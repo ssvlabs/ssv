@@ -107,7 +107,7 @@ spec:
             - name: DISCOVERY_TYPE_KEY
               value: "discv5"
             - name: DB_PATH
-              value: "./data/db-holesky-stage"
+              value: "./data/db-holesky-stage--alan-test"
             - name: NETWORK
               value: "holesky-stage"
             - name: DB_REPORTING
@@ -132,6 +132,8 @@ spec:
               value: "false"
             - name: PUBSUB_TRACE
               value: "false"
+            - name: DISABLE_IP_RATE_LIMIT
+              value: "true"
           volumeMounts:
             - mountPath: /data
               name: ssv-exporter-holesky

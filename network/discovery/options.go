@@ -2,12 +2,12 @@ package discovery
 
 import (
 	"crypto/ecdsa"
-	"github.com/bloxapp/ssv/logging"
-	compatible_logger "github.com/bloxapp/ssv/network/discovery/logger"
+	"github.com/ssvlabs/ssv/logging"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 	"net"
 
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/network/commons"
 	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/log"

@@ -3,15 +3,15 @@ package handlers
 import (
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func mockShare(operatorIDs ...uint64) *types.SSVShare {
-	operators := make([]*spectypes.Operator, len(operatorIDs))
+	operators := make([]*spectypes.ShareMember, len(operatorIDs))
 	for i, id := range operatorIDs {
-		operators[i] = &spectypes.Operator{
-			OperatorID: id,
+		operators[i] = &spectypes.ShareMember{
+			Signer: id,
 		}
 	}
 	return &types.SSVShare{

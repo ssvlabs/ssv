@@ -4,11 +4,14 @@ import (
 	"encoding/hex"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
@@ -45,7 +48,7 @@ func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 func createCommit(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: testingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
 	config := testingutils.TestingConfig(ks)
@@ -56,7 +59,7 @@ func createCommit(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessag
 func createPrepare(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: testingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
 	config := testingutils.TestingConfig(ks)
@@ -67,7 +70,7 @@ func createPrepare(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessa
 func createProposal(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: testingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
 	config := testingutils.TestingConfig(ks)
@@ -78,14 +81,18 @@ func createProposal(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMess
 func createRoundChange(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share:            testingutils.TestingShare(ks),
+		Share:            testingutils.TestingOperator(ks),
 		ID:               []byte{1, 2, 3, 4},
-		PrepareContainer: specqbft.NewMsgContainer(),
+		PrepareContainer: qbft.NewMsgContainer(),
 	}
 	config := testingutils.TestingConfig(ks)
 
 	if len(test.PrepareJustifications) > 0 {
-		state.LastPreparedRound = test.PrepareJustifications[0].Message.Round
+		prepareMsg, err := qbft.DecodeMessage(test.PrepareJustifications[0].SSVMessage.Data)
+		if err != nil {
+			return nil, err
+		}
+		state.LastPreparedRound = prepareMsg.Round
 		state.LastPreparedValue = test.StateValue
 
 		for _, msg := range test.PrepareJustifications {

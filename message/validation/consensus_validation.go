@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -25,7 +25,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	validatorIndices []phase0.ValidatorIndex,
 	receivedAt time.Time,
 ) (*specqbft.Message, error) {
-	ssvMessage := signedSSVMessage.GetSSVMessage()
+	ssvMessage := signedSSVMessage.SSVMessage
 
 	if len(ssvMessage.Data) > maxConsensusMsgSize {
 		e := ErrSSVDataTooBig
@@ -47,7 +47,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	state := mv.consensusState(signedSSVMessage.GetSSVMessage().GetID())
+	state := mv.consensusState(signedSSVMessage.SSVMessage.GetID())
 
 	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committee, receivedAt, state); err != nil {
 		return consensusMessage, err
@@ -57,9 +57,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	for i := range signedSSVMessage.GetSignature() {
+	for i := range signedSSVMessage.Signatures {
 		operatorID := signedSSVMessage.GetOperatorIDs()[i]
-		signature := signedSSVMessage.GetSignature()[i]
+		signature := signedSSVMessage.Signatures[i]
 
 		if err := mv.signatureVerifier.VerifySignature(operatorID, ssvMessage, signature); err != nil {
 			e := ErrSignatureVerification
@@ -123,9 +123,9 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return e
 	}
 
-	if !bytes.Equal(consensusMessage.Identifier, signedSSVMessage.GetSSVMessage().MsgID[:]) {
+	if !bytes.Equal(consensusMessage.Identifier, signedSSVMessage.SSVMessage.MsgID[:]) {
 		e := ErrMismatchedIdentifier
-		e.want = hex.EncodeToString(signedSSVMessage.GetSSVMessage().MsgID[:])
+		e.want = hex.EncodeToString(signedSSVMessage.SSVMessage.MsgID[:])
 		e.got = hex.EncodeToString(consensusMessage.Identifier)
 		return e
 	}
@@ -191,7 +191,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
-	role := signedSSVMessage.GetSSVMessage().GetID().GetRoleType()
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
 		e := ErrUnexpectedConsensusMessage
 		e.got = role
@@ -199,7 +199,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	if err := mv.validateBeaconDuty(signedSSVMessage.GetSSVMessage().GetID().GetRoleType(), msgSlot, validatorIndices); err != nil {
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), msgSlot, validatorIndices); err != nil {
 		return err
 	}
 
@@ -375,7 +375,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	lowestAllowed := /*estimatedRound - allowedRoundsInPast*/ specqbft.FirstRound
 	highestAllowed := estimatedRound + allowedRoundsInFuture
 
-	role := signedSSVMessage.GetSSVMessage().GetID().GetRoleType()
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	if consensusMessage.Round < lowestAllowed || consensusMessage.Round > highestAllowed {
 		e := ErrEstimatedRoundTooFar

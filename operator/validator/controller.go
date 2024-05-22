@@ -8,42 +8,45 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/duties"
-	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validators"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties"
+	nodestorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validators"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -70,7 +73,6 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.BeaconNode
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
-	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             spectypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -95,9 +97,9 @@ type Controller interface {
 	StartValidators()
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-	GetValidator(pubKey string) (*validator.Validator, bool)
+	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
-	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
+	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
@@ -131,7 +133,8 @@ type Recipients interface {
 type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
-	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
 type P2PNetwork interface {
@@ -180,7 +183,7 @@ type controller struct {
 
 	recentlyStartedValidators uint64
 	recentlyStartedCommittees uint64
-	metadataLastUpdated       map[string]time.Time
+	metadataLastUpdated       map[spectypes.ValidatorPK]time.Time
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
 }
@@ -214,7 +217,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		NewDecidedHandler: options.NewDecidedHandler,
 		FullNode:          options.FullNode,
 		Exporter:          options.Exporter,
-		BuilderProposals:  options.BuilderProposals,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
 		Metrics:           options.Metrics,
@@ -262,7 +264,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		metadataLastUpdated:     make(map[string]time.Time),
+		metadataLastUpdated:     make(map[spectypes.ValidatorPK]time.Time),
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -336,12 +338,11 @@ func (c *controller) handleRouterMessages() {
 			}
 
 			// TODO: only try copying clusterid if validator failed
-			pk := msg.GetID().GetSenderID()
-			hexPK := hex.EncodeToString(pk)
-			var cid spectypes.ClusterID
-			copy(cid[:], pk[16:])
+			dutyExecutorID := msg.GetID().GetDutyExecutorID()
+			var cid spectypes.CommitteeID
+			copy(cid[:], dutyExecutorID[16:])
 
-			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
+			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
 				v.HandleMessage(c.logger, msg)
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
@@ -378,9 +379,10 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
-			share := c.sharesStorage.Get(nil, msg.GetID().GetSenderID())
+			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
+			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
 			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetSenderID()))
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
 			}
 
 			opts := c.validatorOptions
@@ -574,7 +576,7 @@ func (c *controller) StartNetworkHandlers() {
 }
 
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
-func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
+func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
 	c.metadataLastUpdated[pk] = time.Now()
 
 	if metadata == nil {
@@ -587,11 +589,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	}
 
 	// If this validator is not ours or is liquidated, don't start it.
-	pkBytes, err := hex.DecodeString(pk)
-	if err != nil {
-		return errors.Wrap(err, "could not decode public key")
-	}
-	share := c.sharesStorage.Get(nil, pkBytes)
+	share := c.sharesStorage.Get(nil, pk[:])
 	if share == nil {
 		return errors.New("share was not found")
 	}
@@ -616,7 +614,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 			}
 		}
 	} else {
-		c.logger.Info("starting new validator", zap.String("pubKey", pk))
+		c.logger.Info("starting new validator", fields.PubKey(pk[:]))
 
 		started, err := c.onShareStart(share)
 		if err != nil {
@@ -629,18 +627,78 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	return nil
 }
 
+// UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
+func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
+	// TODO: better log and err handling
+	for pk, metadata := range data {
+		c.metadataLastUpdated[pk] = time.Now()
+
+		if metadata == nil {
+			delete(data, pk)
+		}
+	}
+
+	startdb := time.Now()
+	// Save metadata to share storage.
+	err := c.sharesStorage.UpdateValidatorsMetadata(data)
+	if err != nil {
+		return errors.Wrap(err, "could not update validator metadata")
+	}
+	c.logger.Debug("🆕 updated validators metadata in storage", zap.Duration("elapsed", time.Since(startdb)), zap.Int("count", len(data)))
+
+	pks := maps.Keys(data)
+
+	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated(), registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()), func(share *ssvtypes.SSVShare) bool {
+		return slices.Contains(pks, share.ValidatorPubKey)
+	})
+
+	for _, share := range shares {
+		// Start validator (if not already started).
+		// TODO: why its in the map if not started?
+		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
+			v.Share.BeaconMetadata = share.BeaconMetadata
+			_, err := c.startValidator(v)
+			if err != nil {
+				c.logger.Warn("could not start validator", zap.Error(err))
+			}
+			vc, found := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
+			if found {
+				vc.AddShare(&v.Share.Share)
+				_, err := c.startCommittee(vc)
+				if err != nil {
+					c.logger.Warn("could not start committee", zap.Error(err))
+				}
+			}
+		} else {
+			c.logger.Info("starting new validator", fields.PubKey(share.ValidatorPubKey[:]))
+
+			started, err := c.onShareStart(share)
+			if err != nil {
+				c.logger.Warn("could not start newly active validator", zap.Error(err))
+				continue
+			}
+			if started {
+				c.logger.Debug("started share after metadata update", zap.Bool("started", started))
+			}
+		}
+		return nil
+	}
+
+	return nil
+}
+
 // GetValidator returns a validator instance from ValidatorsMap
-func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
+func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty) {
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
-	var pk []byte
-	copy(pk[:], duty.PubKey[:])
+	pk := make([]byte, 48)
+	copy(pk, duty.PubKey[:])
 
-	if v, ok := c.GetValidator(hex.EncodeToString(pk)); ok {
+	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
@@ -660,7 +718,9 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	}
 }
 
-func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
+func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+	logger = logger.With(fields.Slot(duty.Slot), fields.Role(duty.RunnerRole()))
+
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, types.GetDefaultDomain())
 		if err != nil {
@@ -673,7 +733,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			return
 		}
 		// TODO alan: no queue in cc, what should we do?
-		if err := cm.OnExecuteDuty(c.logger, dec.Body.(*types.EventMsg)); err != nil {
+		if err := cm.OnExecuteDuty(logger, dec.Body.(*types.EventMsg)); err != nil {
 			logger.Error("could not execute committee duty", zap.Error(err))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
@@ -694,7 +754,7 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spec
 }
 
 // CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
-func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.ClusterID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
 	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
@@ -750,12 +810,13 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 	return indices
 }
 
+// TODO: this looks like its duplicated behaviour, check if necessary
 // onMetadataUpdated is called when validator's metadata was updated
-func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.ValidatorMetadata) {
+func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconprotocol.ValidatorMetadata) {
 	if meta == nil {
 		return
 	}
-	logger := c.logger.With(zap.String("pk", pk))
+	logger := c.logger.With(fields.PubKey(pk[:]))
 
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
@@ -769,14 +830,14 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 		_, err := c.startValidator(v)
 		if err != nil {
 			logger.Warn("could not start validator after metadata update",
-				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
+				zap.Error(err), zap.Any("metadata", meta))
 		}
 		if vc, vcexist := c.validatorsMap.GetCommittee(v.Share.CommitteeID()); vcexist {
 			vc.AddShare(&v.Share.Share)
 			_, err := c.startCommittee(vc)
 			if err != nil {
 				logger.Warn("could not start committee after metadata update",
-					zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
+					zap.Error(err), zap.Any("metadata", meta))
 			}
 		}
 		return
@@ -786,17 +847,18 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 // onShareStop is called when a validator was removed or liquidated
 func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// remove from ValidatorsMap
-	v := c.validatorsMap.RemoveValidator(hex.EncodeToString(pubKey[:]))
+	v := c.validatorsMap.RemoveValidator(pubKey)
 
 	// stop instance
 	if v != nil {
 		v.Stop()
+		c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
 	}
 
 	vc, ok := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
 	if ok {
 		vc.RemoveShare(v.Share.Share.ValidatorIndex)
-		// TODO: remove committee if last share and stop
+		// TODO: (Alan) remove committee if last share and stop
 	}
 }
 
@@ -821,12 +883,8 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	}
 
 	// Start a committee validator.
-	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey[:]))
+	v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey)
 	if !found {
-		if !share.HasBeaconMetadata() {
-			return nil, nil, fmt.Errorf("beacon metadata is missing")
-		}
-
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(c.context)
@@ -837,21 +895,15 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
 
 		v = validator.NewValidator(ctx, cancel, opts)
-		c.validatorsMap.PutValidator(hex.EncodeToString(share.ValidatorPubKey[:]), v)
+		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
 
-	} else {
-		c.printShare(v.Share, "get validator")
 	}
 
 	// Start a committee validator.
-	vc, found := c.validatorsMap.GetCommittee(share.CommitteeID())
+	vc, found := c.validatorsMap.GetCommittee(operator.ClusterID)
 	if !found {
-		if !share.HasBeaconMetadata() {
-			return nil, nil, fmt.Errorf("beacon metadata is missing")
-		}
-
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, _ := context.WithCancel(c.context)
@@ -860,17 +912,22 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.SSVShare = share
 		opts.Operator = operator
 
-		committeRunnerFunc := SetupCommitteeRunners(ctx, c.logger, opts)
+		logger := c.logger.With([]zap.Field{
+			zap.String("committee", fields.FormatCommittee(operator.Committee)),
+			zap.String("committee_id", hex.EncodeToString(operator.ClusterID[:])),
+		}...)
 
-		vc = validator.NewCommittee(c.context, operator, opts.SignatureVerifier, committeRunnerFunc)
+		committeRunnerFunc := SetupCommitteeRunners(ctx, logger, opts)
+
+		vc = validator.NewCommittee(c.context, logger, c.beacon.GetBeaconNetwork(), operator, opts.SignatureVerifier, committeRunnerFunc)
 		vc.AddShare(&share.Share)
-		c.validatorsMap.PutCommittee(share.CommitteeID(), vc)
+		c.validatorsMap.PutCommittee(operator.ClusterID, vc)
 
-		c.printShare(share, "setup validator done")
+		c.printShare(share, "setup committee done")
 
 	} else {
 		vc.AddShare(&share.Share)
-		c.printShare(v.Share, "get validator")
+		c.printShare(v.Share, "added share to committee")
 	}
 
 	return v, vc, nil
@@ -987,7 +1044,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
 	//TODO alan: currently nothing to start in committee?
-	c.logger.Debug("committee started ", zap.String("committee_id", hex.EncodeToString(vc.Operator.ClusterID[:])))
+	// c.logger.Debug("committee started ", zap.String("committee_id", hex.EncodeToString(vc.Operator.ClusterID[:])))
 	//cstarted, err := vc.Start() // TODO alan : make it testable
 	//if err != nil {
 	//	// todo alan: metrics
@@ -1013,7 +1070,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 	// Filter for validators which haven't been updated recently.
 	filters = append(filters, func(s *ssvtypes.SSVShare) bool {
-		last, ok := c.metadataLastUpdated[string(s.ValidatorPubKey[:])]
+		last, ok := c.metadataLastUpdated[s.ValidatorPubKey]
 		return !ok || time.Since(last) > c.metadataUpdateInterval
 	})
 
@@ -1026,7 +1083,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey[:])
-			c.metadataLastUpdated[string(share.ValidatorPubKey[:])] = time.Now()
+			c.metadataLastUpdated[share.ValidatorPubKey] = time.Now()
 		}
 
 		// TODO: continue if there is nothing to update.
@@ -1076,26 +1133,23 @@ func TempBeaconVoteValueCheckF(
 			return errors.New("attestation data source > target")
 		}
 
-		attestationData := &phase0.AttestationData{
-			Slot: slot,
-			// CommitteeIndex doesn't matter for slashing checks
-			Index:           0,
-			BeaconBlockRoot: bv.BlockRoot,
-			Source:          bv.Source,
-			Target:          bv.Target,
-		}
+		// attestationData := &phase0.AttestationData{
+		// 	Slot: slot,
+		// 	// CommitteeIndex doesn't matter for slashing checks
+		// 	Index:           0,
+		// 	BeaconBlockRoot: bv.BlockRoot,
+		// 	Source:          bv.Source,
+		// 	Target:          bv.Target,
+		// }
 
-		return signer.IsAttestationSlashable(sharePublicKey, attestationData)
+		// TODO: (Alan) REVERT SLASHING CHECK
+		// return signer.IsAttestationSlashable(sharePublicKey, attestationData)
+		return nil
 	}
 }
 
 func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options validator.Options) func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
-	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
-		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
-		return nil // TODO need to find better way to fix it
-	}
-
-	// TODO: (Alan) fix domain type
+	// TODO: alan fix domains (from netCfg)
 	domainType := spectypes.GenesisMainnet
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
@@ -1126,7 +1180,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
 		// Create a committee runner.
 		epoch := options.BeaconNetwork.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch)
+		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch) // TODO: (Alan) fix slashing check (committee is not 1 pubkey)
 		crunner := runner.NewCommitteeRunner(options.BeaconNetwork.GetBeaconNetwork(), shares, buildController(spectypes.RoleCommittee, valCheck), options.Beacon, options.Network, options.Signer, options.OperatorSigner, valCheck)
 		return crunner.(*runner.CommitteeRunner)
 	}
@@ -1188,7 +1242,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0)
-			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)

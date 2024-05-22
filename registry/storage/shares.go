@@ -8,13 +8,13 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var sharesPrefix = []byte("shares")
@@ -43,7 +43,8 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorMetadata updates validator metadata.
-	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
 type sharesStorage struct {
@@ -66,9 +67,9 @@ type storageOperator struct {
 // but we keep the name Share to avoid conflicts with gob encoding.
 type Share struct {
 	OperatorID            spectypes.OperatorID
-	ValidatorPubKey       spectypes.ValidatorPK `ssz-size:"48"`
-	SharePubKey           []byte                `ssz-size:"48"`
-	Committee             []*storageOperator    `ssz-max:"13"`
+	ValidatorPubKey       []byte             `ssz-size:"48"`
+	SharePubKey           []byte             `ssz-size:"48"`
+	Committee             []*storageOperator `ssz-max:"13"`
 	Quorum, PartialQuorum uint64
 	DomainType            spectypes.DomainType `ssz-size:"4"`
 	FeeRecipientAddress   [20]byte             `ssz-size:"20"`
@@ -172,6 +173,10 @@ func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) *types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	return s.unsafeGet(pubKey)
+}
+
+func (s *sharesStorage) unsafeGet(pubKey []byte) *types.SSVShare {
 	return s.shares[hex.EncodeToString(pubKey)]
 }
 
@@ -203,6 +208,10 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.unsafeSave(rw, shares...)
+}
+
+func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	err := s.db.Using(rw).SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		share := specShareToStorageShare(shares[i])
 		value, err := share.Encode()
@@ -241,7 +250,7 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(committee))
 	stShare := &storageShare{
 		Share: Share{
-			ValidatorPubKey:     share.ValidatorPubKey,
+			ValidatorPubKey:     share.ValidatorPubKey[:],
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
 			Quorum:              quorum,
@@ -274,7 +283,7 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorPubKey:     share.ValidatorPubKey,
+			ValidatorPubKey:     spectypes.ValidatorPK(share.ValidatorPubKey[:]),
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
 			Quorum:              quorum,
@@ -293,35 +302,75 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 }
 
 func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
-	s.mu.Lock()
-	// TODO: (Alan) fix hack to avoid double-locking mutex
-	defer s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
-	defer s.mu.Unlock()
+	err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
-	err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
+		err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
+		if err != nil {
+			return err
+		}
+
+		delete(s.shares, hex.EncodeToString(pubKey))
+		return nil
+	}()
 	if err != nil {
 		return err
 	}
 
-	delete(s.shares, hex.EncodeToString(pubKey))
+	// TODO: (Alan) fix hack to avoid double-locking mutex
+	s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
 
 	return nil
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
-	key, err := hex.DecodeString(pk)
-	if err != nil {
-		return err
-	}
-	share := s.Get(nil, key)
+func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
+	share := s.Get(nil, pk[:])
 	if share == nil {
 		return nil
 	}
 
 	share.BeaconMetadata = metadata
-	s.validatorStore.handleShareUpdated(share)
 	return s.Save(nil, share)
+}
+
+// UpdateValidatorMetadata updates the metadata of the given validator
+func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
+	s.mu.RLock()
+	var shares []*types.SSVShare
+	for pk, metadata := range data {
+		share := s.unsafeGet(pk[:])
+		if share == nil {
+			continue
+		}
+		share.BeaconMetadata = metadata
+		shares = append(shares, share)
+	}
+	s.mu.RUnlock()
+
+	saveShares := func(sshares []*types.SSVShare) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if err := s.unsafeSave(nil, sshares...); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// split into chunks to avoid holding the lock for too long
+	chunkSize := 1000
+	for i := 0; i < len(shares); i += chunkSize {
+		end := i + chunkSize
+		if end > len(shares) {
+			end = len(shares)
+		}
+		if err := saveShares(shares[i:end]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Drop deletes all shares.

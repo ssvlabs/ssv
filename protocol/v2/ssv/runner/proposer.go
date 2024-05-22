@@ -6,34 +6,32 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
-	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
-	ProducesBlindedBlocks bool
 
-	beacon         specssv.BeaconNode
-	network        qbft.FutureSpecNetwork
+	beacon         beacon.BeaconNode
+	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -45,8 +43,8 @@ func NewProposerRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
-	beacon specssv.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	beacon beacon.BeaconNode,
+	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
@@ -112,22 +110,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
-	var ver spec.DataVersion
-	var obj ssz.Marshaler
-	var start = time.Now()
-	if r.ProducesBlindedBlocks {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.DutySlot(), r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get blinded beacon block")
-		}
-	} else {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.DutySlot(), r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get beacon block")
-		}
+	start := time.Now()
+
+	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+	if err != nil {
+		return errors.Wrap(err, "failed to get beacon block")
 	}
+
 	took := time.Since(start)
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
@@ -374,11 +363,11 @@ func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ProposerRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (r *ProposerRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() specssv.BeaconNode {
+func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
@@ -439,13 +428,13 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		return summary, fmt.Errorf("block is nil")
 	}
 	switch b := block.(type) {
-	case *api.VersionedV3Proposal:
-		if b.ExecutionPayloadBlinded {
+	case *api.VersionedProposal:
+		if b.Blinded {
 			switch b.Version {
 			case spec.DataVersionCapella:
-				return summarizeBlock(b.BlindedCapella)
+				return summarizeBlock(b.CapellaBlinded)
 			case spec.DataVersionDeneb:
-				return summarizeBlock(b.BlindedDeneb)
+				return summarizeBlock(b.DenebBlinded)
 			default:
 				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 			}

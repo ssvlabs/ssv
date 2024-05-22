@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"sort"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -215,7 +215,7 @@ func validateCommit(
 	}
 
 	if !bytes.Equal(msg.Root[:], msg.Root[:]) {
-		return errors.New("proposed data mistmatch")
+		return errors.New("proposed data mismatch")
 	}
 
 	return nil

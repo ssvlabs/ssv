@@ -2,28 +2,30 @@ package spectest
 
 import (
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type StartNewRunnerDutySpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
-	Duty                    *spectypes.Duty
+	Duty                    spectypes.Duty
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
-	OutputMessages          []*spectypes.SignedPartialSignatureMessage
+	OutputMessages          []*spectypes.PartialSignatureMessages
 	ExpectedError           string
 }
 
@@ -39,7 +41,7 @@ func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
 }
 
 func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
-	err := test.Runner.StartNewDuty(logger, test.Duty)
+	err := test.runPreTesting(logger)
 	if len(test.ExpectedError) > 0 {
 		require.EqualError(t, err, test.ExpectedError)
 	} else {
@@ -48,7 +50,6 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 
 	// test output message
 	broadcastedSignedMsgs := test.Runner.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
-	require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, test.Runner.GetBaseRunner().Share.Committee))
 	broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
 	if len(broadcastedMsgs) > 0 {
 		index := 0
@@ -57,14 +58,14 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 				continue
 			}
 
-			msg1 := &spectypes.SignedPartialSignatureMessage{}
+			msg1 := &types.PartialSignatureMessages{}
 			require.NoError(t, msg1.Decode(msg.Data))
 			msg2 := test.OutputMessages[index]
-			require.Len(t, msg1.Message.Messages, len(msg2.Message.Messages))
+			require.Len(t, msg1.Messages, len(msg2.Messages))
 
 			// messages are not guaranteed to be in order so we map them and then test all roots to be equal
 			roots := make(map[string]string)
-			for i, partialSigMsg2 := range msg2.Message.Messages {
+			for i, partialSigMsg2 := range msg2.Messages {
 				r2, err := partialSigMsg2.GetRoot()
 				require.NoError(t, err)
 				if _, found := roots[hex.EncodeToString(r2[:])]; !found {
@@ -73,7 +74,7 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 					roots[hex.EncodeToString(r2[:])] = hex.EncodeToString(r2[:])
 				}
 
-				partialSigMsg1 := msg1.Message.Messages[i]
+				partialSigMsg1 := msg1.Messages[i]
 				r1, err := partialSigMsg1.GetRoot()
 				require.NoError(t, err)
 
@@ -97,6 +98,11 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
+
+	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
+		diff := typescomparable.PrintDiff(test.Runner, test.PostDutyRunnerState)
+		require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]), fmt.Sprintf("post runner state not equal\n%s\n", diff))
+	}
 }
 
 func (test *StartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
@@ -137,14 +143,12 @@ func (tests *MultiStartNewRunnerDutySpecTest) overrideStateComparison(t *testing
 func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *StartNewRunnerDutySpecTest, name string, testType string) {
 	var r runner.Runner
 	switch test.Runner.(type) {
-	case *runner.AttesterRunner:
-		r = &runner.AttesterRunner{}
+	case *runner.CommitteeRunner:
+		r = &runner.CommitteeRunner{}
 	case *runner.AggregatorRunner:
 		r = &runner.AggregatorRunner{}
 	case *runner.ProposerRunner:
 		r = &runner.ProposerRunner{}
-	case *runner.SyncCommitteeRunner:
-		r = &runner.SyncCommitteeRunner{}
 	case *runner.SyncCommitteeAggregatorRunner:
 		r = &runner.SyncCommitteeAggregatorRunner{}
 	case *runner.ValidatorRegistrationRunner:
@@ -166,4 +170,9 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 	require.NoError(t, err)
 
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
+}
+
+func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
+	err := test.Runner.StartNewDuty(logger, test.Duty)
+	return err
 }

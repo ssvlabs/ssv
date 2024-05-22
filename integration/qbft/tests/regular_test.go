@@ -3,9 +3,9 @@ package tests
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	protocolstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -105,6 +105,6 @@ func regularValidator() func(t *testing.T, committee int, actual *protocolstorag
 		require.Equal(t, int(qbft.FirstRound), int(actual.State.Round), "round not matching")
 
 		require.NotNil(t, actual.DecidedMessage, "no decided message")
-		require.Greater(t, len(actual.DecidedMessage.Signers), quorum(committee)-1, "no commit qourum")
+		require.Greater(t, len(actual.DecidedMessage.Signatures), quorum(committee)-1, "no commit qourum")
 	}
 }

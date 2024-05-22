@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"encoding/hex"
 	"sync/atomic"
 	"time"
 
@@ -13,22 +14,22 @@ import (
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/network/topics"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/utils/async"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/connections"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/streams"
+	"github.com/ssvlabs/ssv/network/topics"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/utils/async"
+	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
 // network states
@@ -248,7 +249,7 @@ func (n *p2pNetwork) isReady() bool {
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
-	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
+	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(time.Second)
 	registeredSubnets := make([]byte, commons.Subnets())
@@ -262,7 +263,18 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		newSubnets := make([]byte, commons.Subnets())
 		copy(newSubnets, n.subnets)
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-			subnet := commons.ValidatorSubnet(pkHex)
+			// TODO: alan - fork support
+			pbBytes, err := hex.DecodeString(pkHex)
+			if err != nil {
+				return false
+			}
+			// TODO: alan - optimization to get active committees only
+			share := n.nodeStorage.Shares().Get(nil, pbBytes)
+			if share == nil {
+				return false
+			}
+			cid := share.CommitteeID()
+			subnet := commons.CommitteeSubnet(cid)
 			newSubnets[subnet] = byte(1)
 			return true
 		})

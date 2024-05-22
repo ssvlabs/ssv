@@ -3,7 +3,7 @@ package validation
 import (
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // consensusID uniquely identifies a public key and role pair to keep track of state.

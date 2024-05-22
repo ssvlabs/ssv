@@ -7,19 +7,19 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/duties"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/duties"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // b64 encrypted key length is 256
@@ -333,7 +333,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		operators = append(operators, &spectypes.Operator{
 			OperatorID:        operatorID,
 			SSVOperatorPubKey: od.PublicKey,
-			ClusterID:         spectypes.GetClusterID(committeeIDs),
+			ClusterID:         spectypes.GetCommitteeID(committeeIDs),
 			Committee:         committee,
 			Quorum:            quorum,
 			PartialQuorum:     partialQuorum,

@@ -3,15 +3,15 @@ package validator
 import (
 	"sync/atomic"
 
-	"github.com/bloxapp/ssv-spec/p2p"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv-spec/p2p"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 // Start starts a Validator.
@@ -47,7 +47,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {
 				logger.Warn("❗failed to load highest instance",
-					fields.PubKey(identifier.GetSenderID()),
+					fields.PubKey(identifier.GetDutyExecutorID()), // TODO: check if GetDutyExecutorID correct identifier
 					zap.Error(err))
 			} else if highestInstance != nil {
 				decidedValue := &spectypes.ConsensusData{}
@@ -61,7 +61,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 
 		// TODO: P2P
 		var valpk spectypes.ValidatorPK
-		copy(valpk[:], identifier.GetSenderID()[:])
+		copy(valpk[:], share.ValidatorPubKey[:])
 
 		if err := n.Subscribe(valpk); err != nil {
 			return true, err

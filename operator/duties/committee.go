@@ -6,10 +6,10 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 type CommitteeHandler struct {
@@ -60,6 +60,7 @@ func (h *CommitteeHandler) Name() string {
 //  2. If necessary, fetch duties for the next epoch.
 func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	for {
 		select {
@@ -74,6 +75,18 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			h.processExecution(period, epoch, slot)
+
+			// cleanups
+			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
+			// last slot of epoch
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+				h.attDuties.ResetEpoch(epoch)
+			}
+
+			// last slot of period
+			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+				h.syncDuties.Reset(period - 1)
+			}
 
 		case reorgEvent := <-h.reorg:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
@@ -123,11 +136,21 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
+	vsmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID, 0)
+	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
+	for _, v := range vs {
+		vsmap[v.ValidatorIndex] = v.CommitteeID()
+	}
+
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
 	if attDuties != nil {
 		for _, d := range attDuties {
 			if h.shouldExecuteAtt(d) {
-				clusterID := h.validatorProvider.Validator(d.PubKey[:]).CommitteeID()
+				clusterID, ok := vsmap[d.ValidatorIndex]
+				if !ok {
+					h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(d.ValidatorIndex)))
+					continue
+				}
 				specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
 
 				if _, ok := committeeMap[clusterID]; !ok {

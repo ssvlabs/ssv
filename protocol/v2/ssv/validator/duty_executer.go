@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (v *Validator) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error {
@@ -33,8 +33,6 @@ func (c *Committee) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error
 	if err != nil {
 		return fmt.Errorf("failed to get execute committee duty data: %w", err)
 	}
-
-	logger = logger.With(fields.Slot(executeDutyData.Duty.DutySlot()), fields.Role(executeDutyData.Duty.RunnerRole()))
 
 	if err := c.StartDuty(logger, executeDutyData.Duty); err != nil {
 		return fmt.Errorf("could not start committee duty: %w", err)

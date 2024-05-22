@@ -1,10 +1,11 @@
 package storage
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/cornelk/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // QBFTStores wraps sync map with cast functions to qbft store

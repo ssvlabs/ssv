@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"crypto/rsa"
 	"fmt"
 	"os"
 	"path"
@@ -8,48 +9,45 @@ import (
 	"strings"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 var (
-	specModule   = "github.com/bloxapp/ssv-spec"
+	specModule   = "github.com/ssvlabs/ssv-spec"
 	specTestPath = "spectest/generate/tests.json"
 )
 
 // TODO: add missing tests
 
-// GenerateBLSKeys generates randomly nodes
-func GenerateBLSKeys(oids ...spectypes.OperatorID) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator) {
-	_ = bls.Init(bls.BLS12_381)
+// GenerateOperatorSigner generates randomly nodes
+func GenerateOperatorSigner(oids ...spectypes.OperatorID) ([]*rsa.PrivateKey, []*spectypes.Operator) {
+	nodes := make([]*spectypes.Operator, 0, len(oids))
+	sks := make([]*rsa.PrivateKey, 0, len(oids))
 
-	nodes := make([]*spectypes.Operator, 0)
-	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
-
-	for i, oid := range oids {
-		sk := &bls.SecretKey{}
-		sk.SetByCSPRNG()
-
-		opPubKey, _, err := rsaencryption.GenerateKeys()
+	for i := range oids {
+		pubKey, privKey, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			panic(err)
+		}
+		opKey, err := rsaencryption.PemToPrivateKey(privKey)
 		if err != nil {
 			panic(err)
 		}
 
 		nodes = append(nodes, &spectypes.Operator{
 			OperatorID:        spectypes.OperatorID(i),
-			SharePubKey:       sk.GetPublicKey().Serialize(),
-			SSVOperatorPubKey: opPubKey,
+			SSVOperatorPubKey: pubKey,
 		})
-		sks[oid] = sk
+
+		sks = append(sks, opKey)
 	}
 
 	return sks, nodes
@@ -60,7 +58,7 @@ type MsgGenerator func(height specqbft.Height) ([]spectypes.OperatorID, *specqbf
 
 // CreateMultipleStoredInstances enables to create multiple stored instances (with decided messages).
 func CreateMultipleStoredInstances(
-	sks map[spectypes.OperatorID]*bls.SecretKey,
+	sks []*rsa.PrivateKey,
 	start specqbft.Height,
 	end specqbft.Height,
 	generator MsgGenerator,
@@ -71,16 +69,19 @@ func CreateMultipleStoredInstances(
 		if msg == nil {
 			break
 		}
-		sm, err := MultiSignMsg(sks, signers, msg)
-		if err != nil {
+		sm := testingutils.MultiSignQBFTMsg(sks, signers, msg)
+
+		var qbftMsg specqbft.Message
+		if err := qbftMsg.Decode(sm.SSVMessage.Data); err != nil {
 			return nil, err
 		}
+
 		results = append(results, &qbftstorage.StoredInstance{
 			State: &specqbft.State{
-				ID:                   sm.Message.Identifier,
-				Round:                sm.Message.Round,
-				Height:               sm.Message.Height,
-				LastPreparedRound:    sm.Message.Round,
+				ID:                   qbftMsg.Identifier,
+				Round:                qbftMsg.Round,
+				Height:               qbftMsg.Height,
+				LastPreparedRound:    qbftMsg.Round,
 				LastPreparedValue:    sm.FullData,
 				Decided:              true,
 				DecidedValue:         sm.FullData,
@@ -95,61 +96,9 @@ func CreateMultipleStoredInstances(
 	return results, nil
 }
 
-func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
-	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
-	if err != nil {
-		return nil, err
-	}
-	return sk.SignByte(root[:]), nil
-}
-
-// MultiSignMsg signs a msg with multiple signers
-func MultiSignMsg(sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, msg *specqbft.Message) (*spectypes.SignedSSVMessage, error) {
-	_ = bls.Init(bls.BLS12_381)
-
-	var operators = make([]spectypes.OperatorID, 0)
-	var agg *bls.Sign
-	for _, oid := range signers {
-		signature, err := signMessage(msg, sks[oid])
-		if err != nil {
-			return nil, err
-		}
-		operators = append(operators, oid)
-		if agg == nil {
-			agg = signature
-		} else {
-			agg.Add(signature)
-		}
-	}
-
-	return &specqbft.SignedMessage{
-		Message:   *msg,
-		Signature: agg.Serialize(),
-		Signers:   operators,
-	}, nil
-}
-
 // SignMsg handle MultiSignMsg error and return just specqbft.SignedMessage
-func SignMsg(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, msg *specqbft.Message) *spectypes.SignedSSVMessage {
-	res, err := MultiSignMsg(sks, signers, msg)
-	require.NoError(t, err)
-	return res
-}
-
-// AggregateSign sign specqbft.Message and then aggregate
-func AggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, consensusMessage *specqbft.Message) *spectypes.SignedSSVMessage {
-	signedMsg := SignMsg(t, sks, signers, consensusMessage)
-	// TODO: use SignMsg instead of AggregateSign
-	// require.NoError(t, sigSignMsgnedMsg.Aggregate(signedMsg))
-	return signedMsg
-}
-
-// AggregateInvalidSign sign specqbft.Message and then change the signer id to mock invalid sig
-func AggregateInvalidSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, consensusMessage *specqbft.Message) *spectypes.SignedSSVMessage {
-	sigend := SignMsg(t, sks, []spectypes.OperatorID{1}, consensusMessage)
-	sigend.Signers = []spectypes.OperatorID{2}
-	return sigend
+func SignMsg(t *testing.T, sks []*rsa.PrivateKey, signers []spectypes.OperatorID, msg *specqbft.Message) *spectypes.SignedSSVMessage {
+	return testingutils.MultiSignQBFTMsg(sks, signers, msg)
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {

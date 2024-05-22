@@ -5,10 +5,10 @@ import (
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
@@ -40,6 +40,7 @@ func (h *VoluntaryExitHandler) Name() string {
 
 func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	for {
 		select {

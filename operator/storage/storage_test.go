@@ -6,17 +6,17 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var (
@@ -88,7 +88,7 @@ func TestDropRegistryData(t *testing.T) {
 		err := storage.Shares().Save(nil, &types.SSVShare{
 			Share: spectypes.Share{
 				SharePubKey:     pk,
-				ValidatorPubKey: spectypes.ValidatorPK(append([]byte{1}, pk...)),
+				ValidatorPubKey: spectypes.ValidatorPK(append(make([]byte, 47), pk...)),
 			},
 		})
 		require.NoError(t, err)

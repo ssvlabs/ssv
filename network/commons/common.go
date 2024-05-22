@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 const (
@@ -79,12 +79,8 @@ func ValidatorTopicID(pkByts []byte) []string {
 	return []string{SubnetTopicID(subnet)}
 }
 
-// CommitteeTopicID returns the topic to use for the given committee
-func CommitteeTopicID(senderID []byte) []string {
-	committeeID := senderID[16:]
-
-	subnet := new(big.Int).Mod(new(big.Int).SetBytes(committeeID), new(big.Int).SetUint64(subnetsCount)).String()
-	return []string{subnet}
+func CommitteeTopicID(cid spectypes.CommitteeID) []string {
+	return []string{strconv.Itoa(CommitteeSubnet(cid))}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -104,6 +100,12 @@ func ValidatorSubnet(validatorPKHex string) int {
 	}
 	val := hexToUint64(validatorPKHex[:10])
 	return int(val % subnetsCount)
+}
+
+// CommitteeSubnet returns the subnet for the given committee
+func CommitteeSubnet(cid spectypes.CommitteeID) int {
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(subnetsCount))
+	return int(subnet.Int64())
 }
 
 // MsgIDFunc is the function that maps a message to a msg_id

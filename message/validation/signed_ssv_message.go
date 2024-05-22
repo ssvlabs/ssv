@@ -5,18 +5,29 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/network/commons"
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/network/commons"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
+		genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
+		if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
+			return nil, ErrGenesisSignedSSVMessage
+		}
+
+		genesisSSVMessage := &genesisspectypes.SSVMessage{}
+		if err := genesisSSVMessage.Decode(pMsg.GetData()); err == nil {
+			return nil, ErrGenesisSSVMessage
+		}
+
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
 		return nil, e
@@ -52,7 +63,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		prevSigner = signer
 	}
 
-	signatures := signedSSVMessage.GetSignature()
+	signatures := signedSSVMessage.Signatures
 
 	if len(signatures) == 0 {
 		return ErrNoSignatures
@@ -76,7 +87,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return e
 	}
 
-	ssvMessage := signedSSVMessage.GetSSVMessage()
+	ssvMessage := signedSSVMessage.SSVMessage
 	if ssvMessage == nil {
 		return ErrNilSSVMessage
 	}
@@ -147,12 +158,13 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 
 // topicMatches checks if the message was sent on the right topic.
 func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic string) bool {
-	getTopics := commons.ValidatorTopicID
+	var topics []string
 	if mv.committeeRole(ssvMessage.GetID().GetRoleType()) {
-		getTopics = commons.CommitteeTopicID
+		cid := spectypes.CommitteeID(ssvMessage.GetID().GetDutyExecutorID()[16:])
+		topics = commons.CommitteeTopicID(cid)
+	} else {
+		topics = commons.ValidatorTopicID(ssvMessage.GetID().GetDutyExecutorID())
 	}
-
-	topics := getTopics(ssvMessage.GetID().GetSenderID())
 	return slices.Contains(topics, commons.GetTopicBaseName(topic))
 }
 

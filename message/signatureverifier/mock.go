@@ -7,10 +7,10 @@ package signatureverifier
 import (
 	reflect "reflect"
 
-	types "github.com/bloxapp/ssv-spec/types"
-	storage "github.com/bloxapp/ssv/registry/storage"
-	basedb "github.com/bloxapp/ssv/storage/basedb"
 	gomock "github.com/golang/mock/gomock"
+	types "github.com/ssvlabs/ssv-spec/types"
+	storage "github.com/ssvlabs/ssv/registry/storage"
+	basedb "github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // MockSignatureVerifier is a mock of SignatureVerifier interface.

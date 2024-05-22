@@ -8,7 +8,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
 func TestMessageValidator_currentEstimatedRound(t *testing.T) {

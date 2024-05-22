@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/eth/simulator"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 )
 
 var (

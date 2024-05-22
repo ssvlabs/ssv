@@ -7,11 +7,11 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 type AttesterHandler struct {
@@ -62,6 +62,7 @@ func (h *AttesterHandler) Name() string {
 //  2. If necessary, fetch duties for the next epoch.
 func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	h.fetchNextEpoch = true
 
@@ -100,10 +101,11 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextEpoch = true
 			}
 
-			// last slot of epoch
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.duties.ResetEpoch(currentEpoch)
-			}
+			// TODO: (Alan) genesis support
+			//// last slot of epoch
+			//if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+			//	h.duties.ResetEpoch(currentEpoch)
+			//}
 
 		case reorgEvent := <-h.reorg:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)

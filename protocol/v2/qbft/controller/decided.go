@@ -3,13 +3,13 @@ package controller
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
@@ -98,7 +98,11 @@ func ValidateDecided(
 	signedDecided *spectypes.SignedSSVMessage,
 	share *spectypes.Operator,
 ) error {
-	if !IsDecidedMsg(share, signedDecided) {
+	isDecided, err := IsDecidedMsg(share, signedDecided)
+	if err != nil {
+		return err
+	}
+	if !isDecided {
 		return errors.New("not a decided msg")
 	}
 
@@ -131,15 +135,12 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(share *spectypes.Operator, signedDecided *spectypes.SignedSSVMessage) bool {
-	if !share.HasQuorum(len(signedDecided.Signatures)) {
-		return false
-	}
+func IsDecidedMsg(share *spectypes.Operator, signedDecided *spectypes.SignedSSVMessage) (bool, error) {
 
 	msg, err := specqbft.DecodeMessage(signedDecided.SSVMessage.Data)
 	if err != nil {
-		return false // @yosher TODO return err?
+		return false, err
 	}
 
-	return msg.MsgType == specqbft.CommitMsgType
+	return share.HasQuorum(len(signedDecided.GetOperatorIDs())) && msg.MsgType == specqbft.CommitMsgType, nil
 }

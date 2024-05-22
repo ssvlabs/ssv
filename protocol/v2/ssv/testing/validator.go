@@ -3,15 +3,15 @@ package testing
 import (
 	"context"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
@@ -26,19 +26,18 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 			BeaconNetwork: networkconfig.TestNetwork.Beacon,
 			Storage:       testing.TestingStores(logger),
 			SSVShare: &types.SSVShare{
-				Share: *spectestingutils.TestingShare(keySet),
+				Share: *spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex),
 			},
 			Signer:            spectestingutils.NewTestingKeyManager(),
 			OperatorSigner:    spectestingutils.NewTestingOperatorSigner(keySet, 1),
 			SignatureVerifier: spectestingutils.NewTestingVerifier(),
-			DutyRunners: map[spectypes.BeaconRole]runner.Runner{
-				spectypes.BNRoleAttester:                  AttesterRunner(logger, keySet),
-				spectypes.BNRoleProposer:                  ProposerRunner(logger, keySet),
-				spectypes.BNRoleAggregator:                AggregatorRunner(logger, keySet),
-				spectypes.BNRoleSyncCommittee:             SyncCommitteeRunner(logger, keySet),
-				spectypes.BNRoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
-				spectypes.BNRoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
-				spectypes.BNRoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
+			DutyRunners: map[spectypes.RunnerRole]runner.Runner{
+				spectypes.RoleCommittee:                 CommitteeRunner(logger, keySet),
+				spectypes.RoleProposer:                  ProposerRunner(logger, keySet),
+				spectypes.RoleAggregator:                AggregatorRunner(logger, keySet),
+				spectypes.RoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
+				spectypes.RoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
+				spectypes.RoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
 			},
 		},
 	)

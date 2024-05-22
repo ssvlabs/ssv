@@ -6,18 +6,18 @@ import (
 	"math/rand"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 // RegisterHandlers registers the given handlers
@@ -86,7 +86,7 @@ func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPe
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
 	// TODO: fork support
-	topics := commons.CommitteeTopicID(senderID)
+	topics := commons.CommitteeTopicID(spectypes.CommitteeID(senderID[16:]))
 	for _, topic := range topics {
 		ps, err = n.topicsCtrl.Peers(topic)
 		if err != nil {

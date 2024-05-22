@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
 
@@ -24,6 +24,7 @@ func (h *ValidatorRegistrationHandler) Name() string {
 
 func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	// should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
 	registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
@@ -48,9 +49,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				copy(pk[:], share.ValidatorPubKey[:])
 
 				h.executeDuties(h.logger, []*spectypes.BeaconDuty{{
-					Type:   spectypes.BNRoleValidatorRegistration,
-					PubKey: pk,
-					Slot:   slot,
+					Type:           spectypes.BNRoleValidatorRegistration,
+					ValidatorIndex: share.ValidatorIndex,
+					PubKey:         pk,
+					Slot:           slot,
 					// no need for other params
 				}})
 

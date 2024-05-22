@@ -6,23 +6,24 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSSVShare_BelongsToOperator(t *testing.T) {
 	metadata := &SSVShare{
 		Share: spectypes.Share{
-			OperatorID: 1,
+			Committee: []*spectypes.ShareMember{{Signer: 1}},
 		},
 	}
 
 	require.True(t, metadata.BelongsToOperator(1))
 	require.False(t, metadata.BelongsToOperator(2))
 }
+
 func TestSSVShare_ComputeClusterIDHash(t *testing.T) {
 	var (
 		aliceClusterHash = "a341933234aa1e6dfd3b8d6677172bdcd0986b1e6afc2e84d321f154d9736717"

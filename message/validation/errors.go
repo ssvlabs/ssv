@@ -9,8 +9,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 type Error struct {
@@ -52,8 +52,10 @@ func (e Error) Text() string {
 }
 
 var (
+	ErrGenesisSSVMessage                       = Error{text: "genesis ssv message"}
+	ErrGenesisSignedSSVMessage                 = Error{text: "genesis signed ssv message"}
 	ErrEmptyData                               = Error{text: "empty data"}
-	ErrWrongDomain                             = Error{text: "wrong domain", silent: true}
+	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}

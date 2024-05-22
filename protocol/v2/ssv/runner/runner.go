@@ -3,26 +3,26 @@ package runner
 import (
 	"sync"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
-	GetBeaconNode() specssv.BeaconNode
+	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
 	GetOperatorSigner() spectypes.OperatorSigner
-	GetNetwork() qbft.FutureSpecNetwork
+	GetNetwork() specqbft.Network
 }
 
 type Runner interface {
@@ -163,6 +163,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
 	// do not return error if no running duty
 	if !b.hasRunningDuty() {
+		logger.Debug("no running duty")
 		return false, nil, nil
 	}
 

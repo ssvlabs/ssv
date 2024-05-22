@@ -5,20 +5,19 @@ import (
 	"fmt"
 	"sync"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -30,7 +29,7 @@ type Validator struct {
 	cancel context.CancelFunc
 
 	DutyRunners runner.ValidatorDutyRunners
-	Network     qbft.FutureSpecNetwork
+	Network     specqbft.Network
 
 	Operator          *spectypes.Operator
 	Share             *types.SSVShare
@@ -64,6 +63,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		DutyRunners:       options.DutyRunners,
 		Network:           options.Network,
 		Storage:           options.Storage,
+		Operator:          options.Operator,
 		Share:             options.SSVShare,
 		Signer:            options.Signer,
 		OperatorSigner:    options.OperatorSigner,
@@ -125,7 +125,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			return errors.Wrap(err, "invalid signed message")
 		}
 
 		// Verify SignedSSVMessage's signature

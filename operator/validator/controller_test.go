@@ -11,35 +11,33 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-
-	"github.com/bloxapp/ssv/ekm"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validators"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ekm"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator/mocks"
+	"github.com/ssvlabs/ssv/operator/validators"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 const (
@@ -59,7 +57,7 @@ type MockControllerOptions struct {
 	validatorOptions  validator.Options
 	// keyManager          spectypes.KeyManager
 	signer              spectypes.BeaconSigner
-	metadataLastUpdated map[string]time.Time
+	metadataLastUpdated map[spectypes.ValidatorPK]time.Time
 	StorageMap          *ibftstorage.QBFTStores
 	validatorsMap       *validators.ValidatorsMap
 	operatorDataStore   operatordatastore.OperatorDataStore
@@ -173,8 +171,8 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
 			defer ctrl.Finish()
-			testValidatorsMap := map[string]*validator.Validator{
-				secretKey.GetPublicKey().SerializeToHexStr(): firstValidator,
+			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+				(spectypes.ValidatorPK)(secretKey.GetPublicKey().Serialize()): firstValidator,
 			}
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -200,7 +198,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 				validatorsMap:       mockValidatorsMap,
 				validatorOptions:    validator.Options{},
 				metrics:             validator.NopMetrics{},
-				metadataLastUpdated: map[string]time.Time{},
+				metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
@@ -326,15 +324,15 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		sharesStorageExpectReturn any
 		getShareError             bool
 		operatorDataId            uint64
-		testPublicKey             string
+		testPublicKey             spectypes.ValidatorPK
 		mockRecipientTimes        int
 	}{
-		{"could not decode public key", validatorMetaData, true, nil, false, 1, "123", 0},
-		{"Empty metadata", nil, true, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Valid metadata", validatorMetaData, false, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Share wasn't found", validatorMetaData, true, nil, true, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"could not decode public key", validatorMetaData, true, nil, false, 1, spectypes.ValidatorPK([]byte("123")), 0},
+		{"Empty metadata", nil, true, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Valid metadata", validatorMetaData, false, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Share wasn't found", validatorMetaData, true, nil, true, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
 	}
 
 	for _, tc := range testCases {
@@ -344,10 +342,10 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			defer ctrl.Finish()
 			operatorDataStore := operatordatastore.New(buildOperatorData(tc.operatorDataId, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 			recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
-			firstValidatorPublicKey := secretKey.GetPublicKey().SerializeToHexStr()
+			firstValidatorPublicKey := secretKey.GetPublicKey().Serialize()
 
-			testValidatorsMap := map[string]*validator.Validator{
-				firstValidatorPublicKey: firstValidator,
+			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+				(spectypes.ValidatorPK)(firstValidatorPublicKey): firstValidator,
 			}
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -361,7 +359,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				recipientsStorage:   recipientStorage,
 				validatorsMap:       mockValidatorsMap,
 				metrics:             validator.NopMetrics{},
-				metadataLastUpdated: map[string]time.Time{},
+				metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
 			}
 
 			if tc.getShareError {
@@ -408,8 +406,8 @@ func TestSetupValidators(t *testing.T) {
 		t.Fatalf("Length mismatch: validatorKey has length %d, but expected %d", len(validatorKey), len(validatorPublicKey))
 	}
 
-	metadataLastMap := make(map[string]time.Time)
-	metadataLastMap[validatorPublicKey.String()] = time.Now()
+	metadataLastMap := make(map[spectypes.ValidatorPK]time.Time)
+	metadataLastMap[spectypes.ValidatorPK(validatorPublicKey)] = time.Now()
 
 	operators := make([]*spectypes.ShareMember, len(operatorIds))
 	for i, id := range operatorIds {
@@ -606,8 +604,8 @@ func TestSetupValidators(t *testing.T) {
 				return nil
 			}).AnyTimes()
 
-			testValidatorsMap := map[string]*validator.Validator{
-				"0": testValidator,
+			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+				spectypes.ValidatorPK([]byte("0")): testValidator,
 			}
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -651,8 +649,8 @@ func TestGetValidator(t *testing.T) {
 		},
 	}
 
-	testValidatorsMap := map[string]*validator.Validator{
-		"0": testValidator,
+	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+		spectypes.ValidatorPK([]byte("0")): testValidator,
 	}
 	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 	// Set up the controller with mock data
@@ -662,9 +660,9 @@ func TestGetValidator(t *testing.T) {
 	ctr := setupController(logger, controllerOptions)
 
 	// Execute the function under test and validate results
-	_, found := ctr.GetValidator("0")
+	_, found := ctr.GetValidator(spectypes.ValidatorPK([]byte("0")))
 	require.True(t, found)
-	_, found = ctr.GetValidator("1")
+	_, found = ctr.GetValidator(spectypes.ValidatorPK([]byte("1")))
 	require.False(t, found)
 }
 
@@ -892,8 +890,8 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	t.Run("Test with right owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
 
-		testValidatorsMap := map[string]*validator.Validator{
-			"0": testValidator,
+		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+			spectypes.ValidatorPK([]byte("0")): testValidator,
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -909,8 +907,8 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
-		testValidatorsMap := map[string]*validator.Validator{
-			"0": testValidator,
+		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+			spectypes.ValidatorPK([]byte("0")): testValidator,
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
@@ -927,64 +925,64 @@ func TestUpdateFeeRecipient(t *testing.T) {
 func TestGetIndices(t *testing.T) {
 	farFutureEpoch := phase0.Epoch(99999)
 	currentEpoch := phase0.Epoch(100)
-	testValidatorsMap := map[string]*validator.Validator{
-		"0": newValidator(&beacon.ValidatorMetadata{
+	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+		spectypes.ValidatorPK([]byte("0")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          0, // ValidatorStateUnknown
 			Index:           0,
 			ActivationEpoch: farFutureEpoch,
 		}),
-		"1": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("1")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          1, // ValidatorStatePendingInitialized
 			Index:           0,
 			ActivationEpoch: farFutureEpoch,
 		}),
-		"2": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("2")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          2, // ValidatorStatePendingQueued
 			Index:           3,
 			ActivationEpoch: phase0.Epoch(101),
 		}),
 
-		"3": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("3")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          3, // ValidatorStateActiveOngoing
 			Index:           3,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		"4": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("4")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          4, // ValidatorStateActiveExiting
 			Index:           4,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		"5": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("5")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          5, // ValidatorStateActiveSlashed
 			Index:           5,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
 
-		"6": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("6")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          6, // ValidatorStateExitedUnslashed
 			Index:           6,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		"7": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("7")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          7, // ValidatorStateExitedSlashed
 			Index:           7,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		"8": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("8")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          8, // ValidatorStateWithdrawalPossible
 			Index:           8,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		"9": newValidator(&beacon.ValidatorMetadata{
+		spectypes.ValidatorPK([]byte("9")): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          9, // ValidatorStateWithdrawalDone
 			Index:           9,
@@ -1040,52 +1038,74 @@ func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
 	}
 }
 
-// func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
-// 	sm := specqbft.SignedMessage{
-// 		Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
-// 		Signers:   []spectypes.OperatorID{1},
-// 		Message: specqbft.Message{
-// 			MsgType:    specqbft.RoundChangeMsgType,
-// 			Height:     0,
-// 			Round:      1,
-// 			Identifier: identifier[:],
-// 			Root:       [32]byte{1, 2, 3},
-// 		},
-// 	}
-// 	res, err := sm.Encode()
-// 	require.NoError(t, err)
-// 	return res
-// }
+func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
+	msg := specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
+		Height:     0,
+		Round:      1,
+		Identifier: identifier[:],
+		Root:       [32]byte{1, 2, 3},
+	}
 
-// func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte {
-// 	// sm := specqbft.SignedMessage{
-// 	// 	Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
-// 	// 	Signers:   []spectypes.OperatorID{1, 2, 3},
-// 	// 	Message: specqbft.Message{
-// 	// 		MsgType:    specqbft.CommitMsgType,
-// 	// 		Height:     0,
-// 	// 		Round:      1,
-// 	// 		Identifier: identifier[:],
-// 	// 		Root:       [32]byte{1, 2, 3},
-// 	// 	},
-// 	// }
+	msgEncoded, err := msg.Encode()
+	if err != nil {
+		panic(err)
+	}
+	sig := append([]byte{1, 2, 3, 4}, make([]byte, 92)...)
+	sm := &spectypes.SignedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.MessageID(msg.Identifier),
+			Data:    msgEncoded,
+		},
+		FullData:    []byte{1, 2, 3, 4},
+		Signatures:  append(make([][]byte, 0), sig),
+		OperatorIDs: []spectypes.OperatorID{1, 2, 3},
+	}
+	res, err := sm.Encode()
+	require.NoError(t, err)
+	return res
+}
 
-// 	sm := spectypes.SignedSSVMessage{
-// 		Signatures:  append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
-// 		OperatorIDs: []spectypes.OperatorID{1, 2, 3},
-// 		Message: specqbft.Message{
-// 			MsgType:    specqbft.CommitMsgType,
-// 			Height:     0,
-// 			Round:      1,
-// 			Identifier: identifier[:],
-// 			Root:       [32]byte{1, 2, 3},
-// 		},
-// 	}
+func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte {
+	// sm := specqbft.SignedMessage{
+	// 	Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
+	// 	Signers:   []spectypes.OperatorID{1, 2, 3},
+	// 	Message: specqbft.Message{
+	// 		MsgType:    specqbft.CommitMsgType,
+	// 		Height:     0,
+	// 		Round:      1,
+	// 		Identifier: identifier[:],
+	// 		Root:       [32]byte{1, 2, 3},
+	// 	},
+	// }
 
-// 	res, err := sm.Encode()
-// 	require.NoError(t, err)
-// 	return res
-// }
+	msg := specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Height:     0,
+		Round:      1,
+		Identifier: identifier[:],
+		Root:       [32]byte{1, 2, 3},
+	}
+	msgEncoded, err := msg.Encode()
+	if err != nil {
+		panic(err)
+	}
+	sig := append([]byte{1, 2, 3, 4}, make([]byte, 92)...)
+	sm := &spectypes.SignedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.MessageID(msg.Identifier),
+			Data:    msgEncoded,
+		},
+		FullData:    []byte{1, 2, 3, 4},
+		Signatures:  append(make([][]byte, 0), sig),
+		OperatorIDs: []spectypes.OperatorID{1, 2, 3},
+	}
+	res, err := sm.Encode()
+	require.NoError(t, err)
+	return res
+}
 
 func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
 	return &validator.Validator{
@@ -1151,7 +1171,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }

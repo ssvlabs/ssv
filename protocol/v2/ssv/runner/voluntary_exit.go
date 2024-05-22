@@ -5,25 +5,25 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 // Duty runner for validator voluntary exit duty
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         specssv.BeaconNode
-	network        qbft.FutureSpecNetwork
+	beacon         beacon.BeaconNode
+	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -36,8 +36,8 @@ type VoluntaryExitRunner struct {
 func NewVoluntaryExitRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
-	beacon specssv.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	beacon beacon.BeaconNode,
+	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 ) Runner {
@@ -182,11 +182,11 @@ func (r *VoluntaryExitRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *VoluntaryExitRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
-func (r *VoluntaryExitRunner) GetBeaconNode() specssv.BeaconNode {
+func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 

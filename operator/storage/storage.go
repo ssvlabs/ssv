@@ -6,15 +6,15 @@ import (
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var HashedPrivateKey = "hashed-private-key"
@@ -75,6 +75,11 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// stg.genesisShareStore, err = genesisregistrystorage.NewSharesStorage(logger, db, storagePrefix)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	return stg, nil
 }
@@ -224,7 +229,7 @@ func (s *storage) SavePrivateKeyHash(hashedKey string) error {
 	return s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
 }
 
-func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+func (s *storage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
 	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }
 

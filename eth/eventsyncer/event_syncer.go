@@ -10,13 +10,13 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/logging/fields"
-	nodestorage "github.com/bloxapp/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/logging/fields"
+	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 )
 
 // TODO: check if something from these PRs need to be ported:
-// https://github.com/bloxapp/ssv/pull/1053
+// https://github.com/ssvlabs/ssv/pull/1053
 
 var (
 	// ErrNodeNotReady is returned when node is not ready.
@@ -100,6 +100,10 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	if err != nil {
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
+	// TODO: (Alan) should it really be here?
+	if err := <-fetchError; err != nil {
+		return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
+	}
 	if lastProcessedBlock == 0 {
 		return 0, fmt.Errorf("handle historical block events: lastProcessedBlock is 0")
 	}
@@ -108,10 +112,6 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
 	}
 	es.metrics.LastBlockProcessed(lastProcessedBlock)
-
-	if err := <-fetchError; err != nil {
-		return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
-	}
 
 	es.logger.Info("finished syncing historical events",
 		zap.Uint64("from_block", fromBlock),

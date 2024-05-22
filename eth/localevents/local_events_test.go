@@ -3,8 +3,8 @@ package localevents_test
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/localevents"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )

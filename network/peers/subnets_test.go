@@ -6,10 +6,10 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/records"
-	nettesting "github.com/bloxapp/ssv/network/testing"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
+	nettesting "github.com/ssvlabs/ssv/network/testing"
 	"github.com/stretchr/testify/require"
 )
 

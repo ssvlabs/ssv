@@ -13,22 +13,23 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/holiman/uint256"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils"
+
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 const (
@@ -38,7 +39,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectypes.KeyManager {
+func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManager {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -53,7 +54,7 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectype
 		}
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, true, "")
+	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -688,37 +689,35 @@ func TestSignRoot(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	km := testKeyManager(t, nil)
-	opPubKey, _, err := rsaencryption.GenerateKeys()
-	require.NoError(t, err)
 
 	t.Run("pk 1", func(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
 
-		msg := specqbft.Message{
-			MsgType:    specqbft.CommitMsgType,
-			Height:     specqbft.Height(3),
-			Round:      specqbft.Round(2),
+		msg := genesisspecqbft.Message{
+			MsgType:    genesisspecqbft.CommitMsgType,
+			Height:     genesisspecqbft.Height(3),
+			Round:      genesisspecqbft.Round(2),
 			Identifier: []byte("identifier1"),
 			Root:       [32]byte{1, 2, 3},
 		}
 
 		// sign
-		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.(*ethKeyManagerSigner).SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
-		signed := &specqbft.SignedMessage{
-			Signature: sig,
+		signed := &genesisspecqbft.SignedMessage{
+			Signature: genesisspectypes.Signature(sig),
 			Signers:   []spectypes.OperatorID{1},
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(
+		err = signed.Signature.VerifyByOperators(
 			signed,
-			networkconfig.TestNetwork.Domain,
-			spectypes.QBFTSignatureType,
-			[]*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize(), SSVOperatorPubKey: opPubKey}},
+			genesisspectypes.DomainType(networkconfig.TestNetwork.Domain),
+			genesisspectypes.QBFTSignatureType,
+			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)
 		require.NoError(t, err)
 	})
@@ -727,30 +726,30 @@ func TestSignRoot(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
 
-		msg := specqbft.Message{
-			MsgType:    specqbft.CommitMsgType,
-			Height:     specqbft.Height(1),
-			Round:      specqbft.Round(3),
+		msg := genesisspecqbft.Message{
+			MsgType:    genesisspecqbft.CommitMsgType,
+			Height:     genesisspecqbft.Height(1),
+			Round:      genesisspecqbft.Round(3),
 			Identifier: []byte("identifier2"),
 			Root:       [32]byte{4, 5, 6},
 		}
 
 		// sign
-		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.(*ethKeyManagerSigner).SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
-		signed := &specqbft.SignedMessage{
-			Signature: sig,
+		signed := &genesisspecqbft.SignedMessage{
+			Signature: genesisspectypes.Signature(sig),
 			Signers:   []spectypes.OperatorID{1},
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(
+		err = signed.Signature.VerifyByOperators(
 			signed,
-			networkconfig.TestNetwork.Domain,
-			spectypes.QBFTSignatureType,
-			[]*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize(), SSVOperatorPubKey: opPubKey}},
+			genesisspectypes.DomainType(networkconfig.TestNetwork.Domain),
+			genesisspectypes.QBFTSignatureType,
+			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)
 		require.NoError(t, err)
 	})

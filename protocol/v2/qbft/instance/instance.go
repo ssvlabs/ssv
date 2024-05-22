@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
@@ -161,7 +160,7 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, signedMsg *spectypes.SignedSSV
 
 func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) error {
 	if err := signedMsg.Validate(); err != nil {
-		return errors.Wrap(err, "invalid signed message")
+		return errors.Wrap(err, "invalid SignedSSVMessage")
 	}
 
 	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)

@@ -7,21 +7,21 @@ import (
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/validators"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/validators"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestController_LiquidateCluster(t *testing.T) {
@@ -43,8 +43,8 @@ func TestController_LiquidateCluster(t *testing.T) {
 
 	ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
 	defer ctrl.Finish()
-	testValidatorsMap := map[string]*validator.Validator{
-		secretKey.GetPublicKey().SerializeToHexStr(): firstValidator,
+	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+		spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()): firstValidator,
 	}
 	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -60,13 +60,13 @@ func TestController_LiquidateCluster(t *testing.T) {
 		validatorsMap:       mockValidatorsMap,
 		validatorOptions:    validator.Options{},
 		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[string]time.Time{},
+		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
-	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
 	require.True(t, ok, "validator not found")
 
 	err := ctr.LiquidateCluster(common.HexToAddress("123"), []uint64{1, 2, 3, 4}, []*types.SSVShare{{Share: spectypes.Share{
@@ -75,7 +75,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
-	_, ok = mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	_, ok = mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
 	require.False(t, ok, "validator still exists")
 }
 
@@ -106,8 +106,8 @@ func TestController_StopValidator(t *testing.T) {
 	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t)
 	defer ctrl.Finish()
 
-	testValidatorsMap := map[string]*validator.Validator{
-		secretKey.GetPublicKey().SerializeToHexStr(): firstValidator,
+	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+		spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()): firstValidator,
 	}
 	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -123,7 +123,7 @@ func TestController_StopValidator(t *testing.T) {
 		validatorsMap:       mockValidatorsMap,
 		validatorOptions:    validator.Options{},
 		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[string]time.Time{},
+		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
 		// keyManager:          km,
 		signer: signer,
 	}
@@ -143,14 +143,14 @@ func TestController_StopValidator(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
-	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
 	require.True(t, ok, "validator not found")
 
 	err = ctr.StopValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
-	_, ok = mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	_, ok = mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
 	require.False(t, ok, "validator still exists")
 }
 
@@ -181,7 +181,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 			BeaconNetwork: networkconfig.TestNetwork.Beacon,
 		},
 		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[string]time.Time{},
+		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
 		// keyManager:          km,
 		signer: signer,
 	}
@@ -238,9 +238,9 @@ func TestController_ReactivateCluster(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 2)
-	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
 	require.True(t, ok, "validator not found")
-	_, ok = mockValidatorsMap.GetValidator(secretKey2.GetPublicKey().SerializeToHexStr())
+	_, ok = mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()))
 	require.True(t, ok, "validator not found")
 
 	select {

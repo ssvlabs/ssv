@@ -99,7 +99,7 @@ spec:
             - name: HOST_ADDRESS
               value: ""
             - name: DB_PATH
-              value: "./data/db-holesky-stage"
+              value: "./data/db-holesky-stage--alan-test-2"
             - name: NETWORK
               value: "holesky-stage"
             - name: DB_REPORTING
@@ -114,7 +114,7 @@ spec:
               value: 'false'
             - name: PUBSUB_TRACE
               value: 'false'
-            - name: BUILDER_PROPOSALS
+            - name: DISABLE_IP_RATE_LIMIT
               value: "true"
           volumeMounts:
             - mountPath: /data

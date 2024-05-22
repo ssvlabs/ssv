@@ -20,15 +20,14 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/network/topics"
-	"github.com/bloxapp/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/logging"
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/connections"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/streams"
+	"github.com/ssvlabs/ssv/network/topics"
 )
 
 const (
@@ -121,7 +120,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.connectionsAtLimit)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -173,7 +172,9 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
-		NodeVersion: commons.GetNodeVersion(),
+		// TODO: (Alan) revert
+		// NodeVersion: commons.GetNodeVersion(),
+		NodeVersion: "ALANTEST",
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
@@ -198,7 +199,11 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return n.subnets
 	}
 
-	var filters func() []connections.HandshakeFilter
+	filters := func() []connections.HandshakeFilter {
+		return []connections.HandshakeFilter{
+			connections.NetworkIDFilter(domain),
+		}
+	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
@@ -276,6 +281,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
+		DisableIPRateLimit:  n.cfg.DisableIPRateLimit,
 		GetValidatorStats:   n.cfg.GetValidatorStats,
 	}
 

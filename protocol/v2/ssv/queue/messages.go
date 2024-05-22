@@ -8,11 +8,11 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var (
@@ -65,19 +65,11 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 
 // DecodeSignedSSVMessage decodes a SignedSSVMessage into a DecodedSSVMessage.
 func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
-	m, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrDecodeNetworkMsg, err)
-	}
-
 	d, err := DecodeSSVMessage(sm.SSVMessage)
 	if err != nil {
 		return nil, err
 	}
-
 	d.SignedSSVMessage = sm
-	d.Body = m
-
 	return d, nil
 }
 
@@ -238,7 +230,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 	// Higher height.
 	if relativeHeight == 1 {
 		switch {
-		case isDecidedMesssage(state, m.SignedSSVMessage):
+		case isDecidedMesssage(state, m):
 			return 4
 		case isPreConsensusMessage:
 			return 3
@@ -252,7 +244,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 
 	// Lower height.
 	switch {
-	case isDecidedMesssage(state, m.SignedSSVMessage):
+	case isDecidedMesssage(state, m):
 		return 2
 	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
 		return 1
@@ -278,10 +270,11 @@ func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
 	return 0
 }
 
-func isDecidedMesssage(s *State, sm *spectypes.SignedSSVMessage) bool {
-	if sm == nil {
+func isDecidedMesssage(s *State, m *DecodedSSVMessage) bool {
+	consensusMessage, isConsensusMessage := m.Body.(*specqbft.Message)
+	if !isConsensusMessage {
 		return false
 	}
-	return specqbft.MessageType(sm.SSVMessage.MsgType) == specqbft.CommitMsgType &&
-		len(sm.OperatorIDs) > int(s.Quorum)
+	return consensusMessage.MsgType == specqbft.CommitMsgType &&
+		len(m.SignedSSVMessage.OperatorIDs) > int(s.Quorum)
 }

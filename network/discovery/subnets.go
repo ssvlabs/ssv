@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 var (

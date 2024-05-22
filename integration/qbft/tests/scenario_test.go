@@ -6,26 +6,26 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validator"
-	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/validator"
+	protocolbeacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	protocolvalidator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (
@@ -70,18 +70,18 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := validator.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
+				ssvMsg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.BeaconDuty), pk[:], networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
-				s.validators[id].Queues[role].Q.Push(dec)
+				s.validators[id].Queues[spectypes.MapDutyToRunnerRole(role)].Q.Push(dec)
 			}(id, dutyProp)
 		}
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
+			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
@@ -140,12 +140,10 @@ func getKeySet(committee int) *spectestingutils.TestKeySet {
 
 func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) *spectypes.Share { //TODO: check dead-locks
 	return &spectypes.Share{
-		OperatorID:      id,
-		ValidatorPubKey: keySet.ValidatorPK.Serialize(),
+		ValidatorPubKey: spectypes.ValidatorPK(keySet.ValidatorPK.Serialize()),
 		SharePubKey:     keySet.Shares[id].GetPublicKey().Serialize(),
 		DomainType:      testingutils.TestingSSVDomainType,
 		Quorum:          keySet.Threshold,
-		PartialQuorum:   keySet.PartialThreshold,
 		Committee:       keySet.Committee(),
 	}
 }
@@ -172,7 +170,7 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 		spectypes.BNRoleVoluntaryExit,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(db, role.String()))
+		storageMap.Add(spectypes.MapDutyToRunnerRole(role), qbftstorage.New(db, role.String()))
 	}
 
 	return storageMap

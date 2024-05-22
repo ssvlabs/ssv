@@ -9,19 +9,19 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/threshold"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 func TestValidatorSerializer(t *testing.T) {
@@ -116,8 +116,7 @@ func TestSharesStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 
 	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
-		valPk := hex.EncodeToString(validatorShare.ValidatorPubKey[:])
-		require.NoError(t, shareStorage.UpdateValidatorMetadata(valPk, &beaconprotocol.ValidatorMetadata{
+		require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, &beaconprotocol.ValidatorMetadata{
 			Balance:         10000,
 			Index:           3,
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
@@ -166,8 +165,7 @@ func TestSharesStorage(t *testing.T) {
 	require.Nil(t, share)
 
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
-		valPk := hex.EncodeToString(validatorShare.ValidatorPubKey[:])
-		require.NoError(t, shareStorage.UpdateValidatorMetadata(valPk, &beaconprotocol.ValidatorMetadata{
+		require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, &beaconprotocol.ValidatorMetadata{
 			Balance:         10000,
 			Index:           3,
 			Status:          2,
@@ -205,11 +203,10 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 	})
 
 	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(len(splitKeys))
-
-	return &storageShare{
+	share := &storageShare{
 		Share: Share{
 			OperatorID:          1,
-			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
+			ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
 			Quorum:              quorum,
@@ -228,7 +225,8 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 			OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Liquidated:   true,
 		},
-	}, &sk1
+	}
+	return share, &sk1
 }
 
 func generateRandomValidatorSpecShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShare, *bls.SecretKey) {

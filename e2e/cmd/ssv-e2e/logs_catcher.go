@@ -8,8 +8,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/e2e/logs_catcher"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 )
 
 type LogsCatcherCmd struct {

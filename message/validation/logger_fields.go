@@ -1,16 +1,16 @@
 package validation
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging/fields"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // ConsensusFields provides details about the consensus for a message. It's used for logging and metrics.
@@ -56,7 +56,7 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMe
 		return descriptor
 	}
 
-	descriptor.SenderID = decodedMessage.GetID().GetSenderID()
+	descriptor.SenderID = decodedMessage.GetID().GetDutyExecutorID()
 	descriptor.Role = decodedMessage.GetID().GetRoleType()
 	descriptor.SSVMessageType = decodedMessage.GetType()
 

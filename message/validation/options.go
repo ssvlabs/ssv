@@ -4,7 +4,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 )
 
 // Option represents a functional option for configuring a messageValidator.

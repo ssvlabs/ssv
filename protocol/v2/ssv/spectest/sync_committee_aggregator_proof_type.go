@@ -7,27 +7,27 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
 	overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t, test, test.Name)
 
 	ks := testingutils.Testing4SharesSet()
-	share := testingutils.TestingShare(ks)
+	share := testingutils.TestingShare(ks, testingutils.TestingValidatorIndex)
 	logger := logging.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, keySetForShare(share))
-	r := v.DutyRunners[types.BNRoleSyncCommitteeContribution]
+	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
 	lastErr := v.StartDuty(logger, &testingutils.TestingSyncCommitteeContributionDuty)
@@ -71,7 +71,7 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
 }
 
-func keySetForShare(share *types.Share) *testingutils.TestKeySet {
+func keySetForShare(share *spectypes.Share) *testingutils.TestKeySet {
 	if share.Quorum == 5 {
 		return testingutils.Testing7SharesSet()
 	}

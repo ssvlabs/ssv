@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestHandleQuery(t *testing.T) {

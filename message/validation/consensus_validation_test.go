@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
 func TestMessageValidator_currentEstimatedRound(t *testing.T) {

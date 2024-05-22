@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	protocolstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {
@@ -44,12 +44,12 @@ func roundChangeValidator() func(t *testing.T, committee int, actual *protocolst
 		require.Equal(t, int(qbft.Round(2)), int(actual.State.Round), "round not matching")
 
 		require.NotNil(t, actual.DecidedMessage, "no decided message")
-		require.Greater(t, len(actual.DecidedMessage.Signers), quorum(committee)-1, "no commit qourum")
+		require.Greater(t, len(actual.DecidedMessage.Signatures), quorum(committee)-1, "no commit qourum")
 
 		require.Contains(t, actual.State.ProposeContainer.Msgs, qbft.Round(2), "no propose messages for round 2") // TODO: all tests fail on this assertion
 		require.Len(t, actual.State.ProposeContainer.Msgs[qbft.Round(2)], 1, "propose container for round 2 contains more/less than 1 messages")
-		require.Len(t, actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].Signers, 1, "first message in propose container for round 2 contains more/less than 1 signer")
-		require.Equal(t, int(spectypes.OperatorID(2)), int(actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].Signers[0]), "on second round proposer is not 2")
+		require.Len(t, actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].Signatures, 1, "first message in propose container for round 2 contains more/less than 1 signer")
+		require.Equal(t, int(spectypes.OperatorID(2)), int(actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].OperatorIDs[0]), "on second round proposer is not 2")
 	}
 }
 

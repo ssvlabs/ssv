@@ -3,11 +3,11 @@ package duties
 import (
 	"context"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/base_handler.go -source=./base_handler.go

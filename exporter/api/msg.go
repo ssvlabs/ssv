@@ -3,8 +3,8 @@ package api
 import (
 	"encoding/hex"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
 )
 
 // Message represents an exporter message
@@ -52,12 +52,13 @@ func NewDecidedAPIMsg(msgs ...*types.SignedSSVMessage) Message {
 	}
 
 	identifier := specqbft.ControllerIdToMessageID(decMsg.Identifier)
-	pkv := identifier.GetSenderID()
+	// #TODO fixme. its not always pk, it can be a CommitteeID if CommitteeRole or Validator PubKey
+	dutyExecutorID := identifier.GetDutyExecutorID()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
-			PublicKey: hex.EncodeToString(pkv),
+			PublicKey: hex.EncodeToString(dutyExecutorID),
 			From:      uint64(decMsg.Height),
 			To:        uint64(decMsg2.Height),
 			Role:      role.String(),

@@ -4,15 +4,14 @@ import (
 	"encoding/json"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestController_Marshaling(t *testing.T) {
@@ -45,7 +44,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 		Timer:          roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingShare(keySet)
+	share := spectestingutils.TestingOperator(keySet)
 	inst := instance.NewInstance(
 		testConfig,
 		share,
