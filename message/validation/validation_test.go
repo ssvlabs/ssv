@@ -964,7 +964,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
-		require.ErrorContains(t, err, ErrSignatureOperatorIDLengthMismatch.Error())
+		require.ErrorContains(t, err, ErrSignersAndSignaturesWithDifferentLength.Error())
 	})
 
 	// Get error when receiving message from less than quorum size amount of signers

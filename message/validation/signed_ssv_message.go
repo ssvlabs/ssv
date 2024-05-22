@@ -71,7 +71,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 
 	// Rule: Len(Signers) must be equal to Len(Signatures)
 	if len(signedSSVMessage.GetOperatorIDs()) != len(signedSSVMessage.Signatures) {
-		e := ErrSignatureOperatorIDLengthMismatch
+		e := ErrSignersAndSignaturesWithDifferentLength
 		e.got = fmt.Sprintf("%d/%d", len(signedSSVMessage.GetOperatorIDs()), len(signedSSVMessage.Signatures))
 		return e
 	}
