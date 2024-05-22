@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	testing2 "github.com/bloxapp/ssv/protocol/v2/genesisqbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/bloxapp/ssv/protocol/v2/genesistypes"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	testing2 "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/testing"
+	types "github.com/ssvlabs/ssv/protocol/v2/genesistypes"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 
 	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"

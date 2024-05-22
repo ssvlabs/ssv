@@ -1,9 +1,9 @@
 package instance
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 )
 

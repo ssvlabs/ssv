@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/genesisqbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/genesisqbft"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"

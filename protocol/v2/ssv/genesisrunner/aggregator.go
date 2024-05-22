@@ -12,9 +12,9 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/genesisrunner/metrics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/genesisrunner/metrics"
 )
 
 type AggregatorRunner struct {

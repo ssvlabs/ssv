@@ -1,9 +1,9 @@
 package genesisrunner
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
 )
 
 // Compacts the given message's associated instance if it's either...

@@ -1,10 +1,10 @@
 package genesisrunner
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/roundtimer"
 	"go.uber.org/zap"
 )
 

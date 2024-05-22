@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/genesistypes"
+	"github.com/ssvlabs/ssv/logging"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/genesisqbft"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/roundtimer"
+	types "github.com/ssvlabs/ssv/protocol/v2/genesistypes"
 	"github.com/stretchr/testify/require"
 
-	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 func TestController_Marshaling(t *testing.T) {

@@ -3,15 +3,15 @@ package instance
 import (
 	"bytes"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/logging/fields"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/genesisqbft"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/genesistypes"
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 // uponProposal process proposal message

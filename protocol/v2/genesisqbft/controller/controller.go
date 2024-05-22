@@ -6,15 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/logging/fields"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/genesisqbft"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 // NewDecidedHandler handles newly saved decided messages.

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
 	"github.com/stretchr/testify/require"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"

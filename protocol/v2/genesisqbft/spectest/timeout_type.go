@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/roundtimer"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"

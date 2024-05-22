@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/pkg/errors"
+	types "github.com/ssvlabs/ssv/protocol/v2/genesistypes"
 	"go.uber.org/zap"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"

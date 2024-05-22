@@ -3,12 +3,12 @@ package storage
 import (
 	"encoding/binary"
 
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	genesisqbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"

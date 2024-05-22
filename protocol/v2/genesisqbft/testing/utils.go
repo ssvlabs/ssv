@@ -3,10 +3,10 @@ package testing
 import (
 	"bytes"
 
-	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	"github.com/pkg/errors"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/genesisqbft"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/roundtimer"
 	"go.uber.org/zap"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"

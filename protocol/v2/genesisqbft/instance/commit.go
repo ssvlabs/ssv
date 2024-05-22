@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"sort"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	types "github.com/bloxapp/ssv/protocol/v2/genesistypes"
+	"github.com/ssvlabs/ssv/logging/fields"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/genesisqbft"
+	types "github.com/ssvlabs/ssv/protocol/v2/genesistypes"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.

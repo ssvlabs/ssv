@@ -8,8 +8,8 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	types "github.com/bloxapp/ssv/protocol/v2/genesistypes"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	types "github.com/ssvlabs/ssv/protocol/v2/genesistypes"
 )
 
 // State holds all the relevant progress the duty execution progress

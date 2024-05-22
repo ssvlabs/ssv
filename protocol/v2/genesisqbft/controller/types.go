@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )

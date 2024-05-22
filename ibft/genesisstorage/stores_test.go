@@ -3,10 +3,10 @@ package storage
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	genesisqbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/logging"
+	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"

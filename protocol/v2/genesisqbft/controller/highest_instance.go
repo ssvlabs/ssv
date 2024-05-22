@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )

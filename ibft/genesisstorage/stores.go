@@ -1,9 +1,9 @@
 package storage
 
 import (
-	genesisqbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/cornelk/hashmap"
+	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )

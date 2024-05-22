@@ -3,13 +3,13 @@ package controller
 import (
 	"bytes"
 
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	"github.com/pkg/errors"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/genesisqbft"
+	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
