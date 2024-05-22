@@ -175,7 +175,7 @@ func (mv *messageValidator) validateQBFTLogic(
 
 		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
 			// Rule: Ignore if peer already advanced to a later round. Only for non-decided messages
-			if consensusMessage.Round < signerState.Round && len(signedSSVMessage.GetOperatorIDs()) == 1 {
+			if consensusMessage.Round < signerState.Round {
 				// Signers aren't allowed to decrease their round.
 				// If they've sent a future message due to clock error,
 				// they'd have to wait for the next slot/round to be accepted.
@@ -185,11 +185,9 @@ func (mv *messageValidator) validateQBFTLogic(
 				return err
 			}
 
-			if len(signedSSVMessage.GetOperatorIDs()) == 1 {
-				// Rule: Peer must not send two proposals with different data
-				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-					return ErrDuplicatedProposalWithDifferentData
-				}
+			// Rule: Peer must not send two proposals with different data
+			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+				return ErrDuplicatedProposalWithDifferentData
 			}
 
 			// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
