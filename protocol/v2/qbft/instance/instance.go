@@ -160,7 +160,7 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, signedMsg *spectypes.SignedSSV
 
 func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) error {
 	if err := signedMsg.Validate(); err != nil {
-		return errors.Wrap(err, "invalid signed message")
+		return errors.Wrap(err, "invalid SignedSSVMessage")
 	}
 
 	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
