@@ -2,7 +2,7 @@ package storage
 
 import (
 	"github.com/cornelk/hashmap"
-	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
+	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"

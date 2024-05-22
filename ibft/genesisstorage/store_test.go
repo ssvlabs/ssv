@@ -3,13 +3,14 @@ package storage
 import (
 	"testing"
 
-	"github.com/ssvlabs/ssv/logging"
-	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
-	types "github.com/ssvlabs/ssv/protocol/v2/genesistypes"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
+	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"

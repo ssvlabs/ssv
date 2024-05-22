@@ -6,8 +6,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/ssvlabs/ssv/protocol/v2/genesisqbft/instance"
-	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
+	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 

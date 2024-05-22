@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/ssvlabs/ssv/logging"
-	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/v2/genesisqbft/storage"
+	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
