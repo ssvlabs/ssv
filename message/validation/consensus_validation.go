@@ -185,15 +185,17 @@ func (mv *messageValidator) validateQBFTLogic(
 				return err
 			}
 
-			// Rule: Peer must not send two proposals with different data
-			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-				return ErrDuplicatedProposalWithDifferentData
-			}
+			if consensusMessage.Round == signerState.Round {
+				// Rule: Peer must not send two proposals with different data
+				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+					return ErrDuplicatedProposalWithDifferentData
+				}
 
-			// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
-			limits := maxMessageCounts()
-			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
-				return err
+				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
+				limits := maxMessageCounts()
+				if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
+					return err
+				}
 			}
 		} else if len(signedSSVMessage.GetOperatorIDs()) > 1 {
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
