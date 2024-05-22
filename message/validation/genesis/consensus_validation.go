@@ -10,9 +10,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
-	alanspectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -20,21 +19,13 @@ import (
 )
 
 func (mv *messageValidator) validateConsensusMessage(
-	share *ssvtypes.GenesisSSVShare,
+	share *ssvtypes.SSVShare,
 	signedMsg *genesisspecqbft.SignedMessage,
 	messageID genesisspectypes.MessageID,
 	receivedAt time.Time,
 	signatureVerifier func() error,
 ) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
-
-	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-		if mv.inCommittee(share) {
-			mv.metrics.InCommitteeMessage(alanspectypes.MsgType(spectypes.SSVConsensusMsgType), mv.isDecidedMessage(signedMsg))
-		} else {
-			mv.metrics.NonCommitteeMessage(alanspectypes.MsgType(spectypes.SSVConsensusMsgType), mv.isDecidedMessage(signedMsg))
-		}
-	}
 
 	msgSlot := phase0.Slot(signedMsg.Message.Height)
 	msgRound := signedMsg.Message.Round
@@ -152,7 +143,7 @@ func (mv *messageValidator) validateConsensusMessage(
 }
 
 func (mv *messageValidator) validateJustifications(
-	share *ssvtypes.GenesisSSVShare,
+	share *ssvtypes.SSVShare,
 	signedMsg *genesisspecqbft.SignedMessage,
 ) error {
 	pj, err := signedMsg.Message.GetPrepareJustifications()
@@ -207,7 +198,7 @@ func (mv *messageValidator) validateJustifications(
 func (mv *messageValidator) validateSignerBehaviorConsensus(
 	state *ConsensusState,
 	signer genesisspectypes.OperatorID,
-	share *ssvtypes.GenesisSSVShare,
+	share *ssvtypes.SSVShare,
 	msgID genesisspectypes.MessageID,
 	signedMsg *genesisspecqbft.SignedMessage,
 ) error {
@@ -292,7 +283,7 @@ func (mv *messageValidator) validateDutyCount(
 func (mv *messageValidator) validateBeaconDuty(
 	role genesisspectypes.BeaconRole,
 	slot phase0.Slot,
-	share *ssvtypes.GenesisSSVShare,
+	share *ssvtypes.SSVShare,
 ) error {
 	switch role {
 	case genesisspectypes.BNRoleProposer:
@@ -391,18 +382,14 @@ func (mv *messageValidator) validQBFTMsgType(msgType genesisspecqbft.MessageType
 	return false
 }
 
-func (mv *messageValidator) validConsensusSigners(share *ssvtypes.GenesisSSVShare, m *genesisspecqbft.SignedMessage) error {
+func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *genesisspecqbft.SignedMessage) error {
 	switch {
 	case len(m.Signers) == 0:
 		return ErrNoSigners
 
 	case len(m.Signers) == 1:
 		if m.Message.MsgType == genesisspecqbft.ProposalMsgType {
-			qbftState := &genesisspecqbft.State{
-				Height: m.Message.Height,
-				Share:  &share.Share,
-			}
-			leader := genesisspecqbft.RoundRobinProposer(qbftState, m.Message.Round)
+			leader := mv.roundRobinProposer(m.Message.Height, m.Message.Round, share)
 			if m.Signers[0] != leader {
 				err := ErrSignerNotLeader
 				err.got = m.Signers[0]
@@ -438,4 +425,14 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.GenesisSSVShar
 		prevSigner = signer
 	}
 	return nil
+}
+
+func (mv *messageValidator) roundRobinProposer(height genesisspecqbft.Height, round genesisspecqbft.Round, share *ssvtypes.SSVShare) types.OperatorID {
+	firstRoundIndex := 0
+	if height != genesisspecqbft.FirstHeight {
+		firstRoundIndex += int(height) % len(share.Committee)
+	}
+
+	index := (firstRoundIndex + int(round) - int(genesisspecqbft.FirstRound)) % len(share.Committee)
+	return share.Committee[index].Signer
 }

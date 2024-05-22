@@ -29,7 +29,6 @@ import (
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -68,7 +67,6 @@ type messageValidator struct {
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
-	operatorDataStore       operatordatastore.OperatorDataStore
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, keys.OperatorPublicKey]
 
 	// validationLocks is a map of lock per SSV message ID to
@@ -121,13 +119,6 @@ func WithDutyStore(dutyStore *dutystore.Store) Option {
 	}
 }
 
-// WithOwnOperatorID sets the operator ID getter for the messageValidator.
-func WithOwnOperatorID(ods operatordatastore.OperatorDataStore) Option {
-	return func(mv *messageValidator) {
-		mv.operatorDataStore = ods
-	}
-}
-
 // WithNodeStorage sets the node storage for the messageValidator.
 func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
@@ -148,7 +139,7 @@ type ConsensusDescriptor struct {
 	Round           specqbft.Round
 	QBFTMessageType specqbft.MessageType
 	Signers         []spectypes.OperatorID
-	Committee       []*spectypes.Operator
+	Committee       []*alanspectypes.ShareMember
 }
 
 // Descriptor provides details about a message. It's used for logging and metrics.
@@ -172,7 +163,7 @@ func (d Descriptor) Fields() []zapcore.Field {
 	if d.Consensus != nil {
 		var committee []spectypes.OperatorID
 		for _, o := range d.Consensus.Committee {
-			committee = append(committee, o.OperatorID)
+			committee = append(committee, o.Signer)
 		}
 
 		result = append(result,
@@ -199,7 +190,7 @@ func (d Descriptor) String() string {
 	if d.Consensus != nil {
 		var committee []spectypes.OperatorID
 		for _, o := range d.Consensus.Committee {
-			committee = append(committee, o.OperatorID)
+			committee = append(committee, o.Signer)
 		}
 
 		sb.WriteString(fmt.Sprintf(", round: %v, qbft message type: %v, signers: %v, committee: %v",
@@ -402,37 +393,37 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return nil, descriptor, ErrInvalidRole
 	}
 
-	//publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
-	//if err != nil {
-	//	e := ErrDeserializePublicKey
-	//	e.innerErr = err
-	//	return nil, descriptor, e
-	//}
+	publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
+	if err != nil {
+		e := ErrDeserializePublicKey
+		e.innerErr = err
+		return nil, descriptor, e
+	}
 
-	var share *ssvtypes.GenesisSSVShare
-	//if mv.nodeStorage != nil {
-	//	shareStorage := mv.nodeStorage.GenesisShares()
-	//	share = shareStorage.Get(nil, publicKey.Serialize())
-	//	if share == nil {
-	//		e := ErrUnknownValidator
-	//		e.got = publicKey.SerializeToHexStr()
-	//		return nil, descriptor, e
-	//	}
-	//
-	//	if share.Liquidated {
-	//		return nil, descriptor, ErrValidatorLiquidated
-	//	}
-	//
-	//	if share.BeaconMetadata == nil {
-	//		return nil, descriptor, ErrNoShareMetadata
-	//	}
-	//
-	//	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
-	//		err := ErrValidatorNotAttesting
-	//		err.got = share.BeaconMetadata.Status.String()
-	//		return nil, descriptor, err
-	//	}
-	//}
+	var share *ssvtypes.SSVShare
+	if mv.nodeStorage != nil {
+		shareStorage := mv.nodeStorage.Shares()
+		share = shareStorage.Get(nil, publicKey.Serialize())
+		if share == nil {
+			e := ErrUnknownValidator
+			e.got = publicKey.SerializeToHexStr()
+			return nil, descriptor, e
+		}
+
+		if share.Liquidated {
+			return nil, descriptor, ErrValidatorLiquidated
+		}
+
+		if share.BeaconMetadata == nil {
+			return nil, descriptor, ErrNoShareMetadata
+		}
+
+		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+			err := ErrValidatorNotAttesting
+			err.got = share.BeaconMetadata.Status.String()
+			return nil, descriptor, err
+		}
+	}
 
 	msg, err := queue.DecodeGenesisSSVMessage(ssvMessage)
 	if err != nil {
@@ -504,9 +495,9 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	return msg, descriptor, nil
 }
 
-func (mv *messageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
-	return func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == signer
+func (mv *messageValidator) containsSignerFunc(signer spectypes.OperatorID) func(shareMember *alanspectypes.ShareMember) bool {
+	return func(shareMember *alanspectypes.ShareMember) bool {
+		return shareMember.Signer == signer
 	}
 }
 
@@ -523,7 +514,7 @@ func (mv *messageValidator) validateSignatureFormat(signature []byte) error {
 	return nil
 }
 
-func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, share *ssvtypes.GenesisSSVShare) error {
+func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, share *ssvtypes.SSVShare) error {
 	if signer == 0 {
 		return ErrZeroSigner
 	}
@@ -587,11 +578,4 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 
 	cs, _ := mv.index.Load(id)
 	return cs.(*ConsensusState)
-}
-
-// inCommittee should be called only when WithOwnOperatorID is set
-func (mv *messageValidator) inCommittee(share *ssvtypes.GenesisSSVShare) bool {
-	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.operatorDataStore.GetOperatorID()
-	})
 }
