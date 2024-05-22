@@ -173,18 +173,31 @@ func (mv *messageValidator) validateQBFTLogic(
 
 		signerState := signerStateInterface.(*SignerState)
 
-		// Rule: Ignore if peer already advanced to a later round. Only for non-decided messages
-		if consensusMessage.Round < signerState.Round && len(signedSSVMessage.GetOperatorIDs()) == 1 {
-			// Signers aren't allowed to decrease their round.
-			// If they've sent a future message due to clock error,
-			// they'd have to wait for the next slot/round to be accepted.
-			err := ErrRoundAlreadyAdvanced
-			err.want = signerState.Round
-			err.got = consensusMessage.Round
-			return err
-		}
+		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+			// Rule: Ignore if peer already advanced to a later round. Only for non-decided messages
+			if consensusMessage.Round < signerState.Round && len(signedSSVMessage.GetOperatorIDs()) == 1 {
+				// Signers aren't allowed to decrease their round.
+				// If they've sent a future message due to clock error,
+				// they'd have to wait for the next slot/round to be accepted.
+				err := ErrRoundAlreadyAdvanced
+				err.want = signerState.Round
+				err.got = consensusMessage.Round
+				return err
+			}
 
-		if len(signedSSVMessage.GetOperatorIDs()) > 1 {
+			if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+				// Rule: Peer must not send two proposals with different data
+				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+					return ErrDuplicatedProposalWithDifferentData
+				}
+			}
+
+			// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
+			limits := maxMessageCounts()
+			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
+				return err
+			}
+		} else if len(signedSSVMessage.GetOperatorIDs()) > 1 {
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
 			encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
 			if err != nil {
@@ -194,21 +207,6 @@ func (mv *messageValidator) validateQBFTLogic(
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
 			if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
 				return ErrDecidedWithSameSigners
-			}
-		}
-
-		if consensusMessage.Round == signerState.Round {
-			if len(signedSSVMessage.GetOperatorIDs()) == 1 {
-				// Rule: Peer must not send two proposals with different data
-				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-					return ErrDuplicatedProposalWithDifferentData
-				}
-			}
-
-			// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, maxDecidedCount(committeeSize) decided and 1 round-change per round
-			limits := maxMessageCounts(len(committee))
-			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
-				return err
 			}
 		}
 	}

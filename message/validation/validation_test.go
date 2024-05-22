@@ -210,7 +210,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, stateBySlot)
 		require.EqualValues(t, 1, signerStateNewSlot.(*SignerState).Round)
-		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1}, signerStateNewSlot.(*SignerState).MessageCounts)
+		require.EqualValues(t, MessageCounts{Commit: 1}, signerStateNewSlot.(*SignerState).MessageCounts)
 	})
 
 	// Send a pubsub message with no data should cause an error
@@ -1207,7 +1207,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
-		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, decided: 0, round change: 0, post-consensus: 0"
+		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, round change: 0, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1229,7 +1229,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
-		expectedErr.got = "commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, decided: 0, round change: 0, post-consensus: 0"
+		expectedErr.got = "commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, round change: 0, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1251,7 +1251,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
-		expectedErr.got = "round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 0, round change: 1, post-consensus: 0"
+		expectedErr.got = "round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 1, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
