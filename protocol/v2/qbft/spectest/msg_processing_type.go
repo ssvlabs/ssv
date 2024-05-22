@@ -74,7 +74,8 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
-			r2, _ := broadcastedMsgs[i].GetRoot()
+			msg2 := broadcastedMsgs[i]
+			r2, _ := msg2.GetRoot()
 			require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
 		}
 	}
