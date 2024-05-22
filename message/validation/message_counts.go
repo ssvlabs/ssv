@@ -116,11 +116,6 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 		}
 	case specqbft.RoundChangeMsgType:
 		c.RoundChange++
-		c.RoundChangeMsg = queue.DecodedSSVMessage{
-			SignedSSVMessage: signedSSVMessage,
-			SSVMessage:       signedSSVMessage.SSVMessage,
-			Body:             msg,
-		}
 	default:
 		panic("unexpected signed message type") // should be checked before
 	}
