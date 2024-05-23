@@ -1,39 +1,38 @@
 package qbft
 
 import (
-	"errors"
 	"testing"
 
+	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 )
 
 func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported
 	var lastErr error
 
-	for i, rc := range test.Messages {
-		if err := rc.Validate(); err != nil {
+	for i, msg := range test.Messages {
+		if err := msg.Validate(); err != nil {
 			lastErr = err
 			continue
 		}
-		msg, err := specqbft.DecodeMessage(rc.SSVMessage.Data)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if msg.RoundChangePrepared() && len(msg.RoundChangeJustification) == 0 {
-			lastErr = errors.New("round change justification invalid")
+
+		qbftMessage := &qbft.Message{}
+		require.NoError(t, qbftMessage.Decode(msg.SSVMessage.Data))
+		if err := qbftMessage.Validate(); err != nil {
+			lastErr = err
+			continue
 		}
 
 		if len(test.EncodedMessages) > 0 {
-			byts, err := rc.Encode()
+			byts, err := msg.Encode()
 			require.NoError(t, err)
 			require.EqualValues(t, test.EncodedMessages[i], byts)
 		}
 
 		if len(test.ExpectedRoots) > 0 {
-			r, err := rc.GetRoot()
+			r, err := msg.GetRoot()
 			require.NoError(t, err)
 			require.EqualValues(t, test.ExpectedRoots[i], r)
 		}

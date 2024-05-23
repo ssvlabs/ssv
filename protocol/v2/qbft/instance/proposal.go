@@ -5,10 +5,11 @@ import (
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
 
@@ -71,7 +72,6 @@ func isValidProposal(
 	signedProposal *spectypes.SignedSSVMessage,
 	valCheck specqbft.ProposedValueCheckF,
 ) error {
-
 	msg, err := specqbft.DecodeMessage(signedProposal.SSVMessage.Data)
 	if err != nil {
 		return err
@@ -83,14 +83,15 @@ func isValidProposal(
 	if msg.Height != state.Height {
 		return errors.New("wrong msg height")
 	}
-	if len(signedProposal.OperatorIDs) != 1 {
+	if len(signedProposal.GetOperatorIDs()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
+
 	if !signedProposal.CheckSignersInCommittee(state.Share.Committee) {
 		return errors.New("signer not in committee")
 	}
 
-	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, msg.Round)}) {
+	if !signedProposal.MatchedSigners([]types.OperatorID{proposer(state, config, msg.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
 
@@ -190,11 +191,13 @@ func isProposalJustification(
 		// previouslyPreparedF returns true if any on the round change messages have a prepared round and fullData
 		previouslyPrepared, err := func(rcMsgs []*spectypes.SignedSSVMessage) (bool, error) {
 			for _, rc := range rcMsgs {
-				rcmsg, err := specqbft.DecodeMessage(rc.SSVMessage.Data)
+
+				msg, err := specqbft.DecodeMessage(rc.SSVMessage.Data)
 				if err != nil {
 					continue
 				}
-				if rcmsg.RoundChangePrepared() {
+
+				if msg.RoundChangePrepared() {
 					return true, nil
 				}
 			}
@@ -214,12 +217,17 @@ func isProposalJustification(
 			}
 
 			// get a round change data for which there is a justification for the highest previously prepared round
-			rcm, err := highestPrepared(roundChangeMsgs)
+			rcSignedMsg, err := highestPrepared(roundChangeMsgs)
 			if err != nil {
 				return errors.Wrap(err, "could not get highest prepared")
 			}
-			if rcm == nil {
+			if rcSignedMsg == nil {
 				return errors.New("no highest prepared")
+			}
+
+			rcMsg, err := specqbft.DecodeMessage(rcSignedMsg.SSVMessage.Data)
+			if err != nil {
+				return errors.Wrap(err, "highest prepared can't be decoded to Message")
 			}
 
 			// proposed fullData must equal highest prepared fullData
@@ -227,12 +235,6 @@ func isProposalJustification(
 			if err != nil {
 				return errors.Wrap(err, "could not hash input data")
 			}
-
-			rcMsg, err := specqbft.DecodeMessage(rcm.SSVMessage.Data)
-			if err != nil {
-				return errors.Wrap(err, "highest prepared can't be decoded to Message")
-			}
-
 			if !bytes.Equal(r[:], rcMsg.Root[:]) {
 				return errors.New("proposed data doesn't match highest prepared")
 			}
