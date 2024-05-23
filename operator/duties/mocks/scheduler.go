@@ -14,7 +14,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types0 "github.com/ethereum/go-ethereum/core/types"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	types "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
