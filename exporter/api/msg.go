@@ -35,8 +35,8 @@ type ParticipantsAPI struct {
 	Identifier  []byte
 	ValidatorPK string
 	Role        string
-
-	FullData *spectypes.ConsensusData
+	Message     specqbft.Message
+	FullData    *spectypes.ConsensusData
 }
 
 // NewDecidedAPIMsg creates a new message in an old format from the given message.
@@ -131,7 +131,13 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 			Identifier:  msg.Identifier[:],
 			ValidatorPK: hex.EncodeToString(msg.Identifier.GetPubKey()),
 			Role:        msg.Identifier.GetRoleType().String(),
-			FullData:    &spectypes.ConsensusData{Duty: spectypes.Duty{Slot: msg.Slot}},
+			Message: specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.Height(msg.Slot),
+				Identifier: msg.Identifier[:],
+				Round:      specqbft.FirstRound,
+			},
+			FullData: &spectypes.ConsensusData{Duty: spectypes.Duty{Slot: msg.Slot}},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)
