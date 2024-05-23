@@ -57,8 +57,8 @@ var (
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
-	ErrEarlyMessage                            = Error{text: "early message"}
-	ErrLateMessage                             = Error{text: "late message"}
+	ErrEarlySlotMessage                        = Error{text: "message was sent before slot starts"}
+	ErrLateSlotMessage                         = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
 	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
 	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers"}
@@ -70,7 +70,7 @@ var (
 	ErrValidatorIndexMismatch                  = Error{text: "partial signature validator index not found"}
 	ErrTooManyDutiesPerEpoch                   = Error{text: "too many duties per epoch"}
 	ErrNoDuty                                  = Error{text: "no duty for this epoch"}
-	ErrEstimatedRoundTooFar                    = Error{text: "message round is too far from estimated"}
+	ErrEstimatedRoundNotInAllowedSpread        = Error{text: "message round is too far from estimated"}
 	ErrEmptyData                               = Error{text: "empty data", reject: true}
 	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}

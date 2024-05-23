@@ -15,13 +15,13 @@ func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
 
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
 	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance {
-		e := ErrEarlyMessage
+		e := ErrEarlySlotMessage
 		e.got = fmt.Sprintf("early by %v", earliness)
 		return e
 	}
 
 	if lateness := mv.messageLateness(messageSlot, role, receivedAt); lateness > clockErrorTolerance {
-		e := ErrLateMessage
+		e := ErrLateSlotMessage
 		e.got = fmt.Sprintf("late by %v", lateness)
 		return e
 	}

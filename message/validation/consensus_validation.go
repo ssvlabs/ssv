@@ -432,7 +432,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	if consensusMessage.Round < lowestAllowed || consensusMessage.Round > highestAllowed {
-		e := ErrEstimatedRoundTooFar
+		e := ErrEstimatedRoundNotInAllowedSpread
 		e.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
 		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, message.RunnerRoleToString(role), sinceSlotStart)
 		return e

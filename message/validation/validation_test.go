@@ -1032,7 +1032,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				topicID := commons.CommitteeTopicID(committeeID)[0]
 				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-				require.ErrorContains(t, err, ErrLateMessage.Error())
+				require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 			})
 		}
 	})
@@ -1048,7 +1048,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
-		require.ErrorContains(t, err, ErrEarlyMessage.Error())
+		require.ErrorContains(t, err, ErrEarlySlotMessage.Error())
 	})
 
 	// Send message from non-leader acting as a leader should receive an error
@@ -1365,7 +1365,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(sinceSlotStart)
 				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 				if validator.messageLateness(slot, role, receivedAt) > 0 {
-					require.ErrorContains(t, err, ErrLateMessage.Error())
+					require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 				} else {
 					require.ErrorContains(t, err, ErrRoundTooHigh.Error())
 				}
