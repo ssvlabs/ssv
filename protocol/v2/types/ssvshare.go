@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	MaxPossibleShareSize = 1258
+	MaxPossibleShareSize = 1326
 	MaxAllowedShareSize  = MaxPossibleShareSize * 8 // Leaving some room for protocol updates and calculation mistakes.
 )
 

@@ -8,10 +8,10 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -67,9 +67,9 @@ type storageOperator struct {
 // but we keep the name Share to avoid conflicts with gob encoding.
 type Share struct {
 	OperatorID            spectypes.OperatorID
-	ValidatorPubKey       []byte             `ssz-size:"48"`
-	SharePubKey           []byte             `ssz-size:"48"`
-	Committee             []*storageOperator `ssz-max:"13"`
+	ValidatorPubKey       spectypes.ValidatorPK `ssz-size:"48"`
+	SharePubKey           []byte                `ssz-size:"48"`
+	Committee             []*storageOperator    `ssz-max:"13"`
 	Quorum, PartialQuorum uint64
 	DomainType            spectypes.DomainType `ssz-size:"4"`
 	FeeRecipientAddress   [20]byte             `ssz-size:"20"`
@@ -250,7 +250,7 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(committee))
 	stShare := &storageShare{
 		Share: Share{
-			ValidatorPubKey:     share.ValidatorPubKey[:],
+			ValidatorPubKey:     share.ValidatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
 			Quorum:              quorum,
@@ -283,7 +283,7 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorPubKey:     spectypes.ValidatorPK(share.ValidatorPubKey[:]),
+			ValidatorPubKey:     share.ValidatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
 			Quorum:              quorum,
