@@ -3,14 +3,14 @@ package duties
 import (
 	"context"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/base_handler.go -source=./base_handler.go
+//go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
 // ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
