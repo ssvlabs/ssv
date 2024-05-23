@@ -1,4 +1,4 @@
-package newduties
+package duties
 
 import (
 	"context"
