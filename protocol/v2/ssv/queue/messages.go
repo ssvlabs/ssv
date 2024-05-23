@@ -27,7 +27,7 @@ type DecodedSSVMessage struct {
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
+	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg | *genesisspecqbft.SignedMessage | *genesisspectypes.SignedPartialSignatureMessage
 }
 
 func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
@@ -45,6 +45,10 @@ func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
 			return phase0.Slot(data.Height), nil
 		}
 		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
+	case *genesisspecqbft.SignedMessage: // TODO: remove post-fork
+		return phase0.Slot(m.Message.Height), nil
+	case *genesisspectypes.SignedPartialSignatureMessage: // TODO: remove post-fork
+		return m.Message.Slot, nil
 	default:
 		return 0, ErrUnknownMessageType
 	}
