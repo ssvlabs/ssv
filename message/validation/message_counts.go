@@ -37,27 +37,27 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		if c.Proposal >= limits.Proposal {
-			err := ErrTooManySameTypeMessagesPerRound
+			err := ErrDuplicatedMessage
 			err.got = fmt.Sprintf("proposal, having %v", c.String())
 			return err
 		}
 	case specqbft.PrepareMsgType:
 		if c.Prepare >= limits.Prepare {
-			err := ErrTooManySameTypeMessagesPerRound
+			err := ErrDuplicatedMessage
 			err.got = fmt.Sprintf("prepare, having %v", c.String())
 			return err
 		}
 	case specqbft.CommitMsgType:
 		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
 			if c.Commit >= limits.Commit {
-				err := ErrTooManySameTypeMessagesPerRound
+				err := ErrDuplicatedMessage
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
 		}
 	case specqbft.RoundChangeMsgType:
 		if c.RoundChange >= limits.RoundChange {
-			err := ErrTooManySameTypeMessagesPerRound
+			err := ErrDuplicatedMessage
 
 			err.got = fmt.Sprintf("round change, having %v", c.String())
 			return err
@@ -75,13 +75,13 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSign
 	switch m.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		if c.PreConsensus > limits.PreConsensus {
-			err := ErrTooManySameTypeMessagesPerRound
+			err := ErrInvalidPartialSignatureTypeCount
 			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 			return err
 		}
 	case spectypes.PostConsensusPartialSig:
 		if c.PostConsensus > limits.PostConsensus {
-			err := ErrTooManySameTypeMessagesPerRound
+			err := ErrInvalidPartialSignatureTypeCount
 			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
 			return err
 		}

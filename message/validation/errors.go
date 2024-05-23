@@ -52,7 +52,6 @@ func (e Error) Text() string {
 }
 
 var (
-	ErrEmptyData                               = Error{text: "empty data"}
 	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
@@ -60,7 +59,6 @@ var (
 	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
 	ErrEarlyMessage                            = Error{text: "early message"}
 	ErrLateMessage                             = Error{text: "late message"}
-	ErrTooManySameTypeMessagesPerRound         = Error{text: "too many messages of same type per round"}
 	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
 	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers"}
@@ -68,11 +66,13 @@ var (
 	ErrIncorrectTopic                          = Error{text: "incorrect topic"}
 	ErrNonExistentCommitteeID                  = Error{text: "committee ID doesn't exist"}
 	ErrRoundTooHigh                            = Error{text: "round is too high for this role"}
-	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch"}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages"}
 	ErrValidatorIndexMismatch                  = Error{text: "partial signature validator index not found"}
 	ErrTooManyDutiesPerEpoch                   = Error{text: "too many duties per epoch"}
 	ErrNoDuty                                  = Error{text: "no duty for this epoch"}
+	ErrEstimatedRoundTooFar                    = Error{text: "message round is too far from estimated"}
+	ErrEmptyData                               = Error{text: "empty data", reject: true}
+	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
 	ErrPubSubMessageHasNoData                  = Error{text: "pub-sub message has no data", reject: true}
 	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed", reject: true}
@@ -91,7 +91,6 @@ var (
 	ErrInconsistentSigners                     = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                             = Error{text: "root doesn't match full data hash", reject: true}
 	ErrFullDataHash                            = Error{text: "couldn't hash root", reject: true}
-	ErrEstimatedRoundTooFar                    = Error{text: "message round is too far from estimated"}
 	ErrUndecodableMessageData                  = Error{text: "message data could not be decoded", reject: true}
 	ErrEventMessage                            = Error{text: "unexpected event message", reject: true}
 	ErrDKGMessage                              = Error{text: "unexpected DKG message", reject: true}
@@ -115,7 +114,9 @@ var (
 	ErrPrepareOrCommitWithFullData             = Error{text: "prepare or commit with full data", reject: true}
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
-	ErrInvalidRound                            = Error{text: "invalid round", reject: true}
+	ErrZeroRound                               = Error{text: "zero round", reject: true}
+	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
+	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.DecodedSSVMessage, err error) pubsub.ValidationResult {

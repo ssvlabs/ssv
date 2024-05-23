@@ -76,6 +76,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return e
 	}
 
+	// Rule: SSVMessage cannot be nil
 	ssvMessage := signedSSVMessage.SSVMessage
 	if ssvMessage == nil {
 		return ErrNilSSVMessage
@@ -87,10 +88,12 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage) error {
 	mv.metrics.SSVMessageType(ssvMessage.MsgType)
 
+	// Rule: SSVMessage.Data must not be empty
 	if len(ssvMessage.Data) == 0 {
 		return ErrEmptyData
 	}
 
+	// SSVMessage.Data must respect the size limit
 	if len(ssvMessage.Data) > maxPayloadSize {
 		err := ErrSSVDataTooBig
 		err.got = len(ssvMessage.Data)

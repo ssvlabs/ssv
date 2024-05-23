@@ -90,7 +90,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 			return e
 		}
 
-		// Rule: Number of signers must be more than quorum size
+		// Rule: Number of signers must be >= quorum size
 		if uint64(len(signers)) < quorumSize {
 			e := ErrDecidedNotEnoughSigners
 			e.want = quorumSize
@@ -123,9 +123,9 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return ErrUnknownQBFTMessageType
 	}
 
-	// Rule: Round must be valid
+	// Rule: Round must not be zero
 	if consensusMessage.Round == specqbft.NoRound {
-		e := ErrInvalidRound
+		e := ErrZeroRound
 		e.got = specqbft.NoRound
 		return e
 	}
@@ -356,6 +356,7 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 		return e
 	}
 
+	// Rule: Can only exist for Proposal messages
 	if len(pj) != 0 && message.MsgType != specqbft.ProposalMsgType {
 		e := ErrUnexpectedPrepareJustifications
 		e.got = message.MsgType
@@ -369,6 +370,7 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 		return e
 	}
 
+	// Rule: Can only exist for Proposal or Round-Change messages
 	if len(rcj) != 0 && message.MsgType != specqbft.ProposalMsgType && message.MsgType != specqbft.RoundChangeMsgType {
 		e := ErrUnexpectedRoundChangeJustifications
 		e.got = message.MsgType

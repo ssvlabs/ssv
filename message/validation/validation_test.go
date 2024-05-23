@@ -157,7 +157,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		stateBySlot := state.Get(1)
 		require.NotNil(t, stateBySlot)
@@ -187,7 +187,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, MessageCounts{Prepare: 1}, signerStateOldSlot.(*SignerState).MessageCounts)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		signedSSVMessage = generateSignedMessage(ks, msgID, slot+1, func(message *specqbft.Message) {
 			message.MsgType = specqbft.CommitMsgType
@@ -203,7 +203,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, MessageCounts{Commit: 1}, signerStateNewSlot.(*SignerState).MessageCounts)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
-		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		signedSSVMessage = generateMultiSignedMessage(ks, msgID, slot+1)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
@@ -316,7 +316,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
-		const tooBigMsgSize = maxPayloadSize * 2
+		tooBigMsgSize := maxPayloadSize * 2
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, tooBigMsgSize)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
@@ -1206,7 +1206,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		expectedErr := ErrTooManySameTypeMessagesPerRound
+		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, round change: 0, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -1228,7 +1228,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		expectedErr := ErrTooManySameTypeMessagesPerRound
+		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, round change: 0, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -1250,7 +1250,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		expectedErr := ErrTooManySameTypeMessagesPerRound
+		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 1, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -1462,8 +1462,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrNilSSVMessage.Error())
 	})
 
-	// Receive wrong round (0)
-	t.Run("wrong round", func(t *testing.T) {
+	// Receive zero round
+	t.Run("zero round", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -1475,7 +1475,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		require.ErrorContains(t, err, ErrInvalidRound.Error())
+		require.ErrorContains(t, err, ErrZeroRound.Error())
 	})
 
 	// Receive a message with no signatures
