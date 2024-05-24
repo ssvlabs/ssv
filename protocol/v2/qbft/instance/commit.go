@@ -5,25 +5,18 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
 // Assumes commit message is valid!
 func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *spectypes.SignedSSVMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *spectypes.SignedSSVMessage, error) {
-	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(signedCommit)
-	if err != nil {
-		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
-	}
-	if !addMsg {
-		return false, nil, nil, nil // UponCommit was already called
-	}
-
+	// Decode qbft message
 	msg, err := specqbft.DecodeMessage(signedCommit.SSVMessage.Data)
 	if err != nil {
 		return false, nil, nil, err
@@ -33,6 +26,14 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *spectypes.Signed
 		fields.Round(i.State.Round),
 		zap.Any("commit-signers", signedCommit.OperatorIDs),
 		fields.Root(msg.Root))
+
+	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(signedCommit)
+	if err != nil {
+		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
+	}
+	if !addMsg {
+		return false, nil, nil, nil // UponCommit was already called
+	}
 
 	// calculate commit quorum and act upon it
 	quorum, commitMsgs, err := commitQuorumForRoundRoot(i.State, commitMsgContainer, msg.Root, msg.Round)
@@ -134,7 +135,6 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, root [32]byte) (*s
 
 		Root: root,
 	}
-
 	return specqbft.MessageToSignedSSVMessage(msg, state.Share.OperatorID, config.GetOperatorSigner())
 }
 
@@ -144,9 +144,13 @@ func baseCommitValidationIgnoreSignature(
 	operators []*spectypes.CommitteeMember,
 ) error {
 
+	if err := signedCommit.Validate(); err != nil {
+		return errors.Wrap(err, "signed commit invalid")
+	}
+
 	msg, err := specqbft.DecodeMessage(signedCommit.SSVMessage.Data)
 	if err != nil {
-		return errors.Wrap(err, "can't decode inner SSVMessage")
+		return err
 	}
 
 	if msg.MsgType != specqbft.CommitMsgType {
@@ -154,10 +158,6 @@ func baseCommitValidationIgnoreSignature(
 	}
 	if msg.Height != height {
 		return errors.New("wrong msg height")
-	}
-
-	if err := signedCommit.Validate(); err != nil {
-		return errors.Wrap(err, "signed commit invalid")
 	}
 
 	if !signedCommit.CheckSignersInCommittee(operators) {
@@ -194,14 +194,14 @@ func validateCommit(
 	signedCommit *spectypes.SignedSSVMessage,
 	height specqbft.Height,
 	round specqbft.Round,
-	proposedMsg *spectypes.SignedSSVMessage,
+	proposedSignedMsg *spectypes.SignedSSVMessage,
 	operators []*spectypes.CommitteeMember,
 ) error {
 	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
 		return err
 	}
 
-	if len(signedCommit.Signatures) != 1 {
+	if len(signedCommit.GetOperatorIDs()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
 
@@ -214,7 +214,12 @@ func validateCommit(
 		return errors.New("wrong msg round")
 	}
 
-	if !bytes.Equal(msg.Root[:], msg.Root[:]) {
+	proposedMsg, err := specqbft.DecodeMessage(proposedSignedMsg.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Equal(proposedMsg.Root[:], msg.Root[:]) {
 		return errors.New("proposed data mismatch")
 	}
 
