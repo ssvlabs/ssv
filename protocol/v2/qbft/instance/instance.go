@@ -168,6 +168,10 @@ func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) erro
 		return err
 	}
 
+	if err := msg.Validate(); err != nil {
+		return errors.Wrap(err, "invalid Message")
+	}
+
 	if msg.Round < i.State.Round {
 		return errors.New("past round")
 	}
@@ -181,15 +185,21 @@ func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) erro
 			i.config.GetValueCheckF(),
 		)
 	case specqbft.PrepareMsgType:
-		proposedMsg := i.State.ProposalAcceptedForCurrentRound
-		if proposedMsg == nil {
+		proposedSignedMsg := i.State.ProposalAcceptedForCurrentRound
+		if proposedSignedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
+
+		proposedMsg, err := specqbft.DecodeMessage(proposedSignedMsg.SSVMessage.Data)
+		if err != nil {
+			return errors.Wrap(err, "proposal saved for this round is invalid")
+		}
+
 		return validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 			signedMsg,
 			i.State.Height,
 			i.State.Round,
-			msg.Root,
+			proposedMsg.Root,
 			i.State.Share.Committee,
 		)
 	case specqbft.CommitMsgType:

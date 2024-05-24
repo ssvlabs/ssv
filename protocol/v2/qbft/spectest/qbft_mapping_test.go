@@ -38,15 +38,6 @@ func TestQBFTMapping(t *testing.T) {
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
 
-		//
-		//if testName != "qbft message processing prepare wrong data" {
-		//	continue
-		//}
-		//
-		//if testName != "qbft create message create round change no justification quorum" {
-		//	continue
-		//}
-
 		switch testType {
 		case reflect.TypeOf(&spectests.MsgProcessingSpecTest{}).String():
 			byts, err := json.Marshal(test)
