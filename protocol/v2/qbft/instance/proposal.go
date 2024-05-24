@@ -5,7 +5,6 @@ import (
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
@@ -91,7 +90,7 @@ func isValidProposal(
 		return errors.New("signer not in committee")
 	}
 
-	if !signedProposal.MatchedSigners([]types.OperatorID{proposer(state, config, msg.Round)}) {
+	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, msg.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
 

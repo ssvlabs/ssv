@@ -3,7 +3,7 @@ package qbft
 import (
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
 
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
@@ -18,7 +18,7 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 			continue
 		}
 
-		qbftMessage := &qbft.Message{}
+		qbftMessage := &specqbft.Message{}
 		require.NoError(t, qbftMessage.Decode(msg.SSVMessage.Data))
 		if err := qbftMessage.Validate(); err != nil {
 			lastErr = err
