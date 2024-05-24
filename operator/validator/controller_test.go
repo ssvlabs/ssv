@@ -639,9 +639,10 @@ func TestSetupValidators(t *testing.T) {
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
-			inited, committee := ctr.setupValidators(tc.shares)
+			inited, _ := ctr.setupValidators(tc.shares)
 			require.Len(t, inited, tc.inited)
-			started := ctr.startValidators(inited, committee)
+			// TODO: Alan, should we check for committee too?
+			started := ctr.startValidators(inited, nil)
 			require.Equal(t, tc.started, started)
 
 			//Add any assertions here to validate the behavior
