@@ -319,7 +319,7 @@ func (c *controller) handleRouterMessages() {
 			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
-			// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
+			// TODO temp solution to prevent getting event msgs from network. need to add validation in p2p
 			if msg.MsgType == message.SSVEventMsgType {
 				continue
 			}
