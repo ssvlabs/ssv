@@ -147,7 +147,7 @@ func AddOptions(opts []libp2p.Option) []libp2p.Option {
 	return opts
 }
 
-// EncodeNetworkMsg encodes network message
+// EncodeGenesisNetworkMsg encodes network message
 // TODO: DEPRECATED, remove post-fork
 func EncodeGenesisNetworkMsg(msg *genesisspectypes.SSVMessage) ([]byte, error) {
 	return msg.Encode()

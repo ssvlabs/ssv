@@ -58,12 +58,30 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 			return errors.Wrap(err, "could not handle stream")
 		}
 
-		smsg, err := commons.DecodeNetworkMsg(req)
-		if err != nil {
-			return errors.Wrap(err, "could not decode msg from stream")
+		var ssvMsg *spectypes.SSVMessage
+		if n.cfg.AlanFork {
+			ssvMsg, err = commons.DecodeNetworkMsg(req)
+			if err != nil {
+				return errors.Wrap(err, "could not decode msg from stream")
+			}
+		} else {
+			genesisSSVMsg, err := commons.DecodeGenesisNetworkMsg(req)
+			if err != nil {
+				return errors.Wrap(err, "could not decode genesis msg from stream")
+			}
+
+			if genesisSSVMsg == nil {
+				ssvMsg = nil
+			} else {
+				ssvMsg = &spectypes.SSVMessage{
+					MsgType: spectypes.MsgType(genesisSSVMsg.MsgType),
+					MsgID:   spectypes.MessageID(genesisSSVMsg.MsgID),
+					Data:    genesisSSVMsg.Data,
+				}
+			}
 		}
 
-		result, err := handler(smsg)
+		result, err := handler(ssvMsg)
 		if err != nil {
 			return errors.Wrap(err, "could not handle msg from stream")
 		}
@@ -153,10 +171,29 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 		}
 		distinct[mid] = struct{}{}
 
-		res, err := commons.DecodeNetworkMsg(raw)
-		if err != nil {
-			logger.Debug("could not decode stream response", zap.Error(err))
-			continue
+		var res *spectypes.SSVMessage
+		if n.cfg.AlanFork {
+			res, err = commons.DecodeNetworkMsg(raw)
+			if err != nil {
+				logger.Debug("could not decode stream response", zap.Error(err))
+				continue
+			}
+		} else {
+			genesisSSVMsg, err := commons.DecodeGenesisNetworkMsg(raw)
+			if err != nil {
+				logger.Debug("could not decode stream response", zap.Error(err))
+				continue
+			}
+
+			if genesisSSVMsg == nil {
+				res = nil
+			} else {
+				res = &spectypes.SSVMessage{
+					MsgType: spectypes.MsgType(genesisSSVMsg.MsgType),
+					MsgID:   spectypes.MessageID(genesisSSVMsg.MsgID),
+					Data:    genesisSSVMsg.Data,
+				}
+			}
 		}
 
 		results = append(results, p2pprotocol.SyncResult{

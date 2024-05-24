@@ -761,8 +761,6 @@ github.com/ssvlabs/ssv-spec v0.3.10-0.20240519064657-54fad5befec4 h1:YWhB9RWnWtZ
 github.com/ssvlabs/ssv-spec v0.3.10-0.20240519064657-54fad5befec4/go.mod h1:GRCpcoYwYQYGmW8Ox3yQojJk4/7vhAzIiezxJxDyUDQ=
 github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240430144319-0b52aac25006 h1:+JolKHQ8h2diTn2rxpZvtTul0ZQoiJJOm/4p1E/iiVc=
 github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240430144319-0b52aac25006/go.mod h1:a7ROAIWAtDOV1VdIYBu4dFtD8TGpKCmC1KMOQKpnM7U=
-github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240502072846-bba633c4ed61 h1:NkbXQyLsgZeedMXKAj0EKQJ2LyizPefZ5K99rK3Yyl8=
-github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240502072846-bba633c4ed61/go.mod h1:a7ROAIWAtDOV1VdIYBu4dFtD8TGpKCmC1KMOQKpnM7U=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

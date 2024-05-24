@@ -123,14 +123,16 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
 	if msg.GetType() != message.SSVEventMsgType {
-		// Validate message
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid signed message")
-		}
+		if msg.SignedSSVMessage != nil { // TODO: remove post-fork
+			// Validate message
+			if err := msg.SignedSSVMessage.Validate(); err != nil {
+				return errors.Wrap(err, "invalid signed message")
+			}
 
-		// Verify SignedSSVMessage's signature
-		if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			// Verify SignedSSVMessage's signature
+			if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
+				return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			}
 		}
 	}
 
