@@ -31,7 +31,9 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -49,13 +51,12 @@ const (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
-	metrics           validator.Metrics
-	beacon            beacon.BeaconNode
-	validatorOptions  validator.Options
-	// keyManager          spectypes.KeyManager
+	network             P2PNetwork
+	recipientsStorage   Recipients
+	sharesStorage       SharesStorage
+	metrics             validator.Metrics
+	beacon              beacon.BeaconNode
+	validatorOptions    validator.Options
 	signer              spectypes.BeaconSigner
 	metadataLastUpdated map[spectypes.ValidatorPK]time.Time
 	StorageMap          *ibftstorage.QBFTStores
@@ -207,69 +208,69 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 	}
 }
 
-// func TestHandleNonCommitteeMessages(t *testing.T) {
-// 	logger := logging.TestLogger(t)
-// 	mockValidatorsMap := validators.New(context.TODO())
-// 	controllerOptions := MockControllerOptions{
-// 		validatorsMap: mockValidatorsMap,
-// 	}
-// 	ctr := setupController(logger, controllerOptions) // none committee
+func TestHandleNonCommitteeMessages(t *testing.T) {
+	logger := logging.TestLogger(t)
+	mockValidatorsMap := validators.New(context.TODO())
+	controllerOptions := MockControllerOptions{
+		validatorsMap: mockValidatorsMap,
+	}
+	ctr := setupController(logger, controllerOptions) // none committee
 
-// 	// Only exporter handles non committee messages
-// 	ctr.validatorOptions.Exporter = true
+	// Only exporter handles non committee messages
+	ctr.validatorOptions.Exporter = true
 
-// 	go ctr.handleRouterMessages()
+	go ctr.handleRouterMessages()
 
-// 	var wg sync.WaitGroup
+	var wg sync.WaitGroup
 
-// 	ctr.messageWorker.UseHandler(func(msg *queue.DecodedSSVMessage) error {
-// 		wg.Done()
-// 		return nil
-// 	})
+	ctr.messageWorker.UseHandler(func(msg *queue.DecodedSSVMessage) error {
+		wg.Done()
+		return nil
+	})
 
-// 	wg.Add(2)
+	wg.Add(2)
 
-// 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.RoleCommittee)
 
-// 	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
-// 		SSVMessage: &spectypes.SSVMessage{
-// 			MsgType: spectypes.SSVConsensusMsgType,
-// 			MsgID:   identifier,
-// 			Data:    generateDecidedMessage(t, identifier),
-// 		},
-// 	})
+	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   identifier,
+			Data:    generateDecidedMessage(t, identifier),
+		},
+	})
 
-// 	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
-// 		SSVMessage: &spectypes.SSVMessage{
-// 			MsgType: spectypes.SSVConsensusMsgType,
-// 			MsgID:   identifier,
-// 			Data:    generateChangeRoundMsg(t, identifier),
-// 		},
-// 	})
+	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   identifier,
+			Data:    generateChangeRoundMsg(t, identifier),
+		},
+	})
 
-// 	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
-// 		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-// 			MsgType: message.SSVSyncMsgType,
-// 			MsgID:   identifier,
-// 			Data:    []byte("data"),
-// 		},
-// 	})
+	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+			MsgType: message.SSVSyncMsgType,
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
 
-// 	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
-// 		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-// 			MsgType: spectypes.SSVPartialSignatureMsgType,
-// 			MsgID:   identifier,
-// 			Data:    []byte("data"),
-// 		},
-// 	})
+	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
 
-// 	go func() {
-// 		time.Sleep(time.Second * 4)
-// 		panic("time out!")
-// 	}()
+	go func() {
+		time.Sleep(time.Second * 4)
+		panic("time out!")
+	}()
 
-// 	wg.Wait()
-// }
+	wg.Wait()
+}
 
 func TestUpdateValidatorMetadata(t *testing.T) {
 
@@ -327,7 +328,6 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		testPublicKey             spectypes.ValidatorPK
 		mockRecipientTimes        int
 	}{
-		{"could not decode public key", validatorMetaData, true, nil, false, 1, spectypes.ValidatorPK([]byte("123")), 0},
 		{"Empty metadata", nil, true, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
 		{"Valid metadata", validatorMetaData, false, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
 		{"Share wasn't found", validatorMetaData, true, nil, true, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
@@ -605,7 +605,7 @@ func TestSetupValidators(t *testing.T) {
 			}).AnyTimes()
 
 			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-				spectypes.ValidatorPK([]byte("0")): testValidator,
+				createPubKey(byte('0')): testValidator,
 			}
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -650,7 +650,7 @@ func TestGetValidator(t *testing.T) {
 	}
 
 	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-		spectypes.ValidatorPK([]byte("0")): testValidator,
+		createPubKey(byte('0')): testValidator,
 	}
 	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 	// Set up the controller with mock data
@@ -660,9 +660,9 @@ func TestGetValidator(t *testing.T) {
 	ctr := setupController(logger, controllerOptions)
 
 	// Execute the function under test and validate results
-	_, found := ctr.GetValidator(spectypes.ValidatorPK([]byte("0")))
+	_, found := ctr.GetValidator(createPubKey(byte('0')))
 	require.True(t, found)
-	_, found = ctr.GetValidator(spectypes.ValidatorPK([]byte("1")))
+	_, found = ctr.GetValidator(createPubKey(byte('1')))
 	require.False(t, found)
 }
 
@@ -891,7 +891,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
 
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-			spectypes.ValidatorPK([]byte("0")): testValidator,
+			createPubKey(byte('0')): testValidator,
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
@@ -908,7 +908,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	t.Run("Test with wrong owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-			spectypes.ValidatorPK([]byte("0")): testValidator,
+			createPubKey(byte('0')): testValidator,
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
@@ -926,63 +926,63 @@ func TestGetIndices(t *testing.T) {
 	farFutureEpoch := phase0.Epoch(99999)
 	currentEpoch := phase0.Epoch(100)
 	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-		spectypes.ValidatorPK([]byte("0")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('0')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          0, // ValidatorStateUnknown
 			Index:           0,
 			ActivationEpoch: farFutureEpoch,
 		}),
-		spectypes.ValidatorPK([]byte("1")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('1')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          1, // ValidatorStatePendingInitialized
 			Index:           0,
 			ActivationEpoch: farFutureEpoch,
 		}),
-		spectypes.ValidatorPK([]byte("2")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('2')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          2, // ValidatorStatePendingQueued
 			Index:           3,
 			ActivationEpoch: phase0.Epoch(101),
 		}),
 
-		spectypes.ValidatorPK([]byte("3")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('3')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          3, // ValidatorStateActiveOngoing
 			Index:           3,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		spectypes.ValidatorPK([]byte("4")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('4')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          4, // ValidatorStateActiveExiting
 			Index:           4,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		spectypes.ValidatorPK([]byte("5")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('5')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          5, // ValidatorStateActiveSlashed
 			Index:           5,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
 
-		spectypes.ValidatorPK([]byte("6")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('6')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          6, // ValidatorStateExitedUnslashed
 			Index:           6,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		spectypes.ValidatorPK([]byte("7")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('7')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          7, // ValidatorStateExitedSlashed
 			Index:           7,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		spectypes.ValidatorPK([]byte("8")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('8')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          8, // ValidatorStateWithdrawalPossible
 			Index:           8,
 			ActivationEpoch: phase0.Epoch(100),
 		}),
-		spectypes.ValidatorPK([]byte("9")): newValidator(&beacon.ValidatorMetadata{
+		createPubKey(byte('9')): newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          9, // ValidatorStateWithdrawalDone
 			Index:           9,
@@ -1185,4 +1185,12 @@ func buildOperators(t *testing.T) []*spectypes.ShareMember {
 		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 	return operators
+}
+
+func createPubKey(input byte) spectypes.ValidatorPK {
+	var byteArray [48]byte
+	for i := range byteArray {
+		byteArray[i] = input
+	}
+	return byteArray
 }
