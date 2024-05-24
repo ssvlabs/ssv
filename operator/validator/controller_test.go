@@ -62,6 +62,7 @@ type MockControllerOptions struct {
 	StorageMap          *ibftstorage.QBFTStores
 	validatorsMap       *validators.ValidatorsMap
 	operatorDataStore   operatordatastore.OperatorDataStore
+	operatorStorage     registrystorage.Operators
 }
 
 func TestNewController(t *testing.T) {
@@ -182,8 +183,9 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 			} else {
 				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(sharesSlice[0]).AnyTimes()
 				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
+				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(0)
 			}
 
@@ -419,7 +421,7 @@ func TestSetupValidators(t *testing.T) {
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			// OperatorID:      2,
-			Committee:       operators,
+			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
 		Metadata: types.Metadata{
@@ -436,7 +438,7 @@ func TestSetupValidators(t *testing.T) {
 	shareWithoutMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			// OperatorID:      2,
-			Committee:       operators,
+			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
 		Metadata: types.Metadata{
@@ -452,6 +454,11 @@ func TestSetupValidators(t *testing.T) {
 	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
 	storageMu := sync.Mutex{}
 	storageData := make(map[string]*beacon.ValidatorMetadata)
+
+	opStorage, done := newOperatorStorageForTest(logger)
+	defer done()
+
+	opStorage.SaveOperatorData(nil, buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		0: {
@@ -607,7 +614,10 @@ func TestSetupValidators(t *testing.T) {
 			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 				createPubKey(byte('0')): testValidator,
 			}
-			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
+			committeMap := make(map[spectypes.CommitteeID]*validator.Committee)
+			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeMap))
+
+			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
@@ -616,6 +626,7 @@ func TestSetupValidators(t *testing.T) {
 				sharesStorage:     sharesStorage,
 				operatorDataStore: operatorDataStore,
 				recipientsStorage: recipientStorage,
+				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorOptions: validator.Options{
 					BeaconNetwork: networkconfig.TestNetwork.Beacon,
@@ -628,10 +639,10 @@ func TestSetupValidators(t *testing.T) {
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
-			inited, committee := ctr.setupValidators(tc.shares) //TODO
+			inited, committee := ctr.setupValidators(tc.shares)
 			require.Len(t, inited, tc.inited)
 			started := ctr.startValidators(inited, committee)
-			require.Equal(t, started, tc.started)
+			require.Equal(t, tc.started, started)
 
 			//Add any assertions here to validate the behavior
 		})
@@ -677,64 +688,64 @@ func TestGetValidatorStats(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
 
-	// t.Run("Test with multiple operators", func(t *testing.T) {
-	// 	// Setup for this subtest
-	// 	operatorIds := []uint64{1, 2, 3}
-	// 	operators := make([]*spectypes.ShareMember, len(operatorIds))
-	// 	for i, id := range operatorIds {
-	// 		operators[i] = &spectypes.ShareMember{Signer: id}
-	// 	}
+	t.Run("Test with multiple operators", func(t *testing.T) {
+		// Setup for this subtest
+		operatorIds := []uint64{1, 2, 3}
+		operators := make([]*spectypes.ShareMember, len(operatorIds))
+		for i, id := range operatorIds {
+			operators[i] = &spectypes.ShareMember{Signer: id}
+		}
 
-	// 	// Create a sample SSVShare slice for this subtest
-	// 	sharesSlice := []*types.SSVShare{
-	// 		{
-	// 			Share: spectypes.Share{
-	// 				Committee: operators,
-	// 			},
-	// 			Metadata: types.Metadata{
-	// 				BeaconMetadata: &beacon.ValidatorMetadata{
-	// 					Balance:         0,
-	// 					Status:          3, // ValidatorStatePendingInitialized
-	// 					Index:           0,
-	// 					ActivationEpoch: passedEpoch,
-	// 				},
-	// 			},
-	// 		},
-	// 		{
-	// 			Share: spectypes.Share{
-	// 				Committee: operators,
-	// 			},
-	// 			Metadata: types.Metadata{
-	// 				BeaconMetadata: &beacon.ValidatorMetadata{
-	// 					Balance:         0,
-	// 					Status:          1, // Some other status
-	// 					Index:           0,
-	// 					ActivationEpoch: passedEpoch,
-	// 				},
-	// 			},
-	// 		},
-	// 	}
+		// Create a sample SSVShare slice for this subtest
+		sharesSlice := []*types.SSVShare{
+			{
+				Share: spectypes.Share{
+					Committee: operators,
+				},
+				Metadata: types.Metadata{
+					BeaconMetadata: &beacon.ValidatorMetadata{
+						Balance:         0,
+						Status:          3, // ValidatorStatePendingInitialized
+						Index:           0,
+						ActivationEpoch: passedEpoch,
+					},
+				},
+			},
+			{
+				Share: spectypes.Share{
+					Committee: operators[1:],
+				},
+				Metadata: types.Metadata{
+					BeaconMetadata: &beacon.ValidatorMetadata{
+						Balance:         0,
+						Status:          1, // Some other status
+						Index:           0,
+						ActivationEpoch: passedEpoch,
+					},
+				},
+			},
+		}
 
-	// 	// Set up the controller with mock data for this subtest
-	// 	controllerOptions := MockControllerOptions{
-	// 		sharesStorage:     sharesStorage,
-	// 		validatorsMap:     validators.New(context.TODO()),
-	// 		operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-	// 		beacon:            bc,
-	// 	}
+		// Set up the controller with mock data for this subtest
+		controllerOptions := MockControllerOptions{
+			sharesStorage:     sharesStorage,
+			validatorsMap:     validators.New(context.TODO()),
+			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			beacon:            bc,
+		}
 
-	// 	ctr := setupController(logger, controllerOptions)
+		ctr := setupController(logger, controllerOptions)
 
-	// 	// Set mock expectations for this subtest
-	// 	sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
+		// Set mock expectations for this subtest
+		sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
 
-	// 	// Execute the function under test and validate results for this subtest
-	// 	allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
-	// 	require.NoError(t, err, "Failed to get validator stats")
-	// 	require.Equal(t, len(sharesSlice), int(allShares), "Unexpected total shares count")
-	// 	require.Equal(t, 1, int(activeShares), "Unexpected active shares count")
-	// 	require.Equal(t, 1, int(operatorShares), "Unexpected operator shares count")
-	// })
+		// Execute the function under test and validate results for this subtest
+		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
+		require.NoError(t, err, "Failed to get validator stats")
+		require.Equal(t, len(sharesSlice), int(allShares), "Unexpected total shares count")
+		require.Equal(t, 1, int(activeShares), "Unexpected active shares count")
+		require.Equal(t, 1, int(operatorShares), "Unexpected operator shares count")
+	})
 
 	t.Run("Test with single operator", func(t *testing.T) {
 		// Setup for this subtest
@@ -1013,6 +1024,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		beaconSigner:           opts.signer,
 		ibftStorageMap:         opts.StorageMap,
 		operatorDataStore:      opts.operatorDataStore,
+		operatorsStorage:       opts.operatorStorage,
 		sharesStorage:          opts.sharesStorage,
 		validatorsMap:          opts.validatorsMap,
 		context:                context.Background(),
@@ -1193,4 +1205,15 @@ func createPubKey(input byte) spectypes.ValidatorPK {
 		byteArray[i] = input
 	}
 	return byteArray
+}
+
+func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, func()) {
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	if err != nil {
+		return nil, func() {}
+	}
+	s := registrystorage.NewOperatorsStorage(logger, db, []byte("test"))
+	return s, func() {
+		db.Close()
+	}
 }
