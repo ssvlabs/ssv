@@ -171,7 +171,7 @@ func setupSchedulerAndMocksCommittee(t *testing.T, handlers []dutyHandler, curre
 ) {
 	ctrl := gomock.NewController(t)
 	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 5000 * time.Millisecond
+	timeout := 200 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
@@ -347,10 +347,10 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 	}
 }
 
-func waitForCommitteeDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.CommitteeDuty, timeout time.Duration) {
+func waitForDutiesFetchCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
 	select {
 	case <-fetchDutiesCall:
-		logger.Debug("duties fetched")
+		break
 	case <-executeDutiesCall:
 		require.FailNow(t, "unexpected execute duty call")
 	case <-time.After(timeout):
@@ -369,7 +369,7 @@ func waitForNoActionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall 
 	}
 }
 
-func waitForCommitteeDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration, expectedDuties committeeDutiesMap) {
+func waitForDutiesExecutionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration, expectedDuties committeeDutiesMap) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
