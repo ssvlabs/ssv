@@ -81,10 +81,11 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
+	UseNewExporterAPI          bool `yaml:"UseNewExporterAPI" env:"USE_NEW_EXPORTER_API" env-description:"Use new exporter API which is simpler and has no workarounds"`
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
-	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Buffer size for message workers"`
 	GasLimit        uint64
 }
 
@@ -336,7 +337,7 @@ func (c *controller) handleRouterMessages() {
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
-				if msg.MsgType != spectypes.SSVConsensusMsgType {
+				if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
@@ -396,7 +397,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 
 	// Process the message.
 	defer ncv.Unlock()
-	ncv.ProcessMessage(c.logger, msg)
+	ncv.ProcessMessage(msg)
 
 	return nil
 }
@@ -901,7 +902,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 
 		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, config, options.FullNode)
-		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
 
