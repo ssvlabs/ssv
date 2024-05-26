@@ -14,7 +14,6 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -116,11 +115,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
+				ValidatorIndex: 1,
 			},
 		}}
 	)
@@ -171,11 +166,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
+				ValidatorIndex: 1,
 			},
 		}}
 	)
@@ -225,11 +216,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
+				ValidatorIndex: 1,
 			},
 		}}
 	)
@@ -287,11 +274,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
+				ValidatorIndex: 1,
 			},
 		}}
 	)

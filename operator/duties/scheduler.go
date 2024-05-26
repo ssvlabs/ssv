@@ -444,10 +444,7 @@ func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
 func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {
 	indices := make([]phase0.ValidatorIndex, len(shares))
 	for i, share := range shares {
-		if share.BeaconMetadata == nil || share.BeaconMetadata.Index == 0 {
-			continue
-		}
-		indices[i] = share.BeaconMetadata.Index
+		indices[i] = share.ValidatorIndex
 	}
 	return indices
 }
