@@ -190,7 +190,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 		// If justifiedRoundChangeMsg has prepare justification chose prepared value
 		valueToPropose := instanceStartValue
 		if containerRoundChangeMessage.RoundChangePrepared() {
-			valueToPropose = signedRoundChange.FullData
+			valueToPropose = msg.FullData
 		}
 
 		roundChangeJustification, _ := containerRoundChangeMessage.GetRoundChangeJustifications() // no need to check error, checked on isValidRoundChange
@@ -378,6 +378,7 @@ func validRoundChangeForDataVerifySignature(
 // highestPrepared returns a round change message with the highest prepared round, returns nil if none found
 func highestPrepared(roundChanges []*spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
 	var ret *spectypes.SignedSSVMessage
+	var highestPreparedRound specqbft.Round
 	for _, rc := range roundChanges {
 
 		msg, err := specqbft.DecodeMessage(rc.SSVMessage.Data)
@@ -391,9 +392,11 @@ func highestPrepared(roundChanges []*spectypes.SignedSSVMessage) (*spectypes.Sig
 
 		if ret == nil {
 			ret = rc
+			highestPreparedRound = msg.DataRound
 		} else {
-			if msg.DataRound < msg.DataRound {
+			if highestPreparedRound < msg.DataRound {
 				ret = rc
+				highestPreparedRound = msg.DataRound
 			}
 		}
 	}

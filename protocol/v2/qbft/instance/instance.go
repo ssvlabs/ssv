@@ -160,12 +160,16 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, signedMsg *spectypes.SignedSSV
 
 func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) error {
 	if err := signedMsg.Validate(); err != nil {
-		return errors.Wrap(err, "invalid signed message")
+		return errors.Wrap(err, "invalid SignedSSVMessage")
 	}
 
 	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
 	if err != nil {
 		return err
+	}
+
+	if err := msg.Validate(); err != nil {
+		return errors.Wrap(err, "invalid Message")
 	}
 
 	if msg.Round < i.State.Round {
@@ -181,15 +185,21 @@ func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) erro
 			i.config.GetValueCheckF(),
 		)
 	case specqbft.PrepareMsgType:
-		proposedMsg := i.State.ProposalAcceptedForCurrentRound
-		if proposedMsg == nil {
+		proposedSignedMsg := i.State.ProposalAcceptedForCurrentRound
+		if proposedSignedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
+
+		proposedMsg, err := specqbft.DecodeMessage(proposedSignedMsg.SSVMessage.Data)
+		if err != nil {
+			return errors.Wrap(err, "proposal saved for this round is invalid")
+		}
+
 		return validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 			signedMsg,
 			i.State.Height,
 			i.State.Round,
-			msg.Root,
+			proposedMsg.Root,
 			i.State.Share.Committee,
 		)
 	case specqbft.CommitMsgType:
