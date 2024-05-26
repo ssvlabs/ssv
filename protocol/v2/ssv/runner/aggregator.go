@@ -2,7 +2,9 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -18,8 +20,7 @@ import (
 )
 
 type AggregatorRunner struct {
-	BaseRunner *BaseRunner
-
+	BaseRunner     *BaseRunner
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
@@ -80,8 +81,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
-
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
 	// reconstruct selection proof sig
@@ -91,24 +90,16 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
-
-	duty := r.GetState().StartingDuty
-
-	logger.Debug("🧩 got partial signature quorum",
-		zap.Any("signer", signedMsg.Signer),
-		fields.Slot(duty.Slot),
-	)
+	r.metrics.EndPreConsensus()
 
 	r.metrics.PauseDutyFullFlow()
-
 	// get block data
+	duty := r.GetState().StartingDuty
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
-
 	r.metrics.ContinueDutyFullFlow()
-	r.metrics.StartConsensus()
 
 	byts, err := res.MarshalSSZ()
 	if err != nil {
@@ -120,6 +111,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		DataSSZ: byts,
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
@@ -193,7 +185,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 	if !quorum {
 		return nil
 	}
-
 	r.metrics.EndPostConsensus()
 
 	for _, root := range roots {
@@ -218,18 +209,31 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			Signature: specSig,
 		}
 
-		proofSubmissionEnd := r.metrics.StartBeaconSubmission()
+		start := time.Now()
+		endSubmission := r.metrics.StartBeaconSubmission()
 
+		logger = logger.With(
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			zap.String("block_root", hex.EncodeToString(msg.Message.Aggregate.Data.BeaconBlockRoot[:])),
+		)
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
+			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
+				fields.SubmissionTime(time.Since(start)),
+				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
-		proofSubmissionEnd()
+		endSubmission()
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("✅ successful submitted aggregate")
+		logger.Debug("✅ successful submitted aggregate",
+			fields.SubmissionTime(time.Since(start)),
+		)
 	}
 	r.GetState().Finished = true
 
