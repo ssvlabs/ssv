@@ -371,7 +371,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	currentTopic := pMsg.GetTopic()
 	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
 	var expectedTopics []string
-	if mv.netCfg.CommitteeSubnetFork() {
+	if mv.netCfg.CommitteeSubnetsFork() {
 		share := mv.nodeStorage.Shares().Get(nil, msg.GetID().GetPubKey())
 		if share == nil {
 			return nil, Descriptor{}, ErrUnknownValidator

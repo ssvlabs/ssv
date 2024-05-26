@@ -71,8 +71,9 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeValidators *hashmap.Map[string, validatorStatus]
-	activeCommittees *hashmap.Map[string, validatorStatus]
+	activeValidators                  *hashmap.Map[string, validatorStatus]
+	activeCommittees                  *hashmap.Map[string, validatorStatus]
+	committeePresubscriptionScheduled bool // whether validator subnets are enabled
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
@@ -251,16 +252,27 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		// Compute the new subnets according to the active validators.
+		// Presubscribe to committee subnets, if needed.
+		// This only happens once during the presubscription phase.
+		if n.committeePresubscriptionScheduled && n.committeeSubnetSubscriptions() {
+			err := n.presubscribeToCommitteeSubnets(logger)
+			if err != nil {
+				logger.Warn("could not presubscribe to committee subnets", zap.Error(err))
+			}
+			n.committeePresubscriptionScheduled = false
+		}
+
+		// Compute the new subnets according to the active committees/validators.
 		newSubnets := make([]byte, commons.Subnets())
 		copy(newSubnets, n.subnets)
-		if n.cfg.Network.CommitteeSubnetFork() {
+		if n.committeeSubnetSubscriptions() { // Presubscription phase or post-fork.
 			n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 				subnet := commons.CommitteeSubnet(types.CommitteeID([]byte(cid)))
 				newSubnets[subnet] = byte(1)
 				return true
 			})
-		} else {
+		}
+		if !n.validatorSubnetSubscriptions() { // Pre-fork.
 			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 				subnet := commons.ValidatorSubnet(pkHex)
 				newSubnets[subnet] = byte(1)

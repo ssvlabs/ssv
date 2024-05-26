@@ -71,6 +71,6 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
 }
 
-func (n NetworkConfig) CommitteeSubnetFork() bool {
+func (n NetworkConfig) CommitteeSubnetsFork() bool {
 	return n.Beacon.EstimatedCurrentEpoch() >= n.CommitteeSubnetForkEpoch
 }

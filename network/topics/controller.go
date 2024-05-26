@@ -85,6 +85,8 @@ func NewTopicsController(
 
 func (ctrl *topicsCtrl) onNewTopic(logger *zap.Logger) onTopicJoined {
 	return func(ps *pubsub.PubSub, topic *pubsub.Topic) {
+		// TODO: get committee ID from topic name and calculate number of validators accordingly.
+
 		// initial setup for the topic, should happen only once
 		name := topic.String()
 		if err := ctrl.setupTopicValidator(topic.String()); err != nil {

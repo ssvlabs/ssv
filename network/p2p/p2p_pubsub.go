@@ -132,14 +132,22 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if n.cfg.Network.CommitteeSubnetFork() {
+	// Subscribe to committee subnet if we're in the committee subnet fork,
+	// or in the presubscription phase (in which case we subscribe to both).
+	if n.committeeSubnetSubscriptions() {
 		share := n.nodeStorage.Shares().Get(nil, pk)
 		if share == nil {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk))
 		}
-		return n.subscribeCommittee(share.CommitteeID())
+		err := n.subscribeCommittee(share.CommitteeID())
+		if err != nil {
+			return fmt.Errorf("could not subscribe to committee: %w", err)
+		}
 	}
-	return n.subscribeValidator(pk)
+	if n.validatorSubnetSubscriptions() {
+		return n.subscribeValidator(pk)
+	}
+	return nil
 }
 
 // subscribeCommittee handles the subscription logic for committee subnets
@@ -252,7 +260,7 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) validatorTopics(pk spectypes.ValidatorPK) ([]string, error) {
-	if n.cfg.Network.CommitteeSubnetFork() {
+	if n.cfg.Network.CommitteeSubnetsFork() {
 		share := n.nodeStorage.Shares().Get(nil, pk)
 		if share == nil {
 			return nil, fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk))

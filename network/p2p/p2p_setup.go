@@ -52,6 +52,8 @@ const (
 func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	logger = logger.Named(logging.NameP2PNetwork)
 
+	n.committeePresubscriptionScheduled = !n.committeeSubnetSubscriptions()
+
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
