@@ -1215,11 +1215,12 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			BeaconSigner:   options.Signer,
-			OperatorSigner: options.OperatorSigner,
-			SigningPK:      options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:         domainType,
-			ValueCheckF:    nil, // sets per role type
+			BeaconSigner:      options.Signer,
+			OperatorSigner:    options.OperatorSigner,
+			SigningPK:         options.SSVShare.ValidatorPubKey[:], // TODO right val?
+			Domain:            domainType,
+			SignatureVerifier: options.SignatureVerifier,
+			ValueCheckF:       nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
