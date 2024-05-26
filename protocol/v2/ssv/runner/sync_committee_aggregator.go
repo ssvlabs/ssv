@@ -3,7 +3,9 @@ package runner
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,6 +14,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -19,8 +22,7 @@ import (
 )
 
 type SyncCommitteeAggregatorRunner struct {
-	BaseRunner *BaseRunner
-
+	BaseRunner     *BaseRunner
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
@@ -80,8 +82,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
-
 	// collect selection proofs and subnets
 	var (
 		selectionProofs []phase0.BLSSignature
@@ -97,6 +97,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 			}
 			return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 		}
+
 		blsSigSelectionProof := phase0.BLSSignature{}
 		copy(blsSigSelectionProof[:], sig)
 
@@ -117,19 +118,23 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
 	}
+
 	if len(selectionProofs) == 0 {
 		r.GetState().Finished = true
 		return nil
 	}
 
-	duty := r.GetState().StartingDuty
+	r.metrics.EndPreConsensus()
 
 	// fetch contributions
 	r.metrics.PauseDutyFullFlow()
+	r.metrics.StartBeaconData()
+	duty := r.GetState().StartingDuty
 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, selectionProofs, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee contribution")
 	}
+	r.metrics.EndBeaconData()
 	r.metrics.ContinueDutyFullFlow()
 
 	byts, err := contributions.MarshalSSZ()
@@ -228,8 +233,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 		return nil
 	}
 
-	r.metrics.EndPostConsensus()
-
 	// get contributions
 	contributions, err := r.GetState().DecidedValue.GetSyncCommitteeContributions()
 	if err != nil {
@@ -247,8 +250,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		r.metrics.EndPostConsensus()
 
 		for _, contribution := range contributions {
+			start := time.Now()
 			// match the right contrib and proof root to signed root
 			contribAndProof, contribAndProofRoot, err := r.generateContributionAndProof(contribution.Contribution, contribution.SelectionProofSig)
 			if err != nil {
@@ -270,17 +275,27 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			}
 
 			submissionEnd := r.metrics.StartBeaconSubmission()
-
+			logger = logger.With(
+				zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+				fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
+				fields.ConsensusTime(r.metrics.GetConsensusTime()),
+				fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+				zap.String("block_root", hex.EncodeToString(contribAndProof.Contribution.BeaconBlockRoot[:])),
+			)
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				r.metrics.RoleSubmissionFailed()
+				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
+					fields.SubmissionTime(time.Since(start)),
+					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
 
 			submissionEnd()
 			r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 			r.metrics.RoleSubmitted()
-
-			logger.Debug("✅ submitted successfully sync committee aggregator!")
+			logger.Debug("✅ successfully submitted sync committee aggregator",
+				fields.SubmissionTime(time.Since(start)),
+			)
 			break
 		}
 	}
@@ -350,7 +365,6 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
-
 	// sign selection proofs
 	msgs := spectypes.PartialSignatureMessages{
 		Type:     spectypes.ContributionProofs,
