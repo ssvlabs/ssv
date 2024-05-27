@@ -7,17 +7,17 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
-	"github.com/golang/mock/gomock"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 )
 
-func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.Duty) {
+func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.BeaconDuty) {
 	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.Duty)
+	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().ProposerDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
@@ -46,14 +46,14 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 		return getIndices(epoch)
 	}
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(getIndicesBool).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getIndicesBool).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedProposerDuties(handler *ProposerHandler, duties []*eth2apiv1.ProposerDuty) []*spectypes.Duty {
-	expectedDuties := make([]*spectypes.Duty, 0)
+func expectedExecutedProposerDuties(handler *ProposerHandler, duties []*eth2apiv1.ProposerDuty) []*spectypes.BeaconDuty {
+	expectedDuties := make([]*spectypes.BeaconDuty, 0)
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleProposer))
 	}

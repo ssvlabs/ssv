@@ -16,13 +16,14 @@ import (
 func TestSSVShare_BelongsToOperator(t *testing.T) {
 	metadata := &SSVShare{
 		Share: spectypes.Share{
-			OperatorID: 1,
+			Committee: []*spectypes.ShareMember{{Signer: 1}},
 		},
 	}
 
 	require.True(t, metadata.BelongsToOperator(1))
 	require.False(t, metadata.BelongsToOperator(2))
 }
+
 func TestSSVShare_ComputeClusterIDHash(t *testing.T) {
 	var (
 		aliceClusterHash = "a341933234aa1e6dfd3b8d6677172bdcd0986b1e6afc2e84d321f154d9736717"

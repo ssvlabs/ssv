@@ -7,9 +7,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -17,6 +14,9 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var (
@@ -88,7 +88,7 @@ func TestDropRegistryData(t *testing.T) {
 		err := storage.Shares().Save(nil, &types.SSVShare{
 			Share: spectypes.Share{
 				SharePubKey:     pk,
-				ValidatorPubKey: spectypes.ValidatorPK(append([]byte{1}, pk...)),
+				ValidatorPubKey: spectypes.ValidatorPK(append(make([]byte, 47), pk...)),
 			},
 		})
 		require.NoError(t, err)

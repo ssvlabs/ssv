@@ -9,10 +9,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/golang/mock/gomock"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
@@ -31,7 +31,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	assert1to1BlockSlotMapping(t, scheduler)
 	require.EqualValues(t, 1, blockByNumberCalls.Load())
 
-	executeDutiesCall := make(chan []*spectypes.Duty)
+	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
 	const blockNumber = uint64(1)
@@ -166,10 +166,10 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.EqualValues(t, blockNumber, slot)
 }
 
-func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.Duty {
-	expectedDuties := make([]*spectypes.Duty, 0)
+func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.BeaconDuty {
+	expectedDuties := make([]*spectypes.BeaconDuty, 0)
 	for _, d := range descriptors {
-		expectedDuties = append(expectedDuties, &spectypes.Duty{
+		expectedDuties = append(expectedDuties, &spectypes.BeaconDuty{
 			Type:           spectypes.BNRoleVoluntaryExit,
 			PubKey:         d.PubKey,
 			Slot:           phase0.Slot(d.BlockNumber) + voluntaryExitSlotsToPostpone,

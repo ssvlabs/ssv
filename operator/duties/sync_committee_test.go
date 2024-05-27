@@ -8,18 +8,18 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
-	"github.com/golang/mock/gomock"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
-func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, []*v1.SyncCommitteeDuty]) (chan struct{}, chan []*spectypes.Duty) {
+func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, []*v1.SyncCommitteeDuty]) (chan struct{}, chan []*spectypes.BeaconDuty) {
 	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.Duty)
+	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
@@ -73,20 +73,20 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, [
 		return indices
 	}
 
-	getDutiesBool := func(epoch phase0.Epoch, wait bool) []phase0.ValidatorIndex {
+	getDutiesBool := func(epoch phase0.Epoch) []phase0.ValidatorIndex {
 		return getDuties(epoch)
 	}
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(getDutiesBool).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getDutiesBool).AnyTimes()
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.Duty {
-	expectedDuties := make([]*spectypes.Duty, 0)
+func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.BeaconDuty {
+	expectedDuties := make([]*spectypes.BeaconDuty, 0)
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))

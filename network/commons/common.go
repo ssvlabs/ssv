@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
@@ -39,6 +41,29 @@ const (
 	MessageOffset    = operatorIDOffset + operatorIDSize
 )
 
+// EncodeGenesisSignedSSVMessage serializes the message, op id and signature into bytes
+// DEPRECATED, TODO: remove post-fork
+func EncodeGenesisSignedSSVMessage(message []byte, operatorID genesisspectypes.OperatorID, signature []byte) []byte {
+	b := make([]byte, signatureSize+operatorIDSize+len(message))
+	copy(b[signatureOffset:], signature)
+	binary.LittleEndian.PutUint64(b[operatorIDOffset:], operatorID)
+	copy(b[MessageOffset:], message)
+	return b
+}
+
+// DecodeGenesisSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
+// DEPRECATED, TODO: remove post-fork
+func DecodeGenesisSignedSSVMessage(encoded []byte) ([]byte, genesisspectypes.OperatorID, []byte, error) {
+	if len(encoded) < MessageOffset {
+		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
+	}
+
+	message := encoded[MessageOffset:]
+	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
+	signature := encoded[signatureOffset : signatureOffset+signatureSize]
+	return message, operatorID, signature, nil
+}
+
 // SubnetTopicID returns the topic to use for the given subnet
 func SubnetTopicID(subnet int) string {
 	if subnet < 0 {
@@ -52,6 +77,10 @@ func ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
 	subnet := ValidatorSubnet(pkHex)
 	return []string{SubnetTopicID(subnet)}
+}
+
+func CommitteeTopicID(cid spectypes.CommitteeID) []string {
+	return []string{strconv.Itoa(CommitteeSubnet(cid))}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -71,6 +100,12 @@ func ValidatorSubnet(validatorPKHex string) int {
 	}
 	val := hexToUint64(validatorPKHex[:10])
 	return int(val % subnetsCount)
+}
+
+// CommitteeSubnet returns the subnet for the given committee
+func CommitteeSubnet(cid spectypes.CommitteeID) int {
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(subnetsCount))
+	return int(subnet.Int64())
 }
 
 // MsgIDFunc is the function that maps a message to a msg_id
@@ -110,6 +145,23 @@ func AddOptions(opts []libp2p.Option) []libp2p.Option {
 	opts = append(opts, libp2p.AutoNATServiceRateLimit(15, 3, 1*time.Minute))
 	// opts = append(opts, libp2p.DisableRelay())
 	return opts
+}
+
+// EncodeNetworkMsg encodes network message
+// TODO: DEPRECATED, remove post-fork
+func EncodeGenesisNetworkMsg(msg *genesisspectypes.SSVMessage) ([]byte, error) {
+	return msg.Encode()
+}
+
+// DecodeGenesisNetworkMsg decodes network message
+// TODO: DEPRECATED, remove post-fork
+func DecodeGenesisNetworkMsg(data []byte) (*genesisspectypes.SSVMessage, error) {
+	msg := genesisspectypes.SSVMessage{}
+	err := msg.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }
 
 // EncodeNetworkMsg encodes network message

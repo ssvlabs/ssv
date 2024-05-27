@@ -32,9 +32,9 @@ func (c *controller) StartValidator(share *types.SSVShare) error {
 }
 
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
-	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey))
+	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
-	c.metrics.ValidatorRemoved(pubKey)
+	c.metrics.ValidatorRemoved(pubKey[:])
 	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
@@ -47,7 +47,7 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []specty
 
 	for _, share := range toLiquidate {
 		c.onShareStop(share.ValidatorPubKey)
-		logger.With(fields.PubKey(share.ValidatorPubKey)).Debug("liquidated share")
+		logger.With(fields.PubKey(share.ValidatorPubKey[:])).Debug("liquidated share")
 	}
 
 	return nil
@@ -89,7 +89,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	c.validatorsMap.ForEach(func(v *validator.Validator) bool {
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
 			v.Share.FeeRecipientAddress = recipient
 

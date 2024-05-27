@@ -5,14 +5,17 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv-spec/qbft"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
 )
 
 func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
-	var msg *specqbft.SignedMessage
+	var msg *spectypes.SignedSSVMessage
 	var err error
 	switch test.CreateType {
 	case spectests.CreateProposal:
@@ -42,10 +45,10 @@ func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r[:]))
 }
 
-func createCommit(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createCommit(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: testingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
 	config := testingutils.TestingConfig(ks)
@@ -53,10 +56,10 @@ func createCommit(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, e
 	return specqbft.CreateCommit(state, config, test.Value)
 }
 
-func createPrepare(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createPrepare(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: testingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
 	config := testingutils.TestingConfig(ks)
@@ -64,10 +67,10 @@ func createPrepare(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, 
 	return specqbft.CreatePrepare(state, config, test.Round, test.Value)
 }
 
-func createProposal(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createProposal(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: testingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
 	config := testingutils.TestingConfig(ks)
@@ -75,17 +78,21 @@ func createProposal(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage,
 	return specqbft.CreateProposal(state, config, test.Value[:], test.RoundChangeJustifications, test.PrepareJustifications)
 }
 
-func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createRoundChange(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share:            testingutils.TestingShare(ks),
+		Share:            testingutils.TestingOperator(ks),
 		ID:               []byte{1, 2, 3, 4},
-		PrepareContainer: specqbft.NewMsgContainer(),
+		PrepareContainer: qbft.NewMsgContainer(),
 	}
 	config := testingutils.TestingConfig(ks)
 
 	if len(test.PrepareJustifications) > 0 {
-		state.LastPreparedRound = test.PrepareJustifications[0].Message.Round
+		prepareMsg, err := qbft.DecodeMessage(test.PrepareJustifications[0].SSVMessage.Data)
+		if err != nil {
+			return nil, err
+		}
+		state.LastPreparedRound = prepareMsg.Round
 		state.LastPreparedValue = test.StateValue
 
 		for _, msg := range test.PrepareJustifications {

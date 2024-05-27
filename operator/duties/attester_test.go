@@ -8,17 +8,19 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
-	"github.com/golang/mock/gomock"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func setupAttesterDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty]) (chan struct{}, chan []*spectypes.Duty) {
+func setupAttesterDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty]) (chan struct{}, chan []*spectypes.BeaconDuty) {
 	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.Duty)
+	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
@@ -27,7 +29,7 @@ func setupAttesterDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			return duties, nil
 		}).AnyTimes()
 
-	getIndices := func(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	getIndices := func(epoch phase0.Epoch) []*types.SSVShare {
 		uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
 		duties, _ := dutiesMap.Get(epoch)
@@ -35,23 +37,26 @@ func setupAttesterDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			uniqueIndices[d.ValidatorIndex] = true
 		}
 
-		indices := make([]phase0.ValidatorIndex, 0, len(uniqueIndices))
+		shares := make([]*types.SSVShare, 0, len(uniqueIndices))
 		for index := range uniqueIndices {
-			indices = append(indices, index)
+			share := &types.SSVShare{
+				Metadata: types.Metadata{BeaconMetadata: &beacon.ValidatorMetadata{Index: index}},
+			}
+			shares = append(shares, share)
 		}
 
-		return indices
+		return shares
 	}
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(getIndices).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv1.AttesterDuty) []*spectypes.Duty {
-	expectedDuties := make([]*spectypes.Duty, 0)
+func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv1.AttesterDuty) []*spectypes.BeaconDuty {
+	expectedDuties := make([]*spectypes.BeaconDuty, 0)
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleAttester))
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleAggregator))
@@ -69,7 +74,7 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 	startFn()
-
+	handler.fetchCurrentEpoch = true
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -106,7 +111,7 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 	startFn()
-
+	handler.fetchCurrentEpoch = true
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},

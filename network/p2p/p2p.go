@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"encoding/hex"
 	"sync/atomic"
 	"time"
 
@@ -46,6 +47,16 @@ const (
 	peerIdentitiesReportingInterval = 5 * time.Minute
 	topicsReportingInterval         = 180 * time.Second
 )
+
+// PeersIndexProvider holds peers index instance
+type PeersIndexProvider interface {
+	PeersIndex() peers.Index
+}
+
+// HostProvider holds host instance
+type HostProvider interface {
+	Host() host.Host
+}
 
 // p2pNetwork implements network.P2PNetwork
 type p2pNetwork struct {
@@ -252,7 +263,18 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		newSubnets := make([]byte, commons.Subnets())
 		copy(newSubnets, n.subnets)
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-			subnet := commons.ValidatorSubnet(pkHex)
+			// TODO: alan - fork support
+			pbBytes, err := hex.DecodeString(pkHex)
+			if err != nil {
+				return false
+			}
+			// TODO: alan - optimization to get active committees only
+			share := n.nodeStorage.Shares().Get(nil, pbBytes)
+			if share == nil {
+				return false
+			}
+			cid := share.CommitteeID()
+			subnet := commons.CommitteeSubnet(cid)
 			newSubnets[subnet] = byte(1)
 			return true
 		})

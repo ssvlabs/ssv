@@ -26,15 +26,16 @@ type Controller struct {
 	Identifier []byte
 	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
-	StoredInstances InstanceContainer
-	Share           *spectypes.Share
-	config          qbft.IConfig
-	fullNode        bool
+	StoredInstances   InstanceContainer
+	Share             *spectypes.Operator
+	NewDecidedHandler NewDecidedHandler `json:"-"`
+	config            qbft.IConfig
+	fullNode          bool
 }
 
 func NewController(
 	identifier []byte,
-	share *spectypes.Share,
+	share *spectypes.Operator,
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
@@ -80,7 +81,7 @@ func (c *Controller) forceStopAllInstanceExceptCurrent() {
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func (c *Controller) ProcessMsg(logger *zap.Logger, msg *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
 	if err := c.BaseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}
@@ -92,23 +93,40 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage)
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	if IsDecidedMsg(c.Share, msg) {
+	isDecided, err := IsDecidedMsg(c.Share, msg)
+	if err != nil {
+		return nil, err
+	}
+	if isDecided {
 		return c.UponDecided(logger, msg)
-	} else if c.isFutureMessage(msg) {
+	}
+
+	isFuture, err := c.isFutureMessage(msg)
+	if err != nil {
+		return nil, err
+	}
+	if isFuture {
 		return nil, fmt.Errorf("future msg from height, could not process")
 	}
+
 	return c.UponExistingInstanceMsg(logger, msg)
 }
 
-func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	inst := c.InstanceForHeight(logger, msg.Message.Height)
+func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
+
+	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	inst := c.InstanceForHeight(logger, msg.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
 	}
 
 	prevDecided, _ := inst.IsDecided()
 
-	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
+	decided, _, decidedMsg, err := inst.ProcessMsg(logger, signedMsg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
@@ -137,9 +155,14 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.S
 }
 
 // BaseMsgValidation returns error if msg is invalid (base validation)
-func (c *Controller) BaseMsgValidation(msg *specqbft.SignedMessage) error {
+func (c *Controller) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) error {
 	// verify msg belongs to controller
-	if !bytes.Equal(c.Identifier, msg.Message.Identifier) {
+	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Equal(c.Identifier, msg.Identifier) {
 		return errors.New("message doesn't belong to Identifier")
 	}
 
@@ -179,11 +202,17 @@ func (c *Controller) GetIdentifier() []byte {
 
 // isFutureMessage returns true if message height is from a future instance.
 // It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
-func (c *Controller) isFutureMessage(msg *specqbft.SignedMessage) bool {
+func (c *Controller) isFutureMessage(signedMsg *spectypes.SignedSSVMessage) (bool, error) {
 	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
-		return true
+		return true, nil
 	}
-	return msg.Message.Height > c.Height
+
+	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+	if err != nil {
+		return false, err
+	}
+
+	return msg.Height > c.Height, nil
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
@@ -225,26 +254,8 @@ func (c *Controller) Decode(data []byte) error {
 	return nil
 }
 
-func (c *Controller) broadcastDecided(aggregatedCommit *specqbft.SignedMessage) error {
-	// Broadcast Decided msg
-	byts, err := aggregatedCommit.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode decided message")
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   specqbft.ControllerIdToMessageID(c.Identifier),
-		Data:    byts,
-	}
-
-	operatorSigner := c.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, c.Share.OperatorID, operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	if err := c.GetConfig().GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage) error {
+	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit); err != nil {
 		// We do not return error here, just Log broadcasting error.
 		return errors.Wrap(err, "could not broadcast decided")
 	}

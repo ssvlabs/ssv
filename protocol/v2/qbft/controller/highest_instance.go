@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -45,12 +46,18 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 }
 
 // SaveInstance saves the given instance to the storage.
-func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
+func (c *Controller) SaveInstance(i *instance.Instance, msg *spectypes.SignedSSVMessage) error {
 	storedInstance := &qbftstorage.StoredInstance{
 		State:          i.State,
 		DecidedMessage: msg,
 	}
-	isHighest := msg.Message.Height >= c.Height
+
+	decMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
+	isHighest := decMsg.Height >= c.Height
 
 	// Full nodes save both highest and historical instances.
 	if c.fullNode {

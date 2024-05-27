@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -31,7 +31,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
+		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForOperator(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
@@ -74,14 +74,8 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
-
-			ssvMsg := &spectypes.SSVMessage{}
-			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].Data))
-
-			msg2 := &specqbft.SignedMessage{}
-			require.NoError(t, msg2.Decode(ssvMsg.Data))
+			msg2 := broadcastedMsgs[i]
 			r2, _ := msg2.GetRoot()
-
 			require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
 		}
 	}

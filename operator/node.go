@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	storage2 "github.com/ssvlabs/ssv/registry/storage"
+
 	"github.com/ssvlabs/ssv/network"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -41,6 +43,7 @@ type Options struct {
 	Context             context.Context
 	DB                  basedb.Database
 	ValidatorController validator.Controller
+	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
 	WS                  api.WebSocketServer
@@ -72,14 +75,13 @@ type operatorNode struct {
 func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
 	storageMap := qbftstorage.NewStores()
 
-	roles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit,
+	roles := []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
+		spectypes.RoleAggregator,
+		spectypes.RoleProposer,
+		spectypes.RoleSyncCommitteeContribution,
+		spectypes.RoleValidatorRegistration,
+		spectypes.RoleVoluntaryExit,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))
@@ -96,16 +98,17 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
-			Ctx:                 opts.Context,
-			BeaconNode:          opts.BeaconNode,
-			ExecutionClient:     opts.ExecutionClient,
-			Network:             opts.Network,
-			ValidatorController: opts.ValidatorController,
-			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
-			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
-			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
-			DutyStore:           opts.DutyStore,
-			SlotTickerProvider:  slotTickerProvider,
+			Ctx:                  opts.Context,
+			BeaconNode:           opts.BeaconNode,
+			ExecutionClient:      opts.ExecutionClient,
+			Network:              opts.Network,
+			ValidatorProvider:    opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
+			IndicesChg:           opts.ValidatorController.IndicesChangeChan(),
+			ValidatorExitCh:      opts.ValidatorController.ValidatorExitChan(),
+			ExecuteDuty:          opts.ValidatorController.ExecuteDuty,
+			ExecuteCommitteeDuty: opts.ValidatorController.ExecuteCommitteeDuty,
+			DutyStore:            opts.DutyStore,
+			SlotTickerProvider:   slotTickerProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,

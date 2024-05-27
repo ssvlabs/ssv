@@ -5,6 +5,7 @@ package eventhandler
 import (
 	"errors"
 	"fmt"
+	"github.com/ssvlabs/ssv/ekm"
 	"math/big"
 	"time"
 
@@ -63,7 +64,7 @@ type EventHandler struct {
 	networkConfig     networkconfig.NetworkConfig
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorDecrypter keys.OperatorDecrypter
-	keyManager        spectypes.KeyManager
+	keyManager        ekm.KeyManager
 	beacon            beaconprotocol.BeaconNode
 	storageMap        *qbftstorage.QBFTStores
 
@@ -79,7 +80,7 @@ func New(
 	networkConfig networkconfig.NetworkConfig,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
-	keyManager spectypes.KeyManager,
+	keyManager ekm.KeyManager,
 	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
@@ -295,7 +296,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
 
-		if validatorPubKey != nil {
+		if validatorPubKey != emptyPK {
 			return NewStopValidatorTask(eh.taskExecutor, validatorPubKey), nil
 		}
 

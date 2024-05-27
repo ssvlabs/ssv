@@ -8,14 +8,12 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 type OperatorPublicKey interface {
 	Encrypt(data []byte) ([]byte, error)
-	Verify(data []byte, signature [256]byte) error
+	Verify(data []byte, signature []byte) error
 	Base64() ([]byte, error)
 }
 
@@ -29,8 +27,7 @@ type OperatorPrivateKey interface {
 }
 
 type OperatorSigner interface {
-	spectypes.OperatorSigner
-	Sign(data []byte) ([256]byte, error)
+	Sign(data []byte) ([]byte, error)
 	Public() OperatorPublicKey
 }
 
@@ -71,21 +68,17 @@ func GeneratePrivateKey() (OperatorPrivateKey, error) {
 	return &privateKey{privKey: privKey}, nil
 }
 
-func (p *privateKey) SignSSVMessage(data []byte) ([256]byte, error) {
-	return p.Sign(data)
-}
-
-func (p *privateKey) Sign(data []byte) ([256]byte, error) {
+func (p *privateKey) Sign(data []byte) ([]byte, error) {
 	hash := sha256.Sum256(data)
 	signature, err := SignRSA(p, hash[:])
 	if err != nil {
-		return [256]byte{}, err
+		return []byte{}, err
 	}
 
-	var sig [256]byte
-	copy(sig[:], signature)
+	//var sig [256]byte
+	//copy(sig[:], signature)
 
-	return sig, nil
+	return signature, nil
 }
 
 func (p *privateKey) Public() OperatorPublicKey {
@@ -133,8 +126,8 @@ func (p *publicKey) Encrypt(data []byte) ([]byte, error) {
 	return EncryptRSA(p, data)
 }
 
-func (p *publicKey) Verify(data []byte, signature [256]byte) error {
-	return VerifyRSA(p, data, signature[:])
+func (p *publicKey) Verify(data []byte, signature []byte) error {
+	return VerifyRSA(p, data, signature)
 }
 
 func (p *publicKey) Base64() ([]byte, error) {

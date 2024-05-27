@@ -62,6 +62,7 @@ func (h *AttesterHandler) Name() string {
 //  2. If necessary, fetch duties for the next epoch.
 func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	h.fetchNextEpoch = true
 
@@ -74,15 +75,17 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
+			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch, slot)
-				h.processExecution(currentEpoch, slot)
+				// TODO: (Alan) genesis support
+				//h.processExecution(currentEpoch, slot)
 			} else {
-				h.processExecution(currentEpoch, slot)
+				// TODO: (Alan) genesis support
+				//h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
 					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
@@ -98,15 +101,16 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextEpoch = true
 			}
 
-			// last slot of epoch
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.duties.ResetEpoch(currentEpoch)
-			}
+			// TODO: (Alan) genesis support
+			//// last slot of epoch
+			//if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+			//	h.duties.ResetEpoch(currentEpoch)
+			//}
 
 		case reorgEvent := <-h.reorg:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_seq", buildStr), zap.Any("event", reorgEvent))
+			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
 			if reorgEvent.Previous {
@@ -130,7 +134,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			slot := h.network.Beacon.EstimatedCurrentSlot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_seq", buildStr))
+			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
 			h.indicesChanged = true
 			h.fetchCurrentEpoch = true
@@ -142,6 +146,15 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	defer cancel()
+
+	slot := h.network.Beacon.EstimatedCurrentSlot()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	h.processFetching(ctx, epoch, slot)
 }
 
 func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
@@ -172,10 +185,11 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	}
 
 	// range over duties and execute
-	toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
+	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
+			// TODO: genesis
+			//toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
@@ -185,7 +199,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
-	indices := h.validatorController.CommitteeActiveIndices(epoch)
+	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
 
 	if len(indices) == 0 {
 		return nil
@@ -196,7 +210,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
 
-	specDuties := make([]*spectypes.Duty, 0, len(duties))
+	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
@@ -228,8 +242,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	return nil
 }
 
-func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
-	return &spectypes.Duty{
+func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
+	return &spectypes.BeaconDuty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,

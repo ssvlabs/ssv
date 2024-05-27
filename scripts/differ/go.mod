@@ -1,4 +1,4 @@
-module github.com/bloxapp/ssv/scripts/differ
+module github.com/ssvlabs/ssv/scripts/differ
 
 go 1.19
 

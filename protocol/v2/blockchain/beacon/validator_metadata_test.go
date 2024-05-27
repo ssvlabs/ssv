@@ -9,9 +9,10 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 )
 
@@ -105,12 +106,12 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return results, nil
 	})
 
-	storageData := make(map[string]*ValidatorMetadata)
+	storageData := make(map[spectypes.ValidatorPK]*ValidatorMetadata)
 	storageMu := sync.Mutex{}
 
 	// storage := NewMockValidatorMetadataStorage()
 	storage := NewMockValidatorMetadataStorage(ctrl)
-	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
+	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk spectypes.ValidatorPK, metadata *ValidatorMetadata) error {
 		storageMu.Lock()
 		defer storageMu.Unlock()
 
@@ -119,9 +120,21 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	onUpdated := func(pk string, meta *ValidatorMetadata) {
+	storage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(metadata map[spectypes.ValidatorPK]*ValidatorMetadata) error {
+		storageMu.Lock()
+		defer storageMu.Unlock()
+
+		for pk, meta := range metadata {
+			storageData[pk] = meta
+		}
+
+		return nil
+	}).AnyTimes()
+
+	onUpdated := func(pk spectypes.ValidatorPK, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
-		require.True(t, strings.Contains(joined, pk))
+
+		require.True(t, strings.Contains(joined, strings.Trim(phase0.BLSPubKey(pk).String(), "0x")))
 		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))
 		atomic.AddUint64(&updateCount, 1)
 	}

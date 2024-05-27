@@ -1,6 +1,7 @@
 package message_test
 
 import (
+	"crypto/rsa"
 	"sort"
 	"testing"
 
@@ -14,12 +15,12 @@ import (
 
 func TestAggregateSorting(t *testing.T) {
 	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
-	secretKeys, _ := protocoltesting.GenerateBLSKeys(uids...)
+	secretKeys, _ := protocoltesting.GenerateOperatorSigner(uids...)
 
 	identifier := []byte("pk")
 
-	generateSignedMsg := func(operatorId spectypes.OperatorID) *specqbft.SignedMessage {
-		return protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{operatorId}, &specqbft.Message{
+	generateSignedMsg := func(operatorId spectypes.OperatorID) *spectypes.SignedSSVMessage {
+		return protocoltesting.SignMsg(t, []*rsa.PrivateKey{secretKeys[operatorId-1]}, []spectypes.OperatorID{operatorId}, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     0,
 			Round:      1,
@@ -33,8 +34,9 @@ func TestAggregateSorting(t *testing.T) {
 		require.NoError(t, message.Aggregate(signedMessage, sig))
 	}
 
-	sorted := sort.SliceIsSorted(signedMessage.Signers, func(i, j int) bool {
-		return signedMessage.Signers[i] < signedMessage.Signers[j]
+	sorted := sort.SliceIsSorted(signedMessage.OperatorIDs, func(i, j int) bool {
+		return signedMessage.OperatorIDs[i] < signedMessage.OperatorIDs[j]
 	})
+
 	require.True(t, sorted)
 }

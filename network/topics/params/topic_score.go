@@ -35,6 +35,11 @@ const (
 	// P4
 	invalidMessageDecayEpochs = time.Duration(100)
 	maxInvalidMessagesAllowed = 20
+
+	// Message rate
+	clusterConsensusReductionFactor  = 0.15
+	messageRatePerValidatorPerSecond = 600.0 / 10000.0
+	msgsPerValidatorPerSecond        = messageRatePerValidatorPerSecond * clusterConsensusReductionFactor
 )
 
 var (
@@ -178,7 +183,6 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 
 	// Set expected message rate based on stage metrics
 	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
-	msgsPerValidatorPerSecond := 600.0 / 10000.0
 	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
 
 	return opts

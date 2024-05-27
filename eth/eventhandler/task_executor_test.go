@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -63,7 +63,7 @@ func TestExecuteTask(t *testing.T) {
 		}
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: validatorAddedEvent.PublicKey,
+				ValidatorPubKey: spectypes.ValidatorPK(validatorAddedEvent.PublicKey),
 			},
 		}
 		validatorCtrl.EXPECT().StartValidator(gomock.Any()).Return(nil).AnyTimes()
@@ -81,7 +81,7 @@ func TestExecuteTask(t *testing.T) {
 		}
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: validatorAddedEvent.PublicKey,
+				ValidatorPubKey: spectypes.ValidatorPK(validatorAddedEvent.PublicKey),
 			},
 			Metadata: ssvtypes.Metadata{
 				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
@@ -99,7 +99,7 @@ func TestExecuteTask(t *testing.T) {
 	t.Run("test StopValidator task execution", func(t *testing.T) {
 		validatorCtrl.EXPECT().StopValidator(gomock.Any()).Return(nil).AnyTimes()
 
-		task := NewStopValidatorTask(eh.taskExecutor, ethcommon.Hex2Bytes(valPk))
+		task := NewStopValidatorTask(eh.taskExecutor, spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)))
 		require.NoError(t, task.Execute())
 	})
 
@@ -107,7 +107,7 @@ func TestExecuteTask(t *testing.T) {
 		var shares []*ssvtypes.SSVShare
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: ethcommon.Hex2Bytes(valPk),
+				ValidatorPubKey: spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)),
 			},
 		}
 
@@ -121,7 +121,7 @@ func TestExecuteTask(t *testing.T) {
 		var shares []*ssvtypes.SSVShare
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: ethcommon.Hex2Bytes(valPk),
+				ValidatorPubKey: spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)),
 			},
 		}
 

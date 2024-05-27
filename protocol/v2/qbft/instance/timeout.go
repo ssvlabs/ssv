@@ -2,6 +2,7 @@ package instance
 
 import (
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -31,10 +32,14 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		return errors.Wrap(err, "could not generate round change msg")
 	}
 
+	root, err := specqbft.HashDataRoot(i.StartValue)
+	if err != nil {
+		return err
+	}
 	logger.Debug("📢 broadcasting round change message",
 		fields.Round(i.State.Round),
-		fields.Root(roundChange.Message.Root),
-		zap.Any("round-change-signers", roundChange.Signers),
+		fields.Root(root),
+		zap.Any("round-change-signers", roundChange.OperatorIDs),
 		fields.Height(i.State.Height),
 		zap.String("reason", "timeout"))
 

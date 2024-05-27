@@ -23,10 +23,9 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 const (
@@ -57,8 +56,16 @@ type StorageProvider interface {
 	BumpSlashingProtection(pubKey []byte) error
 }
 
+type KeyManager interface {
+	spectypes.BeaconSigner
+	// AddShare saves a share key
+	AddShare(shareKey *bls.SecretKey) error
+	// RemoveShare removes a share key
+	RemoveShare(pubKey string) error
+}
+
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
@@ -222,7 +229,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 	}
 }
 
-func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.AttestationData) error {
+func (km *ethKeyManagerSigner) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
 	if val, err := km.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
 		if err != nil {
 			return err

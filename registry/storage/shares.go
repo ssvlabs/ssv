@@ -43,17 +43,20 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorMetadata updates validator metadata.
-	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
 type sharesStorage struct {
-	logger    *zap.Logger
-	db        basedb.Database
-	prefix    []byte
-	shares    map[string]*types.SSVShare
-	operators map[uint64][]byte
-	mu        sync.RWMutex
+	logger         *zap.Logger
+	db             basedb.Database
+	prefix         []byte
+	shares         map[string]*types.SSVShare
+	operators      map[uint64][]byte
+	validatorStore *validatorStore
+	mu             sync.RWMutex
 }
+
 type storageOperator struct {
 	OperatorID spectypes.OperatorID
 	PubKey     []byte `ssz-size:"48"`
@@ -103,7 +106,7 @@ func (s *storageShare) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, error) {
+func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		logger:    logger,
 		shares:    make(map[string]*types.SSVShare),
@@ -113,13 +116,18 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 	}
 
 	if err := storage.loadOperators(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := storage.load(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return storage, nil
+	storage.validatorStore = newValidatorStore(
+		func() []*types.SSVShare { return storage.List(nil) },
+		func(pk []byte) *types.SSVShare { return storage.Get(nil, pk) },
+	)
+	storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...)
+	return storage, storage.validatorStore, nil
 }
 
 // loadOperators reads all operators from db.
@@ -156,7 +164,7 @@ func (s *sharesStorage) load() error {
 			return fmt.Errorf("failed to convert storage share to spec share: %w", err)
 		}
 
-		s.shares[hex.EncodeToString(val.ValidatorPubKey)] = share
+		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = share
 		return nil
 	})
 }
@@ -165,6 +173,10 @@ func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) *types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	return s.unsafeGet(pubKey)
+}
+
+func (s *sharesStorage) unsafeGet(pubKey []byte) *types.SSVShare {
 	return s.shares[hex.EncodeToString(pubKey)]
 }
 
@@ -196,20 +208,32 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.unsafeSave(rw, shares...)
+}
+
+func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	err := s.db.Using(rw).SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		share := specShareToStorageShare(shares[i])
 		value, err := share.Encode()
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
 		}
-		return basedb.Obj{Key: s.storageKey(share.ValidatorPubKey), Value: value}, nil
+		return basedb.Obj{Key: s.storageKey(share.ValidatorPubKey[:]), Value: value}, nil
 	})
 	if err != nil {
 		return err
 	}
 
 	for _, share := range shares {
-		key := hex.EncodeToString(share.ValidatorPubKey)
+		key := hex.EncodeToString(share.ValidatorPubKey[:])
+
+		// Update validatorStore indices.
+		if _, ok := s.shares[key]; ok {
+			s.validatorStore.handleShareUpdated(share)
+		} else {
+			s.validatorStore.handleSharesAdded(share)
+		}
+
 		s.shares[key] = share
 	}
 	return nil
@@ -219,18 +243,18 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 	committee := make([]*storageOperator, len(share.Committee))
 	for i, c := range share.Committee {
 		committee[i] = &storageOperator{
-			OperatorID: c.OperatorID,
+			OperatorID: c.Signer,
 			PubKey:     c.SharePubKey,
 		}
 	}
+	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(committee))
 	stShare := &storageShare{
 		Share: Share{
-			OperatorID:          share.OperatorID,
 			ValidatorPubKey:     share.ValidatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
-			Quorum:              share.Quorum,
-			PartialQuorum:       share.PartialQuorum,
+			Quorum:              quorum,
+			PartialQuorum:       partialQuorum,
 			DomainType:          share.DomainType,
 			FeeRecipientAddress: share.FeeRecipientAddress,
 			Graffiti:            share.Graffiti,
@@ -242,27 +266,27 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 }
 
 func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSVShare, error) {
-	committee := make([]*spectypes.Operator, len(share.Committee))
+	committee := make([]*spectypes.ShareMember, len(share.Committee))
 	for i, c := range share.Committee {
-		opPubKey, ok := s.operators[c.OperatorID]
-		if !ok {
-			return nil, fmt.Errorf("operator not found: %d", c.OperatorID)
-		}
+		// TODO: (genesis) this is needed to fill in genesis committees
+		// opPubKey, ok := s.operators[c.OperatorID]
+		// if !ok {
+		// 	return nil, fmt.Errorf("operator not found: %d", c.OperatorID)
+		// }
 
-		committee[i] = &spectypes.Operator{
-			OperatorID:        c.OperatorID,
-			SharePubKey:       c.PubKey,
-			SSVOperatorPubKey: opPubKey,
+		committee[i] = &spectypes.ShareMember{
+			Signer:      c.OperatorID,
+			SharePubKey: c.PubKey,
 		}
 	}
+	quorum, _ := types.ComputeQuorumAndPartialQuorum(len(committee))
+
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
-			OperatorID:          share.OperatorID,
 			ValidatorPubKey:     share.ValidatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
-			Quorum:              share.Quorum,
-			PartialQuorum:       share.PartialQuorum,
+			Quorum:              quorum,
 			DomainType:          share.DomainType,
 			FeeRecipientAddress: share.FeeRecipientAddress,
 			Graffiti:            share.Graffiti,
@@ -270,35 +294,83 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 		Metadata: share.Metadata,
 	}
 
+	if share.BeaconMetadata != nil && share.BeaconMetadata.Index != 0 {
+		specShare.Share.ValidatorIndex = share.Metadata.BeaconMetadata.Index
+	}
+
 	return specShare, nil
 }
 
 func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
-	err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
+		err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
+		if err != nil {
+			return err
+		}
+
+		delete(s.shares, hex.EncodeToString(pubKey))
+		return nil
+	}()
 	if err != nil {
 		return err
 	}
 
-	delete(s.shares, hex.EncodeToString(pubKey))
+	// TODO: (Alan) fix hack to avoid double-locking mutex
+	s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
+
 	return nil
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
-	key, err := hex.DecodeString(pk)
-	if err != nil {
-		return err
-	}
-	share := s.Get(nil, key)
+func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
+	share := s.Get(nil, pk[:])
 	if share == nil {
 		return nil
 	}
 
 	share.BeaconMetadata = metadata
 	return s.Save(nil, share)
+}
+
+// UpdateValidatorMetadata updates the metadata of the given validator
+func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
+	s.mu.RLock()
+	var shares []*types.SSVShare
+	for pk, metadata := range data {
+		share := s.unsafeGet(pk[:])
+		if share == nil {
+			continue
+		}
+		share.BeaconMetadata = metadata
+		shares = append(shares, share)
+	}
+	s.mu.RUnlock()
+
+	saveShares := func(sshares []*types.SSVShare) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if err := s.unsafeSave(nil, sshares...); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// split into chunks to avoid holding the lock for too long
+	chunkSize := 1000
+	for i := 0; i < len(shares); i += chunkSize {
+		end := i + chunkSize
+		if end > len(shares) {
+			end = len(shares)
+		}
+		if err := saveShares(shares[i:end]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Drop deletes all shares.
@@ -315,6 +387,7 @@ func (s *sharesStorage) Drop() error {
 	}
 
 	s.shares = make(map[string]*types.SSVShare)
+	s.validatorStore.handleDrop()
 	return nil
 }
 
@@ -351,12 +424,12 @@ func ByAttesting(epoch phase0.Epoch) SharesFilter {
 	}
 }
 
-// ByClusterID filters by cluster id.
-func ByClusterID(clusterID []byte) SharesFilter {
+// ByClusterIDHash filters by cluster id.
+func ByClusterIDHash(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		var operatorIDs []uint64
 		for _, op := range share.Committee {
-			operatorIDs = append(operatorIDs, op.OperatorID)
+			operatorIDs = append(operatorIDs, op.Signer)
 		}
 
 		shareClusterID := types.ComputeClusterIDHash(share.OwnerAddress, operatorIDs)

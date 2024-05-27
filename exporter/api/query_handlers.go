@@ -3,15 +3,16 @@ package api
 import (
 	"encoding/hex"
 	"fmt"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ibft/storage"
 )
 
 const (
@@ -46,15 +47,15 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	roleStorage := qbftStorage.Get(beaconRole)
+	roleStorage := qbftStorage.Get(spectypes.RunnerRole(beaconRole))
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(beaconRole))
+		logger.Warn("role storage doesn't exist", fields.Role(spectypes.RunnerRole(beaconRole)))
 		res.Data = []string{"internal error - role storage doesn't exist"}
 		nm.Msg = res
 		return
 	}
 
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, spectypes.RunnerRole(beaconRole))
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
@@ -129,15 +130,15 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		return
 	}
 
-	roleStorage := qbftStorage.Get(beaconRole)
+	roleStorage := qbftStorage.Get(spectypes.RunnerRole(beaconRole))
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(beaconRole))
+		logger.Warn("role storage doesn't exist", fields.Role(spectypes.RunnerRole(beaconRole)))
 		res.Data = []string{"internal error - role storage doesn't exist"}
 		nm.Msg = res
 		return
 	}
 
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, spectypes.RunnerRole(beaconRole))
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
