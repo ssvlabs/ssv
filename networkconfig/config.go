@@ -68,3 +68,8 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
 }
+
+func (n NetworkConfig) AlanFork() bool {
+	// TODO: implement
+	return true
+}

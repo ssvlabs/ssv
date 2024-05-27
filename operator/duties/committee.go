@@ -74,18 +74,20 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			h.processExecution(period, epoch, slot)
+			if h.network.AlanFork() {
+				h.processExecution(period, epoch, slot)
 
-			// cleanups
-			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
-			// last slot of epoch
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.attDuties.ResetEpoch(epoch)
-			}
+				// cleanups
+				slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
+				// last slot of epoch
+				if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+					h.attDuties.ResetEpoch(epoch)
+				}
 
-			// last slot of period
-			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.syncDuties.Reset(period - 1)
+				// last slot of period
+				if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+					h.syncDuties.Reset(period - 1)
+				}
 			}
 
 		case reorgEvent := <-h.reorg:

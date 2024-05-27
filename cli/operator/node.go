@@ -221,9 +221,7 @@ var StartNodeCmd = &cobra.Command{
 
 		var messageValidator validation.MessageValidator
 
-		alanFork := true
-
-		if alanFork {
+		if networkConfig.AlanFork() {
 			messageValidator = validation.New(
 				networkConfig,
 				validatorStore,
@@ -254,6 +252,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
+		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db

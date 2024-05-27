@@ -84,12 +84,14 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.processFetching(ctx, period, true)
-				// TODO: (Alan) genesis support
-				//h.processExecution(period, slot)
+				if !h.network.AlanFork() {
+					h.processExecution(period, slot)
+				}
 			} else {
 				h.processExecution(period, slot)
-				// TODO: (Alan) genesis support
-				//h.processFetching(ctx, period, true)
+				if !h.network.AlanFork() {
+					h.processExecution(period, slot)
+				}
 			}
 			cancel()
 
@@ -102,11 +104,12 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-			// TODO: (Alan) genesis support
-			//// last slot of period
-			//if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-			//	h.duties.Reset(period - 1)
-			//}
+			if !h.network.AlanFork() {
+				// last slot of period
+				if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+					h.duties.Reset(period - 1)
+				}
+			}
 
 		case reorgEvent := <-h.reorg:
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)

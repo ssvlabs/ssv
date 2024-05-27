@@ -79,7 +79,6 @@ func (vm *ValidatorsMap) GetAllValidators() []*validator.Validator {
 }
 
 // GetValidator returns a validator
-// TODO: pass spectypes.ValidatorPK instead of string
 func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
 	vm.vlock.RLock()
 	defer vm.vlock.RUnlock()
@@ -90,7 +89,6 @@ func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*validator.
 }
 
 // PutValidator creates a new validator instance
-// TODO: pass spectypes.ValidatorPK instead of string
 func (vm *ValidatorsMap) PutValidator(pubKey spectypes.ValidatorPK, v *validator.Validator) {
 	vm.vlock.Lock()
 	defer vm.vlock.Unlock()

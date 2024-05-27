@@ -14,6 +14,8 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/networkconfig"
+	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -28,8 +30,10 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.ValidatorDutyRunners
-	Network     specqbft.Network
+	NetworkConfig      networkconfig.NetworkConfig
+	DutyRunners        runner.ValidatorDutyRunners
+	GenesisDutyRunners genesisrunner.DutyRunners
+	Network            specqbft.Network
 
 	Operator          *spectypes.Operator
 	Share             *types.SSVShare
@@ -57,21 +61,23 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	v := &Validator{
-		mtx:               &sync.RWMutex{},
-		ctx:               pctx,
-		cancel:            cancel,
-		DutyRunners:       options.DutyRunners,
-		Network:           options.Network,
-		Storage:           options.Storage,
-		Operator:          options.Operator,
-		Share:             options.SSVShare,
-		Signer:            options.Signer,
-		OperatorSigner:    options.OperatorSigner,
-		SignatureVerifier: options.SignatureVerifier,
-		Queues:            make(map[spectypes.RunnerRole]queueContainer),
-		state:             uint32(NotStarted),
-		dutyIDs:           hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
-		messageValidator:  options.MessageValidator,
+		mtx:                &sync.RWMutex{},
+		ctx:                pctx,
+		cancel:             cancel,
+		NetworkConfig:      options.NetworkConfig,
+		DutyRunners:        options.DutyRunners,
+		GenesisDutyRunners: options.GenesisDutyRunners,
+		Network:            options.Network,
+		Storage:            options.Storage,
+		Operator:           options.Operator,
+		Share:              options.SSVShare,
+		Signer:             options.Signer,
+		OperatorSigner:     options.OperatorSigner,
+		SignatureVerifier:  options.SignatureVerifier,
+		Queues:             make(map[spectypes.RunnerRole]queueContainer),
+		state:              uint32(NotStarted),
+		dutyIDs:            hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
+		messageValidator:   options.MessageValidator,
 	}
 
 	for _, dutyRunner := range options.DutyRunners {

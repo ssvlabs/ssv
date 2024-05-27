@@ -81,11 +81,13 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchFirst = false
 				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch, slot)
-				// TODO: (Alan) genesis support
-				//h.processExecution(currentEpoch, slot)
+				if !h.network.AlanFork() {
+					h.processExecution(currentEpoch, slot)
+				}
 			} else {
-				// TODO: (Alan) genesis support
-				//h.processExecution(currentEpoch, slot)
+				if !h.network.AlanFork() {
+					h.processExecution(currentEpoch, slot)
+				}
 				if h.indicesChanged {
 					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
@@ -101,11 +103,12 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextEpoch = true
 			}
 
-			// TODO: (Alan) genesis support
-			//// last slot of epoch
-			//if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-			//	h.duties.ResetEpoch(currentEpoch)
-			//}
+			if !h.network.AlanFork() {
+				// last slot of epoch
+				if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+					h.duties.ResetEpoch(currentEpoch)
+				}
+			}
 
 		case reorgEvent := <-h.reorg:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
@@ -188,9 +191,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			// TODO: genesis
-			//toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
-			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
+			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
 		}
 	}
 

@@ -3,15 +3,17 @@ package testing
 import (
 	"context"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/networkconfig"
+	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
@@ -38,6 +40,9 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 				spectypes.RoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
 				spectypes.RoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
 				spectypes.RoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
+			},
+			GenesisDutyRunners: map[genesisspectypes.BeaconRole]genesisrunner.Runner{
+				// TODO
 			},
 		},
 	)

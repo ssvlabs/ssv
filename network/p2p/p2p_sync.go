@@ -59,7 +59,7 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 		}
 
 		var ssvMsg *spectypes.SSVMessage
-		if n.cfg.AlanFork {
+		if n.cfg.Network.AlanFork() {
 			ssvMsg, err = commons.DecodeNetworkMsg(req)
 			if err != nil {
 				return errors.Wrap(err, "could not decode msg from stream")
@@ -172,7 +172,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 		distinct[mid] = struct{}{}
 
 		var res *spectypes.SSVMessage
-		if n.cfg.AlanFork {
+		if n.cfg.Network.AlanFork() {
 			res, err = commons.DecodeNetworkMsg(raw)
 			if err != nil {
 				logger.Debug("could not decode stream response", zap.Error(err))

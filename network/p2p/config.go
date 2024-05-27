@@ -95,8 +95,6 @@ type Config struct {
 
 	// PeerScoreInspectorInterval is the interval at which the PeerScoreInspector is called.
 	PeerScoreInspectorInterval time.Duration
-
-	AlanFork bool
 }
 
 // Libp2pOptions creates options list for the libp2p host

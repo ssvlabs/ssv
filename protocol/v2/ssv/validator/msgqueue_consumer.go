@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pkg/errors"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -33,11 +33,16 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
+	role := msg.MsgID.GetRoleType()
+	if !v.NetworkConfig.AlanFork() {
+		role = spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msg.MsgID).GetRoleType()))
+	}
+
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
-	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
+	if q, ok := v.Queues[role]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
@@ -46,7 +51,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
+		logger.Error("❌ missing queue for role type", fields.Role(role))
 	}
 }
 
@@ -74,7 +79,11 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
 		var ok bool
-		q, ok = v.Queues[msgID.GetRoleType()]
+		if v.NetworkConfig.AlanFork() {
+			q, ok = v.Queues[msgID.GetRoleType()]
+		} else {
+			q, ok = v.Queues[spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msgID).GetRoleType()))]
+		}
 		if !ok {
 			return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
 		}
