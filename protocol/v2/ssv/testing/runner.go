@@ -2,6 +2,7 @@ package testing
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"go.uber.org/zap"
@@ -80,10 +81,11 @@ var baseRunner = func(
 	config.OperatorSigner = opSigner
 	config.SignatureVerifier = spectestingutils.NewTestingVerifier()
 
-	contr := specqbft.NewController(
+	contr := testing.NewTestingQBFTController(
 		identifier[:],
 		operator,
 		config,
+		false,
 	)
 
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
@@ -91,22 +93,22 @@ var baseRunner = func(
 
 	switch role {
 	case spectypes.RoleCommittee:
-		return specssv.NewCommitteeRunner(
+		return runner.NewCommitteeRunner(
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
-			spectestingutils.NewTestingBeaconNode(),
+			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
 			valCheck,
 		).(runner.Runner)
 	case spectypes.RoleAggregator:
-		return specssv.NewAggregatorRunner(
+		return runner.NewAggregatorRunner(
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
-			spectestingutils.NewTestingBeaconNode(),
+			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -114,11 +116,11 @@ var baseRunner = func(
 			TestingHighestDecidedSlot,
 		).(runner.Runner)
 	case spectypes.RoleProposer:
-		return specssv.NewProposerRunner(
+		return runner.NewProposerRunner(
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
-			spectestingutils.NewTestingBeaconNode(),
+			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -126,11 +128,11 @@ var baseRunner = func(
 			TestingHighestDecidedSlot,
 		).(runner.Runner)
 	case spectypes.RoleSyncCommitteeContribution:
-		return specssv.NewSyncCommitteeAggregatorRunner(
+		return runner.NewSyncCommitteeAggregatorRunner(
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
-			spectestingutils.NewTestingBeaconNode(),
+			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -138,35 +140,36 @@ var baseRunner = func(
 			TestingHighestDecidedSlot,
 		).(runner.Runner)
 	case spectypes.RoleValidatorRegistration:
-		return specssv.NewValidatorRegistrationRunner(
+		return runner.NewValidatorRegistrationRunner(
 			spectypes.BeaconTestNetwork,
 			shareMap,
-			spectestingutils.NewTestingBeaconNode(),
+			contr,
+			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
 		).(runner.Runner)
 	case spectypes.RoleVoluntaryExit:
-		return specssv.NewVoluntaryExitRunner(
+		return runner.NewVoluntaryExitRunner(
 			spectypes.BeaconTestNetwork,
 			shareMap,
-			spectestingutils.NewTestingBeaconNode(),
+			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
 		).(runner.Runner)
 	case spectestingutils.UnknownDutyType:
-		ret := specssv.NewCommitteeRunner(
+		ret := runner.NewCommitteeRunner(
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
-			spectestingutils.NewTestingBeaconNode(),
+			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
 			valCheck,
 		)
-		ret.(*specssv.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
+		ret.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 		return ret.(runner.Runner)
 	default:
 		panic("unknown role type")
