@@ -77,8 +77,14 @@ type p2pNetwork struct {
 	committeePresubscriptionScheduled bool
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
-	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
+
+	// fixedSubnets are the subnets that the node will not unsubscribe from.
+	fixedSubnets []byte
+
+	// activeSubnets are the subnets that the node is currently subscribed to.
+	// Changes according to the active validators, which is populated by the Subscribe method.
+	activeSubnets []byte
 
 	nodeStorage             operatorstorage.Storage
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
@@ -202,7 +208,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		defer cancel()
 
 		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
-		mySubnets := records.Subnets(n.subnets).Clone()
+		mySubnets := records.Subnets(n.activeSubnets).Clone()
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
@@ -265,7 +271,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 
 		// Compute the new subnets according to the active committees/validators.
 		updatedSubnets := make([]byte, commons.Subnets())
-		copy(updatedSubnets, n.subnets)
+		copy(updatedSubnets, n.fixedSubnets)
 		if n.committeeSubnetSubscriptions() { // Presubscription phase or post-fork.
 			n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 				subnet := commons.CommitteeSubnet(types.CommitteeID([]byte(cid)))
@@ -280,7 +286,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 				return true
 			})
 		}
-		n.subnets = updatedSubnets
+		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]int, 0)
@@ -305,7 +311,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 
 		self := n.idx.Self()
-		self.Metadata.Subnets = records.Subnets(n.subnets).String()
+		self.Metadata.Subnets = records.Subnets(n.activeSubnets).String()
 		n.idx.UpdateSelfRecord(self)
 
 		var errs error
@@ -333,11 +339,12 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
+		subnetsList := records.SharedSubnets(allSubs, n.activeSubnets, 0)
 		logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),
 			zap.Any("subnets", subnetsList),
+			zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
 			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
 			zap.Error(errs),
