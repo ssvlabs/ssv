@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,6 +13,7 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -25,7 +27,7 @@ type ValidatorRegistrationRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner genesisspectypes.OperatorSigner
+	operatorSigner OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -33,12 +35,12 @@ type ValidatorRegistrationRunner struct {
 
 func NewValidatorRegistrationRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *genesisspectypes.Share,
+	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner genesisspectypes.OperatorSigner,
+	operatorSigner OperatorSigner,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
@@ -78,7 +80,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
@@ -86,14 +88,23 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
+	r.metrics.EndPreConsensus()
 
-	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+	submissionTime := time.Now()
+	logger = logger.With(
+		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+	)
+	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey[:], r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+		logger.Error("❌ failed to submit validator registration",
+			fields.SubmissionTime(time.Since(submissionTime)),
+			zap.Error(err))
 		return errors.Wrap(err, "could not submit validator registration")
 	}
-
-	logger.Debug("validator registration submitted successfully",
-		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
-		zap.String("signature", hex.EncodeToString(specSig[:])))
+	logger.Debug("✅ successfully submitted validator registration",
+		fields.SubmissionTime(time.Since(submissionTime)))
 
 	r.GetState().Finished = true
 	return nil
@@ -145,7 +156,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *gene
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
+		Signer:    r.operatorSigner.GetOperatorID(),
 	}
 
 	// broadcast
@@ -155,11 +166,11 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *gene
 	}
 	ssvMsg := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
+	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.operatorSigner.GetOperatorID(), r.operatorSigner.SignSSVMessage)
 	if err != nil {
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
@@ -172,7 +183,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *gene
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {
 	pk := phase0.BLSPubKey{}
-	copy(pk[:], r.BaseRunner.Share.ValidatorPubKey)
+	copy(pk[:], r.BaseRunner.Share.ValidatorPubKey[:])
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
 
@@ -196,7 +207,7 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() genesisspecssv.BeaconNode 
 	return r.beacon
 }
 
-func (r *ValidatorRegistrationRunner) GetShare() *genesisspectypes.Share {
+func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
 	return r.BaseRunner.Share
 }
 
@@ -210,6 +221,10 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() genesisspecqbft.ProposedVal
 
 func (r *ValidatorRegistrationRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
+}
+
+func (r *ValidatorRegistrationRunner) GetOperatorSigner() OperatorSigner {
+	return r.operatorSigner
 }
 
 // Encode returns the encoded struct in bytes or error

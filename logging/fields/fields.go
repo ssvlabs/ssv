@@ -33,12 +33,15 @@ const (
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
 	FieldBeaconRole          = "beacon_role"
+	FieldBeaconDataTime      = "beacon_data_time"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
+	FieldBlockRootTime       = "block_root_time"
+	FieldBlockTime           = "block_time"
 	FieldBlockVersion        = "block_version"
-	FieldBuilderProposals    = "builder_proposals"
+	FieldBroadcastTime       = "broadcast_time"
 	FieldClusterIndex        = "cluster_index"
 	FieldCommitteeID         = "committee_id"
 	FieldConfig              = "config"
@@ -46,6 +49,7 @@ const (
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
+	FieldDecidedTime         = "decided_time"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
 	FieldDuties              = "duties"
@@ -69,8 +73,11 @@ const (
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
 	FieldPeerScore           = "peer_score"
+	FieldPostConsensusTime   = "post_consensus_time"
+	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
+	FieldQuorumTime          = "quorum_time"
 	FieldRole                = "role"
 	FieldRound               = "round"
 	FieldSenderID            = "sender_id"
@@ -274,12 +281,44 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
+func PreConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPreConsensusTime, FormatDuration(val))
+}
+
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldConsensusTime, FormatDuration(val))
+}
+
+func PostConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPostConsensusTime, FormatDuration(val))
+}
+
+func QuorumTime(val time.Duration) zap.Field {
+	return zap.String(FieldQuorumTime, FormatDuration(val))
+}
+
+func DecidedTime(val time.Duration) zap.Field {
+	return zap.String(FieldDecidedTime, FormatDuration(val))
+}
+
+func BlockTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockTime, FormatDuration(val))
+}
+
+func BeaconDataTime(val time.Duration) zap.Field {
+	return zap.String(FieldBeaconDataTime, FormatDuration(val))
+}
+
+func BlockRootTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockRootTime, FormatDuration(val))
 }
 
 func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldSubmissionTime, FormatDuration(val))
+}
+
+func BroadcastTime(val time.Duration) zap.Field {
+	return zap.String(FieldBroadcastTime, FormatDuration(val))
 }
 
 func DutyID(val string) zap.Field {
@@ -371,4 +410,8 @@ func Owner(addr common.Address) zap.Field {
 
 func Type(v any) zapcore.Field {
 	return zap.String(FieldType, fmt.Sprintf("%T", v))
+}
+
+func FormatDuration(val time.Duration) string {
+	return strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
 }

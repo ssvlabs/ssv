@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -11,6 +12,7 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -24,7 +26,7 @@ type VoluntaryExitRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner genesisspectypes.OperatorSigner
+	operatorSigner OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
@@ -34,11 +36,11 @@ type VoluntaryExitRunner struct {
 
 func NewVoluntaryExitRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *genesisspectypes.Share,
+	share *spectypes.Share,
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner genesisspectypes.OperatorSigner,
+	operatorSigner OperatorSigner,
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
@@ -79,7 +81,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
@@ -87,21 +89,28 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
+	r.metrics.EndPreConsensus()
 
 	// create SignedVoluntaryExit using VoluntaryExit created on r.executeDuty() and reconstructed signature
 	signedVoluntaryExit := &phase0.SignedVoluntaryExit{
 		Message:   r.voluntaryExit,
 		Signature: specSig,
 	}
-
+	submissionTime := time.Now()
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
+		logger.Error("failed to submit voluntary exit",
+			fields.SubmissionTime(time.Since(submissionTime)),
+			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+			zap.Error(err))
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
 
-	logger.Debug("voluntary exit submitted successfully",
+	logger.Debug("✅ successfully submitted voluntary exit",
 		fields.Epoch(r.voluntaryExit.Epoch),
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
+		fields.SubmissionTime(time.Since(submissionTime)),
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 	)
 
 	r.GetState().Finished = true
@@ -158,7 +167,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
+		Signer:    r.operatorSigner.GetOperatorID(),
 	}
 
 	// broadcast
@@ -168,11 +177,11 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 	}
 	ssvMsg := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
+	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.operatorSigner.GetOperatorID(), r.operatorSigner.SignSSVMessage)
 	if err != nil {
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
@@ -209,7 +218,7 @@ func (r *VoluntaryExitRunner) GetBeaconNode() genesisspecssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *VoluntaryExitRunner) GetShare() *genesisspectypes.Share {
+func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
 	return r.BaseRunner.Share
 }
 
@@ -223,6 +232,10 @@ func (r *VoluntaryExitRunner) GetValCheckF() genesisspecqbft.ProposedValueCheckF
 
 func (r *VoluntaryExitRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
+}
+
+func (r *VoluntaryExitRunner) GetOperatorSigner() OperatorSigner {
+	return r.operatorSigner
 }
 
 // Encode returns the encoded struct in bytes or error

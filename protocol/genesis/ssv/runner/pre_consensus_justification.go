@@ -103,7 +103,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *genesisspectypes.C
 
 	// Verify the reconstructed signature for each root
 	for root := range roots {
-		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share.ValidatorPubKey)
+		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share.ValidatorPubKey[:])
 		if err != nil {
 			return errors.Wrap(err, "wrong pre-consensus partial signature")
 		}

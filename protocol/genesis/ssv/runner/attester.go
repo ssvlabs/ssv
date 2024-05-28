@@ -14,6 +14,7 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -27,21 +28,20 @@ type AttesterRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner genesisspectypes.OperatorSigner
+	operatorSigner OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 
-	started time.Time
 	metrics metrics.ConsensusMetrics
 }
 
-func NewAttesterRunnner(
+func NewAttesterRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *genesisspectypes.Share,
+	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner genesisspectypes.OperatorSigner,
+	operatorSigner OperatorSigner,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -119,11 +119,11 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesis
 
 	ssvMsg := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
+	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.operatorSigner.GetOperatorID(), r.operatorSigner.SignSSVMessage)
 	if err != nil {
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
@@ -140,8 +140,6 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
 
-	duty := r.GetState().DecidedValue.Duty
-	logger = logger.With(fields.Slot(duty.Slot))
 	logger.Debug("🧩 got partial signatures",
 		zap.Uint64("signer", signedMsg.Signer))
 
@@ -149,15 +147,13 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 		return nil
 	}
 
-	r.metrics.EndPostConsensus()
-
 	attestationData, err := r.GetState().DecidedValue.GetAttestationData()
 	if err != nil {
 		return errors.Wrap(err, "could not get attestation data")
 	}
 
 	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
+		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
@@ -167,10 +163,12 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		r.metrics.EndPostConsensus()
 
-		logger.Debug("🧩 reconstructed partial signatures",
-			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)))
+		endSubmission := r.metrics.StartBeaconSubmission()
+		startSubmissionTime := time.Now()
 
+		duty := r.GetState().DecidedValue.Duty
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
 		signedAtt := &phase0.Attestation{
@@ -179,27 +177,29 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 			AggregationBits: aggregationBitfield,
 		}
 
-		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
-		consensusDuration := time.Since(r.started)
-
 		// Submit it to the BN.
-		start := time.Now()
+		logger = logger.With(
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.BeaconDataTime(r.metrics.GetBeaconDataTime()),
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.Height(specqbft.Height(r.BaseRunner.QBFTController.Height)),
+			fields.Round(specqbft.Round(r.GetState().RunningInstance.State.Round)),
+			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
+		)
+
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		attestationSubmissionEnd()
-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
+		endSubmission()
+		r.metrics.EndDutyFullFlow(specqbft.Round(r.GetState().RunningInstance.State.Round))
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully submitted attestation",
-			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
-			fields.ConsensusTime(consensusDuration),
-			fields.SubmissionTime(time.Since(start)),
-			fields.Height(specqbft.Height(r.BaseRunner.QBFTController.Height)),
-			fields.Round(specqbft.Round(r.GetState().RunningInstance.State.Round)))
+			fields.SubmissionTime(time.Since(startSubmissionTime)))
 	}
 	r.GetState().Finished = true
 
@@ -227,14 +227,15 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
 	start := time.Now()
+	r.metrics.StartBeaconData()
 	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
+		logger.Error("❌ failed to get attestation data",
+			fields.BeaconDataTime(time.Since(start)),
+			zap.Error(err))
 		return errors.Wrap(err, "failed to get attestation data")
 	}
-	logger = logger.With(zap.Duration("attestation_data_time", time.Since(start)))
-
-	r.started = time.Now()
-
+	r.metrics.EndBeaconData()
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartConsensus()
 
@@ -267,7 +268,7 @@ func (r *AttesterRunner) GetBeaconNode() genesisspecssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *AttesterRunner) GetShare() *genesisspectypes.Share {
+func (r *AttesterRunner) GetShare() *spectypes.Share {
 	return r.BaseRunner.Share
 }
 
@@ -281,6 +282,10 @@ func (r *AttesterRunner) GetValCheckF() genesisspecqbft.ProposedValueCheckF {
 
 func (r *AttesterRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
+}
+
+func (r *AttesterRunner) GetOperatorSigner() OperatorSigner {
+	return r.operatorSigner
 }
 
 // Encode returns the encoded struct in bytes or error

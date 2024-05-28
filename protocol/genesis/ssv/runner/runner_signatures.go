@@ -30,7 +30,7 @@ func (b *BaseRunner) signBeaconObject(
 	return &genesisspectypes.PartialSignatureMessage{
 		PartialSignature: sig,
 		SigningRoot:      r,
-		Signer:           runner.GetBaseRunner().Share.OperatorID,
+		Signer:           runner.GetOperatorSigner().GetOperatorID(),
 	}, nil
 }
 
@@ -43,7 +43,7 @@ func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *genesisspectypes.P
 	return &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   *msg,
 		Signature: signature,
-		Signer:    b.Share.OperatorID,
+		Signer:    runner.GetOperatorSigner().GetOperatorID(),
 	}, nil
 }
 
@@ -63,7 +63,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	// Check if signer is in committee
 	signerInCommittee := false
 	for _, operator := range b.Share.Committee {
-		if operator.OperatorID == signedMsg.Signer {
+		if operator.Signer == signedMsg.Signer {
 			signerInCommittee = true
 			break
 		}
@@ -79,8 +79,8 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature genes
 	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	for _, n := range b.Share.Committee {
-		if n.GetID() == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.GetSharePublicKey())
+		if n.Signer == signer {
+			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}
