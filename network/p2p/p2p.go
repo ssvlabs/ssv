@@ -318,22 +318,24 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		if len(addedSubnets) > 0 {
 			err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
 			if err != nil {
-				logger.Warn("could not register subnets", zap.Error(err))
+				logger.Debug("could not register subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
 		}
 		if len(removedSubnets) > 0 {
 			err := n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
 			if err != nil {
-				logger.Warn("could not unregister subnets", zap.Error(err))
+				logger.Debug("could not unregister subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
 
 			// Unsubscribe from the removed subnets.
 			for _, subnet := range removedSubnets {
 				if err := n.unsubscribeSubnet(logger, uint(subnet)); err != nil {
-					logger.Warn("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
+					logger.Debug("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
 					errs = errors.Join(errs, err)
+				} else {
+					logger.Debug("unsubscribed from subnet", zap.Int("subnet", subnet))
 				}
 			}
 		}
