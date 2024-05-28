@@ -141,9 +141,9 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni *records.NodeInfo) error {
 	h.updateNodeSubnets(logger, sender, ni.GetNodeInfo())
 
-	if err := h.applyFilters(sender, ni); err != nil {
-		return err
-	}
+	//if err := h.applyFilters(sender, ni); err != nil {
+	//	return err
+	//}
 
 	h.nodeInfos.SetNodeInfo(sender, ni.GetNodeInfo())
 
