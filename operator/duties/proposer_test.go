@@ -11,8 +11,10 @@ import (
 	"go.uber.org/mock/gomock"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.BeaconDuty) {
@@ -26,7 +28,7 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			return duties, nil
 		}).AnyTimes()
 
-	getIndices := func(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	getShares := func(epoch phase0.Epoch) []*types.SSVShare {
 		uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
 		duties, _ := dutiesMap.Get(epoch)
@@ -34,20 +36,21 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			uniqueIndices[d.ValidatorIndex] = true
 		}
 
-		indices := make([]phase0.ValidatorIndex, 0, len(uniqueIndices))
+		shares := make([]*types.SSVShare, 0, len(uniqueIndices))
 		for index := range uniqueIndices {
-			indices = append(indices, index)
+			share := &types.SSVShare{
+				Share: spectypes.Share{
+					ValidatorIndex: index,
+				},
+			}
+			shares = append(shares, share)
 		}
 
-		return indices
+		return shares
 	}
 
-	getIndicesBool := func(epoch phase0.Epoch, wait bool) []phase0.ValidatorIndex {
-		return getIndices(epoch)
-	}
-
-	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
-	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getIndicesBool).AnyTimes()
+	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
