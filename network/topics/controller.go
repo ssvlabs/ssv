@@ -209,7 +209,10 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 // if hard is true, we will unsubscribe the topic even if there are more subscribers.
 func (ctrl *topicsCtrl) Unsubscribe(logger *zap.Logger, name string, hard bool) error {
-	ctrl.container.Unsubscribe(name)
+	name = commons.GetTopicFullName(name)
+	if !ctrl.container.Unsubscribe(name) {
+		return fmt.Errorf("failed to unsubscribe from topic %s: not subscribed", name)
+	}
 
 	if ctrl.msgValidator != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
