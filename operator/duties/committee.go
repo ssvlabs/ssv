@@ -74,6 +74,9 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
 	// TODO: tmp solution to get committee id fast
+
+	h.logger.Debug("building committee duties", zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)), zap.Int("attester_duties", len(attDuties)), zap.Int("sync_duties", len(syncDuties)))
+
 	vcmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
@@ -94,6 +97,8 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 			h.appendBeaconDuty(committeeMap, vcmap, specDuty)
 		}
 	}
+
+	h.logger.Debug("built committee duties", zap.Int("committees", len(committeeMap)), zap.Any("committees", committeeMap))
 
 	return committeeMap
 }
