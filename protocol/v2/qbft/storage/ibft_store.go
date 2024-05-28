@@ -3,6 +3,8 @@ package qbftstorage
 import (
 	"encoding/json"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -22,6 +24,12 @@ func (si *StoredInstance) Encode() ([]byte, error) {
 // Decode returns error if decoding failed.
 func (si *StoredInstance) Decode(data []byte) error {
 	return json.Unmarshal(data, &si)
+}
+
+type ParticipantsRangeEntry struct {
+	Slot       phase0.Slot
+	Signers    []spectypes.OperatorID
+	Identifier spectypes.MessageID
 }
 
 // InstanceStore manages instance data.
@@ -46,6 +54,15 @@ type InstanceStore interface {
 
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(logger *zap.Logger, msgID []byte) error
+
+	// SaveParticipants save participants in quorum.
+	SaveParticipants(identifier spectypes.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error
+
+	// GetParticipantsInRange returns participants in quorum for the given slot range.
+	GetParticipantsInRange(identifier spectypes.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
+
+	// GetParticipants returns participants in quorum for the given slot.
+	GetParticipants(identifier spectypes.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
 }
 
 // QBFTStore is the store used by QBFT components

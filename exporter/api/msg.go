@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/hex"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // Message represents an exporter message
@@ -20,16 +22,27 @@ type Message struct {
 }
 
 type SignedMessageAPI struct {
-	Signature types.Signature
-	Signers   []types.OperatorID
+	Signature spectypes.Signature
+	Signers   []spectypes.OperatorID
 	Message   specqbft.Message
 
-	FullData *types.ConsensusData
+	FullData *spectypes.ConsensusData
 }
 
-// NewDecidedAPIMsg creates a new message from the given message
+type ParticipantsAPI struct {
+	Signers     []spectypes.OperatorID
+	Slot        phase0.Slot
+	Identifier  []byte
+	ValidatorPK string
+	Role        string
+	Message     specqbft.Message
+	FullData    *spectypes.ConsensusData
+}
+
+// NewDecidedAPIMsg creates a new message in an old format from the given message.
 // TODO: avoid converting to v0 once explorer is upgraded
-func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
+// DEPRECATED.
+func NewDecidedAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	data, err := DecidedAPIData(msgs...)
 	if err != nil {
 		return Message{
@@ -38,45 +51,93 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 		}
 	}
 
-	identifier := specqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
+	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
 	pkv := identifier.GetPubKey()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
 			PublicKey: hex.EncodeToString(pkv),
-			From:      uint64(msgs[0].Message.Height),
-			To:        uint64(msgs[len(msgs)-1].Message.Height),
+			From:      uint64(msgs[0].Slot),
+			To:        uint64(msgs[len(msgs)-1].Slot),
 			Role:      role.String(),
 		},
 		Data: data,
 	}
 }
 
-// DecidedAPIData creates a new message from the given message
-func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
+// NewParticipantsAPIMsg creates a new message in a new format from the given message.
+func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
+	data, err := ParticipantsAPIData(msgs...)
+	if err != nil {
+		return Message{
+			Type: TypeParticipants,
+			Data: []string{},
+		}
+	}
+
+	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
+	pkv := identifier.GetPubKey()
+	role := identifier.GetRoleType()
+	return Message{
+		Type: TypeDecided,
+		Filter: MessageFilter{
+			PublicKey: hex.EncodeToString(pkv),
+			From:      uint64(msgs[0].Slot),
+			To:        uint64(msgs[len(msgs)-1].Slot),
+			Role:      role.String(),
+		},
+		Data: data,
+	}
+}
+
+// DecidedAPIData creates a new message from the given message in an old compatible format, which misses some fields.
+// DEPRECATED.
+func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
 
 	apiMsgs := make([]*SignedMessageAPI, 0)
 	for _, msg := range msgs {
-		if msg == nil {
-			return nil, errors.New("nil message")
-		}
-
 		apiMsg := &SignedMessageAPI{
-			Signature: msg.Signature,
-			Signers:   msg.Signers,
-			Message:   msg.Message,
+			Signers: msg.Signers,
+			Message: specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.Height(msg.Slot),
+				Identifier: msg.Identifier[:],
+				Round:      specqbft.FirstRound,
+			},
+			FullData: &spectypes.ConsensusData{Duty: spectypes.Duty{Slot: msg.Slot}},
 		}
 
-		if msg.FullData != nil {
-			var cd types.ConsensusData
-			if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal consensus data")
-			}
-			apiMsg.FullData = &cd
+		apiMsgs = append(apiMsgs, apiMsg)
+	}
+
+	return apiMsgs, nil
+}
+
+// ParticipantsAPIData creates a new message from the given message in a new format.
+func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
+	if len(msgs) == 0 {
+		return nil, errors.New("no messages")
+	}
+
+	apiMsgs := make([]*ParticipantsAPI, 0)
+	for _, msg := range msgs {
+		apiMsg := &ParticipantsAPI{
+			Signers:     msg.Signers,
+			Slot:        msg.Slot,
+			Identifier:  msg.Identifier[:],
+			ValidatorPK: hex.EncodeToString(msg.Identifier.GetPubKey()),
+			Role:        msg.Identifier.GetRoleType().String(),
+			Message: specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.Height(msg.Slot),
+				Identifier: msg.Identifier[:],
+				Round:      specqbft.FirstRound,
+			},
+			FullData: &spectypes.ConsensusData{Duty: spectypes.Duty{Slot: msg.Slot}},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)
@@ -109,4 +170,6 @@ const (
 	TypeDecided MessageType = "decided"
 	// TypeError is an enum for error type messages
 	TypeError MessageType = "error"
+	// TypeParticipants is an enum for participants type messages
+	TypeParticipants MessageType = "participants"
 )

@@ -193,6 +193,8 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 		api.HandleDecidedQuery(logger, n.qbftStorage, nm)
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
+	case api.TypeParticipants:
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm)
 	default:
 		api.HandleUnknownQuery(logger, nm)
 	}
