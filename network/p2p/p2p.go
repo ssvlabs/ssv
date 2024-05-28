@@ -273,7 +273,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 				return true
 			})
 		}
-		if !n.validatorSubnetSubscriptions() { // Pre-fork.
+		if n.validatorSubnetSubscriptions() { // Pre-fork.
 			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 				subnet := commons.ValidatorSubnet(pkHex)
 				updatedSubnets[subnet] = byte(1)
@@ -297,6 +297,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 				removedSubnets = append(removedSubnets, subnet)
 			}
 		}
+
 		registeredSubnets = updatedSubnets
 
 		if len(addedSubnets) == 0 && len(removedSubnets) == 0 {
