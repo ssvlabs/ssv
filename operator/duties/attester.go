@@ -27,7 +27,6 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty]) *Attes
 		duties: duties,
 	}
 	h.fetchCurrentEpoch = true
-	h.fetchFirst = true
 	return h
 }
 
@@ -77,19 +76,12 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			if h.fetchFirst {
-				h.fetchFirst = false
+			h.processExecution(currentEpoch, slot)
+			if h.indicesChanged {
+				h.duties.ResetEpoch(currentEpoch)
 				h.indicesChanged = false
-				h.processFetching(ctx, currentEpoch, slot)
-				h.processExecution(currentEpoch, slot)
-			} else {
-				h.processExecution(currentEpoch, slot)
-				if h.indicesChanged {
-					h.duties.ResetEpoch(currentEpoch)
-					h.indicesChanged = false
-				}
-				h.processFetching(ctx, currentEpoch, slot)
 			}
+			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
 
@@ -112,12 +104,16 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			// reset current epoch duties
 			if reorgEvent.Previous {
 				h.duties.ResetEpoch(currentEpoch)
-				h.fetchFirst = true
+				// TODO: (Alan) genesis support
+				//h.fetchFirst = true
 				h.fetchCurrentEpoch = true
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
 					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
+
+				// TODO: (Alan) genesis support
+				h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.

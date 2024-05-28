@@ -32,7 +32,6 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitt
 		duties: duties,
 	}
 	h.fetchCurrentPeriod = true
-	h.fetchFirst = true
 	return h
 }
 
@@ -81,14 +80,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			if h.fetchFirst {
-				h.fetchFirst = false
-				h.processFetching(ctx, period, true)
-				h.processExecution(period, slot)
-			} else {
-				h.processExecution(period, slot)
-				h.processFetching(ctx, period, true)
-			}
+			h.processExecution(period, slot)
+			h.processFetching(ctx, period, true)
 			cancel()
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next period in the next slot.
@@ -129,6 +122,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// reset next period duties if in appropriate slot range
 			if h.shouldFetchNextPeriod(slot) {
+				fmt.Println("shouldFetchNextPeriod")
 				h.fetchNextPeriod = true
 			}
 		}

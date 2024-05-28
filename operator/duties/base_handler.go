@@ -39,7 +39,6 @@ type baseHandler struct {
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
 
-	fetchFirst     bool
 	indicesChanged bool
 }
 

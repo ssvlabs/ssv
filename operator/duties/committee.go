@@ -31,35 +31,9 @@ func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], sy
 }
 
 func (h *CommitteeHandler) Name() string {
-	// TODO(Oleg): change to spectypes.BNRoleCluster.String() after spec alignment ?
 	return "CLUSTER"
 }
 
-// HandleDuties manages the duty lifecycle, handling different cases:
-//
-// On First Run:
-//  1. Fetch duties for the current epoch.
-//  2. If necessary, fetch duties for the next epoch.
-//  3. Execute duties.
-//
-// On Re-org:
-//
-//	If the previous dependent root changed:
-//	    1. Fetch duties for the current epoch.
-//	    2. Execute duties.
-//	If the current dependent root changed:
-//	    1. Execute duties.
-//	    2. If necessary, fetch duties for the next epoch.
-//
-// On Indices Change:
-//  1. Execute duties.
-//  2. ResetEpoch duties for the current epoch.
-//  3. Fetch duties for the current epoch.
-//  4. If necessary, fetch duties for the next epoch.
-//
-// On Ticker event:
-//  1. Execute duties.
-//  2. If necessary, fetch duties for the next epoch.
 func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -78,43 +52,11 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 
 			h.processExecution(period, epoch, slot)
 
-		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
-
-			//// reset current epoch duties
-			//if reorgEvent.Previous {
-			//	h.duties.ResetEpoch(currentEpoch)
-			//	h.fetchFirst = true
-			//	h.fetchCurrentEpoch = true
-			//	if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-			//		h.duties.ResetEpoch(currentEpoch + 1)
-			//		h.fetchNextEpoch = true
-			//	}
-			//} else if reorgEvent.Current {
-			//	// reset & re-fetch next epoch duties if in appropriate slot range,
-			//	// otherwise they will be fetched by the appropriate slot tick.
-			//	if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-			//		h.duties.ResetEpoch(currentEpoch + 1)
-			//		h.fetchNextEpoch = true
-			//	}
-			//}
+		case _ = <-h.reorg:
+			// do nothing
 
 		case <-h.indicesChange:
-			slot := h.network.Beacon.EstimatedCurrentSlot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
-
-			//h.indicesChanged = true
-			//h.fetchCurrentEpoch = true
-			//
-			//// reset next epoch duties if in appropriate slot range
-			//if h.shouldFetchNexEpoch(slot) {
-			//	h.duties.ResetEpoch(currentEpoch + 1)
-			//	h.fetchNextEpoch = true
-			//}
+			// do nothing
 		}
 	}
 }
