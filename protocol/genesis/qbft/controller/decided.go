@@ -4,12 +4,12 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
@@ -82,7 +82,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.Signed
 func ValidateDecided(
 	config qbft.IConfig,
 	signedDecided *genesisspecqbft.SignedMessage,
-	share *genesisspectypes.Share,
+	share *spectypes.Share,
 ) error {
 	if !IsDecidedMsg(share, signedDecided) {
 		return errors.New("not a decided msg")
@@ -112,6 +112,6 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(share *genesisspectypes.Share, signedDecided *genesisspecqbft.SignedMessage) bool {
+func IsDecidedMsg(share *spectypes.Share, signedDecided *genesisspecqbft.SignedMessage) bool {
 	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == genesisspecqbft.CommitMsgType
 }

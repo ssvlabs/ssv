@@ -7,14 +7,15 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/logging/fields"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-	"go.uber.org/zap"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -27,7 +28,7 @@ type Controller struct {
 	Height     genesisspecqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
-	Share             *genesisspectypes.Share
+	Share             *spectypes.Share
 	NewDecidedHandler NewDecidedHandler `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
@@ -35,7 +36,7 @@ type Controller struct {
 
 func NewController(
 	identifier []byte,
-	share *genesisspectypes.Share,
+	share *spectypes.Share,
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
@@ -240,7 +241,7 @@ func (c *Controller) broadcastDecided(aggregatedCommit *genesisspecqbft.SignedMe
 	}
 
 	operatorSigner := c.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, c.Share.OperatorID, operatorSigner.SignSSVMessage)
+	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, c.config.GetOperatorSigner().GetOperatorID(), operatorSigner.SignSSVMessage)
 	if err != nil {
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}

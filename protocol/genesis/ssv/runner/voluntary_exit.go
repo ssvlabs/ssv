@@ -17,6 +17,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 // Duty runner for validator voluntary exit duty
@@ -26,7 +27,7 @@ type VoluntaryExitRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner OperatorSigner
+	operatorSigner types.OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
@@ -40,7 +41,7 @@ func NewVoluntaryExitRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner OperatorSigner,
+	operatorSigner types.OperatorSigner,
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
@@ -234,7 +235,7 @@ func (r *VoluntaryExitRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
 }
 
-func (r *VoluntaryExitRunner) GetOperatorSigner() OperatorSigner {
+func (r *VoluntaryExitRunner) GetOperatorSigner() types.OperatorSigner {
 	return r.operatorSigner
 }
 

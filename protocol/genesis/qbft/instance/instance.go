@@ -5,19 +5,21 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/logging/fields"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	"go.uber.org/zap"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
-	State  *genesisspecqbft.State
+	State  *types.State
 	config qbft.IConfig
 
 	processMsgF *genesisspectypes.ThreadSafeF
@@ -31,13 +33,13 @@ type Instance struct {
 
 func NewInstance(
 	config qbft.IConfig,
-	share *genesisspectypes.Share,
+	share *spectypes.Share,
 	identifier []byte,
 	height genesisspecqbft.Height,
 ) *Instance {
 	msgId := genesisspectypes.MessageIDFromBytes(identifier)
 	return &Instance{
-		State: &genesisspecqbft.State{
+		State: &types.State{
 			Share:                share,
 			ID:                   identifier,
 			Round:                genesisspecqbft.FirstRound,
@@ -76,7 +78,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height genesisspecqbf
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
-		if proposerID == i.State.Share.OperatorID {
+		if proposerID == i.config.GetOperatorSigner().GetOperatorID() {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -113,7 +115,7 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *genesisspecqbft.SignedMess
 	}
 
 	operatorSigner := i.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, i.State.Share.OperatorID, operatorSigner.SignSSVMessage)
+	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, i.config.GetOperatorSigner().GetOperatorID(), operatorSigner.SignSSVMessage)
 	if err != nil {
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}

@@ -4,10 +4,12 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"go.uber.org/zap"
 
@@ -65,11 +67,11 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 }
 
 func isValidProposal(
-	state *genesisspecqbft.State,
+	state *types.State,
 	config qbft.IConfig,
 	signedProposal *genesisspecqbft.SignedMessage,
 	valCheck genesisspecqbft.ProposedValueCheckF,
-	operators []*genesisspectypes.Operator,
+	operators []*spectypes.ShareMember,
 ) error {
 	if signedProposal.Message.MsgType != genesisspecqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
@@ -80,7 +82,7 @@ func isValidProposal(
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if !signedProposal.CheckSignersInCommittee(state.Share.Committee) {
+	if !CheckSignersInCommittee(signedProposal, state.Share.Committee) {
 		return errors.New("signer not in committee")
 	}
 
@@ -135,7 +137,7 @@ func IsProposalJustification(
 	fullData []byte,
 ) error {
 	return isProposalJustification(
-		&genesisspecqbft.State{
+		&types.State{
 			Share:  &share.Share,
 			Height: height,
 		},
@@ -151,7 +153,7 @@ func IsProposalJustification(
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
-	state *genesisspecqbft.State,
+	state *types.State,
 	config qbft.IConfig,
 	roundChangeMsgs []*genesisspecqbft.SignedMessage,
 	prepareMsgs []*genesisspecqbft.SignedMessage,
@@ -177,7 +179,7 @@ func isProposalJustification(
 		}
 
 		// check there is a quorum
-		if !genesisspecqbft.HasQuorum(state.Share, roundChangeMsgs) {
+		if !HasQuorum(state.Share, roundChangeMsgs) {
 			return errors.New("change round has no quorum")
 		}
 
@@ -199,7 +201,7 @@ func isProposalJustification(
 		} else {
 
 			// check prepare quorum
-			if !genesisspecqbft.HasQuorum(state.Share, prepareMsgs) {
+			if !HasQuorum(state.Share, prepareMsgs) {
 				return errors.New("prepares has no quorum")
 			}
 
@@ -239,7 +241,7 @@ func isProposalJustification(
 	}
 }
 
-func proposer(state *genesisspecqbft.State, config qbft.IConfig, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+func proposer(state *types.State, config qbft.IConfig, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return config.GetProposerF()(state, round)
 }
@@ -257,7 +259,7 @@ func proposer(state *genesisspecqbft.State, config qbft.IConfig, round genesissp
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *genesisspecqbft.State, config qbft.IConfig, fullData []byte, roundChanges, prepares []*genesisspecqbft.SignedMessage) (*genesisspecqbft.SignedMessage, error) {
+func CreateProposal(state *types.State, config qbft.IConfig, fullData []byte, roundChanges, prepares []*genesisspecqbft.SignedMessage) (*genesisspecqbft.SignedMessage, error) {
 	r, err := genesisspecqbft.HashDataRoot(fullData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
@@ -289,7 +291,7 @@ func CreateProposal(state *genesisspecqbft.State, config qbft.IConfig, fullData 
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{state.Share.OperatorID},
+		Signers:   []genesisspectypes.OperatorID{config.GetOperatorSigner().GetOperatorID()},
 		Message:   *msg,
 
 		FullData: fullData,

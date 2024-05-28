@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -27,7 +28,7 @@ type ValidatorRegistrationRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner OperatorSigner
+	operatorSigner types.OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -40,7 +41,7 @@ func NewValidatorRegistrationRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner OperatorSigner,
+	operatorSigner types.OperatorSigner,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
@@ -223,7 +224,7 @@ func (r *ValidatorRegistrationRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
 }
 
-func (r *ValidatorRegistrationRunner) GetOperatorSigner() OperatorSigner {
+func (r *ValidatorRegistrationRunner) GetOperatorSigner() types.OperatorSigner {
 	return r.operatorSigner
 }
 

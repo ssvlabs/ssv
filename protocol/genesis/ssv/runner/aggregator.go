@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type AggregatorRunner struct {
@@ -27,7 +28,7 @@ type AggregatorRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner OperatorSigner
+	operatorSigner types.OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -42,7 +43,7 @@ func NewAggregatorRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner OperatorSigner,
+	operatorSigner types.OperatorSigner,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -337,7 +338,7 @@ func (r *AggregatorRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
 }
 
-func (r *AggregatorRunner) GetOperatorSigner() OperatorSigner {
+func (r *AggregatorRunner) GetOperatorSigner() types.OperatorSigner {
 	return r.operatorSigner
 }
 

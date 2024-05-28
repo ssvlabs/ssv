@@ -1,8 +1,11 @@
 package qbft
 
 import (
+	"github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
+	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -12,7 +15,7 @@ type signing interface {
 	// GetShareSigner returns a ShareSigner instance
 	GetShareSigner() genesisspectypes.ShareSigner
 	// GetOperatorSigner returns an operator signer instance
-	GetOperatorSigner() genesisspectypes.OperatorSigner
+	GetOperatorSigner() genesisrunner.OperatorSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() genesisspectypes.DomainType
 }
@@ -22,7 +25,7 @@ type IConfig interface {
 	// GetValueCheckF returns value check function
 	GetValueCheckF() genesisspecqbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() genesisspecqbft.ProposerF
+	GetProposerF() func(state *genesisrunner.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() genesisspecqbft.Network
 	// GetStorage returns a storage instance
@@ -39,7 +42,7 @@ type Config struct {
 	SigningPK             []byte
 	Domain                genesisspectypes.DomainType
 	ValueCheckF           genesisspecqbft.ProposedValueCheckF
-	ProposerF             genesisspecqbft.ProposerF
+	ProposerF             func(state *genesisrunner.State, round genesisspecqbft.Round) types.OperatorID
 	Storage               qbftstorage.QBFTStore
 	Network               genesisspecqbft.Network
 	Timer                 roundtimer.Timer
@@ -72,7 +75,7 @@ func (c *Config) GetValueCheckF() genesisspecqbft.ProposedValueCheckF {
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() genesisspecqbft.ProposerF {
+func (c *Config) GetProposerF() func(state *genesisrunner.State, round genesisspecqbft.Round) types.OperatorID {
 	return c.ProposerF
 }
 

@@ -4,9 +4,10 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	"go.uber.org/zap"
@@ -19,7 +20,7 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbft.SignedMessage, prepareMsgContainer *genesisspecqbft.MsgContainer) error {
-	hasQuorumBefore := genesisspecqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
+	hasQuorumBefore := HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
@@ -38,7 +39,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 		return nil // already moved to commit stage
 	}
 
-	if !genesisspecqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+	if !HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
 
@@ -73,7 +74,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 
 // getRoundChangeJustification returns the round change justification for the current round.
 // The justification is a quorum of signed prepare messages that agree on state.LastPreparedValue
-func getRoundChangeJustification(state *genesisspecqbft.State, config qbft.IConfig, prepareMsgContainer *genesisspecqbft.MsgContainer) ([]*genesisspecqbft.SignedMessage, error) {
+func getRoundChangeJustification(state *types.State, config qbft.IConfig, prepareMsgContainer *genesisspecqbft.MsgContainer) ([]*genesisspecqbft.SignedMessage, error) {
 	if state.LastPreparedValue == nil {
 		return nil, nil
 	}
@@ -97,7 +98,7 @@ func getRoundChangeJustification(state *genesisspecqbft.State, config qbft.IConf
 		}
 	}
 
-	if !genesisspecqbft.HasQuorum(state.Share, ret) {
+	if !HasQuorum(state.Share, ret) {
 		return nil, nil
 	}
 
@@ -111,7 +112,7 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	root [32]byte,
-	operators []*genesisspectypes.Operator) error {
+	operators []*spectypes.ShareMember) error {
 
 	if signedPrepare.Message.MsgType != genesisspecqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
@@ -135,7 +136,7 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if !signedPrepare.CheckSignersInCommittee(operators) {
+	if !CheckSignersInCommittee(signedPrepare, operators) {
 		return errors.New("signer not in committee")
 	}
 
@@ -148,7 +149,7 @@ func validSignedPrepareForHeightRoundAndRootVerifySignature(
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	root [32]byte,
-	operators []*genesisspectypes.Operator) error {
+	operators []*spectypes.ShareMember) error {
 
 	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(signedPrepare, height, round, root, operators); err != nil {
 		return err
@@ -175,7 +176,7 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *genesisspecqbft.State, config qbft.IConfig, newRound genesisspecqbft.Round, root [32]byte) (*genesisspecqbft.SignedMessage, error) {
+func CreatePrepare(state *types.State, config qbft.IConfig, newRound genesisspecqbft.Round, root [32]byte) (*genesisspecqbft.SignedMessage, error) {
 	msg := &genesisspecqbft.Message{
 		MsgType:    genesisspecqbft.PrepareMsgType,
 		Height:     state.Height,
@@ -191,7 +192,7 @@ func CreatePrepare(state *genesisspecqbft.State, config qbft.IConfig, newRound g
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{state.Share.OperatorID},
+		Signers:   []genesisspectypes.OperatorID{config.GetOperatorSigner().GetOperatorID()},
 		Message:   *msg,
 	}
 	return signedMsg, nil

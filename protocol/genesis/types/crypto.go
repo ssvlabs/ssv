@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
@@ -32,7 +33,7 @@ func init() {
 // DeserializeBLSPublicKey function and bounded.CGO
 //
 // TODO: rethink this function and consider moving/refactoring it.
-func VerifyByOperators(s genesisspectypes.Signature, data genesisspectypes.MessageSignature, domain genesisspectypes.DomainType, sigType genesisspectypes.SignatureType, operators []*genesisspectypes.Operator) error {
+func VerifyByOperators(s genesisspectypes.Signature, data genesisspectypes.MessageSignature, domain genesisspectypes.DomainType, sigType genesisspectypes.SignatureType, operators []*types.ShareMember) error {
 	MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	sign := &bls.Sign{}
@@ -44,8 +45,8 @@ func VerifyByOperators(s genesisspectypes.Signature, data genesisspectypes.Messa
 	for _, id := range data.GetSigners() {
 		found := false
 		for _, n := range operators {
-			if id == n.GetID() {
-				pk, err := DeserializeBLSPublicKey(n.GetSharePublicKey())
+			if id == n.Signer {
+				pk, err := DeserializeBLSPublicKey(n.SharePubKey)
 				if err != nil {
 					return errors.Wrap(err, "failed to deserialize public key")
 				}

@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type SyncCommitteeRunner struct {
@@ -28,7 +29,7 @@ type SyncCommitteeRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner OperatorSigner
+	operatorSigner types.OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -41,7 +42,7 @@ func NewSyncCommitteeRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner OperatorSigner,
+	operatorSigner types.OperatorSigner,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -272,7 +273,7 @@ func (r *SyncCommitteeRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
 }
 
-func (r *SyncCommitteeRunner) GetOperatorSigner() OperatorSigner {
+func (r *SyncCommitteeRunner) GetOperatorSigner() types.OperatorSigner {
 	return r.operatorSigner
 }
 

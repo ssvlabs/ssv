@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type ProposerRunner struct {
@@ -35,7 +36,7 @@ type ProposerRunner struct {
 	beacon         genesisspecssv.BeaconNode
 	network        genesisspecssv.Network
 	signer         genesisspectypes.KeyManager
-	operatorSigner OperatorSigner
+	operatorSigner types.OperatorSigner
 	valCheck       genesisspecqbft.ProposedValueCheckF
 	metrics        metrics.ConsensusMetrics
 }
@@ -47,7 +48,7 @@ func NewProposerRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner OperatorSigner,
+	operatorSigner types.OperatorSigner,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -417,7 +418,7 @@ func (r *ProposerRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
 }
 
-func (r *ProposerRunner) GetOperatorSigner() OperatorSigner {
+func (r *ProposerRunner) GetOperatorSigner() types.OperatorSigner {
 	return r.operatorSigner
 }
 

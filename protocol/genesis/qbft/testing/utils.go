@@ -4,10 +4,12 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
-	"go.uber.org/zap"
+	types2 "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -31,7 +33,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			}
 			return nil
 		},
-		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) types.OperatorID {
+		ProposerF: func(state *types2.State, round genesisspecqbft.Round) types.OperatorID {
 			return 1
 		},
 		Storage:               TestingStores(logger).Get(role),

@@ -1,6 +1,10 @@
 package instance
 
-import genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+import (
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
+)
 
 // Compact trims the given qbft.State down to the minimum required
 // for consensus to proceed.
@@ -9,7 +13,7 @@ import genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 // Compact discards all non-commit messages, only if the given state is decided.
 //
 // This helps reduce the state's memory footprint.
-func Compact(state *genesisspecqbft.State, decidedMessage *genesisspecqbft.SignedMessage) {
+func Compact(state *types.State, decidedMessage *genesisspecqbft.SignedMessage) {
 	compact(state, decidedMessage, compactContainerEdit)
 }
 
@@ -20,13 +24,13 @@ func Compact(state *genesisspecqbft.State, decidedMessage *genesisspecqbft.Signe
 // TODO: this is a temporary solution to not break spec-tests. Revert this once spec is aligned.
 //
 // See Compact for more details.
-func CompactCopy(state *genesisspecqbft.State, decidedMessage *genesisspecqbft.SignedMessage) *genesisspecqbft.State {
+func CompactCopy(state *types.State, decidedMessage *genesisspecqbft.SignedMessage) *types.State {
 	stateCopy := *state
 	compact(&stateCopy, decidedMessage, compactContainerCopy)
 	return &stateCopy
 }
 
-func compact(state *genesisspecqbft.State, decidedMessage *genesisspecqbft.SignedMessage, compactContainer compactContainerFunc) {
+func compact(state *types.State, decidedMessage *genesisspecqbft.SignedMessage, compactContainer compactContainerFunc) {
 	state.ProposeContainer = compactContainer(state.ProposeContainer, state.Round, state.Decided)
 	state.PrepareContainer = compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	state.RoundChangeContainer = compactContainer(state.RoundChangeContainer, state.Round, state.Decided)

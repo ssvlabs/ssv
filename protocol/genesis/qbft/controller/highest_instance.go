@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/pkg/errors"
+
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 
