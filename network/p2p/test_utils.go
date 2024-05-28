@@ -24,7 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/format"
 )
@@ -158,7 +157,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 			counts := network.ValidatorCounts{Total: uint32(options.TotalValidators), Attesting: uint32(options.ActiveValidators), Mine: uint32(options.MyValidators)}
 			return network.ValidatorStats{
 					ValidatorCounts: counts,
-					Committees:      map[types.CommitteeID]network.ValidatorCounts{types.CommitteeID{0x1}: counts},
+					Subnets:         [commons.SubnetsCount]network.ValidatorCounts{1: counts},
 				},
 				nil
 		}
