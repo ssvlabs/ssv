@@ -159,9 +159,13 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
 		if cfg.GetValidatorStats == nil {
-			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+			cfg.GetValidatorStats = func() (network.ValidatorStats, error) {
 				// default in case it was not injected
-				return 100, 100, 10, nil
+				counts := network.ValidatorCounts{Total: 100, Attesting: 100, Mine: 10}
+				return network.ValidatorStats{
+					ValidatorCounts: counts,
+					Subnets:         [commons.SubnetsCount]network.ValidatorCounts{counts},
+				}, nil
 			}
 		}
 		topicScoreFactory = topicScoreParams(logger, cfg)

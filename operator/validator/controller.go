@@ -25,6 +25,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -65,7 +67,7 @@ type ControllerOptions struct {
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
-	BeaconNetwork              beaconprotocol.Network
+	NetworkConfig              networkconfig.NetworkConfig
 	Network                    P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
@@ -103,7 +105,7 @@ type Controller interface {
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
-	GetValidatorStats() (uint64, uint64, uint64, error)
+	GetValidatorStats() (network.ValidatorStats, error)
 	IndicesChangeChan() chan struct{}
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
@@ -152,6 +154,7 @@ type controller struct {
 	recipientsStorage Recipients
 	ibftStorageMap    *storage.QBFTStores
 
+	networkCfg     networkconfig.NetworkConfig
 	beacon         beaconprotocol.BeaconNode
 	keyManager     spectypes.KeyManager
 	operatorSigner spectypes.OperatorSigner
@@ -180,6 +183,11 @@ type controller struct {
 	metadataLastUpdated       map[string]time.Time
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
+
+	validatorStats         *network.ValidatorStats
+	validatorStatsEpoch    phase0.Epoch
+	validatorStatsMutex    sync.Mutex
+	validatorStatsPostFork bool
 }
 
 // NewController creates a new validator controller instance
@@ -200,7 +208,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	validatorOptions := validator.Options{ //TODO add vars
 		Network:       options.Network,
 		Beacon:        options.Beacon,
-		BeaconNetwork: options.BeaconNetwork.GetNetwork(),
+		BeaconNetwork: options.NetworkConfig.Beacon.GetNetwork(),
 		Storage:       options.StorageMap,
 		//Share:   nil,  // set per validator
 		Signer:            options.KeyManager,
@@ -238,6 +246,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		recipientsStorage: options.RegistryStorage,
 		ibftStorageMap:    options.StorageMap,
 		context:           options.Context,
+		networkCfg:        options.NetworkConfig,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
 		keyManager:        options.KeyManager,
@@ -300,19 +309,51 @@ func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
 	return c.validatorExitCh
 }
 
-func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
-	allShares := c.sharesStorage.List(nil)
-	operatorShares := uint64(0)
-	active := uint64(0)
-	for _, s := range allShares {
+func (c *controller) GetValidatorStats() (network.ValidatorStats, error) {
+	c.validatorStatsMutex.Lock()
+	defer c.validatorStatsMutex.Unlock()
+
+	postFork := c.networkCfg.CommitteeSubnetsFork()
+
+	if c.validatorStats != nil &&
+		c.validatorStatsEpoch == c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch() &&
+		c.validatorStatsPostFork == postFork {
+		return *c.validatorStats, nil
+	}
+
+	start := time.Now()
+	stats := network.ValidatorStats{}
+	for _, s := range c.sharesStorage.List(nil) {
+		subnets := network.ValidatorCounts{}
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
-			operatorShares++
+			stats.Mine++
+			subnets.Mine++
 		}
 		if s.IsAttesting(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
-			active++
+			stats.Attesting++
+			subnets.Attesting++
 		}
+		stats.Total++
+		subnets.Total++
+		var subnet int
+		if postFork {
+			subnet = commons.CommitteeSubnet(s.CommitteeID())
+		} else {
+			subnet = commons.ValidatorSubnet(hex.EncodeToString(s.ValidatorPubKey))
+		}
+		stats.Subnets[subnet] = subnets
 	}
-	return uint64(len(allShares)), active, operatorShares, nil
+
+	c.validatorStats = &stats
+	c.validatorStatsEpoch = c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()
+	c.validatorStatsPostFork = postFork
+	c.logger.Debug(
+		"computed validator stats",
+		zap.Any("stats", stats),
+		fields.Took(time.Since(start)),
+		zap.Bool("post_fork", postFork),
+	)
+	return stats, nil
 }
 
 func (c *controller) handleRouterMessages() {

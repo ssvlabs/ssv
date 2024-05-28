@@ -2,6 +2,7 @@ package topics
 
 import (
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -97,15 +98,26 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 // topicScoreParams factory for creating scoring params for topics
 func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
-		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
+		validatorStats, err := cfg.GetValidatorStats()
 		if err != nil {
 			logger.Debug("could not read stats: active validators")
 			return nil
 		}
-		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
-			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
+		subnet, err := strconv.ParseUint(commons.GetTopicBaseName(t), 10, 64)
+		if err != nil {
+			// TODO: this would fail if we add topics that are not subnets.
+			logger.Error("could not parse subnet from topic", zap.String("topic", t))
+			return nil
+		}
+		stats := validatorStats.Subnets[subnet]
+		logger := logger.With(
+			zap.String("topic", t),
+			zap.Uint64("total_validators", uint64(stats.Total)),
+			zap.Uint64("attesting_validators", uint64(stats.Attesting)),
+			zap.Uint64("my_validators", uint64(stats.Mine)))
 		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets())
+		// TODO: we use total instead of attesting here, is that correct?
+		opts := params.NewSubnetTopicOpts(int(stats.Total), commons.Subnets())
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))

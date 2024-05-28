@@ -45,8 +45,6 @@ var (
 
 // NetworkOpts is the config struct for network configurations
 type NetworkOpts struct {
-	// ActiveValidators is the amount of validators in the network
-	ActiveValidators int
 	// Subnets is the number of subnets in the network
 	Subnets int
 	// OneEpochDuration is used as a time-frame length to control scoring in a dynamic way
@@ -57,6 +55,9 @@ type NetworkOpts struct {
 
 // TopicOpts is the config struct for topic configurations
 type TopicOpts struct {
+	// ActiveValidators is the amount of validators in the topic
+	ActiveValidators int
+
 	// D is the gossip degree
 	D int
 
@@ -144,7 +145,7 @@ func (o *Options) defaults() {
 }
 
 func (o *Options) validate() error {
-	if o.Network.ActiveValidators < minActiveValidators {
+	if o.Topic.ActiveValidators < 1 {
 		return ErrLowValidatorsCount
 	}
 	return nil
@@ -159,16 +160,16 @@ func (o *Options) maxScore() float64 {
 func NewOpts(activeValidators, subnets int) Options {
 	return Options{
 		Network: NetworkOpts{
-			ActiveValidators: activeValidators,
-			Subnets:          subnets,
+			Subnets: subnets,
 		},
-		Topic: TopicOpts{},
+		Topic: TopicOpts{
+			ActiveValidators: activeValidators,
+		},
 	}
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
 func NewSubnetTopicOpts(activeValidators, subnets int) Options {
-
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()
@@ -177,9 +178,8 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
 
 	// Set expected message rate based on stage metrics
-	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
 	msgsPerValidatorPerSecond := 600.0 / 10000.0
-	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
+	opts.Topic.ExpectedMsgRate = float64(opts.Topic.ActiveValidators) * msgsPerValidatorPerSecond
 
 	return opts
 }

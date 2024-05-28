@@ -9,6 +9,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// type forkPhase int
+
+// const (
+// 	forkPhaseBefore forkPhase = iota
+// 	forkPhasePrepare
+// 	forkPhaseAfter
+// )
+
 const (
 	// committeeSubnetPresubscriptionDistance is the distance from the fork slot
 	// to start subscribing to committee subnets. During this phase, the node
@@ -66,10 +74,22 @@ func (n *p2pNetwork) presubscribeToCommitteeSubnets(logger *zap.Logger) error {
 		return true
 	})
 
-	logger.Debug("subscribed to committee subnets",
+	logger.Debug("presubscribed to committee subnets",
 		zap.Strings("committee_ids", hexCommitteeIDs),
 		zap.Int("total_committees", len(hexCommitteeIDs)),
 		zap.Duration("took", time.Since(start)))
+
+	go func() {
+		// Wait for the fork slot to update subnet score params.
+		forkTime := n.cfg.Network.Beacon.EpochStartTime(n.cfg.Network.CommitteeSubnetForkEpoch)
+		time.Sleep(time.Until(forkTime))
+
+		if err := n.topicsCtrl.UpdateScoreParams(logger); err != nil {
+			logger.Warn("could not update score params", zap.Error(err))
+			return
+		}
+		logger.Debug("updated score params for committee subnets")
+	}()
 
 	return nil
 }

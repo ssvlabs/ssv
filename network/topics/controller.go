@@ -2,13 +2,14 @@ package topics
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
@@ -32,6 +33,8 @@ type Controller interface {
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+	// UpdateScoreParams refreshes the score params for every subscribed topic.
+	UpdateScoreParams(logger *zap.Logger) error
 
 	io.Closer
 }
@@ -104,6 +107,31 @@ func (ctrl *topicsCtrl) onNewTopic(logger *zap.Logger) onTopicJoined {
 			}
 		}
 	}
+}
+
+func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
+	if ctrl.scoreParamsFactory == nil {
+		return fmt.Errorf("scoreParamsFactory is not set")
+	}
+	var err error
+	topics := ctrl.ps.GetTopics()
+	for _, topicName := range topics {
+		topic := ctrl.container.Get(topicName)
+		if topic == nil {
+			err = errors.Join(err, fmt.Errorf("topic %s is not ready", topicName))
+			continue
+		}
+		p := ctrl.scoreParamsFactory(topicName)
+		if p == nil {
+			err = errors.Join(err, fmt.Errorf("score params for topic %s is nil", topicName))
+			continue
+		}
+		if err := topic.SetScoreParams(p); err != nil {
+			err = errors.Join(err, fmt.Errorf("could not set score params for topic %s: %w", topicName, err))
+			continue
+		}
+	}
+	return err
 }
 
 // Close implements io.Closer
@@ -260,15 +288,18 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 	if ctrl.msgValidator != nil {
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
-		_ = ctrl.ps.UnregisterTopicValidator(name)
+		err := ctrl.ps.UnregisterTopicValidator(name)
+		if err != nil {
+			ctrl.logger.Debug("failed to unregister topic validator", zap.String("topic", name), zap.Error(err))
+		}
 
 		var opts []pubsub.ValidatorOpt
 		// Optional: set a timeout for message validation
 		// opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
+		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
 		if err != nil {
-			return errors.Wrap(err, "could not register topic validator")
+			return fmt.Errorf("could not register topic validator: %w", err)
 		}
 	}
 	return nil

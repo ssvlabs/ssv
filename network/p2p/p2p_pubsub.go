@@ -203,6 +203,19 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	// return nil
 }
 
+func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+	if subnet >= uint(commons.Subnets()) {
+		return fmt.Errorf("invalid subnet %d", subnet)
+	}
+	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(int(subnet)), false); err != nil {
+		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
+	}
+	return nil
+}
+
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.Context, topic string, msg *pubsub.Message) error {
 	return func(ctx context.Context, topic string, msg *pubsub.Message) error {
@@ -224,13 +237,6 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		if decodedMsg == nil {
 			return errors.New("message was not decoded")
 		}
-
-		//p2pID := decodedMsg.GetID().String()
-
-		//	logger.With(
-		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
-		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
-		// 	).Debug("handlePubsubMessages")
 
 		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 

@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
@@ -73,7 +74,7 @@ type p2pNetwork struct {
 
 	activeValidators                  *hashmap.Map[string, validatorStatus]
 	activeCommittees                  *hashmap.Map[string, validatorStatus]
-	committeePresubscriptionScheduled bool // whether validator subnets are enabled
+	committeePresubscriptionScheduled bool
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
@@ -263,34 +264,42 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 
 		// Compute the new subnets according to the active committees/validators.
-		newSubnets := make([]byte, commons.Subnets())
-		copy(newSubnets, n.subnets)
+		updatedSubnets := make([]byte, commons.Subnets())
+		copy(updatedSubnets, n.subnets)
 		if n.committeeSubnetSubscriptions() { // Presubscription phase or post-fork.
 			n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 				subnet := commons.CommitteeSubnet(types.CommitteeID([]byte(cid)))
-				newSubnets[subnet] = byte(1)
+				updatedSubnets[subnet] = byte(1)
 				return true
 			})
 		}
 		if !n.validatorSubnetSubscriptions() { // Pre-fork.
 			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 				subnet := commons.ValidatorSubnet(pkHex)
-				newSubnets[subnet] = byte(1)
+				updatedSubnets[subnet] = byte(1)
 				return true
 			})
 		}
-		n.subnets = newSubnets
+		n.subnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
-		unregisteredSubnets := make([]int, 0)
-		for subnet, active := range newSubnets {
+		addedSubnets := make([]int, 0)
+		for subnet, active := range updatedSubnets {
 			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				unregisteredSubnets = append(unregisteredSubnets, subnet)
+				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
-		registeredSubnets = newSubnets
 
-		if len(unregisteredSubnets) == 0 {
+		// Compute the not anymore registered subnets.
+		removedSubnets := make([]int, 0)
+		for subnet, active := range registeredSubnets {
+			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
+				removedSubnets = append(removedSubnets, subnet)
+			}
+		}
+		registeredSubnets = updatedSubnets
+
+		if len(addedSubnets) == 0 && len(removedSubnets) == 0 {
 			continue
 		}
 
@@ -298,18 +307,39 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		self.Metadata.Subnets = records.Subnets(n.subnets).String()
 		n.idx.UpdateSelfRecord(self)
 
-		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
-		if err != nil {
-			logger.Warn("could not register subnets", zap.Error(err))
-			continue
+		var errs error
+		if len(addedSubnets) > 0 {
+			err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+			if err != nil {
+				logger.Warn("could not register subnets", zap.Error(err))
+				errs = errors.Join(errs, err)
+			}
 		}
+		if len(removedSubnets) > 0 {
+			err := n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
+			if err != nil {
+				logger.Warn("could not unregister subnets", zap.Error(err))
+				errs = errors.Join(errs, err)
+			}
+
+			// Unsubscribe from the removed subnets.
+			for _, subnet := range removedSubnets {
+				if err := n.unsubscribeSubnet(logger, uint(subnet)); err != nil {
+					logger.Warn("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
+					errs = errors.Join(errs, err)
+				}
+			}
+		}
+
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
 		logger.Debug("updated subnets",
-			zap.Any("added", unregisteredSubnets),
+			zap.Any("added", addedSubnets),
+			zap.Any("removed", removedSubnets),
 			zap.Any("subnets", subnetsList),
 			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
+			zap.Error(errs),
 		)
 	}
 }
