@@ -254,7 +254,7 @@ func (c *Controller) Decode(data []byte) error {
 }
 
 func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage) error {
-	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.MsgID, aggregatedCommit); err != nil {
+	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit); err != nil {
 		// We do not return error here, just Log broadcasting error.
 		return errors.Wrap(err, "could not broadcast decided")
 	}

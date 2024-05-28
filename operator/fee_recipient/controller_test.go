@@ -2,6 +2,7 @@ package fee_recipient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -145,6 +145,7 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 		return &types.SSVShare{
 			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
 				ValidatorIndex: phase0.ValidatorIndex(index),
+				Committee:      []*spectypes.ShareMember{&spectypes.ShareMember{Signer: operatorID}},
 			},
 			Metadata: types.Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{

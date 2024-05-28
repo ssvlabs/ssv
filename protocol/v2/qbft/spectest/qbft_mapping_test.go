@@ -37,6 +37,7 @@ func TestQBFTMapping(t *testing.T) {
 		name, test := name, test
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
+
 		switch testType {
 		case reflect.TypeOf(&spectests.MsgProcessingSpecTest{}).String():
 			byts, err := json.Marshal(test)
