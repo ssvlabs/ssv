@@ -66,7 +66,6 @@ var (
 	ErrIncorrectTopic                          = Error{text: "incorrect topic"}
 	ErrNonExistentCommitteeID                  = Error{text: "committee ID doesn't exist"}
 	ErrRoundTooHigh                            = Error{text: "round is too high for this role"}
-	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages"}
 	ErrValidatorIndexMismatch                  = Error{text: "partial signature validator index not found"}
 	ErrTooManyDutiesPerEpoch                   = Error{text: "too many duties per epoch"}
 	ErrNoDuty                                  = Error{text: "no duty for this epoch"}
@@ -117,6 +116,7 @@ var (
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
 	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
 	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
+	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.DecodedSSVMessage, err error) pubsub.ValidationResult {
