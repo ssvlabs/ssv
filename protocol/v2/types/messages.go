@@ -38,7 +38,11 @@ type TimeoutData struct {
 }
 
 type ExecuteDutyData struct {
-	Duty *types.Duty
+	Duty *types.BeaconDuty
+}
+
+type ExecuteCommitteeDutyData struct {
+	Duty *types.CommitteeDuty
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {
@@ -51,6 +55,14 @@ func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {
 
 func (m *EventMsg) GetExecuteDutyData() (*ExecuteDutyData, error) {
 	ed := &ExecuteDutyData{}
+	if err := json.Unmarshal(m.Data, ed); err != nil {
+		return nil, err
+	}
+	return ed, nil
+}
+
+func (m *EventMsg) GetExecuteCommitteeDutyData() (*ExecuteCommitteeDutyData, error) {
+	ed := &ExecuteCommitteeDutyData{}
 	if err := json.Unmarshal(m.Data, ed); err != nil {
 		return nil, err
 	}

@@ -5,13 +5,22 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
+var TestingSK = testingutils.Testing4SharesSet()
+var TestingMessage = &specqbft.Message{
+	MsgType:    specqbft.ProposalMsgType,
+	Height:     specqbft.FirstHeight,
+	Round:      specqbft.FirstRound,
+	Identifier: []byte{1, 2, 3, 4},
+	Root:       testingutils.TestingQBFTRootData,
+}
 var compactTests = []struct {
 	name       string
 	inputState *specqbft.State
-	inputMsg   *specqbft.SignedMessage
+	inputMsg   *spectypes.SignedSSVMessage
 	expected   *specqbft.State // if nil, expected to be equal to input
 }{
 	{
@@ -82,27 +91,21 @@ var compactTests = []struct {
 	{
 		name: "compact quorum decided with previous rounds",
 		inputState: &specqbft.State{
-			Round:             3,
-			LastPreparedRound: 3,
-			Decided:           true,
-			Share: &spectypes.Share{
-				Committee: make([]*spectypes.Operator, 4),
-			},
+			Round:                3,
+			LastPreparedRound:    3,
+			Decided:              true,
+			Share:                testingutils.TestingOperator(TestingSK),
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
 			CommitContainer:      mockContainer(1, 2, 3, 4),
 			RoundChangeContainer: mockContainer(1, 2, 3, 4),
 		},
-		inputMsg: &specqbft.SignedMessage{
-			Signers: []spectypes.OperatorID{1, 2, 3},
-		},
+		inputMsg: testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, TestingMessage),
 		expected: &specqbft.State{
-			Round:             3,
-			LastPreparedRound: 3,
-			Decided:           true,
-			Share: &spectypes.Share{
-				Committee: make([]*spectypes.Operator, 4),
-			},
+			Round:                3,
+			LastPreparedRound:    3,
+			Decided:              true,
+			Share:                testingutils.TestingOperator(TestingSK),
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
 			CommitContainer:      mockContainer(3, 4),
@@ -112,27 +115,21 @@ var compactTests = []struct {
 	{
 		name: "compact whole committee decided with previous rounds",
 		inputState: &specqbft.State{
-			Round:             2,
-			LastPreparedRound: 2,
-			Decided:           true,
-			Share: &spectypes.Share{
-				Committee: make([]*spectypes.Operator, 4),
-			},
+			Round:                2,
+			LastPreparedRound:    2,
+			Decided:              true,
+			Share:                testingutils.TestingOperator(TestingSK),
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
 			CommitContainer:      mockContainer(1, 2, 3, 4),
 			RoundChangeContainer: mockContainer(1, 2, 3, 4),
 		},
-		inputMsg: &specqbft.SignedMessage{
-			Signers: []spectypes.OperatorID{1, 2, 3, 4},
-		},
+		inputMsg: testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, TestingMessage),
 		expected: &specqbft.State{
-			Round:             2,
-			LastPreparedRound: 2,
-			Decided:           true,
-			Share: &spectypes.Share{
-				Committee: make([]*spectypes.Operator, 4),
-			},
+			Round:                2,
+			LastPreparedRound:    2,
+			Decided:              true,
+			Share:                testingutils.TestingOperator(TestingSK),
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
 			CommitContainer:      mockContainer(2, 3, 4),
@@ -171,11 +168,10 @@ func TestCompact(t *testing.T) {
 func mockContainer(rounds ...specqbft.Round) *specqbft.MsgContainer {
 	container := specqbft.NewMsgContainer()
 	for _, round := range rounds {
-		container.AddMsg(&specqbft.SignedMessage{
-			Message: specqbft.Message{
-				Round: round,
-			},
-		})
+		msg := &specqbft.Message{
+			Round: round,
+		}
+		container.AddMsg(testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, msg))
 	}
 	return container
 }

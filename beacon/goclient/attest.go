@@ -9,7 +9,6 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -30,7 +29,7 @@ func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	return resp.Data, nil
 }
 
-func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
 	attDataReqStart := time.Now()
 	resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 		Slot:           slot,

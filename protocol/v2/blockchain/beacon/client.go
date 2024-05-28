@@ -4,6 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
+	"github.com/attestantio/go-eth2-client/spec"
+	ssz "github.com/ferranbt/fastssz"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -46,9 +51,36 @@ type signer interface {
 	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
 }
 
+// TODO: remove temp spec intefaces once spec is settled
+
+// ProposerCalls interface has all block proposer duty specific calls
+type TempSpecProposerCalls interface {
+	// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
+	GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error)
+	// GetBlindedBeaconBlock returns blinded beacon block by the given slot, graffiti, and randao.
+	//GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error)
+	// SubmitBeaconBlock submit the block to the node
+	SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error
+	// SubmitBlindedBeaconBlock submit the blinded block to the node
+	SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error
+}
+
+type TempSpecBeaconNode interface {
+	// GetBeaconNetwork returns the beacon network the node is on
+	GetBeaconNetwork() spectypes.BeaconNetwork
+	specssv.AttesterCalls
+	TempSpecProposerCalls
+	specssv.AggregatorCalls
+	specssv.SyncCommitteeCalls
+	specssv.SyncCommitteeContributionCalls
+	specssv.ValidatorRegistrationCalls
+	specssv.VoluntaryExitCalls
+	specssv.DomainCalls
+}
+
 // BeaconNode interface for all beacon duty calls
 type BeaconNode interface {
-	specssv.BeaconNode // spec beacon interface
+	TempSpecBeaconNode // spec beacon interface
 	beaconDuties
 	beaconSubscriber
 	beaconValidator

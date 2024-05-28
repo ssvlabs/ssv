@@ -2,7 +2,6 @@ package testing
 
 import (
 	"context"
-
 	"github.com/ssvlabs/ssv/network"
 )
 

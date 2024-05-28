@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/rsa"
 	"math"
 	"testing"
 
@@ -86,25 +87,25 @@ func TestHandleDecidedQuery(t *testing.T) {
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()
 
-	roles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
+	roles := []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
+		spectypes.RoleProposer,
+		spectypes.RoleAggregator,
+		spectypes.RoleSyncCommitteeContribution,
 		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)
 	_ = bls.Init(bls.BLS12_381)
 
-	sks, _ := GenerateNodes(4)
-	oids := make([]spectypes.OperatorID, 0)
-	for oid := range sks {
-		oids = append(oids, oid)
+	sks, op, rsaKeys := GenerateNodes(4)
+	oids := make([]spectypes.OperatorID, 0, len(op))
+	for _, o := range op {
+		oids = append(oids, o.OperatorID)
 	}
 
-	role := spectypes.BNRoleAttester
+	role := spectypes.RoleCommittee
 	pk := sks[1].GetPublicKey()
-	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
@@ -119,10 +120,9 @@ func TestHandleDecidedQuery(t *testing.T) {
 	// save decided
 	for _, d := range decided250Seq {
 		require.NoError(t, ibftStorage.Get(role).SaveInstance(d))
-		require.NoError(t, ibftStorage.Get(role).SaveParticipants(
-			spectypes.MessageIDFromBytes(d.DecidedMessage.Message.Identifier),
-			phase0.Slot(d.DecidedMessage.Message.Height),
-			d.DecidedMessage.Signers),
+		require.NoError(t, ibftStorage.Get(role).SaveParticipants(d.DecidedMessage.SSVMessage.MsgID,
+			phase0.Slot(d.State.Height),
+			d.DecidedMessage.OperatorIDs),
 		)
 	}
 
@@ -198,7 +198,7 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, fu
 	}
 }
 
-func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.QBFTStores) {
+func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.RunnerRole) (storage.Storage, *qbftstorage.QBFTStores) {
 	sExporter, err := storage.NewNodeStorage(logger, db)
 	if err != nil {
 		panic(err)
@@ -213,25 +213,31 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator) {
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator, []*rsa.PrivateKey) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make([]*spectypes.Operator, 0)
+	nodes := make([]*spectypes.Operator, 0, cnt)
 	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
+	rsaKeys := make([]*rsa.PrivateKey, 0, cnt)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		opPubKey, _, err := rsaencryption.GenerateKeys()
+		opPubKey, privateKey, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			panic(err)
+		}
+		pk, err := rsaencryption.PemToPrivateKey(privateKey)
 		if err != nil {
 			panic(err)
 		}
 
 		nodes = append(nodes, &spectypes.Operator{
 			OperatorID:        spectypes.OperatorID(i),
-			SharePubKey:       sk.GetPublicKey().Serialize(),
 			SSVOperatorPubKey: opPubKey,
+			Committee:         []*spectypes.CommitteeMember{{OperatorID: spectypes.OperatorID(i), SSVOperatorPubKey: opPubKey}},
 		})
 		sks[spectypes.OperatorID(i)] = sk
+		rsaKeys = append(rsaKeys, pk)
 	}
-	return sks, nodes
+	return sks, nodes, rsaKeys
 }

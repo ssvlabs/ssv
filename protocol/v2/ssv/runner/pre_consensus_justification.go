@@ -10,24 +10,30 @@ import (
 )
 
 // correctQBFTState returns true if QBFT controller state requires pre-consensus justification
-func (b *BaseRunner) correctQBFTState(logger *zap.Logger, msg *specqbft.SignedMessage) bool {
+func (b *BaseRunner) correctQBFTState(logger *zap.Logger, msg *specqbft.Message) bool {
 	inst := b.QBFTController.InstanceForHeight(logger, b.QBFTController.Height)
 	decidedInstance := inst != nil && inst.State != nil && inst.State.Decided
 
 	// firstHeightNotDecided is true if height == 0 (special case) and did not start yet
-	firstHeightNotDecided := inst == nil && b.QBFTController.Height == msg.Message.Height && msg.Message.Height == specqbft.FirstHeight
+	firstHeightNotDecided := inst == nil && b.QBFTController.Height == msg.Height && msg.Height == specqbft.FirstHeight
 
 	// notFirstHeightDecided returns true if height != 0, height decided and the message is for next height
-	notFirstHeightDecided := decidedInstance && msg.Message.Height > specqbft.FirstHeight && b.QBFTController.Height+1 == msg.Message.Height
+	notFirstHeightDecided := decidedInstance && msg.Height > specqbft.FirstHeight && b.QBFTController.Height+1 == msg.Height
 
 	return firstHeightNotDecided || notFirstHeightDecided
 }
 
 // shouldProcessingJustificationsForHeight returns true if pre-consensus justification should be processed, false otherwise
-func (b *BaseRunner) shouldProcessingJustificationsForHeight(logger *zap.Logger, msg *specqbft.SignedMessage) bool {
-	correctMsgTYpe := msg.Message.MsgType == specqbft.ProposalMsgType || msg.Message.MsgType == specqbft.RoundChangeMsgType
-	correctBeaconRole := b.BeaconRoleType == spectypes.BNRoleProposer || b.BeaconRoleType == spectypes.BNRoleAggregator || b.BeaconRoleType == spectypes.BNRoleSyncCommitteeContribution
-	return b.correctQBFTState(logger, msg) && correctMsgTYpe && correctBeaconRole
+func (b *BaseRunner) shouldProcessingJustificationsForHeight(logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) (bool, error) {
+
+	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+	if err != nil {
+		return false, err
+	}
+
+	correctMsgTYpe := msg.MsgType == specqbft.ProposalMsgType || msg.MsgType == specqbft.RoundChangeMsgType
+	correctBeaconRole := b.RunnerRoleType == spectypes.RoleProposer || b.RunnerRoleType == spectypes.RoleAggregator || b.RunnerRoleType == spectypes.RoleSyncCommitteeContribution
+	return b.correctQBFTState(logger, msg) && correctMsgTYpe && correctBeaconRole, nil
 }
 
 // validatePreConsensusJustifications returns an error if pre-consensus justification is invalid, nil otherwise
@@ -37,7 +43,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 		return err
 	}
 
-	if b.BeaconRoleType != data.Duty.Type {
+	if b.RunnerRoleType != spectypes.MapDutyToRunnerRole(data.Duty.Type) {
 		return errors.New("wrong beacon role")
 	}
 
@@ -46,37 +52,39 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 	}
 
 	// validate justification quorum
-	if !b.Share.HasQuorum(len(data.PreConsensusJustifications)) {
+	if !b.Share[data.Duty.ValidatorIndex].HasQuorum(len(data.PreConsensusJustifications)) {
 		return errors.New("no quorum")
 	}
 
 	signers := make(map[spectypes.OperatorID]bool)
 	roots := make(map[[32]byte]bool)
 	rootCount := 0
-	partialSigContainer := ssv.NewPartialSigContainer(b.Share.Quorum)
+	partialSigContainer := ssv.NewPartialSigContainer(b.Share[data.Duty.ValidatorIndex].Quorum)
 	for i, msg := range data.PreConsensusJustifications {
 		if err := msg.Validate(); err != nil {
 			return err
 		}
 
+		signer := msg.Messages[0].Signer
+
 		// check unique signers
-		if !signers[msg.Signer] {
-			signers[msg.Signer] = true
+		if !signers[signer] {
+			signers[signer] = true
 		} else {
 			return errors.New("duplicate signer")
 		}
 
 		// verify all justifications have the same root count
 		if i == 0 {
-			rootCount = len(msg.Message.Messages)
+			rootCount = len(msg.Messages)
 		} else {
-			if rootCount != len(msg.Message.Messages) {
+			if rootCount != len(msg.Messages) {
 				return errors.New("inconsistent root count")
 			}
 		}
 
 		// validate roots
-		for _, partialSigMessage := range msg.Message.Messages {
+		for _, partialSigMessage := range msg.Messages {
 			// validate roots
 			if i == 0 {
 				// check signer did not sign duplicate root
@@ -103,7 +111,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 
 	// Verify the reconstructed signature for each root
 	for root := range roots {
-		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share.ValidatorPubKey)
+		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share[data.Duty.ValidatorIndex].ValidatorPubKey[:], data.Duty.ValidatorIndex)
 		if err != nil {
 			return errors.Wrap(err, "wrong pre-consensus partial signature")
 		}
@@ -123,8 +131,12 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 5) add pre-consensus sigs to container
 6) decided on duty
 */
-func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner Runner, highestDecidedDutySlot phase0.Slot, msg *specqbft.SignedMessage) error {
-	if !b.shouldProcessingJustificationsForHeight(logger, msg) {
+func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner Runner, highestDecidedDutySlot phase0.Slot, msg *spectypes.SignedSSVMessage) error {
+	shouldProcess, err := b.shouldProcessingJustificationsForHeight(logger, msg)
+	if err != nil {
+		return nil
+	}
+	if !shouldProcess {
 		return nil
 	}
 
@@ -159,5 +171,10 @@ func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner
 		return errors.New("invalid pre-consensus justification quorum")
 	}
 
-	return b.decide(logger, runner, cd)
+	inputBytes, err := cd.Encode()
+	if err != nil {
+		return errors.Wrap(err, "could not encode ConsensusData")
+	}
+
+	return b.decide(logger, runner, cd.Duty.Slot, inputBytes)
 }

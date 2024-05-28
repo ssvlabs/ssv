@@ -52,7 +52,7 @@ func NewDecidedAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	}
 
 	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
-	pkv := identifier.GetPubKey()
+	pkv := identifier.GetDutyExecutorID()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
@@ -77,7 +77,7 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	}
 
 	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
-	pkv := identifier.GetPubKey()
+	pkv := identifier.GetDutyExecutorID()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
@@ -108,7 +108,7 @@ func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, er
 				Identifier: msg.Identifier[:],
 				Round:      specqbft.FirstRound,
 			},
-			FullData: &spectypes.ConsensusData{Duty: spectypes.Duty{Slot: msg.Slot}},
+			FullData: &spectypes.ConsensusData{Duty: spectypes.BeaconDuty{Slot: msg.Slot}},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)
@@ -129,7 +129,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 			Signers:     msg.Signers,
 			Slot:        msg.Slot,
 			Identifier:  msg.Identifier[:],
-			ValidatorPK: hex.EncodeToString(msg.Identifier.GetPubKey()),
+			ValidatorPK: hex.EncodeToString(msg.Identifier.GetDutyExecutorID()),
 			Role:        msg.Identifier.GetRoleType().String(),
 			Message: specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
@@ -137,7 +137,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 				Identifier: msg.Identifier[:],
 				Round:      specqbft.FirstRound,
 			},
-			FullData: &spectypes.ConsensusData{Duty: spectypes.Duty{Slot: msg.Slot}},
+			FullData: &spectypes.ConsensusData{Duty: spectypes.BeaconDuty{Slot: msg.Slot}},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)

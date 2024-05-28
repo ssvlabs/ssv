@@ -16,7 +16,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
 	github.com/golang/gddo v0.0.0-20200528160355-8d077c1d8f4c
-	github.com/golang/mock v1.6.0
+	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/golang-lru/v2 v2.0.2
@@ -38,12 +38,14 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
-	github.com/ssvlabs/ssv-spec v0.3.9-0.20240502104002-5c24261a2140
+	github.com/ssvlabs/ssv-spec v0.3.10-0.20240519064657-54fad5befec4
+	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240502072846-bba633c4ed61
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
+	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
@@ -103,10 +105,10 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
 	github.com/google/flatbuffers v1.12.1 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20230602150820-91b7bce49751 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -229,4 +231,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/ssvlabs/ssv-spec => github.com/ssvlabs/ssv-spec v0.3.10-0.20240519135356-bf5598c26211
+// TODO (Alan) fix spec tests by mergeing builder proposals removing into the main spec
+//replace github.com/ssvlabs/ssv-spec => github.com/ssvlabs/ssv-spec v0.3.10-0.20240519135356-bf5598c26211

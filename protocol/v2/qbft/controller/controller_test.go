@@ -6,13 +6,12 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestController_Marshaling(t *testing.T) {
@@ -39,13 +38,13 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		ShareSigner:    spectestingutils.NewTestingKeyManager(),
+		BeaconSigner:   spectestingutils.NewTestingKeyManager(),
 		OperatorSigner: spectestingutils.NewTestingOperatorSigner(keySet, 1),
 		Network:        spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:          roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingShare(keySet)
+	share := spectestingutils.TestingOperator(keySet)
 	inst := instance.NewInstance(
 		testConfig,
 		share,

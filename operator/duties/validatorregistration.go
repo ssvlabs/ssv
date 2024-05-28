@@ -24,6 +24,7 @@ func (h *ValidatorRegistrationHandler) Name() string {
 
 func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	// should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
 	registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
@@ -36,26 +37,22 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-h.ticker.Next():
 			slot := h.ticker.Slot()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			shares := h.validatorController.GetOperatorShares()
+			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(validatorRegistrationEpochInterval))
 
 			var validators []phase0.ValidatorIndex
 			for _, share := range shares {
-				if !share.IsAttesting(epoch + phase0.Epoch(validatorRegistrationEpochInterval)) {
-					continue
-				}
-
 				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
 					continue
 				}
 
 				pk := phase0.BLSPubKey{}
-				copy(pk[:], share.ValidatorPubKey)
+				copy(pk[:], share.ValidatorPubKey[:])
 
-				h.executeDuties(h.logger, []*spectypes.Duty{{
+				h.executeDuties(h.logger, []*spectypes.BeaconDuty{{
 					Type:           spectypes.BNRoleValidatorRegistration,
+					ValidatorIndex: share.ValidatorIndex,
 					PubKey:         pk,
 					Slot:           slot,
-					ValidatorIndex: share.BeaconMetadata.Index,
 					// no need for other params
 				}})
 

@@ -39,7 +39,13 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 // Peers registers a message router to handle incoming messages
 func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
-	topics := commons.ValidatorTopicID(pk)
+	// TODO: Alan - fork support
+	share := n.nodeStorage.Shares().Get(nil, pk[:])
+	if share == nil {
+		return nil, fmt.Errorf("could not find validator: %x", pk[:])
+	}
+	cmtid := share.CommitteeID()
+	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		peers, err := n.topicsCtrl.Peers(topic)
 		if err != nil {
@@ -60,17 +66,41 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("operator ID is not ready")
 	}
 
+	// TODO: (genesis) old encoding
+	// encodedMsg, err := commons.EncodeNetworkMsg(msg)
+	// if err != nil {
+	// 	return errors.Wrap(err, "could not decode msg")
+	// }
+	// signature, err := n.operatorSigner.Sign(encodedMsg)
+	// if err != nil {
+	// 	return err
+	// }
+	// encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
+
 	encodedMsg, err := msg.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	vpk := msgID.GetPubKey()
-	topics := commons.ValidatorTopicID(vpk)
+	var committeeID spectypes.CommitteeID
+	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		committeeID = spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
+	} else {
+		share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if share == nil {
+			return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
+		}
+		committeeID = share.CommitteeID()
+	}
+	topics := commons.CommitteeTopicID(committeeID)
 
 	for _, topic := range topics {
+		n.interfaceLogger.Debug("broadcasting msg",
+			zap.String("committee_id", hex.EncodeToString(committeeID[:])),
+			zap.Int("msg_type", int(msg.SSVMessage.MsgType)),
+			fields.Topic(topic))
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
+			n.interfaceLogger.Debug("could not broadcast msg", fields.CommitteeID(committeeID), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
@@ -127,7 +157,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	pkHex := hex.EncodeToString(pk)
+	pkHex := hex.EncodeToString(pk[:])
 	status, found := n.activeValidators.GetOrInsert(pkHex, validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
@@ -145,11 +175,12 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	pkHex := hex.EncodeToString(pk)
+	pkHex := hex.EncodeToString(pk[:])
 	if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
 		return nil
 	}
-	topics := commons.ValidatorTopicID(pk)
+	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
+	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
@@ -159,9 +190,23 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	return nil
 }
 
+//TODO: alan genesis
+// subscribe to validator topics, as defined in the fork
+//func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+//	topics := commons.ValidatorTopicID(pk[:])
+//	for _, topic := range topics {
+//		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
+//			// return errors.Wrap(err, "could not broadcast message")
+//			return err
+//		}
+//	}
+//	return nil
+//}
+
 // subscribe to validator topics, as defined in the fork
 func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
-	topics := commons.ValidatorTopicID(pk)
+	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
+	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")

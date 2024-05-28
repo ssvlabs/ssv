@@ -183,8 +183,7 @@ By using this script, developers can simulate a real SSV environment, run multip
 The script simplifies configuration by automatically generating YAML files for each operator and an 'events.yaml' file. The 'events.yaml' emulates a 'happy flow' scenario, which includes the registration of four operators and one validator
 
 1. Download the latest executable version (v1.0.0 or later) from [ssv-keys](https://github.com/ssvlabs/ssv-keys/releases).
-
-   - After downloading, follow these [steps](https://github.com/ssvlabs/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
+    - After downloading, follow these [steps](https://github.com/ssvlabs/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
 
 2. Generate a local configuration using the provided [script](../scripts/generate_local_config.sh).
 

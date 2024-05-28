@@ -2,10 +2,9 @@ package discovery
 
 import (
 	"crypto/ecdsa"
-	"net"
-
 	"github.com/ssvlabs/ssv/logging"
 	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
+	"net"
 
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/network/commons"

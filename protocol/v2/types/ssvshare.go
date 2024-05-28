@@ -1,8 +1,11 @@
 package types
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"sort"
+
+	"golang.org/x/exp/slices"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -15,7 +18,7 @@ import (
 )
 
 const (
-	MaxPossibleShareSize = 1258
+	MaxPossibleShareSize = 1326
 	MaxAllowedShareSize  = MaxPossibleShareSize * 8 // Leaving some room for protocol updates and calculation mistakes.
 )
 
@@ -23,11 +26,18 @@ const (
 type SSVShare struct {
 	spectypes.Share
 	Metadata
+	committeeID *spectypes.CommitteeID
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
 func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
-	return operatorID != 0 && s.OperatorID == operatorID
+	if operatorID == 0 {
+		return false
+	}
+
+	return slices.ContainsFunc(s.Committee, func(shareMember *spectypes.ShareMember) bool {
+		return shareMember.Signer == operatorID
+	})
 }
 
 // HasBeaconMetadata checks whether the BeaconMetadata field is not nil.
@@ -40,8 +50,25 @@ func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 		(s.BeaconMetadata.IsAttesting() || (s.BeaconMetadata.Status == eth2apiv1.ValidatorStatePendingQueued && s.BeaconMetadata.ActivationEpoch <= epoch))
 }
 
+func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
+	return !s.Liquidated && s.IsAttesting(epoch)
+}
+
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipientAddress = feeRecipient
+}
+
+func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
+	if s.committeeID != nil {
+		return *s.committeeID
+	}
+	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
+	for i, v := range s.Share.Committee {
+		ids[i] = v.Signer
+	}
+	id := ComputeCommitteeID(ids)
+	s.committeeID = &id
+	return id
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
@@ -79,4 +106,19 @@ type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
+}
+
+// Return a 32 bytes ID for the committee of operators
+func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID {
+	// sort
+	sort.Slice(committee, func(i, j int) bool {
+		return committee[i] < committee[j]
+	})
+	// Convert to bytes
+	bytes := make([]byte, len(committee)*4)
+	for i, v := range committee {
+		binary.LittleEndian.PutUint32(bytes[i*4:], uint32(v))
+	}
+	// Hash
+	return spectypes.CommitteeID(sha256.Sum256(bytes))
 }

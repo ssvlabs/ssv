@@ -10,17 +10,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/ssvlabs/ssv/operator/keystore"
-
-	"github.com/ssvlabs/ssv/network"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api/handlers"
@@ -39,20 +33,25 @@ import (
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/operator"
-
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
-	"github.com/ssvlabs/ssv/operator/validatorsmap"
+	"github.com/ssvlabs/ssv/operator/validators"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -210,19 +209,39 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		validatorsMap := validatorsmap.New(cmd.Context())
+		validatorsMap := validators.New(cmd.Context())
 
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		messageValidator := validation.NewMessageValidator(
-			networkConfig,
-			validation.WithNodeStorage(nodeStorage),
-			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
-			validation.WithDutyStore(dutyStore),
-			validation.WithOwnOperatorID(operatorDataStore),
-		)
+		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+
+		validatorStore := nodeStorage.ValidatorStore()
+		// validatorStore = newValidatorStore(...) // TODO
+
+		var messageValidator validation.MessageValidator
+
+		alanFork := true
+
+		if alanFork {
+			messageValidator = validation.New(
+				networkConfig,
+				validatorStore,
+				dutyStore,
+				signatureVerifier,
+				validation.WithLogger(logger),
+				validation.WithMetrics(metricsReporter),
+			)
+		} else {
+			messageValidator = genesisvalidation.New(
+				networkConfig,
+				genesisvalidation.WithNodeStorage(nodeStorage),
+				genesisvalidation.WithLogger(logger),
+				genesisvalidation.WithMetrics(metricsReporter),
+				genesisvalidation.WithDutyStore(dutyStore),
+				genesisvalidation.WithOwnOperatorID(operatorDataStore),
+			)
+		}
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
@@ -241,7 +260,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
-		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
+		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
@@ -258,15 +277,15 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.BeaconRole{
-			spectypes.BNRoleAttester,
-			spectypes.BNRoleProposer,
-			spectypes.BNRoleAggregator,
-			spectypes.BNRoleSyncCommittee,
-			spectypes.BNRoleSyncCommitteeContribution,
-			spectypes.BNRoleValidatorRegistration,
-			spectypes.BNRoleVoluntaryExit,
+		storageRoles := []spectypes.RunnerRole{
+			spectypes.RoleCommittee,
+			spectypes.RoleProposer,
+			spectypes.RoleAggregator,
+			spectypes.RoleSyncCommitteeContribution,
+			spectypes.RoleValidatorRegistration,
+			spectypes.RoleVoluntaryExit,
 		}
+
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
@@ -275,11 +294,12 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
-		cfg.SSVOptions.ValidatorOptions.OperatorSigner = operatorPrivKey
+		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
+		cfg.SSVOptions.ValidatorStore = validatorStore
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
 
@@ -319,6 +339,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			operatorDataStore,
 			operatorPrivKey,
+			keyManager,
 		)
 		nodeProber.AddNode("event syncer", eventSyncer)
 
@@ -591,6 +612,7 @@ func setupEventHandling(
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
+	keyManager ekm.KeyManager,
 ) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
@@ -606,7 +628,7 @@ func setupEventHandling(
 		networkConfig,
 		operatorDataStore,
 		operatorDecrypter,
-		cfg.SSVOptions.ValidatorOptions.KeyManager,
+		keyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		storageMap,
 		eventhandler.WithFullNode(),

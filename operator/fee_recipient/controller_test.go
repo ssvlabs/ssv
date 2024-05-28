@@ -2,6 +2,7 @@ package fee_recipient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -10,12 +11,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang/mock/gomock"
-	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -129,7 +129,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, regis
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	shareStorage, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,10 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 		copy(ownerAddrByte[:], ownerAddr)
 
 		return &types.SSVShare{
-			Share: spectypes.Share{ValidatorPubKey: []byte(fmt.Sprintf("pk%d", index)), OperatorID: operatorID},
+			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
+				ValidatorIndex: phase0.ValidatorIndex(index),
+				Committee:      []*spectypes.ShareMember{&spectypes.ShareMember{Signer: operatorID}},
+			},
 			Metadata: types.Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
 					Index: phase0.ValidatorIndex(index),

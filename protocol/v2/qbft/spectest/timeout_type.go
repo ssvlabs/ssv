@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -20,7 +19,7 @@ type SpecTest struct {
 	Name               string
 	Pre                *instance.Instance
 	PostRoot           string
-	OutputMessages     []*qbft.SignedMessage
+	OutputMessages     []*spectypes.SignedSSVMessage
 	ExpectedTimerState *testingutils.TimerState
 	ExpectedError      string
 }
@@ -49,11 +48,7 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
 
-			ssvMsg := &spectypes.SSVMessage{}
-			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].Data))
-
-			msg2 := &qbft.SignedMessage{}
-			require.NoError(t, msg2.Decode(ssvMsg.Data))
+			msg2 := broadcastedMsgs[i]
 			r2, _ := msg2.GetRoot()
 
 			require.EqualValuesf(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))

@@ -2,11 +2,10 @@ package validator
 
 import (
 	"fmt"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
@@ -35,7 +34,10 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 		Network:               opts.Network,
 		SignatureVerification: true,
 	}
-	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, config, opts.FullNode)
+
+	// TODO: does the specific operator matters?
+
+	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		logger.Debug("❗ failed to load highest instance", zap.Error(err))
@@ -52,7 +54,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 }
 
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
-	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
+	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetDutyExecutorID()), fields.Role(msg.MsgID.GetRoleType()))
 
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Debug("❌ got invalid message", zap.Error(err))
@@ -63,17 +65,17 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		return
 	}
 
-	spsm := &spectypes.SignedPartialSignatureMessage{}
-	if err := spsm.Decode(msg.SignedSSVMessage.GetData()); err != nil {
+	spsm := &spectypes.PartialSignatureMessages{}
+	if err := spsm.Decode(msg.SSVMessage.GetData()); err != nil {
 		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
 		return
 	}
 
-	if spsm.Message.Type != spectypes.PostConsensusPartialSig {
+	if spsm.Type != spectypes.PostConsensusPartialSig {
 		return
 	}
 
-	logger = logger.With(fields.Slot(spsm.Message.Slot))
+	logger = logger.With(fields.Slot(spsm.Slot))
 
 	quorums, err := ncv.processMessage(spsm)
 	if err != nil {
@@ -87,14 +89,14 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 
 	for _, quorum := range quorums {
-		if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Message.Slot, quorum); err != nil {
+		if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return
 		}
 
 		if ncv.newDecidedHandler != nil {
 			ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
-				Slot:       spsm.Message.Slot,
+				Slot:       spsm.Slot,
 				Signers:    quorum,
 				Identifier: msg.GetID(),
 			})
@@ -112,18 +114,18 @@ func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 }
 
 func (ncv *NonCommitteeValidator) processMessage(
-	signedMsg *spectypes.SignedPartialSignatureMessage,
+	signedMsg *spectypes.PartialSignatureMessages,
 ) (map[[32]byte][]spectypes.OperatorID, error) {
 	quorums := make(map[[32]byte][]spectypes.OperatorID)
 
-	for _, msg := range signedMsg.Message.Messages {
-		if ncv.postConsensusContainer.HasSigner(msg.Signer, msg.SigningRoot) {
+	for _, msg := range signedMsg.Messages {
+		if ncv.postConsensusContainer.HasSigner(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			ncv.resolveDuplicateSignature(ncv.postConsensusContainer, msg)
 		} else {
 			ncv.postConsensusContainer.AddSignature(msg)
 		}
 
-		rootSignatures := ncv.postConsensusContainer.GetSignatures(msg.SigningRoot)
+		rootSignatures := ncv.postConsensusContainer.GetSignatures(msg.ValidatorIndex, msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= ncv.Share.Quorum {
 			longestSigners := quorums[msg.SigningRoot]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
@@ -144,7 +146,7 @@ func (ncv *NonCommitteeValidator) processMessage(
 // copied from BaseRunner
 func (ncv *NonCommitteeValidator) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
 	// Check previous signature validity
-	previousSignature, err := container.GetSignature(msg.Signer, msg.SigningRoot)
+	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
 		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot)
 		if err == nil {
@@ -154,7 +156,7 @@ func (ncv *NonCommitteeValidator) resolveDuplicateSignature(container *specssv.P
 	}
 
 	// Previous signature is incorrect or doesn't exist
-	container.Remove(msg.Signer, msg.SigningRoot)
+	container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 
 	// Hold the new signature, if correct
 	err = ncv.verifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot)
@@ -168,8 +170,8 @@ func (ncv *NonCommitteeValidator) verifyBeaconPartialSignature(signer uint64, si
 	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	for _, n := range ncv.Share.Committee {
-		if n.GetID() == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.GetSSVOperatorPublicKey())
+		if n.Signer == signer {
+			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
 				return fmt.Errorf("could not deserialized pk: %w", err)
 			}

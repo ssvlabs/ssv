@@ -36,5 +36,6 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer, useNewAPI bo
 		} else {
 			feed.Send(api.NewDecidedAPIMsg(msg))
 		}
+
 	}
 }

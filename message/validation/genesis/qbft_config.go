@@ -1,8 +1,9 @@
 package validation
 
 import (
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -19,11 +20,7 @@ func newQBFTConfig(domain spectypes.DomainType) qbftConfig {
 	}
 }
 
-func (q qbftConfig) GetShareSigner() spectypes.ShareSigner {
-	panic("should not be called")
-}
-
-func (q qbftConfig) GetOperatorSigner() spectypes.OperatorSigner {
+func (q qbftConfig) GetSigner() genesisspectypes.BeaconSigner {
 	panic("should not be called")
 }
 

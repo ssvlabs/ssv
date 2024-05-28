@@ -30,7 +30,7 @@ type Subscriber interface {
 
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
-	p2p.Broadcaster
+	Broadcast(id spectypes.MessageID, message *spectypes.SignedSSVMessage) error
 }
 
 // RequestHandler handles p2p requests
@@ -64,20 +64,22 @@ type SyncResults []SyncResult
 func (s SyncResults) String() string {
 	var v []string
 	for _, m := range s {
-		var sm *specqbft.SignedMessage
+		var sm *spectypes.SignedSSVMessage
 		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-			sm = &specqbft.SignedMessage{}
-			if err := sm.Decode(m.Msg.Data); err != nil {
+
+			decMsg, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
+			if err != nil {
 				v = append(v, fmt.Sprintf("(%v)", err))
 				continue
 			}
+
 			v = append(
 				v,
 				fmt.Sprintf(
 					"(type=%d height=%d round=%d)",
 					m.Msg.MsgType,
-					sm.Message.Height,
-					sm.Message.Round,
+					decMsg.Height,
+					decMsg.Round,
 				),
 			)
 		}
@@ -87,7 +89,7 @@ func (s SyncResults) String() string {
 	return strings.Join(v, ", ")
 }
 
-func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage) (stop bool)) {
+func (results SyncResults) ForEachSignedMessage(iterator func(message *spectypes.SignedSSVMessage) (stop bool)) {
 	for _, res := range results {
 		if res.Msg == nil {
 			continue

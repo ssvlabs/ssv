@@ -35,8 +35,8 @@ func (c *MessageCounts) String() string {
 
 // ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
-func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, limits MessageCounts) error {
-	switch msg.Message.MsgType {
+func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message, limits MessageCounts) error {
+	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		if c.Proposal >= limits.Proposal {
 			err := ErrTooManySameTypeMessagesPerRound
@@ -50,14 +50,14 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 			return err
 		}
 	case specqbft.CommitMsgType:
-		if len(msg.Signers) == 1 {
+		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
 			if c.Commit >= limits.Commit {
 				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
 		}
-		if len(msg.Signers) > 1 {
+		if len(signedSSVMessage.GetOperatorIDs()) > 1 {
 			if c.Decided >= limits.Decided {
 				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("decided, having %v", c.String())
@@ -79,8 +79,8 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 
 // ValidatePartialSignatureMessage checks if the provided partial signature message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
-func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedPartialSignatureMessage, limits MessageCounts) error {
-	switch m.Message.Type {
+func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages, limits MessageCounts) error {
+	switch m.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		if c.PreConsensus > limits.PreConsensus {
 			err := ErrTooManySameTypeMessagesPerRound
@@ -101,20 +101,20 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedParti
 }
 
 // RecordConsensusMessage updates the counts based on the provided consensus message type.
-func (c *MessageCounts) RecordConsensusMessage(msg *specqbft.SignedMessage) {
-	switch msg.Message.MsgType {
+func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) {
+	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		c.Proposal++
 	case specqbft.PrepareMsgType:
 		c.Prepare++
 	case specqbft.CommitMsgType:
 		switch {
-		case len(msg.Signers) == 1:
+		case len(signedSSVMessage.GetOperatorIDs()) == 1:
 			c.Commit++
-		case len(msg.Signers) > 1:
+		case len(signedSSVMessage.GetOperatorIDs()) > 1:
 			c.Decided++
 		default:
-			panic("expected signers") // 0 length should be checked before
+			panic("unexpected signers length 0") // 0 length should be checked before
 		}
 	case specqbft.RoundChangeMsgType:
 		c.RoundChange++
@@ -124,8 +124,8 @@ func (c *MessageCounts) RecordConsensusMessage(msg *specqbft.SignedMessage) {
 }
 
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
-func (c *MessageCounts) RecordPartialSignatureMessage(msg *spectypes.SignedPartialSignatureMessage) {
-	switch msg.Message.Type {
+func (c *MessageCounts) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) {
+	switch messages.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		c.PreConsensus++
 	case spectypes.PostConsensusPartialSig:

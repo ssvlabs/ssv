@@ -5,13 +5,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
 
@@ -33,7 +32,7 @@ type Instance struct {
 
 func NewInstance(
 	config qbft.IConfig,
-	share *spectypes.Share,
+	share *spectypes.Operator,
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
@@ -86,8 +85,14 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
+
+				r, err := specqbft.HashDataRoot(i.StartValue) // @TODO (better than decoding?)
+				if err != nil {
+					logger.Warn("❗ failed to hash input data", zap.Error(err))
+					return
+				}
 				// nolint
-				logger = logger.With(fields.Root(proposal.Message.Root))
+				logger = logger.With(fields.Root(r))
 				logger.Debug("📢 leader broadcasting proposal message")
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
@@ -97,66 +102,55 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 	})
 }
 
-func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) error {
+func (i *Instance) Broadcast(logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing messages")
 	}
-	byts, err := msg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode message")
-	}
-
 	msgID := spectypes.MessageID{}
-	copy(msgID[:], msg.Message.Identifier)
+	copy(msgID[:], i.State.ID)
 
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   msgID,
-		Data:    byts,
-	}
-
-	operatorSigner := i.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, i.State.Share.OperatorID, operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	return i.config.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast)
+	return i.config.GetNetwork().Broadcast(msgID, msg)
 }
 
-func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {
+func allSigners(all []*spectypes.SignedSSVMessage) []spectypes.OperatorID {
 	signers := make([]spectypes.OperatorID, 0, len(all))
 	for _, m := range all {
-		signers = append(signers, m.Signers...)
+		signers = append(signers, m.OperatorIDs...)
 	}
 	return signers
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+func (i *Instance) ProcessMsg(logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
 	if !i.CanProcessMessages() {
 		return false, nil, nil, errors.New("instance stopped processing messages")
 	}
 
-	if err := i.BaseMsgValidation(msg); err != nil {
+	if err := i.BaseMsgValidation(signedMsg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
 
+	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+	if err != nil {
+		return false, nil, nil, err
+	}
+
 	res := i.processMsgF.Run(func() interface{} {
-		switch msg.Message.MsgType {
+
+		switch msg.MsgType {
 		case specqbft.ProposalMsgType:
-			return i.uponProposal(logger, msg, i.State.ProposeContainer)
+			return i.uponProposal(logger, signedMsg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(logger, msg, i.State.PrepareContainer)
+			return i.uponPrepare(logger, signedMsg, i.State.PrepareContainer)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
+			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, signedMsg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(logger, i.StartValue, signedMsg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}
@@ -167,34 +161,48 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (
 	return i.State.Decided, i.State.DecidedValue, aggregatedCommit, nil
 }
 
-func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
-	if err := msg.Validate(); err != nil {
-		return errors.Wrap(err, "invalid signed message")
+func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) error {
+	if err := signedMsg.Validate(); err != nil {
+		return errors.Wrap(err, "invalid SignedSSVMessage")
 	}
 
-	if msg.Message.Round < i.State.Round {
+	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
+	if err := msg.Validate(); err != nil {
+		return errors.Wrap(err, "invalid Message")
+	}
+
+	if msg.Round < i.State.Round {
 		return errors.New("past round")
 	}
 
-	switch msg.Message.MsgType {
+	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		return isValidProposal(
 			i.State,
 			i.config,
-			msg,
+			signedMsg,
 			i.config.GetValueCheckF(),
-			i.State.Share.Committee,
 		)
 	case specqbft.PrepareMsgType:
-		proposedMsg := i.State.ProposalAcceptedForCurrentRound
-		if proposedMsg == nil {
+		proposedSignedMsg := i.State.ProposalAcceptedForCurrentRound
+		if proposedSignedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
+
+		proposedMsg, err := specqbft.DecodeMessage(proposedSignedMsg.SSVMessage.Data)
+		if err != nil {
+			return errors.Wrap(err, "proposal saved for this round is invalid")
+		}
+
 		return validSignedPrepareForHeightRoundAndRootIgnoreSignature(
-			msg,
+			signedMsg,
 			i.State.Height,
 			i.State.Round,
-			proposedMsg.Message.Root,
+			proposedMsg.Root,
 			i.State.Share.Committee,
 		)
 	case specqbft.CommitMsgType:
@@ -203,14 +211,14 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			return errors.New("did not receive proposal for this round")
 		}
 		return validateCommit(
-			msg,
+			signedMsg,
 			i.State.Height,
 			i.State.Round,
 			i.State.ProposalAcceptedForCurrentRound,
 			i.State.Share.Committee,
 		)
 	case specqbft.RoundChangeMsgType:
-		return validRoundChangeForDataIgnoreSignature(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
+		return validRoundChangeForDataIgnoreSignature(i.State, i.config, signedMsg, i.State.Height, msg.Round, signedMsg.FullData)
 	default:
 		return errors.New("signed message type not supported")
 	}

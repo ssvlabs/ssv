@@ -44,6 +44,7 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
+	ValidatorStore() registrystorage.ValidatorStore
 
 	GetPrivateKeyHash() (string, bool, error)
 	SavePrivateKeyHash(privKeyHash string) error
@@ -56,6 +57,7 @@ type storage struct {
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
 	shareStore     registrystorage.Shares
+	validatorStore registrystorage.ValidatorStore
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -66,11 +68,19 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, storagePrefix),
 		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
 	}
+
 	var err error
-	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
+
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
 	if err != nil {
 		return nil, err
 	}
+
+	// stg.genesisShareStore, err = genesisregistrystorage.NewSharesStorage(logger, db, storagePrefix)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
 	return stg, nil
 }
 
@@ -84,6 +94,10 @@ func (s *storage) BeginRead() basedb.ReadTxn {
 
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
+}
+
+func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
+	return s.validatorStore
 }
 
 func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
@@ -215,7 +229,7 @@ func (s *storage) SavePrivateKeyHash(hashedKey string) error {
 	return s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
 }
 
-func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+func (s *storage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
 	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }
 

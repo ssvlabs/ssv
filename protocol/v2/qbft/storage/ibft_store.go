@@ -2,9 +2,9 @@ package qbftstorage
 
 import (
 	"encoding/json"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -13,7 +13,7 @@ import (
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
 	State          *specqbft.State
-	DecidedMessage *specqbft.SignedMessage
+	DecidedMessage *spectypes.SignedSSVMessage
 }
 
 // Encode returns a StoredInstance encoded bytes or error.

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -19,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -28,15 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
-// PeersIndexProvider holds peers index instance
-type PeersIndexProvider interface {
-	PeersIndex() peers.Index
-}
-
-// HostProvider holds host instance
-type HostProvider interface {
-	Host() host.Host
-}
+// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
@@ -149,7 +139,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
-	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
+	cfg.MessageValidator = nil //validation.NewMessageValidator(networkconfig.TestNetwork)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -169,7 +159,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
-		cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
+		cfg.MessageValidator = nil //validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {
