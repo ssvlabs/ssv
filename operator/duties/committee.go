@@ -52,7 +52,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 
 			h.processExecution(period, epoch, slot)
 
-		case _ = <-h.reorg:
+		case <-h.reorg:
 			// do nothing
 
 		case <-h.indicesChange:
@@ -73,7 +73,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
-	// tmp solution to get committee id fast
+	// TODO: tmp solution to get committee id fast
 	vcmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
