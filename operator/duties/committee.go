@@ -98,7 +98,9 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 		}
 	}
 
-	h.logger.Debug("built committee duties", zap.Int("committees", len(committeeMap)), zap.Any("committees", committeeMap))
+	for _, c := range committeeMap {
+		h.logger.Debug("built committee duties", zap.Any("committee", c), zap.Int("beacon_duties", len(c.BeaconDuties))
+	}
 
 	return committeeMap
 }
