@@ -9,7 +9,7 @@ import (
 	time "time"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	gomock "go.uber.org/mock/gomock"
+	gomock "github.com/golang/mock/gomock"
 	types "github.com/ssvlabs/ssv-spec/types"
 	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )

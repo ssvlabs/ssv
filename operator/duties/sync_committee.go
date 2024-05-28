@@ -32,7 +32,6 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitt
 		duties: duties,
 	}
 	h.fetchCurrentPeriod = true
-	h.fetchFirst = true
 	return h
 }
 
@@ -81,16 +80,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			if h.fetchFirst {
-				h.fetchFirst = false
-				h.processFetching(ctx, period, true)
-				// TODO: (Alan) genesis support
-				//h.processExecution(period, slot)
-			} else {
-				h.processExecution(period, slot)
-				// TODO: (Alan) genesis support
-				//h.processFetching(ctx, period, true)
-			}
+			h.processExecution(period, slot)
+			h.processFetching(ctx, period, true)
 			cancel()
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next period in the next slot.
@@ -102,11 +93,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-			// TODO: (Alan) genesis support
-			//// last slot of period
-			//if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-			//	h.duties.Reset(period - 1)
-			//}
+			// last slot of period
+			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+				h.duties.Reset(period - 1)
+			}
 
 		case reorgEvent := <-h.reorg:
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
@@ -132,6 +122,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// reset next period duties if in appropriate slot range
 			if h.shouldFetchNextPeriod(slot) {
+				fmt.Println("shouldFetchNextPeriod")
 				h.fetchNextPeriod = true
 			}
 		}
@@ -145,11 +136,6 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 	h.processFetching(ctx, period, false)
-
-	// At the init time we may not have enough duties to fetch
-	// we should not set those values to false in processFetching() call
-	h.fetchNextPeriod = true
-	h.fetchCurrentPeriod = true
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
@@ -183,6 +169,7 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
+			// TODO: (Alan) genesis support
 			//toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
@@ -199,7 +186,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	allActiveIndices := indicesFromShares(h.validatorProvider.ParticipatingValidators(firstEpoch))
+	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
 	if len(allActiveIndices) == 0 {
 		return nil
 	}
