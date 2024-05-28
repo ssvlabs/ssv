@@ -19,6 +19,10 @@ func (bn *TestingBeaconNodeWrapped) GetBroadcastedRoots() []phase0.Root {
 	return bn.bn.BroadcastedRoots
 }
 
+func (bn *TestingBeaconNodeWrapped) GetBeaconNode() *spectestingutils.TestingBeaconNode {
+	return bn.bn
+}
+
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {
 	bnw := &TestingBeaconNodeWrapped{}
 	bnw.bn = spectestingutils.NewTestingBeaconNode()

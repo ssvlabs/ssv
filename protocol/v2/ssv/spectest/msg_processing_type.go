@@ -7,12 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/go-cmp/cmp"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -46,8 +48,9 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	test.RunAsPartOfMultiTest(t, logger)
 }
 
-func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator.Validator, error) {
+func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
+	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
 	if len(test.Runner.GetBaseRunner().Share) == 0 {
 		panic("No share in base runner for tests")
 	}
@@ -55,31 +58,62 @@ func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator
 		share = validatorShare
 		break
 	}
-	v := ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
-	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
-	v.Network = test.Runner.GetNetwork()
 
+	for valIdx, validatorShare := range test.Runner.GetBaseRunner().Share {
+		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
+	}
+
+	var v *validator.Validator
+	var c *validator.Committee
 	var lastErr error
-	if !test.DontStartDuty {
-		lastErr = v.StartDuty(logger, test.Duty)
-	}
-	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			lastErr = err
-			continue
+	switch test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		c = baseCommitteeWithRunnerSample(ketSetMap, test.Runner.(*runner.CommitteeRunner))
+
+		if !test.DontStartDuty {
+			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
+		} else {
+			c.Runners[test.Duty.DutySlot()] = test.Runner.(*runner.CommitteeRunner)
 		}
-		err = v.ProcessMessage(logger, dmsg)
-		if err != nil {
-			lastErr = err
+
+		for _, msg := range test.Messages {
+			dmsg, err := queue.DecodeSignedSSVMessage(msg)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			err = c.ProcessMessage(logger, dmsg)
+			if err != nil {
+				lastErr = err
+			}
+		}
+
+	default:
+		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
+		v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
+		v.Network = test.Runner.GetNetwork()
+
+		if !test.DontStartDuty {
+			lastErr = v.StartDuty(logger, test.Duty)
+		}
+		for _, msg := range test.Messages {
+			dmsg, err := queue.DecodeSignedSSVMessage(msg)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			err = v.ProcessMessage(logger, dmsg)
+			if err != nil {
+				lastErr = err
+			}
 		}
 	}
 
-	return v, lastErr
+	return v, c, lastErr
 }
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
-	v, lastErr := test.runPreTesting(logger)
+	v, c, lastErr := test.runPreTesting(logger)
 
 	if len(test.ExpectedError) != 0 {
 		require.EqualError(t, lastErr, test.ExpectedError)
@@ -87,11 +121,30 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		require.NoError(t, lastErr)
 	}
 
+	network := &spectestingutils.TestingNetwork{}
+	beaconNetwork := tests.NewTestingBeaconNodeWrapped()
+	var committee []*spectypes.CommitteeMember
+	switch test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		var runnerInstance *runner.CommitteeRunner
+		for _, runner := range c.Runners {
+			runnerInstance = runner
+			break
+		}
+		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork = runnerInstance.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		committee = c.Operator.Committee
+	default:
+		network = v.Network.(*spectestingutils.TestingNetwork)
+		committee = v.Operator.Committee
+		beaconNetwork = test.Runner.GetBeaconNode()
+	}
+
 	// test output message
-	test.compareOutputMsgs(t, v)
+	spectestingutils.ComparePartialSignatureOutputMessages(t, test.OutputMessages, network.BroadcastedMsgs, committee)
 
 	// test beacon broadcasted msgs
-	test.compareBroadcastedBeaconMsgs(t)
+	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, beaconNetwork.(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots())
 
 	// post root
 	postRoot, err := test.Runner.GetRoot()
@@ -114,65 +167,6 @@ func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
 			}
 		}
 		require.Truef(t, found, "broadcasted beacon root not found")
-	}
-}
-
-func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.Validator) {
-	filterPartialSigs := func(messages []*spectypes.SSVMessage) []*spectypes.SSVMessage {
-		ret := make([]*spectypes.SSVMessage, 0)
-		for _, msg := range messages {
-			if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
-				continue
-			}
-			ret = append(ret, msg)
-		}
-		return ret
-	}
-	broadcastedSignedMsgs := v.Network.(*spectestingutils.TestingNetwork).BroadcastedMsgs
-	require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, v.Operator.Committee))
-	broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
-	broadcastedMsgs = filterPartialSigs(broadcastedMsgs)
-	require.Len(t, broadcastedMsgs, len(test.OutputMessages))
-	index := 0
-	for _, msg := range broadcastedMsgs {
-		if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
-			continue
-		}
-
-		msg1 := &spectypes.PartialSignatureMessages{}
-		require.NoError(t, msg1.Decode(msg.Data))
-		msg2 := test.OutputMessages[index]
-		require.Len(t, msg1.Messages, len(msg2.Messages))
-
-		// messages are not guaranteed to be in order so we map them and then test all roots to be equal
-		roots := make(map[string]string)
-		for i, partialSigMsg2 := range msg2.Messages {
-			r2, err := partialSigMsg2.GetRoot()
-			require.NoError(t, err)
-			if _, found := roots[hex.EncodeToString(r2[:])]; !found {
-				roots[hex.EncodeToString(r2[:])] = ""
-			} else {
-				roots[hex.EncodeToString(r2[:])] = hex.EncodeToString(r2[:])
-			}
-
-			partialSigMsg1 := msg1.Messages[i]
-			r1, err := partialSigMsg1.GetRoot()
-			require.NoError(t, err)
-
-			if _, found := roots[hex.EncodeToString(r1[:])]; !found {
-				roots[hex.EncodeToString(r1[:])] = ""
-			} else {
-				roots[hex.EncodeToString(r1[:])] = hex.EncodeToString(r1[:])
-			}
-		}
-		for k, v := range roots {
-			require.EqualValues(t, k, v, "missing output msg")
-		}
-
-		// test that slot is correct in broadcasted msg
-		require.EqualValues(t, msg1.Slot, msg2.Slot, "incorrect broadcasted slot")
-
-		index++
 	}
 }
 
@@ -212,4 +206,45 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	require.NoError(t, err)
 
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
+}
+
+var baseCommitteeWithRunnerSample = func(
+	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
+	runnerSample *runner.CommitteeRunner,
+) *validator.Committee {
+
+	var keySetSample *spectestingutils.TestKeySet
+	for _, ks := range keySetMap {
+		keySetSample = ks
+		break
+	}
+
+	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
+	for valIdx, ks := range keySetMap {
+		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
+	}
+
+	createRunnerF := func(shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+		return runner.NewCommitteeRunner(runnerSample.BaseRunner.BeaconNetwork,
+			shareMap,
+			controller.NewController(
+				runnerSample.BaseRunner.QBFTController.Identifier,
+				runnerSample.BaseRunner.QBFTController.Share,
+				runnerSample.BaseRunner.QBFTController.GetConfig(),
+				false,
+			),
+			runnerSample.GetBeaconNode(),
+			runnerSample.GetNetwork(),
+			runnerSample.GetSigner(),
+			runnerSample.GetOperatorSigner(),
+			runnerSample.GetValCheckF(),
+		).(*runner.CommitteeRunner)
+	}
+
+	return validator.NewCommittee(
+		*spectestingutils.TestingsOperator(keySetSample),
+		spectestingutils.NewTestingVerifier(),
+		shareMap,
+		createRunnerF,
+	)
 }
