@@ -29,7 +29,6 @@ import (
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -46,7 +45,7 @@ const (
 	clockErrorTolerance = time.Millisecond * 50
 
 	maxMessageSize             = maxConsensusMsgSize
-	maxConsensusMsgSize        = 8388608
+	maxConsensusMsgSize        = 6291829
 	maxPartialSignatureMsgSize = 1952
 	allowedRoundsInFuture      = 1
 	allowedRoundsInPast        = 2
@@ -68,7 +67,6 @@ type messageValidator struct {
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
-	operatorDataStore       operatordatastore.OperatorDataStore
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, keys.OperatorPublicKey]
 
 	// validationLocks is a map of lock per SSV message ID to
@@ -121,13 +119,6 @@ func WithDutyStore(dutyStore *dutystore.Store) Option {
 	}
 }
 
-// WithOwnOperatorID sets the operator ID getter for the messageValidator.
-func WithOwnOperatorID(ods operatordatastore.OperatorDataStore) Option {
-	return func(mv *messageValidator) {
-		mv.operatorDataStore = ods
-	}
-}
-
 // WithNodeStorage sets the node storage for the messageValidator.
 func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
@@ -148,7 +139,7 @@ type ConsensusDescriptor struct {
 	Round           specqbft.Round
 	QBFTMessageType specqbft.MessageType
 	Signers         []spectypes.OperatorID
-	Committee       []*spectypes.Operator
+	Committee       []*alanspectypes.ShareMember
 }
 
 // Descriptor provides details about a message. It's used for logging and metrics.
@@ -172,7 +163,7 @@ func (d Descriptor) Fields() []zapcore.Field {
 	if d.Consensus != nil {
 		var committee []spectypes.OperatorID
 		for _, o := range d.Consensus.Committee {
-			committee = append(committee, o.OperatorID)
+			committee = append(committee, o.Signer)
 		}
 
 		result = append(result,
@@ -199,7 +190,7 @@ func (d Descriptor) String() string {
 	if d.Consensus != nil {
 		var committee []spectypes.OperatorID
 		for _, o := range d.Consensus.Committee {
-			committee = append(committee, o.OperatorID)
+			committee = append(committee, o.Signer)
 		}
 
 		sb.WriteString(fmt.Sprintf(", round: %v, qbft message type: %v, signers: %v, committee: %v",
@@ -223,16 +214,18 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
-		rawMsgPayload, _, _, err := commons.DecodeGenesisSignedSSVMessage(pmsg.Data)
-		if err != nil {
+		signedSSVMsg := &spectypes.SignedSSVMessage{}
+		if err := signedSSVMsg.Decode(pmsg.GetData()); err != nil {
 			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
 			return pubsub.ValidationReject
 		}
-		msg, err := commons.DecodeGenesisNetworkMsg(rawMsgPayload)
+
+		msg, err := signedSSVMsg.GetSSVMessageFromData()
 		if err != nil {
 			mv.logger.Error("failed to decode network message", zap.Error(err))
 			return pubsub.ValidationReject
 		}
+
 		// skipping the error check for testing simplifying
 		decMsg, _ := queue.DecodeGenesisSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
@@ -291,7 +284,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
-func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
@@ -306,27 +299,25 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	encMessageData := pMsg.GetData()
 
-	var signatureVerifier func() error
-
 	if len(encMessageData) == 0 {
 		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}
 
-	messageData, operatorID, signature, err := commons.DecodeGenesisSignedSSVMessage(encMessageData)
-
-	if err != nil {
+	signedSSVMsg := &spectypes.SignedSSVMessage{}
+	if err := signedSSVMsg.Decode(encMessageData); err != nil {
 		e := ErrMalformedSignedMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
 
+	messageData := signedSSVMsg.GetData()
 	if len(messageData) == 0 {
 		return nil, Descriptor{}, ErrDecodedPubSubMessageHasEmptyData
 	}
 
-	signatureVerifier = func() error {
+	signatureVerifier := func() error {
 		mv.metrics.MessageValidationRSAVerifications()
-		return mv.verifySignature(messageData, operatorID, signature)
+		return mv.verifySignature(signedSSVMsg)
 	}
 
 	mv.metrics.MessageSize(len(messageData))
@@ -340,9 +331,19 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 
-	msg, err := commons.DecodeGenesisNetworkMsg(messageData)
+	msg, err := queue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
-		e := ErrMalformedPubSubMessage
+		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
+			e := ErrMalformedPubSubMessage
+			e.innerErr = err
+			return nil, Descriptor{}, e
+		}
+		if errors.Is(err, queue.ErrUnknownMessageType) {
+			e := ErrUnknownSSVMessageType
+			e.innerErr = err
+			return nil, Descriptor{}, e
+		}
+		e := ErrMalformedMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
@@ -354,7 +355,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	// Check if the message was sent on the right topic.
 	currentTopic := pMsg.GetTopic()
 	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
-	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
+	topics := commons.ValidatorTopicID(spectypes.MessageID(msg.GetID()).GetPubKey())
 
 	topicFound := false
 	for _, tp := range topics {
@@ -367,13 +368,14 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
 
-	mv.metrics.SSVMessageType(alanspectypes.MsgType(msg.MsgType))
+	mv.metrics.SSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
+	ssvMessage := msg.SSVMessage
 
 	if len(ssvMessage.Data) == 0 {
 		return nil, descriptor, ErrEmptyData
@@ -393,8 +395,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return nil, descriptor, err
 	}
 
-	validatorPK := ssvMessage.GetID().GetPubKey()
-	role := ssvMessage.GetID().GetRoleType()
+	validatorPK := spectypes.MessageID(ssvMessage.GetID()).GetPubKey()
+	role := spectypes.MessageID(ssvMessage.GetID()).GetRoleType()
 	descriptor.Role = role
 	descriptor.ValidatorPK = validatorPK
 
@@ -402,49 +404,36 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return nil, descriptor, ErrInvalidRole
 	}
 
-	//publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
-	//if err != nil {
-	//	e := ErrDeserializePublicKey
-	//	e.innerErr = err
-	//	return nil, descriptor, e
-	//}
-
-	var share *ssvtypes.GenesisSSVShare
-	//if mv.nodeStorage != nil {
-	//	shareStorage := mv.nodeStorage.GenesisShares()
-	//	share = shareStorage.Get(nil, publicKey.Serialize())
-	//	if share == nil {
-	//		e := ErrUnknownValidator
-	//		e.got = publicKey.SerializeToHexStr()
-	//		return nil, descriptor, e
-	//	}
-	//
-	//	if share.Liquidated {
-	//		return nil, descriptor, ErrValidatorLiquidated
-	//	}
-	//
-	//	if share.BeaconMetadata == nil {
-	//		return nil, descriptor, ErrNoShareMetadata
-	//	}
-	//
-	//	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
-	//		err := ErrValidatorNotAttesting
-	//		err.got = share.BeaconMetadata.Status.String()
-	//		return nil, descriptor, err
-	//	}
-	//}
-
-	msg, err := queue.DecodeGenesisSSVMessage(ssvMessage)
+	publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
 	if err != nil {
-		if errors.Is(err, queue.ErrUnknownMessageType) {
-			e := ErrUnknownSSVMessageType
-			e.got = ssvMessage.GetType()
+		e := ErrDeserializePublicKey
+		e.innerErr = err
+		return nil, descriptor, e
+	}
+
+	var share *ssvtypes.SSVShare
+	if mv.nodeStorage != nil {
+		shareStorage := mv.nodeStorage.Shares()
+		share = shareStorage.Get(nil, publicKey.Serialize())
+		if share == nil {
+			e := ErrUnknownValidator
+			e.got = publicKey.SerializeToHexStr()
 			return nil, descriptor, e
 		}
 
-		e := ErrMalformedMessage
-		e.innerErr = err
-		return nil, descriptor, e
+		if share.Liquidated {
+			return nil, descriptor, ErrValidatorLiquidated
+		}
+
+		if share.BeaconMetadata == nil {
+			return nil, descriptor, ErrNoShareMetadata
+		}
+
+		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+			err := ErrValidatorNotAttesting
+			err.got = share.BeaconMetadata.Status.String()
+			return nil, descriptor, err
+		}
 	}
 
 	// Lock this SSV message ID to prevent concurrent access to the same state.
@@ -458,12 +447,12 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	defer mutex.Unlock()
 	mv.validationMutex.Unlock()
 
-	descriptor.SSVMessageType = ssvMessage.MsgType
+	descriptor.SSVMessageType = spectypes.MsgType(ssvMessage.MsgType)
 
 	if mv.nodeStorage != nil {
-		switch ssvMessage.MsgType {
+		switch spectypes.MsgType(ssvMessage.MsgType) {
 		case spectypes.SSVConsensusMsgType:
-			if len(msg.Data) > maxConsensusMsgSize {
+			if len(ssvMessage.Data) > maxConsensusMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
 				e.want = maxConsensusMsgSize
@@ -479,7 +468,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			}
 
 		case spectypes.SSVPartialSignatureMsgType:
-			if len(msg.Data) > maxPartialSignatureMsgSize {
+			if len(ssvMessage.Data) > maxPartialSignatureMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
 				e.want = maxPartialSignatureMsgSize
@@ -504,9 +493,9 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	return msg, descriptor, nil
 }
 
-func (mv *messageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
-	return func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == signer
+func (mv *messageValidator) containsSignerFunc(signer spectypes.OperatorID) func(shareMember *alanspectypes.ShareMember) bool {
+	return func(shareMember *alanspectypes.ShareMember) bool {
+		return shareMember.Signer == signer
 	}
 }
 
@@ -523,7 +512,7 @@ func (mv *messageValidator) validateSignatureFormat(signature []byte) error {
 	return nil
 }
 
-func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, share *ssvtypes.GenesisSSVShare) error {
+func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, share *ssvtypes.SSVShare) error {
 	if signer == 0 {
 		return ErrZeroSigner
 	}
@@ -587,11 +576,4 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 
 	cs, _ := mv.index.Load(id)
 	return cs.(*ConsensusState)
-}
-
-// inCommittee should be called only when WithOwnOperatorID is set
-func (mv *messageValidator) inCommittee(share *ssvtypes.GenesisSSVShare) bool {
-	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.operatorDataStore.GetOperatorID()
-	})
 }
