@@ -11,7 +11,7 @@ import (
 const (
 	// Network Topology
 	gossipSubD          = 8
-	minActiveValidators = 200
+	minActiveValidators = 1
 
 	// Overall parameters
 	totalTopicsWeight = 4.0
@@ -145,7 +145,7 @@ func (o *Options) defaults() {
 }
 
 func (o *Options) validate() error {
-	if o.Topic.ActiveValidators < 1 {
+	if o.Topic.ActiveValidators < minActiveValidators {
 		return ErrLowValidatorsCount
 	}
 	return nil
@@ -158,6 +158,11 @@ func (o *Options) maxScore() float64 {
 
 // NewOpts creates new TopicOpts instance
 func NewOpts(activeValidators, subnets int) Options {
+	if activeValidators < minActiveValidators {
+		// TODO: is this right? For subnets that don't have validators, should we even create a topic?
+		// Currently this is required because we sometimes update score params before unsubscribing from old topics.
+		activeValidators = minActiveValidators
+	}
 	return Options{
 		Network: NetworkOpts{
 			Subnets: subnets,

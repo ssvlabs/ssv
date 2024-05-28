@@ -322,38 +322,39 @@ func (c *controller) GetValidatorStats() (network.ValidatorStats, error) {
 	}
 
 	start := time.Now()
-	stats := network.ValidatorStats{}
+	all := network.ValidatorStats{}
 	for _, s := range c.sharesStorage.List(nil) {
-		subnets := network.ValidatorCounts{}
+		var subnetNumber int
+		if postFork {
+			subnetNumber = commons.CommitteeSubnet(s.CommitteeID())
+		} else {
+			subnetNumber = commons.ValidatorSubnet(hex.EncodeToString(s.ValidatorPubKey))
+		}
+		subnet := all.Subnets[subnetNumber]
+
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
-			stats.Mine++
-			subnets.Mine++
+			all.Mine++
+			subnet.Mine++
 		}
 		if s.IsAttesting(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
-			stats.Attesting++
-			subnets.Attesting++
+			all.Attesting++
+			subnet.Attesting++
 		}
-		stats.Total++
-		subnets.Total++
-		var subnet int
-		if postFork {
-			subnet = commons.CommitteeSubnet(s.CommitteeID())
-		} else {
-			subnet = commons.ValidatorSubnet(hex.EncodeToString(s.ValidatorPubKey))
-		}
-		stats.Subnets[subnet] = subnets
+		all.Total++
+		subnet.Total++
+		all.Subnets[subnetNumber] = subnet
 	}
 
-	c.validatorStats = &stats
+	c.validatorStats = &all
 	c.validatorStatsEpoch = c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()
 	c.validatorStatsPostFork = postFork
 	c.logger.Debug(
 		"computed validator stats",
-		zap.Any("stats", stats),
+		zap.Any("stats", all),
 		fields.Took(time.Since(start)),
 		zap.Bool("post_fork", postFork),
 	)
-	return stats, nil
+	return all, nil
 }
 
 func (c *controller) handleRouterMessages() {
