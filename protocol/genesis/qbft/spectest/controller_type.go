@@ -117,8 +117,7 @@ func testBroadcastedDecided(
 		// test broadcasted
 		broadcastedSignedMsgs := config.GetNetwork().(*genesisspectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedSignedMsgs), 0)
-		//TODO: uncomment and fix
-		//require.NoError(t, genesisspectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
+		require.NoError(t, genesisspectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
 		broadcastedMsgs := genesisspectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
 		found := false
 		for _, msg := range broadcastedMsgs {
