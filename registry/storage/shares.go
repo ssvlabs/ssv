@@ -263,7 +263,7 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 			Committee:           committee,
 			Quorum:              share.Quorum,
 			PartialQuorum:       share.PartialQuorum,
-			DomainType:          share.DomainType,
+			DomainType:          types.GetDefaultDomain(), // TODO: revert
 			FeeRecipientAddress: share.FeeRecipientAddress,
 			Graffiti:            share.Graffiti,
 		},
