@@ -6,6 +6,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"strconv"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -59,7 +60,13 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
+	logger.Info("1111111111111111111111111111111111111111111111111")
+	logger.Info(msgID.String())
+	logger.Info(strconv.FormatUint(uint64(from), 10))
+	logger.Info(strconv.FormatUint(uint64(to), 10))
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
+	logger.Info(strconv.Itoa(len(participantsList)))
+	logger.Info("1111111111111111111111111111111111111111111111111")
 	if err != nil {
 		logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}
@@ -142,7 +149,13 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
+	logger.Info("2222222222222222222222222222222222222222222222222")
+	logger.Info(msgID.String())
+	logger.Info(strconv.FormatUint(uint64(from), 10))
+	logger.Info(strconv.FormatUint(uint64(to), 10))
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
+	logger.Info(strconv.Itoa(len(participantsList)))
+	logger.Info("2222222222222222222222222222222222222222222222222")
 	if err != nil {
 		logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}
