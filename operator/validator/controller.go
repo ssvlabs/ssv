@@ -833,7 +833,6 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
-			c.metadataLastUpdated[string(share.ValidatorPubKey)] = time.Now()
 		}
 
 		// TODO: continue if there is nothing to update.
@@ -850,6 +849,11 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			zap.Int("validators", len(shares)),
 			zap.Uint64("started_validators", c.recentlyStartedValidators),
 			fields.Took(time.Since(start)))
+
+		// Set the last updated time for each share.
+		for _, share := range shares {
+			c.metadataLastUpdated[string(share.ValidatorPubKey)] = time.Now()
+		}
 
 		// Notify DutyScheduler of new validators.
 		if c.recentlyStartedValidators > 0 {
