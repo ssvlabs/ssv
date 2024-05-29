@@ -3,56 +3,85 @@ package queue
 import (
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/network/commons"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var (
 	ErrUnknownMessageType = fmt.Errorf("unknown message type")
+	ErrDecodeNetworkMsg   = fmt.Errorf("could not decode data into an SSVMessage")
 )
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
+	*spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
 	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage | *EventMsg
 }
 
-// DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
+// DecodeSSVMessage decodes a SSVMessage into a DecodedSSVMessage.
 func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
+	body, err := ExtractMsgBody(m)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DecodedSSVMessage{
+		SSVMessage: m,
+		Body:       body,
+	}, nil
+}
+
+// DecodeSignedSSVMessage decodes a SignedSSVMessage into a DecodedSSVMessage.
+func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
+	m, err := commons.DecodeNetworkMsg(sm.GetData())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrDecodeNetworkMsg, err)
+	}
+
+	d, err := DecodeSSVMessage(m)
+	if err != nil {
+		return nil, err
+	}
+
+	d.SignedSSVMessage = sm
+
+	return d, nil
+}
+
+func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 	var body interface{}
 	switch m.MsgType {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
 		sm := &specqbft.SignedMessage{}
 		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedMessage")
+			return nil, fmt.Errorf("failed to decode SignedMessage: %w", err)
 		}
 		body = sm
 	case spectypes.SSVPartialSignatureMsgType:
 		sm := &spectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
+			return nil, fmt.Errorf("failed to decode SignedPartialSignatureMessage: %w", err)
 		}
 		body = sm
 	case ssvmessage.SSVEventMsgType:
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode EventMsg")
+			return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
 		}
 		body = msg
 	default:
 		return nil, ErrUnknownMessageType
 	}
-	return &DecodedSSVMessage{
-		SSVMessage: m,
-		Body:       body,
-	}, nil
+
+	return body, nil
 }
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.

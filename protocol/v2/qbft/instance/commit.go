@@ -3,15 +3,16 @@ package instance
 import (
 	"bytes"
 	"sort"
+	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -47,7 +48,8 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 		logger.Debug("🎯 got commit quorum",
 			fields.Round(i.State.Round),
 			zap.Any("agg-signers", agg.Signers),
-			fields.Root(signedCommit.Message.Root))
+			fields.Root(signedCommit.Message.Root),
+			fields.QuorumTime(time.Since(i.started)))
 
 		i.metrics.EndStageCommit()
 
@@ -110,7 +112,7 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, root [32]byte) (*s
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetShareSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing commit msg")
 	}
@@ -123,8 +125,7 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, root [32]byte) (*s
 	return signedMsg, nil
 }
 
-func BaseCommitValidation(
-	config qbft.IConfig,
+func baseCommitValidationIgnoreSignature(
 	signedCommit *specqbft.SignedMessage,
 	height specqbft.Height,
 	operators []*spectypes.Operator,
@@ -140,6 +141,24 @@ func BaseCommitValidation(
 		return errors.Wrap(err, "signed commit invalid")
 	}
 
+	if !signedCommit.CheckSignersInCommittee(operators) {
+		return errors.New("signer not in committee")
+	}
+
+	return nil
+}
+
+func BaseCommitValidationVerifySignature(
+	config qbft.IConfig,
+	signedCommit *specqbft.SignedMessage,
+	height specqbft.Height,
+	operators []*spectypes.Operator,
+) error {
+
+	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
+		return err
+	}
+
 	if config.VerifySignatures() {
 		if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
@@ -150,14 +169,13 @@ func BaseCommitValidation(
 }
 
 func validateCommit(
-	config qbft.IConfig,
 	signedCommit *specqbft.SignedMessage,
 	height specqbft.Height,
 	round specqbft.Round,
 	proposedMsg *specqbft.SignedMessage,
 	operators []*spectypes.Operator,
 ) error {
-	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
+	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
 		return err
 	}
 

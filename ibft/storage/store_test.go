@@ -3,16 +3,16 @@ package storage
 import (
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/logging"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestCleanInstances(t *testing.T) {
@@ -60,6 +60,7 @@ func TestCleanInstances(t *testing.T) {
 	differMsgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("differ_pk"), spectypes.BNRoleAttester)
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
 	require.NoError(t, storage.SaveHighestInstance(generateInstance(differMsgID, specqbft.Height(msgsCount))))
+	require.NoError(t, storage.SaveHighestAndHistoricalInstance(generateInstance(differMsgID, specqbft.Height(1))))
 
 	res, err := storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)

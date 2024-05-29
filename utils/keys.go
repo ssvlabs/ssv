@@ -5,11 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/network/commons"
 	"go.uber.org/zap"
 )
 

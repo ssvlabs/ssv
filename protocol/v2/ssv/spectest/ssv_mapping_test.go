@@ -7,25 +7,25 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/partialsigcontainer"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/spectest/tests/partialsigmessage"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/partialsigcontainer"
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -219,10 +219,10 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	byts, _ := json.Marshal(m["Duty"])
 	require.NoError(t, json.Unmarshal(byts, duty))
 
-	msgs := make([]*spectypes.SSVMessage, 0)
+	msgs := make([]*spectypes.SignedSSVMessage, 0)
 	for _, msg := range m["Messages"].([]interface{}) {
 		byts, _ = json.Marshal(msg)
-		typedMsg := &spectypes.SSVMessage{}
+		typedMsg := &spectypes.SignedSSVMessage{}
 		require.NoError(t, json.Unmarshal(byts, typedMsg))
 		msgs = append(msgs, typedMsg)
 	}
@@ -271,11 +271,6 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	logger := logging.TestLogger(t)
 
 	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
-
-	// specific for blinded block
-	if blindedBlocks, ok := runnerMap["ProducesBlindedBlocks"]; ok {
-		ret.(*runner.ProposerRunner).ProducesBlindedBlocks = blindedBlocks.(bool)
-	}
 
 	if ret.GetBaseRunner().QBFTController != nil {
 		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)

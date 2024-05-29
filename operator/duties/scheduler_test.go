@@ -7,19 +7,19 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/mocks"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	mockslotticker "github.com/bloxapp/ssv/operator/slotticker/mocks"
-	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/mocks"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
+	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 type MockSlotTicker interface {
@@ -108,7 +108,6 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
 		},
-		BuilderProposals: false,
 	}
 
 	s := NewScheduler(opts)
@@ -267,7 +266,6 @@ func TestScheduler_Run(t *testing.T) {
 		BeaconNode:          mockBeaconNode,
 		Network:             networkconfig.TestNetwork,
 		ValidatorController: mockValidatorController,
-		BuilderProposals:    false,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},
@@ -320,8 +318,6 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 			return mockTicker
 		},
 		IndicesChg: make(chan struct{}),
-
-		BuilderProposals: true,
 	}
 
 	s := NewScheduler(opts)

@@ -19,14 +19,14 @@ import (
 	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 const (
@@ -47,7 +47,6 @@ type ethKeyManagerSigner struct {
 	storage           Storage
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
-	builderProposals  bool
 }
 
 // StorageProvider provides the underlying KeyManager storage.
@@ -59,7 +58,7 @@ type StorageProvider interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (spectypes.KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
@@ -96,7 +95,6 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		storage:           signerStore,
 		domain:            network.Domain,
 		slashingProtector: slashingProtector,
-		builderProposals:  builderProposals,
 	}, nil
 }
 
@@ -134,41 +132,35 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignBeaconAttestation(data, domain, pk)
 	case spectypes.DomainProposer:
-		if km.builderProposals {
-			var vBlindedBlock *api.VersionedBlindedBeaconBlock
-			switch v := obj.(type) {
-			case *apiv1capella.BlindedBeaconBlock:
-				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
-					Version: spec.DataVersionCapella,
-					Capella: v,
-				}
-				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
-			case *apiv1deneb.BlindedBeaconBlock:
-				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
-					Version: spec.DataVersionDeneb,
-					Deneb:   v,
-				}
-				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
-			}
-		}
-
-		var vBlock *spec.VersionedBeaconBlock
 		switch v := obj.(type) {
 		case *capella.BeaconBlock:
-			vBlock = &spec.VersionedBeaconBlock{
+			vBlock := &spec.VersionedBeaconBlock{
 				Version: spec.DataVersionCapella,
 				Capella: v,
 			}
+			return km.signer.SignBeaconBlock(vBlock, domain, pk)
 		case *deneb.BeaconBlock:
-			vBlock = &spec.VersionedBeaconBlock{
+			vBlock := &spec.VersionedBeaconBlock{
 				Version: spec.DataVersionDeneb,
 				Deneb:   v,
 			}
+			return km.signer.SignBeaconBlock(vBlock, domain, pk)
+		case *apiv1capella.BlindedBeaconBlock:
+			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
+				Version: spec.DataVersionCapella,
+				Capella: v,
+			}
+			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+		case *apiv1deneb.BlindedBeaconBlock:
+			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
+				Version: spec.DataVersionDeneb,
+				Deneb:   v,
+			}
+			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 		default:
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 
-		return km.signer.SignBeaconBlock(vBlock, domain, pk)
 	case spectypes.DomainVoluntaryExit:
 		data, ok := obj.(*phase0.VoluntaryExit)
 		if !ok {

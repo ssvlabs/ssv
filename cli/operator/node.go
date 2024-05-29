@@ -10,56 +10,57 @@ import (
 	"os"
 	"time"
 
-	"github.com/bloxapp/ssv/operator/keystore"
+	"github.com/ssvlabs/ssv/operator/keystore"
 
-	"github.com/bloxapp/ssv/network"
+	"github.com/ssvlabs/ssv/network"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/api/handlers"
-	apiserver "github.com/bloxapp/ssv/api/server"
-	"github.com/bloxapp/ssv/beacon/goclient"
-	global_config "github.com/bloxapp/ssv/cli/config"
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/eventhandler"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/eventsyncer"
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth/localevents"
-	exporterapi "github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/api/decided"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	ssv_identity "github.com/bloxapp/ssv/identity"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/migrations"
-	"github.com/bloxapp/ssv/monitoring/metrics"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/nodeprobe"
-	"github.com/bloxapp/ssv/operator"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/commons"
-	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/api/handlers"
+	apiserver "github.com/ssvlabs/ssv/api/server"
+	"github.com/ssvlabs/ssv/beacon/goclient"
+	global_config "github.com/ssvlabs/ssv/cli/config"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/eth/eventhandler"
+	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/eventsyncer"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/eth/localevents"
+	exporterapi "github.com/ssvlabs/ssv/exporter/api"
+	"github.com/ssvlabs/ssv/exporter/api/decided"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	ssv_identity "github.com/ssvlabs/ssv/identity"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/migrations"
+	"github.com/ssvlabs/ssv/monitoring/metrics"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/operator"
+
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/operator/validatorsmap"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/utils/format"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 type KeyStore struct {
@@ -167,17 +168,12 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not get operator private key hash", zap.Error(err))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, ekmHashedKey)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
-
-		permissioned := func() bool {
-			currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
-			return currentEpoch < networkConfig.PermissionlessActivationEpoch
-		}
 
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
@@ -208,7 +204,6 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
-		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
@@ -280,6 +275,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.OperatorSigner = operatorPrivKey
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
@@ -546,16 +542,11 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
 		nodeType = "full"
 	}
-	builderProposals := "disabled"
-	if cfg.SSVOptions.ValidatorOptions.BuilderProposals {
-		builderProposals = "enabled"
-	}
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
 		fields.Domain(networkConfig.Domain),
 		zap.String("nodeType", nodeType),
-		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),

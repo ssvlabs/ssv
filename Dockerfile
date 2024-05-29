@@ -13,11 +13,12 @@ RUN apt-get update                                                        && \
   gcc-aarch64-linux-gnu=4:12.2.0-3 \
   bzip2=1.0.8-5+b1 \
   make=4.3-4.1 \
+  dnsutils=1:9.18.24-1 \
   && rm -rf /var/lib/apt/lists/*
 
 RUN go version
 
-WORKDIR /go/src/github.com/bloxapp/ssv/
+WORKDIR /go/src/github.com/ssvlabs/ssv/
 COPY go.mod .
 COPY go.sum .
 RUN --mount=type=cache,target=/root/.cache/go-build \

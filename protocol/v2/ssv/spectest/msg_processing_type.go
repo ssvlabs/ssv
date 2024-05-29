@@ -7,27 +7,28 @@ import (
 	"strings"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type MsgProcessingSpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
 	Duty                    *spectypes.Duty
-	Messages                []*spectypes.SSVMessage
+	Messages                []*spectypes.SignedSSVMessage
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
@@ -57,7 +58,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSSVMessage(msg)
+		dmsg, err := queue.DecodeSignedSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue
@@ -114,7 +115,10 @@ func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.
 	}
 
 	net := v.Network.(specssv.Network)
-	broadcastedMsgs := filterPartialSigs(net.(*spectestingutils.TestingNetwork).BroadcastedMsgs)
+	broadcastedSignedMsgs := net.(*spectestingutils.TestingNetwork).BroadcastedMsgs
+	require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, v.Share.Committee))
+	broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
+	broadcastedMsgs = filterPartialSigs(broadcastedMsgs)
 	require.Len(t, broadcastedMsgs, len(test.OutputMessages))
 	index := 0
 	for _, msg := range broadcastedMsgs {

@@ -6,18 +6,18 @@ import (
 	"math/rand"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 // RegisterHandlers registers the given handlers
@@ -144,15 +144,6 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 				logger.Debug("could not make stream request", zap.Error(err))
 			}
 			continue
-		}
-
-		if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-			decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(raw)
-			if err != nil {
-				logger.Debug("could not decode signed SSV message", zap.Error(err))
-			} else {
-				raw = decodedMsg
-			}
 		}
 
 		mid := msgID(raw)

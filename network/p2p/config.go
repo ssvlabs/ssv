@@ -16,15 +16,15 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/storage"
-	uc "github.com/bloxapp/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/storage"
+	uc "github.com/ssvlabs/ssv/utils/commons"
 )
 
 const (
@@ -86,9 +86,9 @@ type Config struct {
 	// If false, SyncDecidedByRange becomes a no-op.
 	FullNode bool
 
-	GetValidatorStats network.GetValidatorStats
+	DisableIPRateLimit bool `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" default:"false" env-description:"Flag to turn on/off IP rate limiting"`
 
-	Permissioned func() bool // this is not loaded from config file but set up in full node setup
+	GetValidatorStats network.GetValidatorStats
 
 	// PeerScoreInspector is called periodically to inspect the peer scores.
 	PeerScoreInspector func(peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)

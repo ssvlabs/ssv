@@ -7,20 +7,20 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/records"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 type validatorStatus int
@@ -51,7 +51,7 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -60,27 +60,18 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return fmt.Errorf("operator ID is not ready")
 	}
 
-	encodedMsg, err := commons.EncodeNetworkMsg(msg)
+	encodedMsg, err := msg.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not decode msg")
+		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-		signature, err := n.operatorSigner.Sign(encodedMsg)
-		if err != nil {
-			return err
-		}
-
-		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
-	}
-
-	vpk := msg.GetID().GetPubKey()
+	vpk := msgID.GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
-			return errors.Wrap(err, "could not broadcast msg")
+			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
 	return nil

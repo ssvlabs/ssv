@@ -6,26 +6,26 @@ import (
 	"fmt"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/testing"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/connections/mock"
+	"github.com/ssvlabs/ssv/network/testing"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 // PeersIndexProvider holds peers index instance
@@ -252,8 +252,5 @@ func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discover
 		OperatorPubKeyHash: operatorPubKeyHash,
 		UserAgent:          ua,
 		Discovery:          discT,
-		Permissioned: func() bool {
-			return false
-		},
 	}
 }

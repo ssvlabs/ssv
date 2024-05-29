@@ -3,14 +3,14 @@ package instance
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -238,7 +238,7 @@ func isReceivedProposalJustification(
 	return nil
 }
 
-func validRoundChangeForData(
+func validRoundChangeForDataIgnoreSignature(
 	state *specqbft.State,
 	config qbft.IConfig,
 	signedMsg *specqbft.SignedMessage,
@@ -259,14 +259,12 @@ func validRoundChangeForData(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	if err := signedMsg.Validate(); err != nil {
+		return errors.Wrap(err, "roundChange invalid")
 	}
 
-	if err := signedMsg.Message.Validate(); err != nil {
-		return errors.Wrap(err, "roundChange invalid")
+	if !signedMsg.CheckSignersInCommittee(state.Share.Committee) {
+		return errors.New("signer not in committee")
 	}
 
 	// Addition to formal spec
@@ -280,7 +278,7 @@ func validRoundChangeForData(
 		// validate prepare message justifications
 		prepareMsgs, _ := signedMsg.Message.GetRoundChangeJustifications() // no need to check error, checked on signedMsg.Message.Validate()
 		for _, pm := range prepareMsgs {
-			if err := validSignedPrepareForHeightRoundAndRoot(
+			if err := validSignedPrepareForHeightRoundAndRootVerifySignature(
 				config,
 				pm,
 				state.Height,
@@ -305,6 +303,29 @@ func validRoundChangeForData(
 
 		return nil
 	}
+
+	return nil
+}
+
+func validRoundChangeForDataVerifySignature(
+	state *specqbft.State,
+	config qbft.IConfig,
+	signedMsg *specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	fullData []byte,
+) error {
+
+	if err := validRoundChangeForDataIgnoreSignature(state, config, signedMsg, height, round, fullData); err != nil {
+		return err
+	}
+
+	if config.VerifySignatures() {
+		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
+	}
+
 	return nil
 }
 
@@ -389,7 +410,7 @@ func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound spec
 		DataRound:                round,
 		RoundChangeJustification: justificationsData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetShareSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing round change msg")
 	}

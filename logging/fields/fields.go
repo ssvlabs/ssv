@@ -11,22 +11,22 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields/stringer"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields/stringer"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 const (
@@ -38,11 +38,18 @@ const (
 	FieldBlockHash           = "block_hash"
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
-	FieldBuilderProposals    = "builder_proposals"
 	FieldClusterIndex        = "cluster_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
+	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldConsensusTime       = "consensus_time"
+	FieldPostConsensusTime   = "post_consensus_time"
+	FieldQuorumTime          = "quorum_time"
+	FieldDecidedTime         = "decided_time"
+	FieldBlockTime           = "block_time"
+	FieldBeaconDataTime      = "beacon_data_time"
+	FieldBlockRootTime       = "block_root_time"
+	FieldBroadcastTime       = "broadcast_time"
 	FieldSubmissionTime      = "submission_time"
 	FieldCount               = "count"
 	FieldTook                = "took"
@@ -269,12 +276,45 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
+func PreConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPreConsensusTime, FormatDuration(val))
+}
+
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldConsensusTime, FormatDuration(val))
+}
+
+func PostConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPostConsensusTime, FormatDuration(val))
+}
+
+func QuorumTime(val time.Duration) zap.Field {
+	return zap.String(FieldQuorumTime, FormatDuration(val))
+}
+func DecidedTime(val time.Duration) zap.Field {
+	return zap.String(FieldDecidedTime, FormatDuration(val))
+}
+
+func BlockTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockTime, FormatDuration(val))
+}
+func BeaconDataTime(val time.Duration) zap.Field {
+	return zap.String(FieldBeaconDataTime, FormatDuration(val))
+}
+func BlockRootTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockRootTime, FormatDuration(val))
 }
 
 func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldSubmissionTime, FormatDuration(val))
+}
+
+func BroadcastTime(val time.Duration) zap.Field {
+	return zap.String(FieldBroadcastTime, FormatDuration(val))
+}
+
+func FormatDuration(val time.Duration) string {
+	return strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
 }
 
 func DutyID(val string) zap.Field {
@@ -315,10 +355,6 @@ func ToBlock(val uint64) zap.Field {
 
 func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
-}
-
-func BuilderProposals(v bool) zap.Field {
-	return zap.Bool(FieldBuilderProposals, v)
 }
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {

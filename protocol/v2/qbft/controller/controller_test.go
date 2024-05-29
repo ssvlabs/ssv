@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestController_Marshaling(t *testing.T) {
@@ -37,13 +37,15 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	// Initialize logger
 	logger := logging.TestLogger(t)
 
+	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		Signer:  spectestingutils.NewTestingKeyManager(),
-		Network: spectestingutils.NewTestingNetwork(),
-		Timer:   roundtimer.NewTestingTimer(),
+		ShareSigner:    spectestingutils.NewTestingKeyManager(),
+		OperatorSigner: spectestingutils.NewTestingOperatorSigner(keySet, 1),
+		Network:        spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Timer:          roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())
+	share := spectestingutils.TestingShare(keySet)
 	inst := instance.NewInstance(
 		testConfig,
 		share,

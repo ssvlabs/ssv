@@ -7,10 +7,10 @@ import (
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (
@@ -102,4 +102,14 @@ func TestSetupPrivateKey(t *testing.T) {
 			require.Equal(t, test.passedKey, hex.EncodeToString(b))
 		})
 	}
+
+	t.Run("NewIdentityStore", func(t *testing.T) {
+		db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		p2pStorage := NewIdentityStore(db)
+
+		require.NotNil(t, p2pStorage)
+	})
 }

@@ -3,23 +3,24 @@ package testing
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
 	return &qbft.Config{
-		Signer:    testingutils.NewTestingKeyManager(),
-		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
-		Domain:    testingutils.TestingSSVDomainType,
+		ShareSigner:    testingutils.NewTestingKeyManager(),
+		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
+		SigningPK:      keySet.Shares[1].GetPublicKey().Serialize(),
+		Domain:         testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
 				return errors.New("invalid value")
@@ -35,7 +36,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			return 1
 		},
 		Storage:               TestingStores(logger).Get(role),
-		Network:               testingutils.NewTestingNetwork(),
+		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,
 	}

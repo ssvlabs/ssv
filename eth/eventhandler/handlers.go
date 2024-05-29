@@ -7,19 +7,19 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/duties"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/duties"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // b64 encrypted key length is 256
@@ -224,6 +224,7 @@ func (eh *EventHandler) handleShareCreation(
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
 	share, shareSecret, err := eh.validatorAddedEventToShare(
+		txn,
 		validatorEvent,
 		sharePublicKeys,
 		encryptedKeys,
@@ -252,6 +253,7 @@ func (eh *EventHandler) handleShareCreation(
 }
 
 func (eh *EventHandler) validatorAddedEventToShare(
+	txn basedb.Txn,
 	event *contract.ContractValidatorAdded,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
@@ -273,9 +275,20 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	committee := make([]*spectypes.Operator, 0)
 	for i := range event.OperatorIds {
 		operatorID := event.OperatorIds[i]
+		od, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not get operator data: %w", err)
+		}
+		if !found {
+			return nil, nil, &MalformedEventError{
+				Err: fmt.Errorf("operator data not found: %w", err),
+			}
+		}
+
 		committee = append(committee, &spectypes.Operator{
-			OperatorID: operatorID,
-			PubKey:     sharePublicKeys[i],
+			OperatorID:        operatorID,
+			SharePubKey:       sharePublicKeys[i],
+			SSVOperatorPubKey: od.PublicKey,
 		})
 
 		if operatorID != selfOperatorID {

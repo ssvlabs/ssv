@@ -15,13 +15,13 @@ import (
 	"github.com/golang/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/eth/eventsyncer"
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth/simulator"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
+	"github.com/ssvlabs/ssv/eth/eventsyncer"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator/mocks"
 )
 
 type CommonTestInput struct {

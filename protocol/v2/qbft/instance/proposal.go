@@ -3,14 +3,14 @@ package instance
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
@@ -77,11 +77,10 @@ func isValidProposal(
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if config.VerifySignatures() {
-		if err := ssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	if !signedProposal.CheckSignersInCommittee(state.Share.Committee) {
+		return errors.New("signer not in committee")
 	}
+
 	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
@@ -169,7 +168,7 @@ func isProposalJustification(
 		// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
 		// prepared
 		for _, rc := range roundChangeMsgs {
-			if err := validRoundChangeForData(state, config, rc, height, round, fullData); err != nil {
+			if err := validRoundChangeForDataVerifySignature(state, config, rc, height, round, fullData); err != nil {
 				return errors.Wrap(err, "change round msg not valid")
 			}
 		}
@@ -221,7 +220,7 @@ func isProposalJustification(
 
 			// validate each prepare message against the highest previously prepared fullData and round
 			for _, pm := range prepareMsgs {
-				if err := validSignedPrepareForHeightRoundAndRoot(
+				if err := validSignedPrepareForHeightRoundAndRootVerifySignature(
 					config,
 					pm,
 					height,
@@ -280,7 +279,7 @@ func CreateProposal(state *specqbft.State, config qbft.IConfig, fullData []byte,
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetShareSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing proposal msg")
 	}

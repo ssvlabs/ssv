@@ -11,8 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.
@@ -106,41 +105,9 @@ func (pi *peersIndex) Self() *records.NodeInfo {
 	return pi.self
 }
 
-func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorSigner keys.OperatorSigner) ([]byte, error) {
+func (pi *peersIndex) SelfSealed() ([]byte, error) {
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
-
-	if permissioned {
-		publicKey, err := operatorSigner.Public().Base64()
-		if err != nil {
-			return nil, err
-		}
-
-		handshakeData := records.HandshakeData{
-			SenderPeerID:    sender,
-			RecipientPeerID: recipient,
-			Timestamp:       time.Now(),
-			SenderPublicKey: publicKey,
-		}
-
-		signature, err := operatorSigner.Sign(handshakeData.Encode())
-		if err != nil {
-			return nil, err
-		}
-
-		signedNodeInfo := &records.SignedNodeInfo{
-			NodeInfo:      pi.self,
-			HandshakeData: handshakeData,
-			Signature:     signature,
-		}
-
-		sealed, err := signedNodeInfo.Seal(pi.netKeyProvider())
-		if err != nil {
-			return nil, err
-		}
-
-		return sealed, nil
-	}
 
 	sealed, err := pi.self.Seal(pi.netKeyProvider())
 	if err != nil {

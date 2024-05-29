@@ -20,15 +20,15 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/network/topics"
-	"github.com/bloxapp/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/logging"
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/connections"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/streams"
+	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 const (
@@ -121,7 +121,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.connectionsAtLimit)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -199,17 +199,9 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	filters := func() []connections.HandshakeFilter {
-		filters := []connections.HandshakeFilter{
+		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(domain),
 		}
-
-		if n.cfg.Permissioned() {
-			filters = append(filters,
-				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
-				connections.SignatureCheckFilter(),
-				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.Network.WhitelistedOperatorKeys))
-		}
-		return filters
 	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
@@ -221,8 +213,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		IDService:       ids,
 		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
-		OperatorSigner:  n.operatorSigner,
-		Permissioned:    n.cfg.Permissioned,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
@@ -290,6 +280,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
+		DisableIPRateLimit:  n.cfg.DisableIPRateLimit,
 		GetValidatorStats:   n.cfg.GetValidatorStats,
 	}
 
@@ -302,7 +293,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		cfg.ScoreIndex = nil
 	}
 
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2, n.cfg.Network)
+	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
 	n.msgResolver = midHandler
 	cfg.MsgIDHandler = midHandler
 	go cfg.MsgIDHandler.Start()

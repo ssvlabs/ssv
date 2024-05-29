@@ -2,14 +2,14 @@ package testing
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -27,14 +27,12 @@ var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySe
 }
 
 var ProposerBlindedBlockRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	ret := baseRunner(
+	return baseRunner(
 		logger,
 		spectypes.BNRoleProposer,
 		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil),
 		keySet,
 	)
-	ret.(*runner.ProposerRunner).ProducesBlindedBlocks = true
-	return ret
 }
 
 var AggregatorRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -65,8 +63,9 @@ var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.Te
 var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck specqbft.ProposedValueCheckF, keySet *spectestingutils.TestKeySet) runner.Runner {
 	share := spectestingutils.TestingShare(keySet)
 	identifier := spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], role)
-	net := spectestingutils.NewTestingNetwork()
+	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
+	opSigner := spectestingutils.NewTestingOperatorSigner(keySet, 1)
 
 	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
@@ -74,7 +73,8 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 		return 1
 	}
 	config.Network = net
-	config.Signer = km
+	config.ShareSigner = km
+	config.OperatorSigner = opSigner
 
 	contr := testing.NewTestingQBFTController(
 		identifier[:],
@@ -85,13 +85,14 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 
 	switch role {
 	case spectypes.BNRoleAttester:
-		return runner.NewAttesterRunnner(
+		return runner.NewAttesterRunner(
 			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
@@ -103,6 +104,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
@@ -114,6 +116,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
@@ -125,6 +128,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
@@ -136,6 +140,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
@@ -147,6 +152,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 		)
 	case spectypes.BNRoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
@@ -155,15 +161,17 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 		)
 	case spectestingutils.UnknownDutyType:
-		ret := runner.NewAttesterRunnner(
+		ret := runner.NewAttesterRunner(
 			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
+			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
 		)

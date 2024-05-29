@@ -7,9 +7,9 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
@@ -31,15 +31,13 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                          string
-	Beacon                        beacon.BeaconNetwork
-	Domain                        spectypes.DomainType
-	GenesisEpoch                  spec.Epoch
-	RegistrySyncOffset            *big.Int
-	RegistryContractAddr          string // TODO: ethcommon.Address
-	Bootnodes                     []string
-	WhitelistedOperatorKeys       []string
-	PermissionlessActivationEpoch spec.Epoch
+	Name                 string
+	Beacon               beacon.BeaconNetwork
+	Domain               spectypes.DomainType
+	GenesisEpoch         spec.Epoch
+	RegistrySyncOffset   *big.Int
+	RegistryContractAddr string // TODO: ethcommon.Address
+	Bootnodes            []string
 }
 
 func (n NetworkConfig) String() string {

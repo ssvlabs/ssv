@@ -2,10 +2,10 @@ package qbft
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var TestingMessage = &specqbft.Message{
@@ -52,8 +52,8 @@ var testingShare = &types.Share{
 	PartialQuorum:   2,
 	Committee: []*types.Operator{
 		{
-			OperatorID: 1,
-			PubKey:     TestingSK.GetPublicKey().Serialize(),
+			OperatorID:  1,
+			SharePubKey: TestingSK.GetPublicKey().Serialize(),
 		},
 	},
 }

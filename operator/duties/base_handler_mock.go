@@ -8,9 +8,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	networkconfig "github.com/bloxapp/ssv/networkconfig"
-	slotticker "github.com/bloxapp/ssv/operator/slotticker"
 	gomock "github.com/golang/mock/gomock"
+	networkconfig "github.com/ssvlabs/ssv/networkconfig"
+	slotticker "github.com/ssvlabs/ssv/operator/slotticker"
 	zap "go.uber.org/zap"
 )
 

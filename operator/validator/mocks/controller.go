@@ -8,18 +8,18 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv-spec/types"
-	network "github.com/bloxapp/ssv/network"
-	duties "github.com/bloxapp/ssv/operator/duties"
-	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	types0 "github.com/bloxapp/ssv/protocol/v2/types"
-	storage "github.com/bloxapp/ssv/registry/storage"
-	basedb "github.com/bloxapp/ssv/storage/basedb"
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
 	peer "github.com/libp2p/go-libp2p/core/peer"
+	types "github.com/ssvlabs/ssv-spec/types"
+	network "github.com/ssvlabs/ssv/network"
+	duties "github.com/ssvlabs/ssv/operator/duties"
+	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
+	storage "github.com/ssvlabs/ssv/registry/storage"
+	basedb "github.com/ssvlabs/ssv/storage/basedb"
 	zap "go.uber.org/zap"
 )
 
@@ -413,17 +413,17 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 }
 
 // Broadcast mocks base method.
-func (m *MockP2PNetwork) Broadcast(message *types.SSVMessage) error {
+func (m *MockP2PNetwork) Broadcast(msgID types.MessageID, message *types.SignedSSVMessage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Broadcast", message)
+	ret := m.ctrl.Call(m, "Broadcast", msgID, message)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Broadcast indicates an expected call of Broadcast.
-func (mr *MockP2PNetworkMockRecorder) Broadcast(message interface{}) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) Broadcast(msgID, message interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), msgID, message)
 }
 
 // Peers mocks base method.

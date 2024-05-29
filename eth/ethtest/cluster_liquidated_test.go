@@ -7,7 +7,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 )
 
 type testClusterLiquidatedInput struct {

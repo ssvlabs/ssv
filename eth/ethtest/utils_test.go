@@ -7,31 +7,32 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/core/types"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/eventhandler"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/simulator"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/eventhandler"
+	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/operator/validator/mocks"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/blskeygen"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 type testValidatorData struct {
@@ -163,7 +164,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -253,7 +254,8 @@ func setupOperatorStorage(
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	privKeyHash, err := operator.privateKey.StorageHash()
+	privKey := operator.privateKey
+	privKeyHash, err := privKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
@@ -283,10 +285,10 @@ func setupOperatorStorage(
 }
 
 func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
-	genesis := core.GenesisAlloc{}
+	genesis := types.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
-		genesis[*testAddr] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
+		genesis[*testAddr] = types.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
 	return simulator.NewSimulatedBackend(
