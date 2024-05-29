@@ -99,7 +99,7 @@ spec:
             - name: HOST_ADDRESS
               value: ""
             - name: DB_PATH
-              value: "./data/db-holesky-stage--fresh-2024-05-29"
+              value: "./data/db-holesky-stage--fresh-2024-05-29--2"
             - name: NETWORK
               value: "holesky-stage"
             - name: DB_REPORTING
