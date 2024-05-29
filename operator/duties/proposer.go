@@ -148,6 +148,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	allIndices := h.validatorController.AllActiveIndices(epoch, false)
 	if len(allIndices) == 0 {
+		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
