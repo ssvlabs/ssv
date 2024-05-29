@@ -95,7 +95,7 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 // DEPRECATED.
 func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
 	if len(msgs) == 0 {
-		return nil, errors.New("no messages")
+		return nil, errors.New("no messages 1")
 	}
 
 	apiMsgs := make([]*SignedMessageAPI, 0)
@@ -120,7 +120,7 @@ func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, er
 // ParticipantsAPIData creates a new message from the given message in a new format.
 func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
 	if len(msgs) == 0 {
-		return nil, errors.New("no messages")
+		return nil, errors.New("no messages 2")
 	}
 
 	apiMsgs := make([]*ParticipantsAPI, 0)
