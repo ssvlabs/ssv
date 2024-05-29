@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,8 +15,8 @@ import (
 
 var (
 	MetricsSignaturesVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_signature_verifications",
-		Help: "Number of signatures verifications",
+		Name: "ssv_signature_verifications_genesis",
+		Help: "Number of signatures verifications (genesis",
 	}, []string{})
 )
 

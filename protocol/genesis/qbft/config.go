@@ -3,17 +3,17 @@ package qbft
 import (
 	"github.com/ssvlabs/ssv-spec/types"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/types"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 type signing interface {
 	// GetShareSigner returns a ShareSigner instance
-	GetShareSigner() genesisspectypes.Signer
+	GetShareSigner() genesisspectypes.ShareSigner
 	// GetOperatorSigner returns an operator signer instance
 	GetOperatorSigner() genesisrunner.OperatorSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
