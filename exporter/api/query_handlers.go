@@ -31,8 +31,6 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		Filter: nm.Msg.Filter,
 	}
 
-	logger.Info("11111111111111111111111111111111111111")
-
 	pkRaw, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
 	if err != nil {
 		logger.Warn("failed to decode validator public key", zap.Error(err))
@@ -41,7 +39,6 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	logger.Info("222222222222222222222222222222222222222222")
 	beaconRole, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
 	if err != nil {
 		logger.Warn("failed to parse role", zap.Error(err))
@@ -50,7 +47,6 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	logger.Info("3333333333333333333333333333333333333333333")
 	runnerRole := spectypes.RunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
@@ -60,18 +56,14 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	logger.Info("4444444444444444444444444444444444444444444444")
 	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
-	logger.Info("55555555555555555555555555555555555555555555555")
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
 	if err != nil {
-		logger.Info("66666666666666666666666666666666666666666666")
 		logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}
 	} else {
-		logger.Info("77777777777777777777777777777777777777777777")
 		data, err := DecidedAPIData(participantsList...)
 		if err != nil {
 			res.Data = []string{err.Error()}
@@ -80,7 +72,6 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		}
 	}
 
-	logger.Info("888888888888888888888888888888888888888888888")
 	nm.Msg = res
 }
 

@@ -376,9 +376,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		println("<<<<<<<<<<<<<<<<<<<<<1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 		if err := operatorNode.Start(logger); err != nil {
-			println("<<<<<<<<<<<<<<<<<<<<<2>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},

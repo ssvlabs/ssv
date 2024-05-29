@@ -142,9 +142,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go func() {
 		err := n.startWSServer(logger)
 		if err != nil {
-			println("<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-			println(err)
-			println("<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 			// TODO: think if we need to panic
 			return
 		}
