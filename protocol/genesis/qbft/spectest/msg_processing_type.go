@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
