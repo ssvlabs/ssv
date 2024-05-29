@@ -30,10 +30,12 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer, useNewAPI bo
 		c.SetDefault(key, true)
 
 		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Slot(msg.Slot))
-
+		logger.Info("hhhhhhhhhheeeeeeeeeeerrrrrrrrrrrrrreeeeeeeeeeee")
 		if useNewAPI {
+			logger.Info("1111111111111111111111111111111111111111")
 			feed.Send(api.NewParticipantsAPIMsg(msg))
 		} else {
+			logger.Info("2222222222222222222222222222222222222222")
 			feed.Send(api.NewDecidedAPIMsg(msg))
 		}
 
