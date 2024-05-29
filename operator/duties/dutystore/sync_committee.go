@@ -2,16 +2,14 @@ package dutystore
 
 import (
 	"sync"
-	"sync/atomic"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 type SyncCommitteeDuties struct {
-	mu    sync.RWMutex
-	m     map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]
-	ready atomic.Bool
+	mu sync.RWMutex
+	m  map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]
 }
 
 func NewSyncCommitteeDuties() *SyncCommitteeDuties {
@@ -75,12 +73,4 @@ func (d *SyncCommitteeDuties) Reset(period uint64) {
 	defer d.mu.Unlock()
 
 	delete(d.m, period)
-}
-
-func (s *SyncCommitteeDuties) Ready() bool {
-	return s.ready.Load()
-}
-
-func (s *SyncCommitteeDuties) SetReady() {
-	s.ready.Store(true)
 }

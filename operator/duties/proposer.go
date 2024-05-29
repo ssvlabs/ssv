@@ -70,7 +70,6 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				h.fetchFirst = false
 				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch, slot)
-				h.duties.SetReady()
 				h.processExecution(currentEpoch, slot)
 			} else {
 				h.processExecution(currentEpoch, slot)
