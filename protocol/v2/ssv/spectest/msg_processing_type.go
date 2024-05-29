@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/hex"
 	"path/filepath"
 	"reflect"
@@ -48,7 +49,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	test.RunAsPartOfMultiTest(t, logger)
 }
 
-func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
+func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
 	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
 	if len(test.Runner.GetBaseRunner().Share) == 0 {
@@ -68,7 +69,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator
 	var lastErr error
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		c = baseCommitteeWithRunnerSample(ketSetMap, test.Runner.(*runner.CommitteeRunner))
+		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner))
 
 		if !test.DontStartDuty {
 			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
@@ -113,7 +114,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator
 }
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
-	v, c, lastErr := test.runPreTesting(logger)
+	ctx := context.Background()
+	v, c, lastErr := test.runPreTesting(ctx, logger)
 
 	if len(test.ExpectedError) != 0 {
 		require.EqualError(t, lastErr, test.ExpectedError)
@@ -209,6 +211,8 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 }
 
 var baseCommitteeWithRunnerSample = func(
+	ctx context.Context,
+	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
 ) *validator.Committee {
@@ -224,7 +228,7 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
 		return runner.NewCommitteeRunner(runnerSample.BaseRunner.BeaconNetwork,
 			shareMap,
 			controller.NewController(
@@ -242,9 +246,11 @@ var baseCommitteeWithRunnerSample = func(
 	}
 
 	return validator.NewCommittee(
-		*spectestingutils.TestingsOperator(keySetSample),
+		ctx,
+		logger,
+		runnerSample.GetBaseRunner().BeaconNetwork,
+		spectestingutils.TestingOperator(keySetSample),
 		spectestingutils.NewTestingVerifier(),
-		shareMap,
 		createRunnerF,
 	)
 }
