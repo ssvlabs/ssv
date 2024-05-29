@@ -4,16 +4,16 @@ import (
 	"encoding/json"
 	"testing"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/logging"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-
-	"github.com/stretchr/testify/require"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 func TestController_Marshaling(t *testing.T) {
@@ -40,13 +40,13 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		ShareSigner:    spectestingutils.NewTestingKeyManager(),
-		OperatorSigner: spectestingutils.NewTestingOperatorSigner(keySet, 1),
-		Network:        spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		ShareSigner:    genesisspectestingutils.NewTestingKeyManager(),
+		OperatorSigner: qbft.NewTestingOperatorSigner(keySet, 1),
+		Network:        genesisspectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:          roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingShare(keySet)
+	share := spectestingutils.TestingShare(keySet, 1)
 	inst := instance.NewInstance(
 		testConfig,
 		share,

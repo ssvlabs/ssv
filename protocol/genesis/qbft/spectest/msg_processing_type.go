@@ -8,18 +8,19 @@ import (
 	"testing"
 	"time"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/logging"
 	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -68,7 +69,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	time.Sleep(time.Millisecond * 5)
 
 	// test output message
-	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*genesisspectestingutils.TestingNetwork).BroadcastedMsgs
 	if len(test.OutputMessages) > 0 || len(broadcastedMsgs) > 0 {
 		require.Len(t, broadcastedMsgs, len(test.OutputMessages))
 

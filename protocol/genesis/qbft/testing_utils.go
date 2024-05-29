@@ -1,12 +1,17 @@
 package qbft
 
 import (
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesistestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var TestingMessage = &genesisspecqbft.Message{
@@ -21,22 +26,22 @@ var TestingSignedMsg = func() *genesisspecqbft.SignedMessage {
 	return SignMsg(TestingSK, 1, TestingMessage)
 }()
 
-var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *genesisspecqbft.Message) *genesisspecqbft.SignedMessage {
-	domain := testingutils.TestingSSVDomainType
-	sigType := types.QBFTSignatureType
+var SignMsg = func(sk *bls.SecretKey, id genesisspectypes.OperatorID, msg *genesisspecqbft.Message) *genesisspecqbft.SignedMessage {
+	domain := genesistestingutils.TestingSSVDomainType
+	sigType := genesisspectypes.QBFTSignatureType
 
-	r, _ := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
+	r, _ := genesisspectypes.ComputeSigningRoot(msg, genesisspectypes.ComputeSignatureDomain(domain, sigType))
 	sig := sk.SignByte(r[:])
 
 	return &genesisspecqbft.SignedMessage{
 		Message:   *msg,
-		Signers:   []types.OperatorID{id},
+		Signers:   []genesisspectypes.OperatorID{id},
 		Signature: sig.Serialize(),
 	}
 }
 
 var TestingSK = func() *bls.SecretKey {
-	types.InitBLS()
+	genesisspectypes.InitBLS()
 	ret := &bls.SecretKey{}
 	ret.SetByCSPRNG()
 	return ret
@@ -44,14 +49,14 @@ var TestingSK = func() *bls.SecretKey {
 
 var testingValidatorPK = phase0.BLSPubKey{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4}
 
-var testingShare = &types.Share{
+var testingShare = &genesisspectypes.Share{
 	OperatorID:      1,
 	ValidatorPubKey: testingValidatorPK[:],
 	SharePubKey:     TestingSK.GetPublicKey().Serialize(),
-	DomainType:      testingutils.TestingSSVDomainType,
+	DomainType:      genesistestingutils.TestingSSVDomainType,
 	Quorum:          3,
 	PartialQuorum:   2,
-	Committee: []*types.Operator{
+	Committee: []*genesisspectypes.Operator{
 		{
 			OperatorID:  1,
 			SharePubKey: TestingSK.GetPublicKey().Serialize(),
@@ -107,4 +112,35 @@ var TestingControllerStruct = &genesisspecqbft.Controller{
 	Height:          genesisspecqbft.Height(1),
 	Share:           testingShare,
 	StoredInstances: genesisspecqbft.InstanceContainer{TestingInstanceStruct},
+}
+
+type testingOperatorSigner struct {
+	SSVOperatorSK *rsa.PrivateKey
+	operatorID    genesisspectypes.OperatorID
+}
+
+func NewTestingOperatorSigner(keySet *testingutils.TestKeySet, operatorID genesisspectypes.OperatorID) *testingOperatorSigner {
+	return &testingOperatorSigner{
+		SSVOperatorSK: keySet.OperatorKeys[operatorID],
+		operatorID:    operatorID,
+	}
+}
+
+func (km *testingOperatorSigner) SignSSVMessage(data []byte) ([256]byte, error) {
+	return SignSSVMessage(km.SSVOperatorSK, data)
+}
+
+// GetOperatorID returns the operator ID
+func (km *testingOperatorSigner) GetOperatorID() genesisspectypes.OperatorID {
+	return km.operatorID
+}
+
+func SignSSVMessage(sk *rsa.PrivateKey, data []byte) ([256]byte, error) {
+	hash := sha256.Sum256(data)
+	signature, err := rsa.SignPKCS1v15(rand.Reader, sk, crypto.SHA256, hash[:])
+	if err != nil {
+		return [256]byte{}, err
+	}
+
+	return [256]byte(signature), nil
 }

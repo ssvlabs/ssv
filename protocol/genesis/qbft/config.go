@@ -1,21 +1,20 @@
 package qbft
 
 import (
-	"github.com/ssvlabs/ssv-spec/types"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
-	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/types"
+	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type signing interface {
 	// GetShareSigner returns a ShareSigner instance
 	GetShareSigner() genesisspectypes.ShareSigner
 	// GetOperatorSigner returns an operator signer instance
-	GetOperatorSigner() genesisrunner.OperatorSigner
+	GetOperatorSigner() genesistypes.OperatorSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() genesisspectypes.DomainType
 }
@@ -25,7 +24,7 @@ type IConfig interface {
 	// GetValueCheckF returns value check function
 	GetValueCheckF() genesisspecqbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() func(state *genesisrunner.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
+	GetProposerF() func(state *genesistypes.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() genesisspecqbft.Network
 	// GetStorage returns a storage instance
@@ -38,11 +37,11 @@ type IConfig interface {
 
 type Config struct {
 	ShareSigner           genesisspectypes.ShareSigner
-	OperatorSigner        genesisspectypes.OperatorSigner
+	OperatorSigner        genesistypes.OperatorSigner
 	SigningPK             []byte
 	Domain                genesisspectypes.DomainType
 	ValueCheckF           genesisspecqbft.ProposedValueCheckF
-	ProposerF             func(state *genesisrunner.State, round genesisspecqbft.Round) types.OperatorID
+	ProposerF             func(state *genesistypes.State, round genesisspecqbft.Round) types.OperatorID
 	Storage               qbftstorage.QBFTStore
 	Network               genesisspecqbft.Network
 	Timer                 roundtimer.Timer
@@ -55,7 +54,7 @@ func (c *Config) GetShareSigner() genesisspectypes.ShareSigner {
 }
 
 // GetOperatorSigner returns a OperatorSigner instance
-func (c *Config) GetOperatorSigner() genesisspectypes.OperatorSigner {
+func (c *Config) GetOperatorSigner() genesistypes.OperatorSigner {
 	return c.OperatorSigner
 }
 
@@ -75,7 +74,7 @@ func (c *Config) GetValueCheckF() genesisspecqbft.ProposedValueCheckF {
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() func(state *genesisrunner.State, round genesisspecqbft.Round) types.OperatorID {
+func (c *Config) GetProposerF() func(state *genesistypes.State, round genesisspecqbft.Round) types.OperatorID {
 	return c.ProposerF
 }
 

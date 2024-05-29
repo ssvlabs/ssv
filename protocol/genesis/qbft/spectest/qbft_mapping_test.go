@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-	testing2 "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
+	genesistesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-
-	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
-	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -31,7 +31,7 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
+	types.SetDefaultDomain(genesisspectestingutils.TestingSSVDomainType)
 
 	for name, test := range untypedTests {
 		name, test := name, test
@@ -103,7 +103,7 @@ func TestQBFTMapping(t *testing.T) {
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
+				genesistesting.TestingConfig(logger, spectestingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
