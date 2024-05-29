@@ -452,6 +452,8 @@ func (c *controller) StartValidators() {
 			zap.Int("shares", len(allPubKeys)),
 			fields.Took(time.Since(start)))
 	}
+
+	// Refresh duties if there are any new active validators.
 	afterUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
 	if hasNewValidators(beforeUpdate, afterUpdate) {
 		c.logger.Debug("new validators found after metadata update",

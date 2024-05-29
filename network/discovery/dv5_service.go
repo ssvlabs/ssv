@@ -151,9 +151,10 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	// TODO: uncomment errors once there are sufficient nodes with domain type.
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
 	if err != nil {
-		// TODO: skip missing domain type (likely old node).
-	} else if nodeDomainType != dvs.domainType {
-		// TODO: skip different domain type.
+		return fmt.Errorf("could not read domain type: %w", err)
+	}
+	if nodeDomainType != dvs.domainType {
+		return fmt.Errorf("mismatched domain type: %v", nodeDomainType)
 	}
 
 	// Get the peer's subnets, skipping if it has none.
