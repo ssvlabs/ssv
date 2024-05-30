@@ -89,12 +89,12 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 
 	for _, quorum := range quorums {
-		logger.Info("hhhhhhhheeeeeeerrrrrrreeeeeeeeeeeee1")
+		logger.Info("hhhhhhhheeeeeeerrrrrrreeeeeeeeeeeee2")
 		logger.Info(msg.GetID().GetRoleType().String())
 		if err1 := ncv.Storage.Get(msg.GetID().GetRoleType()); err1 != nil {
 			logger.Info("11111111111111111111111111")
 		}
-		logger.Info("hhhhhhhheeeeeeerrrrrrreeeeeeeeeeeee1")
+		logger.Info("hhhhhhhheeeeeeerrrrrrreeeeeeeeeeeee2")
 		if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return
