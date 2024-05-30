@@ -32,7 +32,7 @@ const (
 
 	// Client timeouts.
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 30 // For long requests.
+	DefaultLongTimeout   = time.Second * 60 // For long requests.
 )
 
 type beaconNodeStatus int32
@@ -179,7 +179,7 @@ func New(
 		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
 		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
-		eth2clienthttp.WithTimeout(commonTimeout),
+		eth2clienthttp.WithTimeout(longTimeout),
 		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	if err != nil {
