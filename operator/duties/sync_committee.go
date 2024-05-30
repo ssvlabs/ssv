@@ -122,7 +122,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// reset next period duties if in appropriate slot range
 			if h.shouldFetchNextPeriod(slot) {
-				fmt.Println("shouldFetchNextPeriod")
 				h.fetchNextPeriod = true
 			}
 		}
