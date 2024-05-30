@@ -1,12 +1,10 @@
 stages:
   - build
   - deploy
-
 variables:
   #GLOBAL
   IMAGE_NAME: ssv-node
   DOCKER_BUILDKIT: 1
-
   #STAGE
   ACCOUNT_ID_INFRA_STAGE: 121827225315
   AWS_REGION_INFRA_STAGE: "us-west-2"
@@ -14,7 +12,6 @@ variables:
   APP_REPLICAS_INFRA_STAGE: "1"
   ECRLOGIN_INFRA_STAGE: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_STAGE --region $AWS_REGION_INFRA_STAGE --no-include-email"
   STAGE_HEALTH_CHECK_IMAGE: 121827225315.dkr.ecr.us-west-2.amazonaws.com/infra-stage-repo:ubuntu20
-
   #PRODUCTION
   ACCOUNT_ID_INFRA_PROD: 764289642555
   AWS_REGION_INFRA_PROD: "us-west-2"
@@ -22,7 +19,6 @@ variables:
   APP_REPLICAS_INFRA_PROD: "1"
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
   PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
-
 # +-------+
 # | STAGE |
 # +-------+
@@ -40,13 +36,10 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_COMMIT_SHA $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
   only:
-    - alan/no-fork
-
+    - deploy-a05ae8330
 # +---------------------+
 # | STAGE HETZNER NODES |
 # +---------------------+
-
-
 Deploy nodes to hetzner stage:
   stage: deploy
   tags:
@@ -83,8 +76,7 @@ Deploy nodes to hetzner stage:
     - .k8/hetzner-stage/scripts/deploy-cluster-65--68.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     - .k8/hetzner-stage/scripts/deploy-cluster-69--72.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
   only:
-    - alan/no-fork
-
+    - deploy-a05ae8330
 Deploy exporter to hetzner stage:
   stage: deploy
   tags:
@@ -101,7 +93,6 @@ Deploy exporter to hetzner stage:
     - .k8/hetzner-stage/scripts/deploy-holesky-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
     - alan/no-fork
-
 # +---------------+
 # |     Prod      |
 # +---------------+
@@ -118,10 +109,8 @@ Build prod Docker image:
     - DOCKER_LOGIN_TO_INFRA_PROD_REPO=`$ECRLOGIN_INFRA_PROD`
     - docker tag $IMAGE_NAME:$CI_COMMIT_SHA $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
-
   only:
     - main
-
 Deploy nodes to prod:
   stage: deploy
   tags:
@@ -157,10 +146,8 @@ Deploy nodes to prod:
     # +------------------------------+
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
     # - .k8/production/mainnet/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
-
   only:
     - main
-
 Deploy exporter to prod:
   stage: deploy
   tags:
@@ -187,6 +174,5 @@ Deploy exporter to prod:
     # │  🔴 Deploy Mainnet exporter  |
     # +------------------------------+
     # - .k8/production/mainnet/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_MAINNET_CPU_LIMIT $SSV_EXPORTER_MAINNET_MEM_LIMIT
-
   only:
     - main
