@@ -227,6 +227,8 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
+replace github.com/attestantio/go-eth2-client => github.com/moshe-blox/go-eth2-client v0.0.0-20240529101804-84ddfd928b95
+
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
