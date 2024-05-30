@@ -25,16 +25,6 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *spectypes.Sign
 		return nil // uponPrepare was already called
 	}
 
-	rcvmsg, err := specqbft.DecodeMessage(signedPrepare.SSVMessage.Data)
-	if err != nil {
-		return err
-	}
-
-	logger.Debug("📬 got prepare message",
-		fields.Round(i.State.Round),
-		zap.Any("prepare-signers", signedPrepare.OperatorIDs),
-		fields.Root(rcvmsg.Root))
-
 	if hasQuorumBefore {
 		return nil // already moved to commit stage
 	}
@@ -49,6 +39,11 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *spectypes.Sign
 	}
 
 	proposedRoot := proposalMsgAccepted.Root
+
+	logger.Debug("📬 got prepare message",
+		fields.Round(i.State.Round),
+		zap.Any("prepare-signers", signedPrepare.OperatorIDs),
+		fields.Root(proposedRoot))
 
 	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.FullData
 	i.State.LastPreparedRound = i.State.Round
@@ -142,7 +137,7 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return errors.New("proposed data mismatch")
 	}
 
-	if len(signedPrepare.OperatorIDs) != 1 {
+	if len(signedPrepare.GetOperatorIDs()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
 

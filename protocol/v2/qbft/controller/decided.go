@@ -53,7 +53,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, signedMsg *spectypes.Signed
 		}
 	} else { // decide previously, add if has more signers
 		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndRoot(msg.Round, msg.Root)
-		if len(signedMsg.OperatorIDs) > len(signers) {
+		if len(signedMsg.GetOperatorIDs()) > len(signers) {
 			err := inst.State.CommitContainer.AddMsg(signedMsg)
 			if err != nil {
 				return nil, err

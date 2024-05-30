@@ -11,7 +11,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -427,7 +426,7 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *g
 	return nil
 }
 
-func (mv *messageValidator) roundRobinProposer(height genesisspecqbft.Height, round genesisspecqbft.Round, share *ssvtypes.SSVShare) types.OperatorID {
+func (mv *messageValidator) roundRobinProposer(height genesisspecqbft.Height, round genesisspecqbft.Round, share *ssvtypes.SSVShare) genesisspectypes.OperatorID {
 	firstRoundIndex := 0
 	if height != genesisspecqbft.FirstHeight {
 		firstRoundIndex += int(height) % len(share.Committee)

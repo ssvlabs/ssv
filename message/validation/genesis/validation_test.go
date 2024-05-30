@@ -272,7 +272,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		encodedMsg, err := ssvMsg.Encode()
 		require.NoError(t, err)
 
-		encodedSignedMsg := spectypes.EncodeSignedSSVMessage(encodedMsg, 1, [256]byte{})
+		encodedSignedMsg := spectypes.EncodeSignedSSVMessage(encodedMsg, 1, make([]byte, 256))
 
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey[:])[0])
 		pmsg := &pubsub.Message{
@@ -302,7 +302,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		encodedMsg, err := ssvMsg.Encode()
 		require.NoError(t, err)
 
-		encodedSignedMsg := spectypes.EncodeSignedSSVMessage(encodedMsg, 1, [256]byte{})
+		encodedSignedMsg := spectypes.EncodeSignedSSVMessage(encodedMsg, 1, make([]byte, 256))
 
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey[:])[0])
 		pmsg := &pubsub.Message{
@@ -378,7 +378,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		encodedMsg, err := ssvMsg.Encode()
 		require.NoError(t, err)
 
-		encodedSignedMsg := spectypes.EncodeSignedSSVMessage(encodedMsg, 1, [256]byte{})
+		encodedSignedMsg := spectypes.EncodeSignedSSVMessage(encodedMsg, 1, make([]byte, 256))
 
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey[:])[0])
 		pmsg := &pubsub.Message{
@@ -2195,7 +2195,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 
 			signedSSVMsg := &spectypes.SignedSSVMessage{
-				Signature:  [256]byte(signature),
+				Signature:  signature,
 				OperatorID: operatorID,
 				Data:       encodedMsg,
 			}
@@ -2259,7 +2259,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			const unexpectedOperatorID = 2
 			signedSSVMsg := &spectypes.SignedSSVMessage{
-				Signature:  [256]byte(signature),
+				Signature:  signature,
 				OperatorID: unexpectedOperatorID,
 				Data:       encodedMsg,
 			}
@@ -2319,10 +2319,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.False(t, found)
 
 			signature := bytes.Repeat([]byte{1}, 256)
-			sig := [256]byte{}
-			copy(sig[:], signature)
 			signedSSVMsg := &spectypes.SignedSSVMessage{
-				Signature:  sig,
+				Signature:  signature,
 				OperatorID: operatorID,
 				Data:       encodedMsg,
 			}
