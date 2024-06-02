@@ -1,9 +1,7 @@
 package discovery
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"net"
 	"sync/atomic"
 	"time"
@@ -158,12 +156,12 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 
 	// Get the peer's subnets, skipping if it has none.
 	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
-	if err != nil {
-		return fmt.Errorf("could not read subnets: %w", err)
-	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
-		return errors.New("zero subnets")
-	}
+	//if err != nil {
+	//	return fmt.Errorf("could not read subnets: %w", err)
+	//}
+	//if bytes.Equal(zeroSubnets, nodeSubnets) {
+	//	return errors.New("zero subnets")
+	//}
 
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 	if !dvs.limitNodeFilter(e.Node) && !dvs.sharedSubnetsFilter(1)(e.Node) {
