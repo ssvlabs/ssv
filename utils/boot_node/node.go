@@ -103,7 +103,8 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
 	cfg := discover.Config{
-		PrivateKey: privKey,
+		PrivateKey:   privKey,
+		V5ProtocolID: &[6]byte{0, 1, 3, 3, 7, 0},
 	}
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"
