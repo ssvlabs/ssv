@@ -155,13 +155,13 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	if n.validatorOptions.Exporter {
-		// Subscribe to all subnets.
-		err := n.net.SubscribeAll(logger)
-		if err != nil {
-			logger.Error("failed to subscribe to all subnets", zap.Error(err))
-		}
+	//if n.validatorOptions.Exporter {
+	// Subscribe to all subnets.
+	err := n.net.SubscribeAll(logger)
+	if err != nil {
+		logger.Error("failed to subscribe to all subnets", zap.Error(err))
 	}
+	//}
 	go n.net.UpdateSubnets(logger)
 	n.validatorsCtrl.StartValidators()
 	go n.reportOperators(logger)

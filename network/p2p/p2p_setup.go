@@ -243,7 +243,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
 		if len(n.subnets) > 0 {
-			discV5Opts.Subnets = n.subnets
+			discV5Opts.Subnets = []byte(records.AllSubnets)
 		}
 		logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
@@ -258,6 +258,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		HostDNS:     n.cfg.HostDNS,
 		DomainType:  n.cfg.Network.Domain,
 	}
+
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
 		return err
