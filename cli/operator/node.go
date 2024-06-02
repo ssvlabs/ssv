@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/records"
 	"log"
 	"math/big"
 	"net/http"
@@ -581,6 +582,7 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
+	cfg.P2pNetworkConfig.Subnets = records.AllSubnets
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
