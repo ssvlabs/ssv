@@ -72,7 +72,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	}
 	logger.Debug("Duty ID: ", zap.String("duty_id", dutyID))
 
-	committee := []*types.Operator{
+	committee := []*types.CommitteeMember{
 		{OperatorID: 1},
 		{OperatorID: 2},
 		{OperatorID: 3},
@@ -111,18 +111,16 @@ func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string
 	return dutyID, dutySlot, nil
 }
 
-func DetermineLeader(dutySlot phase0.Slot, committee []*types.Operator) types.OperatorID {
-	leader := qbft.RoundRobinProposer(&qbft.State{
-		Share: &types.Share{
-			Committee: committee,
-		},
-		Height: qbft.Height(dutySlot),
-	}, qbft.FirstRound)
+func DetermineLeader(dutySlot phase0.Slot, committee []*types.CommitteeMember) types.OperatorID {
+	share := &types.Operator{
+		Committee: committee,
+	}
+	leader := qbft.RoundRobinProposer(&qbft.State{Height: qbft.Height(dutySlot), Share: share}, qbft.FirstRound)
 
 	return leader
 }
 
-func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committee []*types.Operator, leader types.OperatorID, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID) error {
+func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committee []*types.CommitteeMember, leader types.OperatorID, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID) error {
 	for _, operator := range committee {
 		target := fmt.Sprintf("ssv-node-%d", operator.OperatorID)
 		if operator.OperatorID == corruptedOperator {
