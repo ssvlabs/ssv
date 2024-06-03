@@ -16,6 +16,6 @@ var HoleskyStage = NetworkConfig{
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
 	RegistryContractAddr: "0x0d33801785340072C452b994496B19f196b7eE15",
 	Bootnodes: []string{
-		"enr:-Ja4QMFMjrYCXeunSw96P_hxKOxGddsTzFwxJj8hjzPQC73BN9ng_IE5DQvbUYitXSU_6m8mYsaM15gKhtcm5chUFWCGAY_ZreHKgmlkgnY0gmlwhDQiKqmJc2VjcDI1NmsxoQJ2M-diOqYDd5-7jdnmAz9LP0MLsH6g_r4PCTMPfCuXMINzc3YBg3RjcIITiYN1ZHCCD6E",
+		"enr:-Ja4QDWBZRHe_NL2iSUz4YrqWMjFdKezbK5t-Qcd3D0owyB2CL7sz1cU6-2N6ohhpYdqNFggGXTHIUDAO_HjA6_p2wqGAY_dYl_DgmlkgnY0gmlwhDQrLYqJc2VjcDI1NmsxoQKnAiuSlgSR8asjCH0aYoVKM8uPbi4noFuFHZHaAHqknYNzc3YBg3RjcIITiYN1ZHCCD6E",
 	},
 }
