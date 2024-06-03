@@ -38,12 +38,13 @@ func (dvs *DiscV5Service) badNodeFilter(logger *zap.Logger) func(node *enode.Nod
 // badNodeFilter checks if the node was pruned or have a bad score
 func (dvs *DiscV5Service) ssvNodeFilter(logger *zap.Logger) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
-		var isSSV *bool
+		var isSSV = new(bool)
 		if err := node.Record().Load(enr.WithEntry("ssv", isSSV)); err != nil {
-			logger.Warn("could not read ssv entry from node record", zap.Error(err))
+			//TODO: metric
+			//logger.Warn("could not read ssv entry from node record", zap.String("enr", node.String()), zap.Error(err))
 			return false
 		}
-		return isSSV != nil && *isSSV
+		return *isSSV
 	}
 }
 
