@@ -222,6 +222,9 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	r.metrics.EndPostConsensus()
 
 	consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return errors.Wrap(err, "could not create consensus data")
+	}
 
 	// get contributions
 	contributions, err := consensusData.GetSyncCommitteeContributions()
