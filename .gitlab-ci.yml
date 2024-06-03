@@ -100,7 +100,7 @@ Deploy exporter to hetzner stage:
     - kubectl config get-contexts
     - .k8/hetzner-stage/scripts/deploy-holesky-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
-    - stage
+    - alan/no-fork
 
 # +---------------+
 # |     Prod      |
