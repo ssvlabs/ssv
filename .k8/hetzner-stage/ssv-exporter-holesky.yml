@@ -119,7 +119,7 @@ spec:
             - name: ENABLE_PROFILE
               value: "true"
             - name: USE_NEW_EXPORTER_API
-              value: "true"
+              value: "false"
             - name: UDP_PORT
               value: "12073"
             - name: TCP_PORT
