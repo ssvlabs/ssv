@@ -38,7 +38,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
-	github.com/ssvlabs/ssv-spec v0.3.10-0.20240519064657-54fad5befec4
+	github.com/ssvlabs/ssv-spec v0.3.10-0.20240604104112-321c28c134e7
 	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240502072846-bba633c4ed61
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
