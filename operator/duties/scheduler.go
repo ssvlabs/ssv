@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -74,6 +75,11 @@ type ValidatorProvider interface {
 	Validator(pubKey []byte) *types.SSVShare
 }
 
+// ValidatorController represents the component that controls validators via the scheduler
+type ValidatorController interface {
+	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
+}
+
 type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.BeaconDuty)
 type ExecuteCommitteeDutyFunc func(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 
@@ -83,6 +89,7 @@ type SchedulerOptions struct {
 	ExecutionClient      ExecutionClient
 	Network              networkconfig.NetworkConfig
 	ValidatorProvider    ValidatorProvider
+	ValidatorController  ValidatorController
 	ExecuteDuty          ExecuteDutyFunc
 	ExecuteCommitteeDuty ExecuteCommitteeDutyFunc
 	IndicesChg           chan struct{}
@@ -95,7 +102,8 @@ type Scheduler struct {
 	beaconNode           BeaconNode
 	executionClient      ExecutionClient
 	network              networkconfig.NetworkConfig
-	ValidatorProvider    ValidatorProvider
+	validatorProvider    ValidatorProvider
+	validatorController  ValidatorController
 	slotTickerProvider   slotticker.Provider
 	executeDuty          ExecuteDutyFunc
 	executeCommitteeDuty ExecuteCommitteeDutyFunc
@@ -128,7 +136,8 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		slotTickerProvider:   opts.SlotTickerProvider,
 		executeDuty:          opts.ExecuteDuty,
 		executeCommitteeDuty: opts.ExecuteCommitteeDuty,
-		ValidatorProvider:    opts.ValidatorProvider,
+		validatorProvider:    opts.ValidatorProvider,
+		validatorController:  opts.ValidatorController,
 		indicesChg:           opts.IndicesChg,
 		blockPropagateDelay:  blockPropagationDelay,
 
@@ -184,7 +193,8 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.beaconNode,
 			s.executionClient,
 			s.network,
-			s.ValidatorProvider,
+			s.validatorProvider,
+			s.validatorController,
 			s.ExecuteDuties,
 			s.ExecuteCommitteeDuties,
 			s.slotTickerProvider,
@@ -379,11 +389,11 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Beacon
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty) {
+func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
 	for committeeID, duty := range duties {
 		committeeID := committeeID
 		duty := duty
-		//logger := s.loggerWithDutyContext(logger, duty)
+		logger := s.loggerWithCommitteeDutyContext(logger, committeeID, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
@@ -408,6 +418,19 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Be
 		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
+// loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
+func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) *zap.Logger {
+	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+	return logger.
+		With(fields.CommitteeID(committeeID)).
+		With(fields.Role(duty.RunnerRole())).
+		With(fields.Duties(dutyEpoch, duty.BeaconDuties)).
+		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
+		With(fields.Slot(duty.Slot)).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+}
+
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
 	// Wait for the event or signal
@@ -421,10 +444,7 @@ func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
 func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {
 	indices := make([]phase0.ValidatorIndex, len(shares))
 	for i, share := range shares {
-		if share.BeaconMetadata == nil || share.BeaconMetadata.Index == 0 {
-			continue
-		}
-		indices[i] = share.BeaconMetadata.Index
+		indices[i] = share.ValidatorIndex
 	}
 	return indices
 }
