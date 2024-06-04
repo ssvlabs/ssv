@@ -126,7 +126,6 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	//		validatorsRunningSlashing = append(validatorsRunningSlashing, valData)
 	//	}
 	//}
-
 	networkCfg := networkconfig.HoleskyE2E
 
 	const startEpochDelay = 1 // TODO: change to 2 after debugging is done
