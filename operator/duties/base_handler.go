@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
@@ -74,4 +75,8 @@ func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
 
 func (h *baseHandler) HandleInitialDuties(context.Context) {
 	// Do nothing
+}
+
+func (h *baseHandler) AlanFork() bool {
+	return true // TODO: fix
 }
