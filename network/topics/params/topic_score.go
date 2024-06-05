@@ -173,7 +173,6 @@ func NewOpts(activeValidators, subnets int) Options {
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
 func NewSubnetTopicOpts(activeValidators, subnets int) Options {
-
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()
@@ -184,6 +183,7 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 	// Set expected message rate based on stage metrics
 	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
 	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
+	//opts.Topic.ExpectedMsgRate = calcMsgRateForTopic(committeeSizes, validatorCounts) //TODO: pass those values
 
 	return opts
 }
