@@ -71,3 +71,32 @@ func scoreHeight(relativeHeight int) int {
 	}
 	return 0
 }
+
+func NewCommitteeQueuePrioritizer(state *State) MessagePrioritizer {
+	return &committeePrioritizer{state: state}
+}
+
+type committeePrioritizer struct {
+	state *State
+}
+
+func (p *committeePrioritizer) Prior(a, b *DecodedSSVMessage) bool {
+	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
+	if msgScoreA != msgScoreB {
+		return msgScoreA > msgScoreB
+	}
+
+	relativeHeightA, relativeHeightB := compareHeightOrSlot(p.state, a), compareHeightOrSlot(p.state, b)
+	if relativeHeightA != relativeHeightB {
+		return scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)
+	}
+
+	scoreA := scoreCommitteeQueueMessageSubtype(p.state, a, relativeHeightA)
+	scoreB := scoreCommitteeQueueMessageSubtype(p.state, b, relativeHeightB)
+
+	if scoreA != scoreB {
+		return scoreA > scoreB
+	}
+
+	return true
+}
