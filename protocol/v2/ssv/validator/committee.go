@@ -152,22 +152,14 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) 
 }
 
 func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) []*spectypes.BeaconDuty {
-	indices := make([]int, len(indicesToRemove))
-	copy(indices, indicesToRemove)
+	sort.Sort(sort.Reverse(sort.IntSlice(indicesToRemove)))
 
-	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
-
-	// take only unique array item indices
-	uniqueIndices := make(map[int]bool)
 	for _, index := range indicesToRemove {
-		uniqueIndices[index] = true
-	}
-
-	for index := range uniqueIndices {
-		// Ignore incorrect indices
-		if index >= 0 && index < len(s) {
-			s = append(s[:index], s[index+1:]...)
+		// Panic on incorrect indices
+		if index < 0 || index >= len(s) {
+			panic(fmt.Sprintf("index %d out of range of %v", index, indicesToRemove))
 		}
+		s = append(s[:index], s[index+1:]...)
 	}
 
 	return s
