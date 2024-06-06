@@ -5,6 +5,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
@@ -56,11 +57,6 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetDutyExecutorID()), fields.Role(msg.MsgID.GetRoleType()))
 
-	if err := validateMessage(ncv.Share.Share, msg); err != nil {
-		logger.Debug("❌ got invalid message", zap.Error(err))
-		return
-	}
-
 	if msg.GetType() != spectypes.SSVPartialSignatureMsgType {
 		return
 	}
@@ -69,6 +65,16 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if err := spsm.Decode(msg.SSVMessage.GetData()); err != nil {
 		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
 		return
+	}
+	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		if err := spsm.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
+			logger.Debug("❌ got invalid message", zap.Error(err))
+		}
+	} else {
+		if err := validateMessage(ncv.Share.Share, msg); err != nil {
+			logger.Debug("❌ got invalid message", zap.Error(err))
+			return
+		}
 	}
 
 	if spsm.Type != spectypes.PostConsensusPartialSig {
@@ -89,15 +95,17 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 
 	for _, quorum := range quorums {
-		logger.Info("hhhhhhhheeeeeeerrrrrrreeeeeeeeeeeee2")
-		logger.Info(msg.GetID().GetRoleType().String())
-		if err1 := ncv.Storage.Get(msg.GetID().GetRoleType()); err1 != nil {
-			logger.Info("11111111111111111111111111")
-		}
-		logger.Info("hhhhhhhheeeeeeerrrrrrreeeeeeeeeeeee2")
-		if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Slot, quorum); err != nil {
-			logger.Error("❌ could not save participants", zap.Error(err))
-			return
+		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
+			alanSupportMsgID := exporter_message.NewMsgID(exporter_message.DomainType(ncv.Share.DomainType), ncv.Share.ValidatorPubKey[:], exporter_message.RoleAttester)
+			if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveAlanParticipants(alanSupportMsgID, spsm.Slot, quorum); err != nil {
+				logger.Error("❌ could not save participants", zap.Error(err))
+				return
+			}
+		} else {
+			if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Slot, quorum); err != nil {
+				logger.Error("❌ could not save participants", zap.Error(err))
+				return
+			}
 		}
 
 		if ncv.newDecidedHandler != nil {

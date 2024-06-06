@@ -132,3 +132,7 @@ spec:
           configMap:
             name: ssv-node-11-cm
       hostNetwork: true
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/role
+        operator: Exists 

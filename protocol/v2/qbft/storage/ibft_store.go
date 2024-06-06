@@ -3,6 +3,7 @@ package qbftstorage
 import (
 	"encoding/json"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
@@ -54,6 +55,9 @@ type InstanceStore interface {
 
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(logger *zap.Logger, msgID []byte) error
+
+	// SaveAlanParticipants save participants in quorum.
+	SaveAlanParticipants(identifier exporter_message.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error
 
 	// SaveParticipants save participants in quorum.
 	SaveParticipants(identifier spectypes.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error

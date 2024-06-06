@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -154,6 +155,13 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 	return nil
 }
 
+func (i *ibftStorage) SaveAlanParticipants(identifier exporter_message.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
+	if err := i.save(encodeOperators(operators), participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
+		return fmt.Errorf("could not save participants: %w", err)
+	}
+
+	return nil
+}
 func (i *ibftStorage) SaveParticipants(identifier spectypes.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
 	if err := i.save(encodeOperators(operators), participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
 		return fmt.Errorf("could not save participants: %w", err)

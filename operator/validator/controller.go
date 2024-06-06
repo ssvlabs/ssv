@@ -20,9 +20,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -82,6 +81,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
+	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
 	UseNewExporterAPI          bool `yaml:"UseNewExporterAPI" env:"USE_NEW_EXPORTER_API" env-description:"Use new exporter API which is simpler and has no workarounds"`
 	ValidatorsMap              *validators.ValidatorsMap
@@ -165,6 +165,7 @@ type controller struct {
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
+	validatorStore          registrystorage.ValidatorStore
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validator.Validator) (bool, error)
 	committeeValidatorSetup chan struct{}
@@ -244,6 +245,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		operatorsStorage:  options.RegistryStorage,
 		recipientsStorage: options.RegistryStorage,
 		ibftStorageMap:    options.StorageMap,
+		validatorStore:    options.ValidatorStore,
 		context:           options.Context,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
@@ -379,9 +381,17 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 		if item != nil {
 			ncv = item.Value()
 		} else {
+			if msg.SignedSSVMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType {
+				return nil
+			}
+			pSigMessages := &spectypes.PartialSignatureMessages{}
+			if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+				return err
+			}
+			validatorByIndex := c.validatorStore.ValidatorByIndex(pSigMessages.Messages[0].ValidatorIndex)
 			// Create a new nonCommitteeValidator and cache it.
 			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
-			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
+			share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
 			if share == nil {
 				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
 			}
