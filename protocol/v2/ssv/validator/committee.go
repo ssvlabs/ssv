@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -150,10 +151,16 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) 
 	}
 }
 
-func removeIndex(s []*spectypes.BeaconDuty, index int) []*spectypes.BeaconDuty {
-	ret := make([]*spectypes.BeaconDuty, 0)
-	ret = append(ret, s[:index]...)
-	return append(ret, s[index+1:]...)
+// removeIndices removes multiple elements from a slice based on the provided indices.
+func removeIndices(s []*spectypes.BeaconDuty, indices []int) []*spectypes.BeaconDuty {
+	// Sort indices in reverse order to avoid shifting issues
+	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
+
+	for _, index := range indices {
+		s = append(s[:index], s[index+1:]...)
+	}
+
+	return s
 }
 
 // FilterCommitteeDuty filters the committee duties by the slots given per validator.
@@ -165,6 +172,7 @@ func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slot
 	map[spectypes.ValidatorPK]phase0.Slot,
 ) {
 	validatorsToStop := make(map[phase0.Slot]spectypes.ValidatorPK)
+	var indicesToRemove []int
 
 	for i, beaconDuty := range duty.BeaconDuties {
 		validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
@@ -176,10 +184,13 @@ func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slot
 			} else { // else don't run duty with old slot
 				// remove the duty
 				logger.Debug("removing beacon duty from committeeduty", zap.Uint64("slot", uint64(beaconDuty.Slot)), zap.String("validator", hex.EncodeToString(beaconDuty.PubKey[:])))
-				duty.BeaconDuties = removeIndex(duty.BeaconDuties, i)
+				indicesToRemove = append(indicesToRemove, i)
 			}
 		}
 	}
+
+	duty.BeaconDuties = removeIndices(duty.BeaconDuties, indicesToRemove)
+
 	return duty, validatorsToStop, slotMap
 }
 
