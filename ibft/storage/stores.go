@@ -3,7 +3,6 @@ package storage
 import (
 	"github.com/cornelk/hashmap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
 
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -11,8 +10,7 @@ import (
 
 // QBFTStores wraps sync map with cast functions to qbft store
 type QBFTStores struct {
-	m  *hashmap.Map[spectypes.RunnerRole, qbftstorage.QBFTStore]
-	m2 *hashmap.Map[exporter_message.RunnerRole, qbftstorage.QBFTStore]
+	m *hashmap.Map[spectypes.RunnerRole, qbftstorage.QBFTStore]
 }
 
 func NewStores() *QBFTStores {
@@ -32,14 +30,6 @@ func NewStoresFromRoles(db basedb.Database, roles ...spectypes.RunnerRole) *QBFT
 // Get store from sync map by role type
 func (qs *QBFTStores) Get(role spectypes.RunnerRole) qbftstorage.QBFTStore {
 	s, ok := qs.m.Get(role)
-	if !ok {
-		return nil
-	}
-	return s
-}
-
-func (qs *QBFTStores) GetAlan(role exporter_message.RunnerRole) qbftstorage.QBFTStore {
-	s, ok := qs.m2.Get(role)
 	if !ok {
 		return nil
 	}

@@ -97,7 +97,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	for _, quorum := range quorums {
 		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 			alanSupportMsgID := exporter_message.NewMsgID(exporter_message.DomainType(ncv.Share.DomainType), ncv.Share.ValidatorPubKey[:], exporter_message.RoleAttester)
-			if err := ncv.Storage.GetAlan(exporter_message.RoleAttester).SaveAlanParticipants(alanSupportMsgID, spsm.Slot, quorum); err != nil {
+			if err := ncv.Storage.Get(msg.MsgID.GetRoleType()).SaveAlanParticipants(alanSupportMsgID, spsm.Slot, quorum); err != nil {
 				logger.Error("❌ could not save participants", zap.Error(err))
 				return
 			}
