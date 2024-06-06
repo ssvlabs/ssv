@@ -396,15 +396,15 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			if share == nil {
 				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
 			}
-
 			opts := c.validatorOptions
 			opts.SSVShare = share
 			operator, err := c.operatorFromShare(opts.SSVShare)
 			if err != nil {
 				return err
 			}
+
 			opts.Operator = operator
-			MsgID := exporter_message.NewMsgID(exporter_message.DomainType(msg.GetID().GetDomain()), ncv.Share.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
+			MsgID := exporter_message.NewMsgID(exporter_message.DomainType(msg.GetID().GetDomain()), validatorByIndex.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
 			ncv = &nonCommitteeValidator{
 				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
 			}
