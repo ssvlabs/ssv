@@ -3,12 +3,12 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 
 	storage2 "github.com/ssvlabs/ssv/registry/storage"
 
 	"github.com/ssvlabs/ssv/network"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -75,13 +75,13 @@ type operatorNode struct {
 func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
 	storageMap := qbftstorage.NewStores()
 
-	roles := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
-		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit,
+	roles := []exporter_message.RunnerRole{
+		exporter_message.RoleCommittee,
+		exporter_message.RoleAggregator,
+		exporter_message.RoleProposer,
+		exporter_message.RoleSyncCommitteeContribution,
+		exporter_message.RoleValidatorRegistration,
+		exporter_message.RoleVoluntaryExit,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"log"
 	"math/big"
 	"net/http"
@@ -276,13 +277,14 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.RunnerRole{
-			spectypes.RoleCommittee,
-			spectypes.RoleProposer,
-			spectypes.RoleAggregator,
-			spectypes.RoleSyncCommitteeContribution,
-			spectypes.RoleValidatorRegistration,
-			spectypes.RoleVoluntaryExit,
+		storageRoles := []exporter_message.RunnerRole{
+			exporter_message.RoleCommittee,
+			exporter_message.RoleAttester,
+			exporter_message.RoleProposer,
+			exporter_message.RoleAggregator,
+			exporter_message.RoleSyncCommitteeContribution,
+			exporter_message.RoleValidatorRegistration,
+			exporter_message.RoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()

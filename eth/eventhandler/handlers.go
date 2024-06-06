@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -380,8 +381,8 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return emptyPK, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role spectypes.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
+	removeDecidedMessages := func(role exporter_message.RunnerRole, store qbftstorage.QBFTStore) error {
+		messageID := exporter_message.NewMsgID(exporter_message.DomainType(eh.networkConfig.Domain), share.ValidatorPubKey[:], role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)

@@ -27,7 +27,7 @@ type NonCommitteeValidator struct {
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
 }
 
-func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
+func NewNonCommitteeValidator(logger *zap.Logger, identifier exporter_message.MessageID, opts Options) *NonCommitteeValidator {
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:                types.GetDefaultDomain(),
@@ -95,20 +95,11 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 
 	for _, quorum := range quorums {
-		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-			alanSupportMsgID := exporter_message.NewMsgID(exporter_message.DomainType(ncv.Share.DomainType), ncv.Share.ValidatorPubKey[:], exporter_message.RoleAttester)
-			if err := ncv.Storage.Get(msg.MsgID.GetRoleType()).SaveAlanParticipants(alanSupportMsgID, spsm.Slot, quorum); err != nil {
-				logger.Error("❌ could not save participants", zap.Error(err))
-				return
-			}
-		} else {
-			println("2222222222222222222222222222 other 2222222222222222222222222222")
-			println(msg.GetID().GetRoleType().String())
-			println("2222222222222222222222222222 other 2222222222222222222222222222")
-			if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Slot, quorum); err != nil {
-				logger.Error("❌ could not save participants", zap.Error(err))
-				return
-			}
+		role := getRole(msg.MsgID)
+		MsgID := exporter_message.NewMsgID(exporter_message.DomainType(ncv.Share.DomainType), ncv.Share.ValidatorPubKey[:], role)
+		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, spsm.Slot, quorum); err != nil {
+			logger.Error("❌ could not save participants", zap.Error(err))
+			return
 		}
 
 		if ncv.newDecidedHandler != nil {
@@ -119,6 +110,13 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			})
 		}
 	}
+}
+
+func getRole(msgID spectypes.MessageID) exporter_message.RunnerRole {
+	if msgID.GetRoleType() == spectypes.RoleCommittee {
+		return exporter_message.RoleAttester
+	}
+	return exporter_message.RunnerRole(msgID.GetRoleType())
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators

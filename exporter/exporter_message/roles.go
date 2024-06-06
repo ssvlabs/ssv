@@ -3,14 +3,14 @@ package exporter_message
 type RunnerRole int32
 
 const (
-	RoleCommittee RunnerRole = iota
+	RoleAttester RunnerRole = iota
 	RoleAggregator
 	RoleProposer
 	RoleSyncCommitteeContribution
 
 	RoleValidatorRegistration
 	RoleVoluntaryExit
-	RoleAttester
+	RoleCommittee
 
 	RoleUnknown = -1
 )

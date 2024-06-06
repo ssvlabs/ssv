@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"sync"
 	"time"
 
@@ -403,9 +404,9 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 				return err
 			}
 			opts.Operator = operator
-
+			MsgID := exporter_message.NewMsgID(exporter_message.DomainType(msg.GetID().GetDomain()), ncv.Share.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
 			ncv = &nonCommitteeValidator{
-				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, msg.GetID(), opts),
+				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
 			}
 
 			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
@@ -1175,7 +1176,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(role),
+			Storage:               options.Storage.Get(exporter_message.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.BeaconNetwork, role, nil),
 			SignatureVerification: true,
@@ -1226,7 +1227,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(role),
+			Storage:               options.Storage.Get(exporter_message.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.BeaconNetwork, role, nil),
 			SignatureVerification: true,

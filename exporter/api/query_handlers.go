@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -20,7 +21,6 @@ const (
 
 // HandleDecidedQuery handles TypeDecided queries.
 func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage) {
-	println("HandleDecidedQueryHandleDecidedQueryHandleDecidedQueryHandleDecidedQueryHandleDecidedQuery")
 	logger.Debug("handles decided request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -47,16 +47,16 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	runnerRole := spectypes.RunnerRole(beaconRole)
+	runnerRole := exporter_message.RunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(runnerRole))
+		logger.Warn("role storage doesn't exist", fields.Role(spectypes.RunnerRole(runnerRole)))
 		res.Data = []string{"internal error - role storage doesn't exist"}
 		nm.Msg = res
 		return
 	}
 
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, spectypes.RunnerRole(runnerRole))
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
@@ -130,16 +130,16 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		nm.Msg = res
 		return
 	}
-	runnerRole := spectypes.RunnerRole(beaconRole)
+	runnerRole := exporter_message.RunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(runnerRole))
+		logger.Warn("role storage doesn't exist", fields.Role(spectypes.RunnerRole(runnerRole)))
 		res.Data = []string{"internal error - role storage doesn't exist"}
 		nm.Msg = res
 		return
 	}
 
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, spectypes.RunnerRole(runnerRole))
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
