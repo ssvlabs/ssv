@@ -20,6 +20,8 @@ func (r RunnerRole) String() string {
 	switch r {
 	case RoleCommittee:
 		return "COMMITTEE_RUNNER"
+	case RoleAttester:
+		return "ATTESTER_RUNNER"
 	case RoleAggregator:
 		return "AGGREGATOR_RUNNER"
 	case RoleProposer:
