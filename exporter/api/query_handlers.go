@@ -20,6 +20,7 @@ const (
 
 // HandleDecidedQuery handles TypeDecided queries.
 func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage) {
+	println("HandleDecidedQueryHandleDecidedQueryHandleDecidedQueryHandleDecidedQueryHandleDecidedQuery")
 	logger.Debug("handles decided request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
