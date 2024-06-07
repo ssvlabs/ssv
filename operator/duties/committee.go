@@ -139,7 +139,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 	vsmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID, 0)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
-		vsmap[v.ValidatorIndex] = v.CommitteeID()
+		vsmap[v.BeaconMetadata.Index] = v.CommitteeID()
 	}
 
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
