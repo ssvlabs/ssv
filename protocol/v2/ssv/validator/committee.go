@@ -189,7 +189,7 @@ func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slot
 	error,
 ) {
 	validatorsToStop := make(map[phase0.Slot]spectypes.ValidatorPK)
-	indiciesToRemove := make([]int, 0)
+	indicesToRemove := make([]int, 0)
 	for i, beaconDuty := range duty.BeaconDuties {
 		validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
 		slot, exists := slotMap[validatorPK]
@@ -200,12 +200,12 @@ func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slot
 			} else { // else don't run duty with old slot
 				// remove the duty
 				logger.Debug("removing beacon duty from committeeduty", zap.Uint64("slot", uint64(beaconDuty.Slot)), zap.String("validator", hex.EncodeToString(beaconDuty.PubKey[:])))
-				indiciesToRemove = append(indiciesToRemove, i)
+				indicesToRemove = append(indicesToRemove, i)
 			}
 		}
 	}
 
-	filteredDuties, err := removeIndices(duty.BeaconDuties, indiciesToRemove)
+	filteredDuties, err := removeIndices(duty.BeaconDuties, indicesToRemove)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "cannot remove indices")
 	}
