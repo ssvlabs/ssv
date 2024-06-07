@@ -92,7 +92,12 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	//Filter old duties based on highest attesting slot
-	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(logger, duty, c.HighestAttestingSlotMap)
+
+	duty, validatorToStopMap, highestAttestingSlotMap, err := FilterCommitteeDuty(logger, duty, c.HighestAttestingSlotMap)
+	if err != nil {
+		return errors.Wrap(err, "cannot filter committee duty")
+	}
+	c.HighestAttestingSlotMap = highestAttestingSlotMap
 	// Stop validators with old duties
 	c.stopDuties(logger, validatorToStopMap)
 	c.updateAttestingSlotMap(duty)
@@ -151,18 +156,30 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) 
 	}
 }
 
-func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) []*spectypes.BeaconDuty {
+func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) ([]*spectypes.BeaconDuty, error) {
 	sort.Sort(sort.Reverse(sort.IntSlice(indicesToRemove)))
+
+	result := make([]*spectypes.BeaconDuty, len(s))
+	copy(result, s)
+
+	uniqueIndices := make(map[int]struct{})
+
+	for _, id := range indicesToRemove {
+		if _, exists := uniqueIndices[id]; exists {
+			return result, errors.New(fmt.Sprintf("duplicate index %d in %v", id, indicesToRemove))
+		}
+		uniqueIndices[id] = struct{}{}
+	}
 
 	for _, index := range indicesToRemove {
 		// Panic on incorrect indices
-		if index < 0 || index >= len(s) {
-			panic(fmt.Sprintf("index %d out of range of %v", index, indicesToRemove))
+		if index < 0 || index >= len(result) {
+			return result, errors.New(fmt.Sprintf("index %d out of range of %v", index, indicesToRemove))
 		}
-		s = append(s[:index], s[index+1:]...)
+		result = append(result[:index], result[index+1:]...)
 	}
 
-	return s
+	return result, nil
 }
 
 // FilterCommitteeDuty filters the committee duties by the slots given per validator.
@@ -172,6 +189,7 @@ func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slot
 	*spectypes.CommitteeDuty,
 	map[phase0.Slot]spectypes.ValidatorPK,
 	map[spectypes.ValidatorPK]phase0.Slot,
+	error,
 ) {
 	validatorsToStop := make(map[phase0.Slot]spectypes.ValidatorPK)
 	indiciesToRemove := make([]int, 0)
@@ -190,8 +208,12 @@ func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slot
 		}
 	}
 
-	duty.BeaconDuties = removeIndices(duty.BeaconDuties, indiciesToRemove)
-	return duty, validatorsToStop, slotMap
+	filteredDuties, err := removeIndices(duty.BeaconDuties, indiciesToRemove)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "cannot remove indices")
+	}
+	duty.BeaconDuties = filteredDuties
+	return duty, validatorsToStop, slotMap, err
 }
 
 // ProcessMessage processes Network Message of all types
