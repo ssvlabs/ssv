@@ -57,7 +57,7 @@ func TestRemoveIndices(t *testing.T) {
 				indicesToRemove: []int{0, 3, 3, 3},
 			},
 			output:            []int{},
-			expectedErrorText: "duplicate index 3 in [3 3 3 0]",
+			expectedErrorText: "duplicate index 3 in [0 3 3 3]",
 		},
 		{
 			input: TestInputType{
@@ -67,7 +67,7 @@ func TestRemoveIndices(t *testing.T) {
 				indicesToRemove: []int{0, 23, 42},
 			},
 			output:            []int{},
-			expectedErrorText: "index 42 out of range of [42 23 0]",
+			expectedErrorText: "index 23 out of range of slice with length 4",
 		},
 	}
 

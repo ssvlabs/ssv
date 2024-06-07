@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -157,26 +156,24 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) 
 }
 
 func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) ([]*spectypes.BeaconDuty, error) {
-	sort.Sort(sort.Reverse(sort.IntSlice(indicesToRemove)))
-
-	result := make([]*spectypes.BeaconDuty, len(s))
-	copy(result, s)
-
-	uniqueIndices := make(map[int]struct{})
-
+	// Create a set to check for duplicate and invalid indices
+	uniqueIndices := make(map[int]struct{}, len(indicesToRemove))
 	for _, id := range indicesToRemove {
+		if id < 0 || id >= len(s) {
+			return s, fmt.Errorf("index %d out of range of slice with length %d", id, len(s))
+		}
 		if _, exists := uniqueIndices[id]; exists {
-			return result, errors.New(fmt.Sprintf("duplicate index %d in %v", id, indicesToRemove))
+			return s, fmt.Errorf("duplicate index %d in %v", id, indicesToRemove)
 		}
 		uniqueIndices[id] = struct{}{}
 	}
 
-	for _, index := range indicesToRemove {
-		// Panic on incorrect indices
-		if index < 0 || index >= len(result) {
-			return result, errors.New(fmt.Sprintf("index %d out of range of %v", index, indicesToRemove))
+	// Create a result slice excluding marked elements
+	result := make([]*spectypes.BeaconDuty, 0, len(s)-len(indicesToRemove))
+	for i, item := range s {
+		if _, found := uniqueIndices[i]; !found {
+			result = append(result, item)
 		}
-		result = append(result[:index], result[index+1:]...)
 	}
 
 	return result, nil
