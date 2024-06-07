@@ -150,7 +150,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 				if !ok {
 					share := h.validatorProvider.Validator(d.PubKey[:])
 					if share != nil && share.BeaconMetadata != nil {
-						h.logger.Debug("XXXX validator", zap.Uint64("validator_index", uint64(d.ValidatorIndex)), zap.Uint64("activation epoch", uint64(share.BeaconMetadata.ActivationEpoch)), zap.Uint64("current epoch", uint64(epoch)), zap.String("validator status", share.BeaconMetadata.Status.String()), zap.Bool("liquidated", share.Liquidated))
+						h.logger.Debug("XXXX validator", zap.Uint64("validator_index", uint64(d.ValidatorIndex)), zap.Uint64("activation epoch", uint64(share.BeaconMetadata.ActivationEpoch)), zap.Uint64("current epoch", uint64(epoch)), zap.String("validator status", share.BeaconMetadata.Status.String()), zap.Bool("liquidated", share.Liquidated), zap.Bool("is_participating", share.IsParticipating(epoch)))
 					}
 					h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(d.ValidatorIndex)))
 					continue
