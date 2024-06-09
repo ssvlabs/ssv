@@ -27,6 +27,8 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty]) *Attes
 		duties: duties,
 	}
 	h.fetchCurrentEpoch = true
+	// TODO: (Alan) genesis support
+	//h.fetchFirst = true
 	return h
 }
 
@@ -80,7 +82,19 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			if h.indicesChanged {
 				h.duties.ResetEpoch(currentEpoch)
 				h.indicesChanged = false
+				// TODO: (Alan) genesis support
+				//h.processFetching(ctx, currentEpoch, slot)
+				//h.processExecution(currentEpoch, slot)
 			}
+			// TODO: (Alan) genesis support
+			//else {
+			//h.processExecution(currentEpoch, slot)
+			//if h.indicesChanged {
+			//	h.duties.ResetEpoch(currentEpoch)
+			//	h.indicesChanged = false
+			//}
+			//h.processFetching(ctx, currentEpoch, slot)
+			//}
 			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
