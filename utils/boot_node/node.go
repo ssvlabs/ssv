@@ -15,16 +15,16 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
 )
+
+var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // Options contains options to create the node
 type Options struct {
@@ -103,7 +103,8 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
 	cfg := discover.Config{
-		PrivateKey: privKey,
+		PrivateKey:   privKey,
+		V5ProtocolID: &SSVProtocolID,
 	}
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"
@@ -187,8 +188,6 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	fVersion := n.network.ForkVersion()
-
 	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)
 	//	if err != nil {
@@ -198,7 +197,6 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	//		return nil, errors.Errorf("Invalid fork version size expected %d but got %d", 4, len(fVersion))
 	//	}
 	//}
-	genRoot := [32]byte{}
 	// if *genesisValidatorRoot != "" {
 	//	retRoot, err := hex.DecodeString(*genesisValidatorRoot)
 	//	if err != nil {
@@ -210,24 +208,8 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	//	genRoot = bytesutil.ToBytes32(retRoot)
 	//}
 
-	digest, err := goclient.ComputeForkDigest(fVersion, genRoot)
-	if err != nil {
-		return nil, errors.Wrap(err, "Could not compute fork digest")
-	}
-
-	forkID := &ENRForkID{
-		CurrentForkDigest: digest[:],
-		NextForkVersion:   fVersion[:],
-		NextForkEpoch:     goclient.FarFutureEpoch,
-	}
-	forkEntry, err := forkID.MarshalSSZ()
-	if err != nil {
-		return nil, errors.Wrap(err, "Could not marshal fork id")
-	}
-
 	localNode := enode.NewLocalNode(db, privKey)
-	localNode.Set(enr.WithEntry("eth2", forkEntry))
-	localNode.Set(enr.WithEntry("attnets", bitfield.NewBitvector64()))
+	localNode.Set(enr.WithEntry("ssv", true))
 	localNode.SetFallbackIP(external)
 	localNode.SetFallbackUDP(port)
 

@@ -77,7 +77,7 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 	vcmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
-		vcmap[v.ValidatorIndex] = v.CommitteeID()
+		vcmap[v.BeaconMetadata.Index] = v.CommitteeID()
 	}
 	committeeMap := make(committeeDutiesMap)
 
