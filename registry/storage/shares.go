@@ -332,6 +332,8 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metada
 	}
 
 	share.BeaconMetadata = metadata
+	share.Share.ValidatorIndex = metadata.Index
+
 	return s.Save(nil, share)
 }
 
@@ -345,6 +347,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			continue
 		}
 		share.BeaconMetadata = metadata
+		share.Share.ValidatorIndex = metadata.Index
 		shares = append(shares, share)
 	}
 	s.mu.RUnlock()
