@@ -163,7 +163,7 @@ func (i *ibftStorage) SaveParticipants(identifier exporter_message.MessageID, sl
 	return nil
 }
 
-func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (i *ibftStorage) GetParticipantsInRange(identifier exporter_message.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
@@ -186,7 +186,7 @@ func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, fro
 	return participantsRange, nil
 }
 
-func (i *ibftStorage) GetParticipants(identifier spectypes.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+func (i *ibftStorage) GetParticipants(identifier exporter_message.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err

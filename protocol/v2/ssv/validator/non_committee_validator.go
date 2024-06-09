@@ -106,7 +106,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
 				Slot:       spsm.Slot,
 				Signers:    quorum,
-				Identifier: msg.GetID(),
+				Identifier: MsgID,
 			})
 		}
 	}

@@ -56,7 +56,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, spectypes.RunnerRole(runnerRole))
+	msgID := exporter_message.NewMsgID(exporter_message.DomainType(types.GetDefaultDomain()), pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
@@ -139,7 +139,7 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		return
 	}
 
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, spectypes.RunnerRole(runnerRole))
+	msgID := exporter_message.NewMsgID(exporter_message.DomainType(types.GetDefaultDomain()), pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
