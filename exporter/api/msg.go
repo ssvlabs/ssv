@@ -75,17 +75,16 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 			Data: []string{},
 		}
 	}
-
 	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
 	pkv := identifier.GetDutyExecutorID()
-	role := identifier.GetRoleType()
+
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
 			PublicKey: hex.EncodeToString(pkv),
 			From:      uint64(msgs[0].Slot),
 			To:        uint64(msgs[len(msgs)-1].Slot),
-			Role:      role.String(),
+			Role:      msgs[0].Identifier.GetRoleType().String(),
 		},
 		Data: data,
 	}
