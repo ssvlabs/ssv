@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -59,6 +60,36 @@ func (gc *goClient) SubmitAttestation(attestation *phase0.Attestation) error {
 	}
 
 	return gc.client.SubmitAttestations(gc.ctx, []*phase0.Attestation{attestation})
+}
+
+func (gc *goClient) SlashableCheck(attestation *phase0.Attestation) error {
+	signingRoot, err := gc.getSigningRoot(attestation.Data)
+	if err != nil {
+		return errors.Wrap(err, "failed to get signing root")
+	}
+
+	if err := gc.slashableAttestationCheck(gc.ctx, signingRoot); err != nil {
+		return errors.Wrap(err, "failed attestation slashing protection check")
+	}
+
+	return nil
+}
+
+// SubmitAttestations implements Beacon interface
+func (gc *goClient) SubmitAttestations(attestations []*phase0.Attestation) error {
+	toSend := make([]*phase0.Attestation, 0, len(attestations))
+	for _, attestation := range attestations {
+		err := gc.SlashableCheck(attestation)
+		if err != nil {
+			gc.log.Error("skipping attestation due to slashable check failure", zap.Error(err))
+			continue
+		}
+		toSend = append(toSend, attestation)
+	}
+	if len(toSend) == 0 {
+		return fmt.Errorf("all attestations were slashable")
+	}
+	return gc.client.SubmitAttestations(gc.ctx, toSend)
 }
 
 // getSigningRoot returns signing root

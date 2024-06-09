@@ -220,6 +220,51 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 
 }
 
+type validatorAttestation struct {
+	validatorIndex phase0.ValidatorIndex
+	attestation    *phase0.Attestation
+}
+
+type validatorSyncCommitteeMessage struct {
+	validatorIndex phase0.ValidatorIndex
+	syncCommittee  *altair.SyncCommitteeMessage
+}
+
+type validatorAttestations []*validatorAttestation
+type validatorSyncCommitteeMessages []*validatorSyncCommitteeMessage
+
+func (va *validatorAttestations) Indicies() []phase0.ValidatorIndex {
+	indicies := make([]phase0.ValidatorIndex, len(*va))
+	for i, v := range *va {
+		indicies[i] = v.validatorIndex
+	}
+	return indicies
+}
+
+func (va *validatorAttestations) Attestations() []*phase0.Attestation {
+	atts := make([]*phase0.Attestation, len(*va))
+	for i, v := range *va {
+		atts[i] = v.attestation
+	}
+	return atts
+}
+
+func (sc validatorSyncCommitteeMessages) Indicies() []phase0.ValidatorIndex {
+	indicies := make([]phase0.ValidatorIndex, len(sc))
+	for i, v := range sc {
+		indicies[i] = v.validatorIndex
+	}
+	return indicies
+}
+
+func (sc validatorSyncCommitteeMessages) SyncCommitteeMessages() []*altair.SyncCommitteeMessage {
+	scs := make([]*altair.SyncCommitteeMessage, len(sc))
+	for i, v := range sc {
+		scs[i] = v.syncCommittee
+	}
+	return scs
+}
+
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *types.PartialSignatureMessages) error {
 	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
@@ -259,6 +304,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		return errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
 	}
 
+	// TODO: create arrays in parallel
+	attsToSend := validatorAttestations{}
+	scMsgsToSend := validatorSyncCommitteeMessages{}
+
 	for _, root := range roots {
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
 		// TODO: (Alan) revert?
@@ -273,6 +322,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			// TODO error?
 			continue
 		}
+
 		for _, validator := range validators {
 			validator := validator
 			share := cr.BaseRunner.Share[validator]
@@ -311,59 +361,78 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				}
 				vlogger.Debug("submitting attestation",
 					zap.Any("attestation", att),
+					zap.String("beacon_block_root", hex.EncodeToString(att.Data.BeaconBlockRoot[:])),
 					zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
 					zap.String("signing_root", hex.EncodeToString(root[:])),
 					zap.String("signature", hex.EncodeToString(att.Signature[:])),
 				)
 
-				// broadcast
-				// TODO: (Alan) bulk submit instead of goroutine? (at least properly manage goroutines with wg)
-				go func() {
-					start := time.Now()
-					if err := cr.beacon.SubmitAttestation(att); err != nil {
-						vlogger.Error("could not submit to Beacon chain reconstructed attestation",
-							fields.Slot(att.Data.Slot),
-							zap.Error(err),
-						)
+				attsToSend = append(attsToSend, &validatorAttestation{validator, att})
 
-						// TODO: @GalRogozinski
-						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
-						// continue
-						return
-					}
-					vlogger.Info("✅ successfully submitted attestation",
-						zap.String("block_root", hex.EncodeToString(att.Data.BeaconBlockRoot[:])),
-						fields.SubmissionTime(time.Since(start)),
-						fields.Height(cr.BaseRunner.QBFTController.Height),
-						fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
-					)
-				}()
 				// TODO: like AttesterRunner
 			} else if role == types.BNRoleSyncCommittee {
 				syncMsg := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*altair.SyncCommitteeMessage)
 				syncMsg.Signature = specSig
+
+				scMsgsToSend = append(scMsgsToSend, &validatorSyncCommitteeMessage{validator, syncMsg})
+
+				adr, err := syncMsg.HashTreeRoot()
+				if err != nil {
+					return errors.Wrap(err, "failed to hash sync committee msg data")
+				}
+
+				vlogger.Debug("submitting sync committee msg",
+					zap.Any("sync_committee_msg", syncMsg),
+					zap.String("sync_committee_msg_data_root", hex.EncodeToString(adr[:])),
+					zap.String("beacon_block_root", hex.EncodeToString(syncMsg.BeaconBlockRoot[:])),
+					zap.String("signing_root", hex.EncodeToString(root[:])),
+					zap.String("signature", hex.EncodeToString(syncMsg.Signature[:])),
+				)
+
 				// Broadcast
-				// TODO: (Alan) bulk submit instead of goroutine?
-				go func() {
-					start := time.Now()
-					if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
-						vlogger.Error("could not submit to Beacon chain reconstructed signed sync committee",
-							fields.Slot(syncMsg.Slot),
-							zap.Error(err),
-						)
-						// TODO: @GalRogozinski
-						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
-						// continue
-						return
-					}
-					vlogger.Debug("📢 submitted sync committee message",
-						fields.SubmissionTime(time.Since(start)),
-						fields.Slot(syncMsg.Slot),
-					)
-				}()
 			}
 		}
 	}
+
+	// broadcast
+	// TODO: (Alan) bulk submit info, logs all indices even if they failed to submit because of slashing protection
+	attLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("attestations", len(attsToSend)))
+	attLogger.With(zap.Any("validator_indices", attsToSend.Indicies()))
+
+	start := time.Now()
+	if err := cr.beacon.SubmitAttestations(attsToSend.Attestations()); err != nil {
+		attLogger.Error("could not submit to Beacon chain reconstructed attestation",
+			zap.Error(err),
+		)
+
+		// TODO: @GalRogozinski
+		// return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+	} else {
+		// TODO: (Alan) think about logs, should we log all pubkeys?
+		attLogger.Info("✅ successfully submitted attestations",
+			//zap.String("block_root", hex.EncodeToString(att.Data.BeaconBlockRoot[:])),
+			fields.SubmissionTime(time.Since(start)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+		)
+	}
+
+	scLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("sync_committees", len(scMsgsToSend)))
+	scLogger.With(zap.Any("validator_indices", scMsgsToSend.Indicies()))
+
+	start = time.Now()
+	if err := cr.beacon.SubmitSyncMessages(scMsgsToSend.SyncCommitteeMessages()); err != nil {
+		scLogger.Error("could not submit to Beacon chain reconstructed sync committee message",
+			zap.Error(err),
+		)
+	} else {
+		scLogger.Info("📢 submitted sync committee messages",
+			fields.SubmissionTime(time.Since(start)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+		)
+	}
+
 	cr.BaseRunner.State.Finished = true
 	return nil
 }

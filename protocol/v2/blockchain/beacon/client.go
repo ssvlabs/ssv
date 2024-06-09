@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -65,13 +66,29 @@ type TempSpecProposerCalls interface {
 	SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error
 }
 
+// AttesterCalls interface has all attester duty specific calls
+type TempSpecAttesterCalls interface {
+	// GetAttestationData returns attestation data by the given slot and committee index
+	GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error)
+	// SubmitAttestation submit the attestation to the node
+	SubmitAttestations(attestations []*phase0.Attestation) error
+}
+
+// SyncCommitteeCalls interface has all sync committee duty specific calls
+type TempSpecSyncCommitteeCalls interface {
+	// GetSyncMessageBlockRoot returns beacon block root for sync committee
+	GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec.DataVersion, error)
+	// SubmitSyncMessage submits a signed sync committee msg
+	SubmitSyncMessages(msg []*altair.SyncCommitteeMessage) error
+}
+
 type TempSpecBeaconNode interface {
 	// GetBeaconNetwork returns the beacon network the node is on
 	GetBeaconNetwork() spectypes.BeaconNetwork
-	specssv.AttesterCalls
+	TempSpecAttesterCalls
 	TempSpecProposerCalls
 	specssv.AggregatorCalls
-	specssv.SyncCommitteeCalls
+	TempSpecSyncCommitteeCalls
 	specssv.SyncCommitteeContributionCalls
 	specssv.ValidatorRegistrationCalls
 	specssv.VoluntaryExitCalls
