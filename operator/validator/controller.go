@@ -407,7 +407,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			}
 
 			opts.Operator = operator
-			MsgID := exporter_message.NewMsgID(exporter_message.DomainType(msg.GetID().GetDomain()), validatorByIndex.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
+			MsgID := exporter_message.NewMsgID(spectypes.DomainType(msg.GetID().GetDomain()), validatorByIndex.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
 			ncv = &nonCommitteeValidator{
 				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
 			}

@@ -77,6 +77,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 
 	roles := []exporter_message.RunnerRole{
 		exporter_message.RoleCommittee,
+		exporter_message.RoleAttester,
 		exporter_message.RoleAggregator,
 		exporter_message.RoleProposer,
 		exporter_message.RoleSyncCommitteeContribution,

@@ -3,6 +3,7 @@ package exporter_message
 import (
 	"encoding/binary"
 	"encoding/hex"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 const (
@@ -30,7 +31,7 @@ func (msg MessageID) GetRoleType() RunnerRole {
 	return RunnerRole(binary.LittleEndian.Uint32(roleByts))
 }
 
-func NewMsgID(domain DomainType, pk []byte, role RunnerRole) MessageID {
+func NewMsgID(domain spectypes.DomainType, pk []byte, role RunnerRole) MessageID {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))
 

@@ -96,7 +96,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 
 	for _, quorum := range quorums {
 		role := getRole(msg.MsgID)
-		MsgID := exporter_message.NewMsgID(exporter_message.DomainType(ncv.Share.DomainType), ncv.Share.ValidatorPubKey[:], role)
+		MsgID := exporter_message.NewMsgID(ncv.Share.DomainType, ncv.Share.ValidatorPubKey[:], role)
 		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, spsm.Slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return

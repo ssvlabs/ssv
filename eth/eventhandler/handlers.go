@@ -382,7 +382,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	}
 
 	removeDecidedMessages := func(role exporter_message.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := exporter_message.NewMsgID(exporter_message.DomainType(eh.networkConfig.Domain), share.ValidatorPubKey[:], role)
+		messageID := exporter_message.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)

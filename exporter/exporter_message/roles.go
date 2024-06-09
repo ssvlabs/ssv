@@ -37,7 +37,7 @@ func (r RunnerRole) String() string {
 	}
 }
 
-// ToBeaconRole returns name of the runner role
+// ToBeaconRole returns name of the beacon role
 func (r RunnerRole) ToBeaconRole() string {
 	switch r {
 	case RoleAttester:

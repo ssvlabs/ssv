@@ -46,7 +46,6 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		nm.Msg = res
 		return
 	}
-
 	runnerRole := exporter_message.RunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
@@ -56,7 +55,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	msgID := exporter_message.NewMsgID(exporter_message.DomainType(types.GetDefaultDomain()), pkRaw, runnerRole)
+	msgID := exporter_message.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
@@ -139,7 +138,7 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		return
 	}
 
-	msgID := exporter_message.NewMsgID(exporter_message.DomainType(types.GetDefaultDomain()), pkRaw, runnerRole)
+	msgID := exporter_message.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
