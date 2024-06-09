@@ -55,3 +55,11 @@ func (gc *goClient) SubmitSyncMessage(msg *altair.SyncCommitteeMessage) error {
 	}
 	return nil
 }
+
+// SubmitSyncMessages submits signed sync committee msgs
+func (gc *goClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
+	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs); err != nil {
+		return err
+	}
+	return nil
+}
