@@ -390,6 +390,9 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 				return err
 			}
 			validatorByIndex := c.validatorStore.ValidatorByIndex(pSigMessages.Messages[0].ValidatorIndex)
+			if validatorByIndex == nil {
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
+			}
 			// Create a new nonCommitteeValidator and cache it.
 			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
 			share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
