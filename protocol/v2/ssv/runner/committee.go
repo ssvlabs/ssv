@@ -396,8 +396,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 
 	// broadcast
 	// TODO: (Alan) bulk submit info, logs all indices even if they failed to submit because of slashing protection
-	attLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("attestations", len(attsToSend)))
-	attLogger.With(zap.Any("validator_indices", attsToSend.Indicies()))
+	attLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("attestations", len(attsToSend)),
+		zap.Any("validator_indices", attsToSend.Indicies()))
 
 	start := time.Now()
 	if err := cr.beacon.SubmitAttestations(attsToSend.Attestations()); err != nil {
@@ -417,8 +417,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		)
 	}
 
-	scLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("sync_committees", len(scMsgsToSend)))
-	scLogger.With(zap.Any("validator_indices", scMsgsToSend.Indicies()))
+	scLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("sync_committees", len(scMsgsToSend)),
+		zap.Any("validator_indices", scMsgsToSend.Indicies()))
 
 	start = time.Now()
 	if err := cr.beacon.SubmitSyncMessages(scMsgsToSend.SyncCommitteeMessages()); err != nil {
