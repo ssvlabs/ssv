@@ -84,7 +84,7 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 			PublicKey: hex.EncodeToString(pkv),
 			From:      uint64(msgs[0].Slot),
 			To:        uint64(msgs[len(msgs)-1].Slot),
-			Role:      msgs[0].Identifier.GetRoleType().String(),
+			Role:      msgs[0].Identifier.GetRoleType().ToBeaconRole(),
 		},
 		Data: data,
 	}

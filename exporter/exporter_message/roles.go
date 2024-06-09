@@ -36,3 +36,23 @@ func (r RunnerRole) String() string {
 		return "UNDEFINED"
 	}
 }
+
+// ToBeaconRole returns name of the runner role
+func (r RunnerRole) ToBeaconRole() string {
+	switch r {
+	case RoleAttester:
+		return "ATTESTER"
+	case RoleAggregator:
+		return "AGGREGATOR"
+	case RoleProposer:
+		return "PROPOSER"
+	case RoleSyncCommitteeContribution:
+		return "SYNC_COMMITTEE_CONTRIBUTION"
+	case RoleValidatorRegistration:
+		return "VALIDATOR_REGISTRATION"
+	case RoleVoluntaryExit:
+		return "VOLUNTARY_EXIT"
+	default:
+		return "UNDEFINED"
+	}
+}
