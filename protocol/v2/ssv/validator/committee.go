@@ -116,15 +116,19 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
-	c.Queues[duty.Slot] = queueContainer{
-		Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
-		queueState: &queue.State{
-			HasRunningInstance: false,
-			Height:             qbft.Height(duty.Slot),
-			Slot:               0,
-			//Quorum:             options.SSVShare.Share,// TODO
-		},
+	if _, ok := c.Queues[duty.Slot]; !ok {
+		c.Queues[duty.Slot] = queueContainer{
+			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			queueState: &queue.State{
+				HasRunningInstance: false,
+				Height:             qbft.Height(duty.Slot),
+				Slot:               0,
+				//Quorum:             options.SSVShare.Share,// TODO
+			},
+		}
+
 	}
+
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	// TODO alan: stop queue
 	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
