@@ -12,6 +12,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
+type committeeDutiesMap map[spectypes.CommitteeID]*spectypes.CommitteeDuty
+
 type CommitteeHandler struct {
 	baseHandler
 
@@ -29,35 +31,9 @@ func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], sy
 }
 
 func (h *CommitteeHandler) Name() string {
-	// TODO(Oleg): change to spectypes.BNRoleCluster.String() after spec alignment ?
 	return "CLUSTER"
 }
 
-// HandleDuties manages the duty lifecycle, handling different cases:
-//
-// On First Run:
-//  1. Fetch duties for the current epoch.
-//  2. If necessary, fetch duties for the next epoch.
-//  3. Execute duties.
-//
-// On Re-org:
-//
-//	If the previous dependent root changed:
-//	    1. Fetch duties for the current epoch.
-//	    2. Execute duties.
-//	If the current dependent root changed:
-//	    1. Execute duties.
-//	    2. If necessary, fetch duties for the next epoch.
-//
-// On Indices Change:
-//  1. Execute duties.
-//  2. ResetEpoch duties for the current epoch.
-//  3. Fetch duties for the current epoch.
-//  4. If necessary, fetch duties for the next epoch.
-//
-// On Ticker event:
-//  1. Execute duties.
-//  2. If necessary, fetch duties for the next epoch.
 func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -76,55 +52,11 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 
 			h.processExecution(period, epoch, slot)
 
-			// cleanups
-			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
-			// last slot of epoch
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.attDuties.ResetEpoch(epoch)
-			}
-
-			// last slot of period
-			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.syncDuties.Reset(period - 1)
-			}
-
-		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
-
-			//// reset current epoch duties
-			//if reorgEvent.Previous {
-			//	h.duties.ResetEpoch(currentEpoch)
-			//	h.fetchFirst = true
-			//	h.fetchCurrentEpoch = true
-			//	if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-			//		h.duties.ResetEpoch(currentEpoch + 1)
-			//		h.fetchNextEpoch = true
-			//	}
-			//} else if reorgEvent.Current {
-			//	// reset & re-fetch next epoch duties if in appropriate slot range,
-			//	// otherwise they will be fetched by the appropriate slot tick.
-			//	if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-			//		h.duties.ResetEpoch(currentEpoch + 1)
-			//		h.fetchNextEpoch = true
-			//	}
-			//}
+		case <-h.reorg:
+			// do nothing
 
 		case <-h.indicesChange:
-			slot := h.network.Beacon.EstimatedCurrentSlot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
-
-			//h.indicesChanged = true
-			//h.fetchCurrentEpoch = true
-			//
-			//// reset next epoch duties if in appropriate slot range
-			//if h.shouldFetchNexEpoch(slot) {
-			//	h.duties.ResetEpoch(currentEpoch + 1)
-			//	h.fetchNextEpoch = true
-			//}
+			// do nothing
 		}
 	}
 }
@@ -136,52 +68,50 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
-	vsmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID, 0)
+	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
+	h.executeCommitteeDuties(h.logger, committeeMap)
+}
+
+func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
+	// TODO: tmp solution to get committee id fast
+	vcmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
-		vsmap[v.BeaconMetadata.Index] = v.CommitteeID()
+		vcmap[v.BeaconMetadata.Index] = v.CommitteeID()
 	}
+	committeeMap := make(committeeDutiesMap)
 
-	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
-	if attDuties != nil {
-		for _, d := range attDuties {
-			if h.shouldExecuteAtt(d) {
-				clusterID, ok := vsmap[d.ValidatorIndex]
-				if !ok {
-					h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(d.ValidatorIndex)))
-					continue
-				}
-				specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
-
-				if _, ok := committeeMap[clusterID]; !ok {
-					committeeMap[clusterID] = &spectypes.CommitteeDuty{
-						Slot:         specDuty.Slot,
-						BeaconDuties: make([]*spectypes.BeaconDuty, 0),
-					}
-				}
-				committeeMap[clusterID].BeaconDuties = append(committeeMap[clusterID].BeaconDuties, specDuty)
-			}
+	for _, d := range attDuties {
+		if h.shouldExecuteAtt(d) {
+			specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
+			h.appendBeaconDuty(committeeMap, vcmap, specDuty)
 		}
 	}
 
-	if syncDuties != nil {
-		for _, d := range syncDuties {
-			if h.shouldExecuteSync(d, slot) {
-				clusterID := h.validatorProvider.Validator(d.PubKey[:]).CommitteeID()
-				specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
-
-				if _, ok := committeeMap[clusterID]; !ok {
-					committeeMap[clusterID] = &spectypes.CommitteeDuty{
-						Slot:         specDuty.Slot,
-						BeaconDuties: make([]*spectypes.BeaconDuty, 0),
-					}
-				}
-				committeeMap[clusterID].BeaconDuties = append(committeeMap[clusterID].BeaconDuties, specDuty)
-			}
+	for _, d := range syncDuties {
+		if h.shouldExecuteSync(d, slot) {
+			specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
+			h.appendBeaconDuty(committeeMap, vcmap, specDuty)
 		}
 	}
 
-	h.executeCommitteeDuties(h.logger, committeeMap)
+	return committeeMap
+}
+
+func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, vcmap map[phase0.ValidatorIndex]spectypes.CommitteeID, beaconDuty *spectypes.BeaconDuty) {
+	committeeID, ok := vcmap[beaconDuty.ValidatorIndex]
+	if !ok {
+		h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+		return
+	}
+
+	if _, ok := m[committeeID]; !ok {
+		m[committeeID] = &spectypes.CommitteeDuty{
+			Slot:         beaconDuty.Slot,
+			BeaconDuties: make([]*spectypes.BeaconDuty, 0),
+		}
+	}
+	m[committeeID].BeaconDuties = append(m[committeeID].BeaconDuties, beaconDuty)
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
@@ -236,30 +166,4 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 		return true
 	}
 	return false
-}
-
-//// calculateSubscriptionInfo calculates the attester subscriptions given a set of duties.
-//func calculateSubscriptionInfo(duties []*eth2apiv1.ClusterDuty) []*eth2apiv1.BeaconCommitteeSubscription {
-//	subscriptions := make([]*eth2apiv1.BeaconCommitteeSubscription, 0, len(duties)*2)
-//	for _, duty := range duties {
-//		// Append a subscription for the attester role
-//		subscriptions = append(subscriptions, toBeaconCommitteeSubscription(duty, spectypes.BNRoleCluster))
-//		// Append a subscription for the aggregator role
-//		subscriptions = append(subscriptions, toBeaconCommitteeSubscription(duty, spectypes.BNRoleAggregator))
-//	}
-//	return subscriptions
-//}
-//
-//func toBeaconCommitteeSubscription(duty *eth2apiv1.ClusterDuty, role spectypes.BeaconRole) *eth2apiv1.BeaconCommitteeSubscription {
-//	return &eth2apiv1.BeaconCommitteeSubscription{
-//		ValidatorIndex:   duty.ValidatorIndex,
-//		Slot:             duty.Slot,
-//		CommitteeIndex:   duty.CommitteeIndex,
-//		CommitteesAtSlot: duty.CommitteesAtSlot,
-//		IsAggregator:     role == spectypes.BNRoleAggregator,
-//	}
-//}
-
-func (h *CommitteeHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
-	return uint64(slot)%h.network.Beacon.SlotsPerEpoch() > h.network.Beacon.SlotsPerEpoch()/2-2
 }
