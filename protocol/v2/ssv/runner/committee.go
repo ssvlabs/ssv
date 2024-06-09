@@ -220,51 +220,6 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 
 }
 
-type validatorAttestation struct {
-	validatorIndex phase0.ValidatorIndex
-	attestation    *phase0.Attestation
-}
-
-type validatorSyncCommitteeMessage struct {
-	validatorIndex phase0.ValidatorIndex
-	syncCommittee  *altair.SyncCommitteeMessage
-}
-
-type validatorAttestations []*validatorAttestation
-type validatorSyncCommitteeMessages []*validatorSyncCommitteeMessage
-
-func (va *validatorAttestations) Indicies() []phase0.ValidatorIndex {
-	indicies := make([]phase0.ValidatorIndex, len(*va))
-	for i, v := range *va {
-		indicies[i] = v.validatorIndex
-	}
-	return indicies
-}
-
-func (va *validatorAttestations) Attestations() []*phase0.Attestation {
-	atts := make([]*phase0.Attestation, len(*va))
-	for i, v := range *va {
-		atts[i] = v.attestation
-	}
-	return atts
-}
-
-func (sc validatorSyncCommitteeMessages) Indicies() []phase0.ValidatorIndex {
-	indicies := make([]phase0.ValidatorIndex, len(sc))
-	for i, v := range sc {
-		indicies[i] = v.validatorIndex
-	}
-	return indicies
-}
-
-func (sc validatorSyncCommitteeMessages) SyncCommitteeMessages() []*altair.SyncCommitteeMessage {
-	scs := make([]*altair.SyncCommitteeMessage, len(sc))
-	for i, v := range sc {
-		scs[i] = v.syncCommittee
-	}
-	return scs
-}
-
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *types.PartialSignatureMessages) error {
 	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
@@ -305,8 +260,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 
 	// TODO: create arrays in parallel
-	attsToSend := validatorAttestations{}
-	scMsgsToSend := validatorSyncCommitteeMessages{}
+	attsToSend := make([]*phase0.Attestation, 0, len(beaconObjects))
+	attsToSendIndices := make([]phase0.ValidatorIndex, 0, len(beaconObjects))
+	scMsgsToSend := make([]*altair.SyncCommitteeMessage, 0, len(beaconObjects))
+	scMsgsToSendIndices := make([]phase0.ValidatorIndex, 0, len(beaconObjects))
 
 	for _, root := range roots {
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
@@ -367,14 +324,16 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 					zap.String("signature", hex.EncodeToString(att.Signature[:])),
 				)
 
-				attsToSend = append(attsToSend, &validatorAttestation{validator, att})
+				attsToSend = append(attsToSend, att)
+				attsToSendIndices = append(attsToSendIndices, validator)
 
 				// TODO: like AttesterRunner
 			} else if role == types.BNRoleSyncCommittee {
 				syncMsg := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*altair.SyncCommitteeMessage)
 				syncMsg.Signature = specSig
 
-				scMsgsToSend = append(scMsgsToSend, &validatorSyncCommitteeMessage{validator, syncMsg})
+				scMsgsToSend = append(scMsgsToSend, syncMsg)
+				scMsgsToSendIndices = append(scMsgsToSendIndices, validator)
 
 				adr, err := syncMsg.HashTreeRoot()
 				if err != nil {
@@ -397,10 +356,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	// broadcast
 	// TODO: (Alan) bulk submit info, logs all indices even if they failed to submit because of slashing protection
 	attLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("attestations", len(attsToSend)),
-		zap.Any("validator_indices", attsToSend.Indicies()))
+		zap.Any("validator_indices", attsToSendIndices))
 
 	start := time.Now()
-	if err := cr.beacon.SubmitAttestations(attsToSend.Attestations()); err != nil {
+	if err := cr.beacon.SubmitAttestations(attsToSend); err != nil {
 		attLogger.Error("could not submit to Beacon chain reconstructed attestation",
 			zap.Error(err),
 		)
@@ -418,10 +377,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 
 	scLogger := logger.With(fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Int("sync_committees", len(scMsgsToSend)),
-		zap.Any("validator_indices", scMsgsToSend.Indicies()))
+		zap.Any("validator_indices", scMsgsToSendIndices))
 
 	start = time.Now()
-	if err := cr.beacon.SubmitSyncMessages(scMsgsToSend.SyncCommitteeMessages()); err != nil {
+	if err := cr.beacon.SubmitSyncMessages(scMsgsToSend); err != nil {
 		scLogger.Error("could not submit to Beacon chain reconstructed sync committee message",
 			zap.Error(err),
 		)
