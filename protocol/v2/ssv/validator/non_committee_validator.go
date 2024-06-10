@@ -93,7 +93,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if len(quorums) == 0 {
 		return
 	}
-
 	for _, quorum := range quorums {
 		role := getRole(msg.MsgID)
 		MsgID := exporter_message.NewMsgID(ncv.Share.DomainType, ncv.Share.ValidatorPubKey[:], role)
