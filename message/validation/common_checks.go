@@ -105,7 +105,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
 		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
-		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, indices[0]) == nil {
+		if mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, indices[0]) == nil {
 			return ErrNoDuty
 		}
 	}
@@ -113,7 +113,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleSyncCommitteeContribution {
 		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
-		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, indices[0]) == nil {
+		if mv.dutyStore.SyncCommittee.Duty(period, indices[0]) == nil {
 			return ErrNoDuty
 		}
 	}
