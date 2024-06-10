@@ -8,10 +8,10 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
@@ -103,14 +103,14 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(1))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
-	startFn()
-
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
+	startFn()
+	handler.alanFork = false
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(0)
@@ -163,7 +163,6 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256*32 - 49))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
-	startFn()
 
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -177,6 +176,8 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		},
 	})
+	startFn()
+	handler.alanFork = false
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(0)
@@ -231,7 +232,6 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
-	startFn()
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 		{
@@ -239,6 +239,8 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
+	startFn()
+	handler.alanFork = false
 
 	// STEP 1: wait for sync committee duties to be fetched for next period
 	ticker.Send(currentSlot.GetSlot())
@@ -287,6 +289,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
 	startFn()
+	handler.alanFork = false
 
 	// STEP 1: wait for no action to be taken
 	ticker.Send(currentSlot.GetSlot())
@@ -346,6 +349,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
 	startFn()
+	handler.alanFork = false
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 		{
@@ -419,6 +423,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
 	startFn()
+	handler.alanFork = false
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 		{
@@ -500,6 +505,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
 	startFn()
+	handler.alanFork = false
 
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{

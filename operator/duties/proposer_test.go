@@ -7,10 +7,10 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 )
@@ -42,12 +42,8 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 		return indices
 	}
 
-	getIndicesBool := func(epoch phase0.Epoch, wait bool) []phase0.ValidatorIndex {
-		return getIndices(epoch)
-	}
-
 	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
-	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getIndicesBool).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
@@ -69,7 +65,6 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(0))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
 
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 		{
@@ -78,6 +73,8 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
+
+	startFn()
 
 	// STEP 1: wait for proposer duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
@@ -102,7 +99,6 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(0))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
 
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 		{
@@ -111,6 +107,7 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
+	startFn()
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.GetSlot())
@@ -208,7 +205,6 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(0))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
 
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 		{
@@ -217,6 +213,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
+	startFn()
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.GetSlot())
@@ -289,7 +286,6 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(34))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
 
 	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
 		{
@@ -298,6 +294,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
+	startFn()
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.GetSlot())
@@ -365,7 +362,6 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(34))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
 
 	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
 		{
@@ -374,6 +370,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
+	startFn()
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.GetSlot())

@@ -41,6 +41,7 @@ type baseHandler struct {
 
 	fetchFirst     bool
 	indicesChanged bool
+	alanFork       bool
 }
 
 func (h *baseHandler) Setup(
@@ -66,6 +67,7 @@ func (h *baseHandler) Setup(
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
+	h.alanFork = true // TODO: fix
 }
 
 func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
@@ -78,5 +80,5 @@ func (h *baseHandler) HandleInitialDuties(context.Context) {
 }
 
 func (h *baseHandler) AlanFork() bool {
-	return true // TODO: fix
+	return h.alanFork
 }
