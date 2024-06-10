@@ -283,9 +283,9 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 	return 0
 }
 
-// scoreConsensusType returns an integer score for the type of a consensus message.
+// scoreConsensusType returns an integer score for the type of consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
-func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
+func scoreConsensusType(m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		switch qbftMsg.MsgType {
 		case specqbft.ProposalMsgType:
@@ -310,8 +310,8 @@ func isDecidedMesssage(s *State, m *DecodedSSVMessage) bool {
 		len(m.SignedSSVMessage.OperatorIDs) > int(s.Quorum)
 }
 
-// scoreCommitteeQueueMessageSubtype returns an integer score for the message's type.
-func scoreCommitteeQueueMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
+// scoreCommitteeMessageSubtype returns an integer score for the message's type.
+func scoreCommitteeMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
 	_, isConsensusMessage := m.Body.(*specqbft.Message)
 
 	var (
@@ -372,18 +372,20 @@ func scoreCommitteeQueueMessageSubtype(state *State, m *DecodedSSVMessage, relat
 	return 0
 }
 
-//func scoreCommitteeConsensusType(state *State, m *DecodedSSVMessage) int {
-//	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
-//		switch qbftMsg.MsgType {
-//		case specqbft.ProposalMsgType:
-//			return 4
-//		case specqbft.PrepareMsgType:
-//			return 3
-//		case specqbft.CommitMsgType:
-//			return 2
-//		case specqbft.RoundChangeMsgType:
-//			return 1
-//		}
-//	}
-//	return 0
-//}
+// scoreCommitteeConsensusType returns an integer score for the type of committee consensus message.
+// When given a non-consensus message, scoreConsensusType returns 0.
+func scoreCommitteeConsensusType(m *DecodedSSVMessage) int {
+	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
+		switch qbftMsg.MsgType {
+		case specqbft.CommitMsgType:
+			return 4
+		case specqbft.RoundChangeMsgType:
+			return 3
+		case specqbft.ProposalMsgType:
+			return 2
+		case specqbft.PrepareMsgType:
+			return 1
+		}
+	}
+	return 0
+}

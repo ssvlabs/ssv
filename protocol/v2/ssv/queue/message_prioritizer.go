@@ -52,7 +52,7 @@ func (p *standardPrioritizer) Prior(a, b *DecodedSSVMessage) bool {
 		return scoreA > scoreB
 	}
 
-	scoreA, scoreB = scoreConsensusType(p.state, a), scoreConsensusType(p.state, b)
+	scoreA, scoreB = scoreConsensusType(a), scoreConsensusType(b)
 	if scoreA != scoreB {
 		return scoreA > scoreB
 	}
@@ -91,9 +91,17 @@ func (p *committeePrioritizer) Prior(a, b *DecodedSSVMessage) bool {
 		return scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)
 	}
 
-	scoreA := scoreCommitteeQueueMessageSubtype(p.state, a, relativeHeightA)
-	scoreB := scoreCommitteeQueueMessageSubtype(p.state, b, relativeHeightB)
+	scoreA, scoreB := scoreCommitteeMessageSubtype(p.state, a, relativeHeightA), scoreCommitteeMessageSubtype(p.state, b, relativeHeightB)
+	if scoreA != scoreB {
+		return scoreA > scoreB
+	}
 
+	scoreA, scoreB = scoreRound(p.state, a), scoreRound(p.state, b)
+	if scoreA != scoreB {
+		return scoreA > scoreB
+	}
+
+	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
 	if scoreA != scoreB {
 		return scoreA > scoreB
 	}
