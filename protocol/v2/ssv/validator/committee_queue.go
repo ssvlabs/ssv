@@ -18,9 +18,6 @@ import (
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
-	v.mtx.RLock() // read v.Queues
-	defer v.mtx.RUnlock()
-
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -31,7 +28,9 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 		return
 	}
 
+	v.mtx.RLock() // read v.Queues
 	q, ok := v.Queues[slot]
+	v.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
 			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
@@ -42,7 +41,9 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
+		v.mtx.Lock()
 		v.Queues[slot] = q
+		v.mtx.Unlock()
 		logger.Debug("missing queue for slot created", fields.Slot(slot))
 	}
 
