@@ -3,9 +3,9 @@ package duties
 import (
 	"context"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
@@ -16,10 +16,10 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
 
 // ExecuteCommitteeDutiesFunc is a non-blocking function which executes the given committee duties.
-type ExecuteCommitteeDutiesFunc func(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty)
+type ExecuteCommitteeDutiesFunc func(logger *zap.Logger, duties committeeDutiesMap)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorProvider, ExecuteDutiesFunc, ExecuteCommitteeDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
+	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorProvider, ValidatorController, ExecuteDutiesFunc, ExecuteCommitteeDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
@@ -31,6 +31,7 @@ type baseHandler struct {
 	executionClient        ExecutionClient
 	network                networkconfig.NetworkConfig
 	validatorProvider      ValidatorProvider
+	validatorController    ValidatorController
 	executeDuties          ExecuteDutiesFunc
 	executeCommitteeDuties ExecuteCommitteeDutiesFunc
 	ticker                 slotticker.SlotTicker
@@ -38,7 +39,6 @@ type baseHandler struct {
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
 
-	fetchFirst     bool
 	indicesChanged bool
 }
 
@@ -49,6 +49,7 @@ func (h *baseHandler) Setup(
 	executionClient ExecutionClient,
 	network networkconfig.NetworkConfig,
 	validatorProvider ValidatorProvider,
+	validatorController ValidatorController,
 	executeDuties ExecuteDutiesFunc,
 	executeCommitteeDuties ExecuteCommitteeDutiesFunc,
 	slotTickerProvider slotticker.Provider,
@@ -60,6 +61,7 @@ func (h *baseHandler) Setup(
 	h.executionClient = executionClient
 	h.network = network
 	h.validatorProvider = validatorProvider
+	h.validatorController = validatorController
 	h.executeDuties = executeDuties
 	h.executeCommitteeDuties = executeCommitteeDuties
 	h.ticker = slotTickerProvider()
