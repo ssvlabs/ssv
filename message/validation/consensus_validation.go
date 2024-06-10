@@ -101,7 +101,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 
 	if len(signedSSVMessage.FullData) != 0 {
 		// Rule: Prepare or commit messages must not have full data
-		if msgType == specqbft.PrepareMsgType || msgType == specqbft.CommitMsgType && len(signers) == 1 {
+		if msgType == specqbft.PrepareMsgType || (msgType == specqbft.CommitMsgType && len(signers) == 1) {
 			return ErrPrepareOrCommitWithFullData
 		}
 
