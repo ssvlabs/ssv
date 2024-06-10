@@ -17,15 +17,14 @@ import (
 type ProposerHandler struct {
 	baseHandler
 
-	duties *dutystore.Duties[eth2apiv1.ProposerDuty]
+	duties     *dutystore.Duties[eth2apiv1.ProposerDuty]
+	fetchFirst bool
 }
 
 func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
 	return &ProposerHandler{
-		duties: duties,
-		baseHandler: baseHandler{
-			fetchFirst: true,
-		},
+		duties:     duties,
+		fetchFirst: true,
 	}
 }
 

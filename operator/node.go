@@ -103,6 +103,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			ExecutionClient:      opts.ExecutionClient,
 			Network:              opts.Network,
 			ValidatorProvider:    opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
+			ValidatorController:  opts.ValidatorController,
 			IndicesChg:           opts.ValidatorController.IndicesChangeChan(),
 			ValidatorExitCh:      opts.ValidatorController.ValidatorExitChan(),
 			ExecuteDuty:          opts.ValidatorController.ExecuteDuty,
