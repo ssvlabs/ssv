@@ -6,26 +6,16 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
-	share *ssvtypes.GenesisSSVShare,
+	share *ssvtypes.SSVShare,
 	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
 	msgID genesisspectypes.MessageID,
 	signatureVerifier func() error,
 ) (phase0.Slot, error) {
-	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-		if mv.inCommittee(share) {
-			mv.metrics.InCommitteeMessage(alanspectypes.MsgType(spectypes.SSVPartialSignatureMsgType), false)
-		} else {
-			mv.metrics.NonCommitteeMessage(alanspectypes.MsgType(spectypes.SSVPartialSignatureMsgType), false)
-		}
-	}
-
 	msgSlot := signedMsg.Message.Slot
 
 	if !mv.validPartialSigMsgType(signedMsg.Message.Type) {
@@ -110,7 +100,7 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType genesisspect
 	}
 }
 
-func (mv *messageValidator) validatePartialMessages(share *ssvtypes.GenesisSSVShare, m *genesisspectypes.SignedPartialSignatureMessage) error {
+func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *genesisspectypes.SignedPartialSignatureMessage) error {
 	if err := mv.commonSignerValidation(m.Signer, share); err != nil {
 		return err
 	}
@@ -148,7 +138,7 @@ func (mv *messageValidator) validatePartialMessages(share *ssvtypes.GenesisSSVSh
 func (mv *messageValidator) validateSignerBehaviorPartial(
 	state *ConsensusState,
 	signer genesisspectypes.OperatorID,
-	share *ssvtypes.GenesisSSVShare,
+	share *ssvtypes.SSVShare,
 	msgID genesisspectypes.MessageID,
 	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
 ) error {

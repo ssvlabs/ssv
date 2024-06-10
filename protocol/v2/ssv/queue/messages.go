@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -23,11 +23,12 @@ var (
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
-	SignedSSVMessage *spectypes.SignedSSVMessage
+	SignedSSVMessage        *spectypes.SignedSSVMessage
+	GenesisSignedSSVMessage *genesisspectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
+	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg | *genesisspecqbft.SignedMessage (TODO: remove post-fork) | *genesisspectypes.SignedPartialSignatureMessage (TODO: remove post-fork)
 }
 
 func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
@@ -45,22 +46,13 @@ func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
 			return phase0.Slot(data.Height), nil
 		}
 		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
+	case *genesisspecqbft.SignedMessage: // TODO: remove post-fork
+		return phase0.Slot(m.Message.Height), nil
+	case *genesisspectypes.SignedPartialSignatureMessage: // TODO: remove post-fork
+		return m.Message.Slot, nil
 	default:
 		return 0, ErrUnknownMessageType
 	}
-}
-
-// DecodeSSVMessage decodes a SSVMessage into a DecodedSSVMessage.
-func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
-	body, err := ExtractMsgBody(m)
-	if err != nil {
-		return nil, err
-	}
-
-	return &DecodedSSVMessage{
-		SSVMessage: m,
-		Body:       body,
-	}, nil
 }
 
 // DecodeSignedSSVMessage decodes a SignedSSVMessage into a DecodedSSVMessage.
@@ -73,39 +65,16 @@ func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage,
 	return d, nil
 }
 
-// DecodeGenesisSSVMessage decodes a genesis SSVMessage and returns a DecodedSSVMessage.
-// TODO: deprecated, remove post-fork
-func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
-	var body interface{}
-	switch m.MsgType {
-	case genesisspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
-		sm := &genesisspecqbft.SignedMessage{}
-		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedMessage")
-		}
-		body = sm
-	case genesisspectypes.SSVPartialSignatureMsgType:
-		sm := &genesisspectypes.SignedPartialSignatureMessage{}
-		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
-		}
-		body = sm
-	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
-		msg := &ssvtypes.EventMsg{}
-		if err := msg.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode EventMsg")
-		}
-		body = msg
-	default:
-		return nil, ErrUnknownMessageType
+// DecodeSSVMessage decodes a SSVMessage into a DecodedSSVMessage.
+func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
+	body, err := ExtractMsgBody(m)
+	if err != nil {
+		return nil, err
 	}
+
 	return &DecodedSSVMessage{
-		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.MsgType(m.MsgType),
-			MsgID:   spectypes.MessageID(m.MsgID),
-			Data:    m.Data,
-		},
-		Body: body,
+		SSVMessage: m,
+		Body:       body,
 	}, nil
 }
 
@@ -125,6 +94,68 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 		}
 		body = sm
 	case ssvmessage.SSVEventMsgType:
+		msg := &ssvtypes.EventMsg{}
+		if err := msg.Decode(m.Data); err != nil {
+			return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
+		}
+		body = msg
+	default:
+		return nil, ErrUnknownMessageType
+	}
+
+	return body, nil
+}
+
+// DecodeGenesisSSVMessage decodes a genesis SSVMessage into a DecodedSSVMessage.
+func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
+	body, err := ExtractGenesisMsgBody(m)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.MsgType(m.MsgType),
+			MsgID:   spectypes.MessageID(m.MsgID),
+			Data:    m.Data,
+		},
+		Body: body,
+	}, nil
+}
+
+// DecodeGenesisSignedSSVMessage decodes a genesis SignedSSVMessage into a DecodedSSVMessage.
+func DecodeGenesisSignedSSVMessage(sm *genesisspectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
+	m, err := commons.DecodeGenesisNetworkMsg(sm.GetData())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrDecodeNetworkMsg, err)
+	}
+
+	d, err := DecodeGenesisSSVMessage(m)
+	if err != nil {
+		return nil, err
+	}
+
+	d.GenesisSignedSSVMessage = sm
+
+	return d, nil
+}
+
+func ExtractGenesisMsgBody(m *genesisspectypes.SSVMessage) (any, error) {
+	var body any
+	switch m.MsgType {
+	case genesisspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
+		sm := &genesisspecqbft.SignedMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, fmt.Errorf("failed to decode genesis SignedMessage: %w", err)
+		}
+		body = sm
+	case genesisspectypes.SSVPartialSignatureMsgType:
+		sm := &genesisspectypes.SignedPartialSignatureMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, fmt.Errorf("failed to decode genesis SignedPartialSignatureMessage: %w", err)
+		}
+		body = sm
+	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
 			return nil, fmt.Errorf("failed to decode EventMsg: %w", err)

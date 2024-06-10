@@ -239,7 +239,6 @@ var StartNodeCmd = &cobra.Command{
 				genesisvalidation.WithLogger(logger),
 				genesisvalidation.WithMetrics(metricsReporter),
 				genesisvalidation.WithDutyStore(dutyStore),
-				genesisvalidation.WithOwnOperatorID(operatorDataStore),
 			)
 		}
 

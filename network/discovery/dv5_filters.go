@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
@@ -31,6 +32,19 @@ func (dvs *DiscV5Service) badNodeFilter(logger *zap.Logger) func(node *enode.Nod
 			return false
 		}
 		return !dvs.conns.IsBad(logger, pid)
+	}
+}
+
+// badNodeFilter checks if the node was pruned or have a bad score
+func (dvs *DiscV5Service) ssvNodeFilter(logger *zap.Logger) func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		var isSSV = new(bool)
+		if err := node.Record().Load(enr.WithEntry("ssv", isSSV)); err != nil {
+			//TODO: metric
+			//logger.Warn("could not read ssv entry from node record", zap.String("enr", node.String()), zap.Error(err))
+			return false
+		}
+		return *isSSV
 	}
 }
 
