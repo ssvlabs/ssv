@@ -134,7 +134,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 	signer := signedSSVMessage.GetOperatorIDs()[0]
-	signerStateBySlot := state.Get(signer)
+	signerStateBySlot := state.GetOrCreate(signer)
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != types.RoleCommittee { // Rule only for validator runners
@@ -220,7 +220,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 	state *consensusState,
 	signer spectypes.OperatorID,
 ) {
-	stateBySlot := state.Get(signer)
+	stateBySlot := state.GetOrCreate(signer)
 	messageSlot := partialSignatureMessages.Slot
 	var signerState *SignerState
 

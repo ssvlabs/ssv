@@ -144,7 +144,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		msgID := committeeIdentifier
 		state := validator.consensusState(msgID)
 		for i := spectypes.OperatorID(1); i <= 4; i++ {
-			signerState := state.Get(i)
+			signerState := state.GetOrCreate(i)
 			require.NotNil(t, signerState)
 		}
 
@@ -159,7 +159,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.Get(1)
+		stateBySlot := state.GetOrCreate(1)
 		require.NotNil(t, stateBySlot)
 		require.Equal(t, 1, stateBySlot.Size())
 		stateSlot, signerStateOldSlot := stateBySlot.Min()
@@ -169,7 +169,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, 1, signerStateOldSlot.(*SignerState).Round)
 		require.EqualValues(t, MessageCounts{Proposal: 1}, signerStateOldSlot.(*SignerState).MessageCounts)
 		for i := spectypes.OperatorID(2); i <= 4; i++ {
-			require.NotNil(t, state.Get(i))
+			require.NotNil(t, state.GetOrCreate(i))
 		}
 
 		signedSSVMessage = generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {

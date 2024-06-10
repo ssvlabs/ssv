@@ -22,7 +22,7 @@ type consensusState struct {
 	mu       sync.Mutex
 }
 
-func (cs *consensusState) Get(signer spectypes.OperatorID) *treemap.Map {
+func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) *treemap.Map {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 

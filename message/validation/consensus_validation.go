@@ -165,7 +165,7 @@ func (mv *messageValidator) validateQBFTLogic(
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
-		signerStateBySlot := state.Get(signer)
+		signerStateBySlot := state.GetOrCreate(signer)
 		signerStateInterface, ok := signerStateBySlot.Get(msgSlot)
 		if !ok {
 			continue
@@ -231,7 +231,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.GetOperatorIDs() {
-			signerStateBySlot := state.Get(signer)
+			signerStateBySlot := state.GetOrCreate(signer)
 			maxSlot, _ := signerStateBySlot.Max()
 			if maxSlot != nil && maxSlot.(phase0.Slot) > phase0.Slot(consensusMessage.Height) {
 				e := ErrSlotAlreadyAdvanced
@@ -268,7 +268,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
-		signerStateBySlot := state.Get(signer)
+		signerStateBySlot := state.GetOrCreate(signer)
 		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, validatorIndices, signerStateBySlot); err != nil {
 			return err
 		}
@@ -293,7 +293,7 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		var signerState *SignerState
 
-		stateBySlot := consensusState.Get(signer)
+		stateBySlot := consensusState.GetOrCreate(signer)
 		signerStateInterface, ok := stateBySlot.Get(msgSlot)
 		if !ok {
 			signerState = &SignerState{}
