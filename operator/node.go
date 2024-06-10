@@ -4,10 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	storage2 "github.com/ssvlabs/ssv/registry/storage"
-
-	"github.com/ssvlabs/ssv/network"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -16,6 +12,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -24,6 +21,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -82,6 +81,8 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		spectypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
+		ssvtypes.RoleAttester,
+		ssvtypes.RoleSyncCommittee,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))

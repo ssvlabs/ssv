@@ -53,7 +53,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -274,8 +274,6 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
 		}
 
-		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
-
 		storageRoles := []spectypes.RunnerRole{
 			spectypes.RoleCommittee,
 			spectypes.RoleProposer,
@@ -283,6 +281,8 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.RoleSyncCommitteeContribution,
 			spectypes.RoleValidatorRegistration,
 			spectypes.RoleVoluntaryExit,
+			ssvtypes.RoleAttester,
+			ssvtypes.RoleSyncCommittee,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -293,7 +293,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
-		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
+		cfg.SSVOptions.ValidatorOptions.OperatorSigner = ssvtypes.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
@@ -556,7 +556,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		return networkconfig.NetworkConfig{}, err
 	}
 
-	types.SetDefaultDomain(networkConfig.Domain)
+	ssvtypes.SetDefaultDomain(networkConfig.Domain)
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {

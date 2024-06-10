@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type AttesterRunner struct {
@@ -46,7 +47,7 @@ func NewAttesterRunner(
 ) Runner {
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleCommittee, // TODO: decide on value here
+			RunnerRoleType:     ssvtypes.RoleAttester,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,

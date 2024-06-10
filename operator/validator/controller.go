@@ -8,9 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
-
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -21,8 +18,8 @@ import (
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -36,6 +33,7 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -43,7 +41,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -79,7 +76,6 @@ type ControllerOptions struct {
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
@@ -131,8 +127,8 @@ type Recipients interface {
 }
 
 type SharesStorage interface {
-	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
-	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
+	Get(txn basedb.Reader, pubKey []byte) *ssvtypes.SSVShare
+	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
@@ -699,7 +695,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	copy(pk, duty.PubKey[:])
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, ssvtypes.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
 			return
@@ -722,7 +718,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 	logger = logger.With(fields.Slot(duty.Slot), fields.Role(duty.RunnerRole()))
 
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
-		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, types.GetDefaultDomain())
+		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, ssvtypes.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
 			return
@@ -733,7 +729,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			return
 		}
 		// TODO alan: no queue in cc, what should we do?
-		if err := cm.OnExecuteDuty(logger, dec.Body.(*types.EventMsg)); err != nil {
+		if err := cm.OnExecuteDuty(logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
 			logger.Error("could not execute committee duty", zap.Error(err))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
@@ -744,7 +740,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
 func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeDutyData := types.ExecuteDutyData{Duty: duty}
+	executeDutyData := ssvtypes.ExecuteDutyData{Duty: duty}
 	data, err := json.Marshal(executeDutyData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
@@ -755,7 +751,7 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spec
 
 // CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
 func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
+	executeCommitteeDutyData := ssvtypes.ExecuteCommitteeDutyData{Duty: duty}
 	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
@@ -770,7 +766,7 @@ func dutyDataToSSVMsg(
 	runnerRole spectypes.RunnerRole,
 	data []byte,
 ) (*spectypes.SSVMessage, error) {
-	msg := types.EventMsg{
+	msg := ssvtypes.EventMsg{
 		Type: ssvtypes.ExecuteDuty,
 		Data: data,
 	}
@@ -952,7 +948,7 @@ func (c *controller) operatorFromShare(share *ssvtypes.SSVShare) (*spectypes.Ope
 		}
 	}
 
-	q, pc := types.ComputeQuorumAndPartialQuorum(len(share.Committee))
+	q, pc := ssvtypes.ComputeQuorumAndPartialQuorum(len(share.Committee))
 
 	return &spectypes.Operator{
 		OperatorID:        c.operatorDataStore.GetOperatorID(),
@@ -1200,6 +1196,8 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		spectypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
+		ssvtypes.RoleAttester,
+		ssvtypes.RoleSyncCommittee,
 	}
 
 	domainType := ssvtypes.GetDefaultDomain()

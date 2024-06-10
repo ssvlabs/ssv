@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type SyncCommitteeRunner struct {
@@ -44,7 +45,7 @@ func NewSyncCommitteeRunner(
 ) Runner {
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleCommittee, // TODO: decide on value
+			RunnerRoleType:     ssvtypes.RoleSyncCommittee,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
