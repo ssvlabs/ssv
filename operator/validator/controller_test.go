@@ -87,11 +87,11 @@ func TestNewController(t *testing.T) {
 	require.IsType(t, &controller{}, control)
 }
 
-func TestSetupNonCommitteeValidators(t *testing.T) {
+func TestSetupValidatorsExporter(t *testing.T) {
 	passedEpoch := phase0.Epoch(1)
 	operators := buildOperators(t)
 
-	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
+	operatorDataStore := operatordatastore.New(buildOperatorData(0, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 
 	secretKey := &bls.SecretKey{}
@@ -182,6 +182,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 			} else {
 				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(sharesSlice[0]).AnyTimes()
 				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
+				bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).Times(1)
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
 				sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(0)
@@ -191,13 +192,15 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 				return true, nil
 			}
 			controllerOptions := MockControllerOptions{
-				beacon:              bc,
-				network:             network,
-				operatorDataStore:   operatorDataStore,
-				sharesStorage:       sharesStorage,
-				recipientsStorage:   recipientStorage,
-				validatorsMap:       mockValidatorsMap,
-				validatorOptions:    validator.Options{},
+				beacon:            bc,
+				network:           network,
+				operatorDataStore: operatorDataStore,
+				sharesStorage:     sharesStorage,
+				recipientsStorage: recipientStorage,
+				validatorsMap:     mockValidatorsMap,
+				validatorOptions: validator.Options{
+					Exporter: true,
+				},
 				metrics:             validator.NopMetrics{},
 				metadataLastUpdated: map[string]time.Time{},
 			}
