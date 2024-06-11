@@ -103,7 +103,7 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 
 		runner := v.Runners[slot]
 		if runner == nil {
-			return fmt.Errorf("could not get duty runner for slot", slot)
+			return fmt.Errorf("could not get duty runner for slot %d", slot)
 		}
 		var runningInstance *instance.Instance
 		if runner.HasRunningDuty() {
