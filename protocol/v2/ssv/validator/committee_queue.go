@@ -115,8 +115,6 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		}
 
 		state.Slot = slot
-		state.Round = runner.GetBaseRunner().State.RunningInstance.State.Round
-		state.Height = runner.GetBaseRunner().State.RunningInstance.State.Height
 
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {

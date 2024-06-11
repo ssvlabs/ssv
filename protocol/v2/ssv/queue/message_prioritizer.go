@@ -96,10 +96,10 @@ func (p *committeePrioritizer) Prior(a, b *DecodedSSVMessage) bool {
 		return scoreA > scoreB
 	}
 
-	scoreA, scoreB = scoreRound(p.state, a), scoreRound(p.state, b)
-	if scoreA != scoreB {
-		return scoreA > scoreB
-	}
+	//scoreA, scoreB = scoreRound(p.state, a), scoreRound(p.state, b)
+	//if scoreA != scoreB {
+	//	return scoreA > scoreB
+	//}
 
 	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
 	if scoreA != scoreB {
