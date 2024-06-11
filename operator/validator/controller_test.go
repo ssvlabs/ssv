@@ -203,7 +203,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.setupNonCommitteeValidators()
+			ctr.StartValidators()
 		})
 	}
 }
@@ -1011,20 +1011,21 @@ func TestGetIndices(t *testing.T) {
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	return controller{
-		metadataUpdateInterval: 0,
-		logger:                 logger,
-		beacon:                 opts.beacon,
-		network:                opts.network,
-		metrics:                opts.metrics,
-		keyManager:             opts.keyManager,
-		ibftStorageMap:         opts.StorageMap,
-		operatorDataStore:      opts.operatorDataStore,
-		sharesStorage:          opts.sharesStorage,
-		validatorsMap:          opts.validatorsMap,
-		context:                context.Background(),
-		validatorOptions:       opts.validatorOptions,
-		recipientsStorage:      opts.recipientsStorage,
-		messageRouter:          newMessageRouter(logger),
+		metadataUpdateInterval:  0,
+		logger:                  logger,
+		beacon:                  opts.beacon,
+		network:                 opts.network,
+		metrics:                 opts.metrics,
+		keyManager:              opts.keyManager,
+		ibftStorageMap:          opts.StorageMap,
+		operatorDataStore:       opts.operatorDataStore,
+		sharesStorage:           opts.sharesStorage,
+		validatorsMap:           opts.validatorsMap,
+		context:                 context.Background(),
+		validatorOptions:        opts.validatorOptions,
+		recipientsStorage:       opts.recipientsStorage,
+		messageRouter:           newMessageRouter(logger),
+		committeeValidatorSetup: make(chan struct{}),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,
