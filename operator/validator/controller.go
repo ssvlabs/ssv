@@ -793,9 +793,8 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	var sleep = 2 * time.Second
 
 	for {
-		start := time.Now()
-
 		// Get the shares to fetch metadata for.
+		start := time.Now()
 		var existingPubKeys, newPubKeys [][]byte
 		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 			if share.Liquidated {
@@ -803,14 +802,15 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			}
 			if share.BeaconMetadata == nil {
 				newPubKeys = append(newPubKeys, share.ValidatorPubKey)
-			} else if time.Since(share.BeaconMetadata.LastUpdated()) > c.metadataUpdateInterval {
+			} else if time.Since(share.MetadataLastUpdated()) > c.metadataUpdateInterval {
 				existingPubKeys = append(existingPubKeys, share.ValidatorPubKey)
 			}
-			return len(existingPubKeys)+len(newPubKeys) < chunkSize
+			return len(newPubKeys) < chunkSize
 		})
 
 		// Combine pubkeys, prioritizing new validators.
 		pubKeys := append(newPubKeys, existingPubKeys...)
+		filteringTook := time.Since(start)
 
 		if len(pubKeys) > 0 {
 			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.onMetadataUpdated)
@@ -823,6 +823,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			zap.Int("validators", len(pubKeys)),
 			zap.Int("new_validators", len(newPubKeys)),
 			zap.Uint64("started_validators", c.recentlyStartedValidators),
+			zap.Duration("filtering_took", filteringTook),
 			fields.Took(time.Since(start)))
 
 		// Only sleep if there aren't more validators to fetch metadata for.

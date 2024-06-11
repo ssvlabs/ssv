@@ -179,7 +179,7 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 		return nil
 	}
 
-	metadata.SetLastUpdated(time.Now())
+	share.SetMetadataLastUpdated(time.Now())
 	share.BeaconMetadata = metadata
 	return s.Save(nil, share)
 }
