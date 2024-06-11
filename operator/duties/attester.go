@@ -188,6 +188,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	indices := h.validatorController.CommitteeActiveIndices(epoch)
 
 	if len(indices) == 0 {
+		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
