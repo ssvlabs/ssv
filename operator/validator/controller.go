@@ -804,16 +804,16 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			if share.Liquidated {
 				return true
 			}
-			last, ok := c.metadataLastUpdated[string(share.ValidatorPubKey)]
-			if !ok && !share.HasBeaconMetadata() {
+			lastUpdated, everUpdated := c.metadataLastUpdated[string(share.ValidatorPubKey)]
+			if !everUpdated && !share.HasBeaconMetadata() {
 				newPubKeys = append(newPubKeys, share.ValidatorPubKey)
-			} else if !ok || time.Since(last) > c.metadataUpdateInterval {
+			} else if !everUpdated || time.Since(lastUpdated) > c.metadataUpdateInterval {
 				pubKeys = append(pubKeys, share.ValidatorPubKey)
 			}
-			return len(pubKeys)+len(newPubKeys) >= chunkSize
+			return len(pubKeys)+len(newPubKeys) <= chunkSize
 		})
 
-		// Combie pubkeys, prioritizing new validators.
+		// Combine pubkeys, prioritizing new validators.
 		pubKeys = append(newPubKeys, pubKeys...)
 
 		if len(pubKeys) > 0 {
