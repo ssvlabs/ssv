@@ -810,7 +810,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			} else if !everUpdated || time.Since(lastUpdated) > c.metadataUpdateInterval {
 				pubKeys = append(pubKeys, share.ValidatorPubKey)
 			}
-			return len(pubKeys)+len(newPubKeys) <= chunkSize
+			return len(pubKeys)+len(newPubKeys) < chunkSize
 		})
 
 		// Combine pubkeys, prioritizing new validators.
