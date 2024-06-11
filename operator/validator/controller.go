@@ -795,31 +795,38 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		// Get the shares to fetch metadata for.
 		start := time.Now()
-		var existingPubKeys, newPubKeys [][]byte
+		var existingShares, newShares []*ssvtypes.SSVShare
 		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 			if share.Liquidated {
 				return true
 			}
 			if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
-				newPubKeys = append(newPubKeys, share.ValidatorPubKey)
+				newShares = append(newShares, share)
 			} else if time.Since(share.MetadataLastUpdated()) > c.metadataUpdateInterval {
-				existingPubKeys = append(existingPubKeys, share.ValidatorPubKey)
+				existingShares = append(existingShares, share)
 			}
-			return len(newPubKeys) < batchSize
+			return len(newShares) < batchSize
 		})
 
-		// Combine pubkeys up to batchSize, prioritizing new validators.
-		pubKeys := newPubKeys
-		if remainder := batchSize - len(pubKeys); remainder > 0 {
+		// Combine validators up to batchSize, prioritizing the new ones.
+		shares := newShares
+		if remainder := batchSize - len(shares); remainder > 0 {
 			end := remainder
-			if end > len(existingPubKeys) {
-				end = len(existingPubKeys)
+			if end > len(existingShares) {
+				end = len(existingShares)
 			}
-			pubKeys = append(pubKeys, existingPubKeys[:end]...)
+			shares = append(shares, existingShares[:end]...)
+		}
+		for _, share := range shares {
+			share.SetMetadataLastUpdated(time.Now())
 		}
 		filteringTook := time.Since(start)
 
-		if len(pubKeys) > 0 {
+		if len(shares) > 0 {
+			pubKeys := make([][]byte, len(shares))
+			for i, s := range shares {
+				pubKeys[i] = s.ValidatorPubKey
+			}
 			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.onMetadataUpdated)
 			if err != nil {
 				c.logger.Warn("failed to update validators metadata", zap.Error(err))
@@ -827,14 +834,14 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			}
 		}
 		c.logger.Debug("updated validators metadata",
-			zap.Int("validators", len(pubKeys)),
-			zap.Int("new_validators", len(newPubKeys)),
+			zap.Int("validators", len(shares)),
+			zap.Int("new_validators", len(newShares)),
 			zap.Uint64("started_validators", c.recentlyStartedValidators),
 			zap.Duration("filtering_took", filteringTook),
 			fields.Took(time.Since(start)))
 
 		// Only sleep if there aren't more validators to fetch metadata for.
-		if len(pubKeys) < batchSize {
+		if len(shares) < batchSize {
 			time.Sleep(sleep)
 		}
 	}
