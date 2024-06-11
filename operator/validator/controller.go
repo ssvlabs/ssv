@@ -789,7 +789,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
-	const chunkSize = 300
+	const batchSize = 300
 	var sleep = 2 * time.Second
 
 	for {
@@ -800,16 +800,23 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			if share.Liquidated {
 				return true
 			}
-			if share.BeaconMetadata == nil {
+			if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
 				newPubKeys = append(newPubKeys, share.ValidatorPubKey)
 			} else if time.Since(share.MetadataLastUpdated()) > c.metadataUpdateInterval {
 				existingPubKeys = append(existingPubKeys, share.ValidatorPubKey)
 			}
-			return len(newPubKeys) < chunkSize
+			return len(newPubKeys) < batchSize
 		})
 
-		// Combine pubkeys, prioritizing new validators.
-		pubKeys := append(newPubKeys, existingPubKeys...)
+		// Combine pubkeys up to batchSize, prioritizing new validators.
+		pubKeys := newPubKeys
+		if remainder := batchSize - len(pubKeys); remainder > 0 {
+			end := remainder
+			if end > len(existingPubKeys) {
+				end = len(existingPubKeys)
+			}
+			pubKeys = append(pubKeys, existingPubKeys[:end]...)
+		}
 		filteringTook := time.Since(start)
 
 		if len(pubKeys) > 0 {
@@ -827,7 +834,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			fields.Took(time.Since(start)))
 
 		// Only sleep if there aren't more validators to fetch metadata for.
-		if len(pubKeys) < chunkSize {
+		if len(pubKeys) < batchSize {
 			time.Sleep(sleep)
 		}
 	}
