@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"encoding/hex"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -22,6 +23,17 @@ type ValidatorMetadata struct {
 	Status          eth2apiv1.ValidatorState `json:"status"`
 	Index           phase0.ValidatorIndex    `json:"index"` // pointer in order to support nil
 	ActivationEpoch phase0.Epoch             `json:"activation_epoch"`
+
+	// lastUpdated is an internal field that can be used to track the last time the metadata was updated.
+	lastUpdated time.Time
+}
+
+func (m *ValidatorMetadata) LastUpdated() time.Time {
+	return m.lastUpdated
+}
+
+func (m *ValidatorMetadata) SetLastUpdated(t time.Time) {
+	m.lastUpdated = t
 }
 
 // Equals returns true if the given metadata is equal to current

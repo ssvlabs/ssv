@@ -803,10 +803,9 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			if share.Liquidated {
 				return true
 			}
-			lastUpdated, everUpdated := c.metadataLastUpdated[string(share.ValidatorPubKey)]
-			if !everUpdated && !share.HasBeaconMetadata() {
+			if share.BeaconMetadata == nil {
 				newPubKeys = append(newPubKeys, share.ValidatorPubKey)
-			} else if !everUpdated || time.Since(lastUpdated) > c.metadataUpdateInterval {
+			} else if time.Since(share.BeaconMetadata.LastUpdated()) > c.metadataUpdateInterval {
 				existingPubKeys = append(existingPubKeys, share.ValidatorPubKey)
 			}
 			return len(existingPubKeys)+len(newPubKeys) < chunkSize
@@ -827,11 +826,6 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			zap.Int("new_validators", len(newPubKeys)),
 			zap.Uint64("started_validators", c.recentlyStartedValidators),
 			fields.Took(time.Since(start)))
-
-		// Set the last updated time for each share.
-		for _, pk := range pubKeys {
-			c.metadataLastUpdated[string(pk)] = time.Now()
-		}
 
 		// Only sleep if there aren't more validators to fetch metadata for.
 		if len(pubKeys) < chunkSize {
