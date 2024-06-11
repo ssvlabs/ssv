@@ -127,6 +127,7 @@ type Recipients interface {
 type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
+	Range(txn basedb.Reader, fn func(*types.SSVShare) bool)
 	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
 }
 
@@ -432,18 +433,27 @@ func (c *controller) StartValidators() {
 		c.startValidators(inited)
 	}
 
-	// Fetch metadata for all validators.
-	start := time.Now()
-	err := c.updateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.onMetadataUpdated)
-	if err != nil {
-		c.logger.Error("failed to update validators metadata after setup",
-			zap.Int("shares", len(allPubKeys)),
-			fields.Took(time.Since(start)),
-			zap.Error(err))
-	} else {
-		c.logger.Debug("updated validators metadata after setup",
-			zap.Int("shares", len(allPubKeys)),
-			fields.Took(time.Since(start)))
+	// Fetch metadata now if there is none. Otherwise, UpdateValidatorsMetadataLoop will handle it.
+	var hasMetadata bool
+	for _, share := range shares {
+		if !share.Liquidated && share.HasBeaconMetadata() {
+			hasMetadata = true
+			break
+		}
+	}
+	if !hasMetadata {
+		start := time.Now()
+		err := c.updateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.onMetadataUpdated)
+		if err != nil {
+			c.logger.Error("failed to update validators metadata after setup",
+				zap.Int("shares", len(allPubKeys)),
+				fields.Took(time.Since(start)),
+				zap.Error(err))
+		} else {
+			c.logger.Debug("updated validators metadata after setup",
+				zap.Int("shares", len(allPubKeys)),
+				fields.Took(time.Since(start)))
+		}
 	}
 }
 
@@ -629,11 +639,13 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 	if afterInit {
 		<-c.committeeValidatorSetup
 	}
-	shares := c.sharesStorage.List(nil, registrystorage.ByAttesting(epoch))
-	indices := make([]phase0.ValidatorIndex, len(shares))
-	for i, share := range shares {
-		indices[i] = share.BeaconMetadata.Index
-	}
+	var indices []phase0.ValidatorIndex
+	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
+		if share.IsAttesting(epoch) {
+			indices = append(indices, share.BeaconMetadata.Index)
+		}
+		return true
+	})
 	return indices
 }
 
@@ -779,46 +791,47 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
-	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec() * 2
-
-	// Prepare share filters.
-	filters := []registrystorage.SharesFilter{}
-
-	// Filter for validators who are not liquidated.
-	filters = append(filters, registrystorage.ByNotLiquidated())
-
-	// Filter for validators which haven't been updated recently.
-	filters = append(filters, func(s *ssvtypes.SSVShare) bool {
-		last, ok := c.metadataLastUpdated[string(s.ValidatorPubKey)]
-		return !ok || time.Since(last) > c.metadataUpdateInterval
-	})
+	const chunkSize = 300
+	var sleep = 2 * time.Second
 
 	for {
-		time.Sleep(interval)
+		time.Sleep(sleep)
 		start := time.Now()
 
 		// Get the shares to fetch metadata for.
-		shares := c.sharesStorage.List(nil, filters...)
-		var pks [][]byte
-		for _, share := range shares {
-			pks = append(pks, share.ValidatorPubKey)
-		}
+		var pubKeys, newPubKeys [][]byte
+		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
+			if share.Liquidated {
+				return true
+			}
+			last, ok := c.metadataLastUpdated[string(share.ValidatorPubKey)]
+			if !ok && !share.HasBeaconMetadata() {
+				newPubKeys = append(newPubKeys, share.ValidatorPubKey)
+			} else if !ok || time.Since(last) > c.metadataUpdateInterval {
+				pubKeys = append(pubKeys, share.ValidatorPubKey)
+			}
+			return len(pubKeys)+len(newPubKeys) >= chunkSize
+		})
 
-		if len(pks) > 0 {
-			err := c.updateValidatorsMetadata(c.logger, pks, c, c.beacon, c.onMetadataUpdated)
+		// Combie pubkeys, prioritizing new validators.
+		pubKeys = append(newPubKeys, pubKeys...)
+
+		if len(pubKeys) > 0 {
+			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.onMetadataUpdated)
 			if err != nil {
 				c.logger.Warn("failed to update validators metadata", zap.Error(err))
 				continue
 			}
 		}
 		c.logger.Debug("updated validators metadata",
-			zap.Int("validators", len(shares)),
+			zap.Int("validators", len(pubKeys)),
+			zap.Int("new_validators", len(newPubKeys)),
 			zap.Uint64("started_validators", c.recentlyStartedValidators),
 			fields.Took(time.Since(start)))
 
 		// Set the last updated time for each share.
-		for _, share := range shares {
-			c.metadataLastUpdated[string(share.ValidatorPubKey)] = time.Now()
+		for _, pk := range pubKeys {
+			c.metadataLastUpdated[string(pk)] = time.Now()
 		}
 	}
 }

@@ -32,6 +32,10 @@ type Shares interface {
 	// List returns a list of shares, filtered by the given filters (if any).
 	List(txn basedb.Reader, filters ...SharesFilter) []*types.SSVShare
 
+	// Range calls the given function over each share.
+	// If the function returns false, the iteration stops.
+	Range(txn basedb.Reader, fn func(*types.SSVShare) bool)
+
 	// Save saves the given shares.
 	Save(txn basedb.ReadWriter, shares ...*types.SSVShare) error
 
@@ -108,6 +112,17 @@ Shares:
 		shares = append(shares, share)
 	}
 	return shares
+}
+
+func (s *sharesStorage) Range(_ basedb.Reader, fn func(*types.SSVShare) bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, share := range s.shares {
+		if !fn(share) {
+			break
+		}
+	}
 }
 
 func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
