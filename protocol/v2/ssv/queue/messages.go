@@ -261,7 +261,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 	// Higher height.
 	if relativeHeight == 1 {
 		switch {
-		case isDecidedMesssage(state, m):
+		case isDecidedMessage(state, m):
 			return 4
 		case isPreConsensusMessage:
 			return 3
@@ -275,7 +275,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 
 	// Lower height.
 	switch {
-	case isDecidedMesssage(state, m):
+	case isDecidedMessage(state, m):
 		return 2
 	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
 		return 1
@@ -301,7 +301,7 @@ func scoreConsensusType(m *DecodedSSVMessage) int {
 	return 0
 }
 
-func isDecidedMesssage(s *State, m *DecodedSSVMessage) bool {
+func isDecidedMessage(s *State, m *DecodedSSVMessage) bool {
 	consensusMessage, isConsensusMessage := m.Body.(*specqbft.Message)
 	if !isConsensusMessage {
 		return false
@@ -352,7 +352,7 @@ func scoreCommitteeMessageSubtype(state *State, m *DecodedSSVMessage, relativeHe
 		switch {
 		case isPostConsensusMessage:
 			return 4
-		case isDecidedMesssage(state, m):
+		case isDecidedMessage(state, m):
 			return 3
 		case isPreConsensusMessage:
 			return 2
@@ -364,7 +364,7 @@ func scoreCommitteeMessageSubtype(state *State, m *DecodedSSVMessage, relativeHe
 
 	// Lower height.
 	switch {
-	case isDecidedMesssage(state, m):
+	case isDecidedMessage(state, m):
 		return 2
 	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
 		return 1
