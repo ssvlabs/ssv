@@ -524,8 +524,6 @@ func (c *controller) StartNetworkHandlers() {
 
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
 func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
-	c.metadataLastUpdated[pk] = time.Now()
-
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}

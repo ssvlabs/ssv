@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -165,6 +166,10 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 
 // UpdateValidatorMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
+	if metadata == nil {
+		return nil
+	}
+
 	key, err := hex.DecodeString(pk)
 	if err != nil {
 		return err
@@ -174,6 +179,7 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 		return nil
 	}
 
+	metadata.SetLastUpdated(time.Now())
 	share.BeaconMetadata = metadata
 	return s.Save(nil, share)
 }
