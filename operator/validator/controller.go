@@ -399,6 +399,7 @@ func (c *controller) StartValidators() {
 	// Load non-liquidated shares.
 	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
+		close(c.committeeValidatorSetup)
 		c.logger.Info("could not find validators")
 		return
 	}
