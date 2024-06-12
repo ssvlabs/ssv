@@ -87,7 +87,10 @@ func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 		//	return
 		//}
 
+		v.mtx.Lock()
 		dr := v.Runners[phase0.Slot(height)]
+		v.mtx.Unlock()
+
 		hasDuty := dr.HasRunningDuty()
 		if !hasDuty {
 			return
