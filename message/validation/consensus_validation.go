@@ -310,7 +310,7 @@ func (mv *messageValidator) validateBeaconDuty(
 
 		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
 		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, share.Metadata.BeaconMetadata.Index) == nil {
-			return ErrNoDuty
+			return ErrNoDutyIgnored
 		}
 
 		return nil
