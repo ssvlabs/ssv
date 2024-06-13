@@ -99,18 +99,8 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
-	firstValidator := &validator.Validator{
-		DutyRunners: runner.DutyRunners{},
-		Storage:     ibftstorage.NewStores(),
-		Share: &types.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: secretKey.GetPublicKey().Serialize(),
-			},
-		},
-	}
-
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
-		0: {
+		2: {
 			Balance: 0,
 			Status:  3,
 			Index:   2,
@@ -119,9 +109,18 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				PublicKey:       phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),
 			},
 		},
+		3: {
+			Balance: 0,
+			Status:  3,
+			Index:   3,
+			Validator: &phase0.Validator{
+				ActivationEpoch: passedEpoch,
+				PublicKey:       phase0.BLSPubKey(secretKey2.GetPublicKey().Serialize()),
+			},
+		},
 	}
 
-	sharesSlice := []*types.SSVShare{
+	sharesWithMetadata := []*types.SSVShare{
 		{
 			Share: spectypes.Share{
 				OperatorID:      1,
@@ -155,36 +154,83 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			},
 		},
 	}
+	_ = sharesWithMetadata
+
+	sharesWithoutMetadata := []*types.SSVShare{
+		{
+			Share: spectypes.Share{
+				OperatorID:      1,
+				Committee:       operators,
+				ValidatorPubKey: secretKey.GetPublicKey().Serialize(),
+			},
+			Metadata: types.Metadata{
+				Liquidated: false,
+			},
+		},
+		{
+			Share: spectypes.Share{
+				OperatorID:      2,
+				Committee:       operators,
+				ValidatorPubKey: secretKey2.GetPublicKey().Serialize(),
+			},
+			Metadata: types.Metadata{
+				Liquidated: false,
+			},
+		},
+	}
+	_ = sharesWithoutMetadata
 
 	testCases := []struct {
 		name                       string
 		shareStorageListResponse   []*types.SSVShare
+		expectMetadataFetch        bool
 		syncHighestDecidedResponse error
 		getValidatorDataResponse   error
 	}{
-		{"no shares of non committee", nil, nil, nil},
-		{"set up non committee validators", sharesSlice, nil, nil},
-		{"fail to sync highest decided", sharesSlice, errors.New("failed to sync highest decided"), nil},
-		{"fail to update validators metadata", sharesSlice, nil, errors.New("could not update all validators")},
+		{"no shares of non committee", nil, false, nil, nil},
+		{"set up non committee validators", sharesWithMetadata, false, nil, nil},
+		{"set up non committee validators without metadata", sharesWithoutMetadata, true, nil, nil},
+		{"fail to sync highest decided", sharesWithMetadata, false, errors.New("failed to sync highest decided"), nil},
+		{"fail to update validators metadata", sharesWithMetadata, false, nil, errors.New("could not update all validators")},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
 			defer ctrl.Finish()
-			testValidatorsMap := map[string]*validator.Validator{
-				secretKey.GetPublicKey().SerializeToHexStr(): firstValidator,
-			}
-			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+			mockValidatorsMap := validatorsmap.New(context.TODO())
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
 			} else {
-				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(sharesSlice[0]).AnyTimes()
-				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-				bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).Times(1)
+				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) *types.SSVShare {
+					for _, share := range tc.shareStorageListResponse {
+						if hex.EncodeToString(share.Share.ValidatorPubKey) == hex.EncodeToString(pubKey) {
+							return share
+						}
+					}
+					return nil
+				}).AnyTimes()
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
-				sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				sharesStorage.EXPECT().Range(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, fn func(*types.SSVShare) bool) {
+					for _, share := range tc.shareStorageListResponse {
+						if !fn(share) {
+							break
+						}
+					}
+				}).AnyTimes()
+				if tc.expectMetadataFetch {
+					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
+					sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *beacon.ValidatorMetadata) error {
+						for _, share := range tc.shareStorageListResponse {
+							if hex.EncodeToString(share.Share.ValidatorPubKey) == pk {
+								share.Metadata.BeaconMetadata = metadata
+							}
+						}
+						return nil
+					}).Times(len(tc.shareStorageListResponse))
+					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
+				}
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(0)
 			}
 
@@ -1029,6 +1075,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		recipientsStorage:       opts.recipientsStorage,
 		messageRouter:           newMessageRouter(logger),
 		committeeValidatorSetup: make(chan struct{}),
+		indicesChange:           make(chan struct{}, 32),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,
