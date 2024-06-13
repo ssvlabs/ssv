@@ -95,7 +95,6 @@ var (
 	ErrInvalidJustifications               = Error{text: "invalid justifications", reject: true}
 	ErrTooManyDutiesPerEpoch               = Error{text: "too many duties per epoch", reject: true}
 	ErrNoDuty                              = Error{text: "no duty for this epoch", reject: true}
-	ErrNoDutyIgnored                       = Error{text: "no duty for this epoch (ignored)"}
 	ErrDeserializePublicKey                = Error{text: "deserialize public key", reject: true}
 	ErrNoPartialMessages                   = Error{text: "no partial messages", reject: true}
 	ErrDuplicatedPartialSignatureMessage   = Error{text: "duplicated partial signature message", reject: true}
