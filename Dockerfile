@@ -47,6 +47,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 FROM golang:1.20.7 AS runner
 
+RUN apt-get update     && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+  dnsutils=1:9.18.24-1 && \
+  rm -rf /var/lib/apt/lists/*
+
 WORKDIR /
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
