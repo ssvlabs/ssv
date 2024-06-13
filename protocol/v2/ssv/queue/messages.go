@@ -23,12 +23,11 @@ var (
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
-	SignedSSVMessage        *spectypes.SignedSSVMessage
-	GenesisSignedSSVMessage *genesisspectypes.SignedSSVMessage
+	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg | *genesisspecqbft.SignedMessage (TODO: remove post-fork) | *genesisspectypes.SignedPartialSignatureMessage (TODO: remove post-fork)
+	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
 }
 
 func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
@@ -113,13 +112,14 @@ func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage
 		return nil, err
 	}
 
+	msg, _, err := ssvtypes.SSVMessageFromGenesis(m)
+	if err != nil {
+		return nil, err
+	}
+
 	return &DecodedSSVMessage{
-		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.MsgType(m.MsgType),
-			MsgID:   spectypes.MessageID(m.MsgID),
-			Data:    m.Data,
-		},
-		Body: body,
+		SSVMessage: msg,
+		Body:       body,
 	}, nil
 }
 
@@ -135,7 +135,10 @@ func DecodeGenesisSignedSSVMessage(sm *genesisspectypes.SignedSSVMessage) (*Deco
 		return nil, err
 	}
 
-	d.GenesisSignedSSVMessage = sm
+	d.SignedSSVMessage, err = ssvtypes.SignedSSVMessageFromGenesis(sm)
+	if err != nil {
+		return nil, err
+	}
 
 	return d, nil
 }
