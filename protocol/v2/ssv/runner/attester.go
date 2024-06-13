@@ -122,10 +122,6 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	logger.Debug("🧩 broadcasted partial post consensus sig",
-		zap.String("domain_type", hex.EncodeToString(r.GetShare().DomainType[:])),
-		zap.Uint64("slot", uint64(decidedValue.Duty.Slot)),
-		zap.Uint64("signer", r.BaseRunner.Share.OperatorID))
 	return nil
 }
 
