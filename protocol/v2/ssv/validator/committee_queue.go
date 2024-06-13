@@ -101,7 +101,10 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		// Construct a representation of the current state.
 		state := *q.queueState
 
+		v.mtx.Lock()
 		runner := v.Runners[slot]
+		v.mtx.Unlock()
+
 		if runner == nil {
 			return fmt.Errorf("could not get duty runner for slot %d", slot)
 		}
