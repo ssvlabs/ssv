@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	defaultDiscoveryInterval = time.Millisecond * 100
+	defaultDiscoveryInterval = time.Second
 	publishENRTimeout        = time.Minute
 
 	publishStateReady   = int32(0)
