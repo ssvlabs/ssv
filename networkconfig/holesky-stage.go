@@ -20,5 +20,5 @@ var HoleskyStage = NetworkConfig{
 	},
 	WhitelistedOperatorKeys:        []string{},
 	PermissionlessActivationEpoch:  10560,
-	StrictSyncCommitteeDutiesEpoch: 58314,
+	StrictSyncCommitteeDutiesEpoch: 58315,
 }
