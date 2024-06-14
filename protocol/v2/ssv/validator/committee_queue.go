@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
@@ -74,11 +75,18 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler MessageHandler) error {
+func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler MessageHandler, runner *runner.CommitteeRunner) error {
+	if runner == nil {
+		return fmt.Errorf("could not get duty runner for slot %d", slot)
+	}
+
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	var q queueContainer
+	state := *q.queueState
+	state.Slot = slot
+
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
@@ -94,20 +102,10 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 	}
 
 	logger.Debug("📬 queue consumer is running")
-
 	lens := make([]int, 0, 10)
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
-		state := *q.queueState
-
-		v.mtx.Lock()
-		runner := v.Runners[slot]
-		v.mtx.Unlock()
-
-		if runner == nil {
-			return fmt.Errorf("could not get duty runner for slot %d", slot)
-		}
 		var runningInstance *instance.Instance
 		if runner.HasRunningDuty() {
 			runningInstance = runner.GetBaseRunner().State.RunningInstance
@@ -116,8 +114,6 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 				state.HasRunningInstance = !decided
 			}
 		}
-
-		state.Slot = slot
 
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {
