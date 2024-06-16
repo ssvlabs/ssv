@@ -305,7 +305,8 @@ func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
 		}
 		metricPublishEnrPongs.Inc()
 		// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
-	}, time.Millisecond*100, dvs.badNodeFilter(logger))
+		time.Sleep(time.Millisecond * 100)
+	}, dvs.badNodeFilter(logger))
 }
 
 func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
