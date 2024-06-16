@@ -52,7 +52,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 
 	dvs.discover(ctx, func(e PeerEvent) {
 		cn <- e.AddrInfo
-	}, dvs.badNodeFilter(logger), dvs.subnetFilter(uint64(subnet)))
+	}, time.Millisecond, dvs.badNodeFilter(logger), dvs.subnetFilter(uint64(subnet)))
 
 	return cn, nil
 }
