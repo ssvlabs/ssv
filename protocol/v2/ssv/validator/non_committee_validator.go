@@ -60,7 +60,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if msg.GetType() != spectypes.SSVPartialSignatureMsgType {
 		return
 	}
-
 	spsm := &spectypes.PartialSignatureMessages{}
 	if err := spsm.Decode(msg.SSVMessage.GetData()); err != nil {
 		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
