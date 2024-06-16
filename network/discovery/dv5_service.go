@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -198,6 +199,29 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dv5Cfg, err := opts.DiscV5Cfg(logger)
 	if err != nil {
 		return err
+	}
+	dv5Cfg.NodeFilter = func(n *enode.Node) bool {
+		logger := zap.L().With(fields.ENR(n))
+		if n == nil {
+			logger.Debug("discoveryNodeFilter: nil node")
+			return false
+		}
+		r := n.Record()
+		if r == nil {
+			logger.Debug("discoveryNodeFilter: nil record")
+			return false
+		}
+		domainType, err := records.GetDomainTypeEntry(r)
+		if err != nil {
+			logger.Debug("discoveryNodeFilter: could not get domain type", zap.Error(err))
+			return false
+		}
+		if domainType != dvs.domainType {
+			logger.Debug("discoveryNodeFilter: domain type mismatch", zap.String("nodeDomainType", hex.EncodeToString(domainType[:])))
+			return false
+		}
+		logger.Debug("discoveryNodeFilter: node accepted ✅")
+		return true
 	}
 	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
 	if err != nil {
