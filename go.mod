@@ -229,3 +229,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
+
+replace github.com/ethereum/go-ethereum => github.com/moshe-blox/go-ethereum v0.0.0-20240616101439-ced204b13167
