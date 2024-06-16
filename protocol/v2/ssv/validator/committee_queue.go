@@ -18,9 +18,6 @@ import (
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
-	v.mtx.RLock() // read v.Queues
-	defer v.mtx.RUnlock()
-
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -31,16 +28,32 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 		return
 	}
 
-	if q, ok := v.Queues[slot]; ok {
-		if pushed := q.Q.TryPush(msg); !pushed {
-			msgID := msg.MsgID.String()
-			logger.Warn("❗ dropping message because the queue is full",
-				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msg_id", msgID))
+	v.mtx.RLock() // read v.Queues
+	q, ok := v.Queues[slot]
+	v.mtx.RUnlock()
+	if !ok {
+		q = queueContainer{
+			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			queueState: &queue.State{
+				HasRunningInstance: false,
+				Height:             specqbft.Height(slot),
+				Slot:               0,
+				//Quorum:             options.SSVShare.Share,// TODO
+			},
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		v.mtx.Lock()
+		v.Queues[slot] = q
+		v.mtx.Unlock()
+		logger.Debug("missing queue for slot created", fields.Slot(slot))
+	}
+
+	if pushed := q.Q.TryPush(msg); !pushed {
+		msgID := msg.MsgID.String()
+		logger.Warn("❗ dropping message because the queue is full",
+			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+			zap.String("msg_id", msgID))
 	} else {
-		logger.Error("❌ missing queue for slot", fields.Slot(slot))
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	}
 }
 

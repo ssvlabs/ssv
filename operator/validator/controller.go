@@ -864,12 +864,14 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// remove from ValidatorsMap
 	v := c.validatorsMap.RemoveValidator(pubKey)
 
-	// stop instance
-	if v != nil {
-		v.Stop()
-		c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
+	if v == nil {
+		c.logger.Warn("could not find validator to stop", fields.PubKey(pubKey[:]))
+		return
 	}
 
+	// stop instance
+	v.Stop()
+	c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
 	vc, ok := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
 	if ok {
 		vc.RemoveShare(v.Share.Share.ValidatorIndex)
