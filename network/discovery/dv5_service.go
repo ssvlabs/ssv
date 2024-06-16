@@ -215,7 +215,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 // by a random walking on the underlying DHT.
 //
 // handler will act upon new node.
-// interval enables to control the rate of new nodes that we find.
+// interval enables to control the rate of discovered nodes that we accept.
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
 func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
