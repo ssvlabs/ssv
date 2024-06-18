@@ -199,7 +199,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		}
 	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == types.RoleSyncCommitteeContribution {
 		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync comittee contribution duty
-		if partialSignatureMessageCount > maxSignaturesInSyncCommitteeContribution {
+		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
 			e.want = maxConsensusMsgSize

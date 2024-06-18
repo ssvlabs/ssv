@@ -316,7 +316,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
-		tooBigMsgSize := maxPayloadSize * 2
+		tooBigMsgSize := maxPayloadDataSize * 2
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, tooBigMsgSize)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
@@ -325,7 +325,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		expectedErr := ErrSSVDataTooBig
 		expectedErr.got = tooBigMsgSize
-		expectedErr.want = maxPayloadSize
+		expectedErr.want = maxPayloadDataSize
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -336,7 +336,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadSize)
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadDataSize)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
