@@ -68,7 +68,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	mv.updateConsensusState(signedSSVMessage, consensusMessage, state)
+	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, state); err != nil {
+		return consensusMessage, err
+	}
 
 	return consensusMessage, nil
 }
@@ -287,7 +289,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	return nil
 }
 
-func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, consensusState *consensusState) {
+func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, consensusState *consensusState) error {
 	msgSlot := phase0.Slot(consensusMessage.Height)
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
@@ -309,11 +311,15 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 			}
 		}
 
-		mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
+		if err := mv.processSignerState(signedSSVMessage, consensusMessage, signerState); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
-func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, signerState *SignerState) {
+func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, signerState *SignerState) error {
 	if len(signedSSVMessage.FullData) != 0 && consensusMessage.MsgType == specqbft.ProposalMsgType {
 		signerState.ProposalData = signedSSVMessage.FullData
 	}
@@ -322,13 +328,15 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 	if signerCount > 1 {
 		encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
 		if err != nil {
-			return
+			// encodeOperators must never re
+			return ErrEncodeOperators
 		}
 
 		signerState.SeenSigners[string(encodedOperators)] = struct{}{}
 	}
 
 	signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
+	return nil
 }
 
 func (mv *messageValidator) pruneOldSlots(stateBySlot *treemap.Map, lastSlot phase0.Slot) {
