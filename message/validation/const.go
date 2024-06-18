@@ -7,29 +7,48 @@ import (
 const (
 	// lateMessageMargin is the duration past a message's TTL in which it is still considered valid.
 	lateMessageMargin = time.Second * 3
-
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
-	clockErrorTolerance = time.Millisecond * 50
+	clockErrorTolerance   = time.Millisecond * 50
+	allowedRoundsInFuture = 1
+	allowedRoundsInPast   = 2
+	lateSlotAllowance     = 2
+	syncCommitteeSize     = 512
+	rsaSignatureSize      = 256
+	operatorIDSize        = 8 // uint64
+	slotSize              = 8 // uint64
+	validatorIndexSize    = 8 // uint64
+	identifierSize        = 56
+	rootSize              = 32
+	maxSignatures         = 13
+)
 
-	maxConsensusMsgSize        = 705240                   // from knowledge base
-	maxPartialSignatureMsgSize = 8 + 8 + 1000*(96+32+8+8) // 144016, from knowledge base
-	allowedRoundsInFuture      = 1
-	allowedRoundsInPast        = 2
-	lateSlotAllowance          = 2
-	rsaSignatureSize           = 256
-	syncCommitteeSize          = 512
-	operatorIDSize             = 8  // uin64
-	msgTypeSize                = 8  // uint64
-	msgIDSize                  = 56 // from spectypes.SSVMessage
-	maxSignatures              = 13
-	maxSignaturesSize          = maxSignatures * rsaSignatureSize
-	maxOperatorIDSize          = maxSignatures * operatorIDSize
-	maxFullDataSize            = 5243144 // from spectypes.SignedSSVMessage
+const (
+	qbftMsgTypeSize        = 8     // uint64
+	heightSize             = 8     // uint64
+	roundSize              = 8     // uint64
+	maxNoJustificationSize = 3616  // from KB
+	max1JustificationSize  = 50624 // from KB
+	maxConsensusMsgSize    = qbftMsgTypeSize + heightSize + roundSize + identifierSize + rootSize + roundSize + maxSignatures*(maxNoJustificationSize+max1JustificationSize)
+)
+
+const (
+	partialSignatureSize        = 96
+	partialSignatureMsgSize     = partialSignatureSize + rootSize + operatorIDSize + validatorIndexSize
+	maxPartialSignatureMessages = 1000
+	partialSigMsgTypeSize       = 8 // uint64
+	maxPartialSignatureMsgsSize = partialSigMsgTypeSize + slotSize + maxPartialSignatureMessages*partialSignatureMsgSize
+)
+
+const (
+	msgTypeSize       = 8 // uint64
+	maxSignaturesSize = maxSignatures * rsaSignatureSize
+	maxOperatorIDSize = maxSignatures * operatorIDSize
+	maxFullDataSize   = 5243144 // from spectypes.SignedSSVMessage
 )
 
 var (
-	maxPayloadDataSize = max(maxConsensusMsgSize, maxPartialSignatureMsgSize) // not const because of max TODO: const after Go 1.21
-	maxSignedMsgSize   = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + msgIDSize + maxPayloadDataSize + maxFullDataSize
+	maxPayloadDataSize = max(maxConsensusMsgSize, maxPartialSignatureMsgsSize) // not const because of max TODO: const after Go 1.21
+	maxSignedMsgSize   = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + maxFullDataSize
 	maxEncodedMsgSize  = maxSignedMsgSize + maxSignedMsgSize/10 // 10% for encoding overhead
 )
 
