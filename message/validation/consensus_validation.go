@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -466,5 +467,6 @@ func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return buf.Bytes(), nil
+	hash := sha256.Sum256(buf.Bytes())
+	return hash[:], nil
 }
