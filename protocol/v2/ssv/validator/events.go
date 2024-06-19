@@ -57,10 +57,6 @@ func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 
 		dutyRunner.Stop()
 
-		c.mtx.Lock()
-		delete(c.Runners, slot)
-		c.mtx.Unlock()
-
 		return nil
 	case types.ExecuteDuty:
 		if err := c.OnExecuteDuty(logger, eventMsg); err != nil {
