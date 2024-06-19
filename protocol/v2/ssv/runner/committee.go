@@ -73,10 +73,10 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 }
 
 func (cr *CommitteeRunner) Stop() {
-	cr.stopCh <- struct{}{}
+	close(cr.stopCh)
 }
 
-func (cr *CommitteeRunner) IsStopped() <-chan struct{} {
+func (cr *CommitteeRunner) Stopped() <-chan struct{} {
 	return cr.stopCh
 }
 
