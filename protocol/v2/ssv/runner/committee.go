@@ -43,6 +43,8 @@ type CommitteeRunner struct {
 	started       time.Time
 	consensusDone time.Time
 	postStarted   time.Time
+
+	stopCh chan struct{}
 }
 
 func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
@@ -66,7 +68,16 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 		signer:         signer,
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
+		stopCh:         make(chan struct{}),
 	}
+}
+
+func (cr *CommitteeRunner) Stop() {
+	cr.stopCh <- struct{}{}
+}
+
+func (cr *CommitteeRunner) IsStopped() <-chan struct{} {
+	return cr.stopCh
 }
 
 func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {

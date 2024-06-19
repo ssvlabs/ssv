@@ -49,6 +49,8 @@ func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 		if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(logger, *eventMsg); err != nil {
 			return fmt.Errorf("timeout event: %w", err)
 		}
+
+		dutyRunner.Stop()
 		return nil
 	case types.ExecuteDuty:
 		if err := c.OnExecuteDuty(logger, eventMsg); err != nil {
