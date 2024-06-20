@@ -27,8 +27,6 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty]) *Attes
 		duties: duties,
 	}
 	h.fetchCurrentEpoch = true
-	// TODO: (Alan) genesis support
-	//h.fetchFirst = true
 	return h
 }
 
@@ -82,19 +80,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			if h.indicesChanged {
 				h.duties.ResetEpoch(currentEpoch)
 				h.indicesChanged = false
-				// TODO: (Alan) genesis support
-				//h.processFetching(ctx, currentEpoch, slot)
-				//h.processExecution(currentEpoch, slot)
 			}
-			// TODO: (Alan) genesis support
-			//else {
-			//h.processExecution(currentEpoch, slot)
-			//if h.indicesChanged {
-			//	h.duties.ResetEpoch(currentEpoch)
-			//	h.indicesChanged = false
-			//}
-			//h.processFetching(ctx, currentEpoch, slot)
-			//}
 			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
@@ -118,16 +104,15 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			// reset current epoch duties
 			if reorgEvent.Previous {
 				h.duties.ResetEpoch(currentEpoch)
-				// TODO: (Alan) genesis support
-				//h.fetchFirst = true
 				h.fetchCurrentEpoch = true
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
 					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 
-				// TODO: (Alan) genesis support
-				h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
+				if h.AlanFork() {
+					h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
+				}
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.
@@ -195,8 +180,9 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			// TODO: (Alan) genesis support
-			//toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
+			if !h.AlanFork() {
+				toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
+			}
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}

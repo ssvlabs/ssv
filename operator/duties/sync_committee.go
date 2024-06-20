@@ -168,8 +168,9 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
-			// TODO: (Alan) genesis support
-			//toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
+			if !h.AlanFork() {
+				toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
+			}
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
 	}

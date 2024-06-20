@@ -35,11 +35,10 @@ type baseHandler struct {
 	executeDuties          ExecuteDutiesFunc
 	executeCommitteeDuties ExecuteCommitteeDutiesFunc
 	ticker                 slotticker.SlotTicker
-
-	reorg         chan ReorgEvent
-	indicesChange chan struct{}
-
-	indicesChanged bool
+	reorg                  chan ReorgEvent
+	indicesChange          chan struct{}
+	indicesChanged         bool
+	alanFork               bool
 }
 
 func (h *baseHandler) Setup(
@@ -67,6 +66,7 @@ func (h *baseHandler) Setup(
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
+	h.alanFork = true // TODO: implement
 }
 
 func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
@@ -76,4 +76,8 @@ func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
 
 func (h *baseHandler) HandleInitialDuties(context.Context) {
 	// Do nothing
+}
+
+func (h *baseHandler) AlanFork() bool {
+	return h.alanFork
 }
