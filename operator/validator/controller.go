@@ -863,7 +863,17 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	vc, ok := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
 	if ok {
 		vc.RemoveShare(v.Share.Share.ValidatorIndex)
-		// TODO: (Alan) remove committee if last share and stop
+		if len(vc.Shares) == 0 {
+			cm := c.validatorsMap.RemoveCommittee(v.Share.CommitteeID())
+			if cm == nil {
+				c.logger.Warn("could not find committee to remove on no validators",
+					fields.CommitteeID(v.Share.CommitteeID()),
+					fields.PubKey(pubKey[:]),
+				)
+				return
+			}
+			// TODO: (Alan) stop committee runners queues consumption
+		}
 	}
 }
 
