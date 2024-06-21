@@ -22,7 +22,7 @@ func TestSlotTicker(t *testing.T) {
 	timeSinceGenesis := time.Since(genesisTime)
 	expectedSlot := phase0.Slot(timeSinceGenesis/slotDuration) + 1
 
-	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+	ticker := New(zap.NewNop(), Config{SlotDuration: slotDuration, GenesisTime: genesisTime})
 
 	for i := 0; i < numTicks; i++ {
 		<-ticker.Next()
@@ -36,7 +36,7 @@ func TestSlotTicker(t *testing.T) {
 func TestTickerInitialization(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now()
-	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+	ticker := New(zap.NewNop(), Config{SlotDuration: slotDuration, GenesisTime: genesisTime})
 
 	start := time.Now()
 	<-ticker.Next()
@@ -54,7 +54,7 @@ func TestSlotNumberConsistency(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now()
 
-	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+	ticker := New(zap.NewNop(), Config{SlotDuration: slotDuration, GenesisTime: genesisTime})
 	var lastSlot phase0.Slot
 
 	for i := 0; i < 10; i++ {
@@ -70,7 +70,7 @@ func TestGenesisInFuture(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now().Add(1 * time.Second) // Setting genesis time 1s in the future
 
-	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+	ticker := New(zap.NewNop(), Config{SlotDuration: slotDuration, GenesisTime: genesisTime})
 	start := time.Now()
 
 	<-ticker.Next()
@@ -89,7 +89,7 @@ func TestBoundedDrift(t *testing.T) {
 	slotDuration := 20 * time.Millisecond
 	genesisTime := time.Now()
 
-	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+	ticker := New(zap.NewNop(), Config{SlotDuration: slotDuration, GenesisTime: genesisTime})
 	ticks := 100
 
 	start := time.Now()
@@ -122,7 +122,7 @@ func TestMultipleSlotTickers(t *testing.T) {
 	for i := 0; i < numTickers; i++ {
 		go func() {
 			defer wg.Done()
-			ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+			ticker := New(zap.NewNop(), Config{SlotDuration: slotDuration, GenesisTime: genesisTime})
 			for j := 0; j < ticksPerTimer; j++ {
 				<-ticker.Next()
 			}
@@ -148,7 +148,7 @@ func TestSlotSkipping(t *testing.T) {
 	)
 
 	genesisTime := time.Now()
-	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+	ticker := New(zap.NewNop(), Config{SlotDuration: slotDuration, GenesisTime: genesisTime})
 
 	var lastSlot phase0.Slot
 	for i := 1; i <= numTicks; i++ { // Starting loop from 1 for ease of skipInterval check

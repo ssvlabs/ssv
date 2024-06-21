@@ -9,6 +9,7 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter/api"
+	"github.com/ssvlabs/ssv/forks"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -48,6 +49,7 @@ type Options struct {
 	WS                  api.WebSocketServer
 	WsAPIPort           int
 	Metrics             nodeMetrics
+	ForkProvider        forks.Provider
 }
 
 // operatorNode implements Node interface
@@ -111,6 +113,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			ExecuteCommitteeDuty: opts.ValidatorController.ExecuteCommitteeDuty,
 			DutyStore:            opts.DutyStore,
 			SlotTickerProvider:   slotTickerProvider,
+			ForkProvider:         opts.ForkProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,

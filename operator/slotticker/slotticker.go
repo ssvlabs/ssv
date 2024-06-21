@@ -5,6 +5,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/forks"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
@@ -17,16 +19,20 @@ type SlotTicker interface {
 }
 
 type Config struct {
-	SlotDuration time.Duration
-	GenesisTime  time.Time
+	SlotDuration  time.Duration
+	GenesisTime   time.Time
+	SlotsPerEpoch uint64
+	Forks         forks.EpochReporter
 }
 
 type slotTicker struct {
-	logger       *zap.Logger
-	timer        Timer
-	slotDuration time.Duration
-	genesisTime  time.Time
-	slot         phase0.Slot
+	logger        *zap.Logger
+	timer         Timer
+	slotDuration  time.Duration
+	genesisTime   time.Time
+	slotsPerEpoch uint64
+	slot          phase0.Slot
+	forks         forks.EpochReporter
 }
 
 // New returns a goroutine-free SlotTicker implementation which is not thread-safe.
@@ -49,11 +55,13 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 	}
 
 	return &slotTicker{
-		logger:       logger,
-		timer:        timerProvider(initialDelay),
-		slotDuration: cfg.SlotDuration,
-		genesisTime:  cfg.GenesisTime,
-		slot:         0,
+		logger:        logger,
+		timer:         timerProvider(initialDelay),
+		slotDuration:  cfg.SlotDuration,
+		genesisTime:   cfg.GenesisTime,
+		slotsPerEpoch: cfg.SlotsPerEpoch,
+		forks:         cfg.Forks,
+		slot:          0,
 	}
 }
 
@@ -81,6 +89,9 @@ func (s *slotTicker) Next() <-chan time.Time {
 	nextSlotStartTime := s.genesisTime.Add(time.Duration(nextSlot) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
 	s.slot = nextSlot
+	if s.forks != nil {
+		s.forks.ReportEpoch(phase0.Epoch(uint64(nextSlot) / s.slotsPerEpoch))
+	}
 	return s.timer.C()
 }
 

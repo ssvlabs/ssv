@@ -4,6 +4,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/forks"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 )
 
@@ -29,5 +30,12 @@ func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
 	return func(mv *messageValidator) {
 		mv.selfPID = selfPID
 		mv.selfAccept = selfAccept
+	}
+}
+
+func WithGenesisValidator(genesisValidator MessageValidator, forkProvider forks.Provider) Option {
+	return func(mv *messageValidator) {
+		mv.genesisValidator = genesisValidator
+		mv.forkProvider = forkProvider
 	}
 }

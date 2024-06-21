@@ -50,7 +50,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			if h.AlanFork() {
+			if h.forkProvider.IsAlan() {
 				h.processExecution(period, epoch, slot)
 			}
 

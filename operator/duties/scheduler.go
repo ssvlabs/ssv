@@ -21,6 +21,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/forks"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -96,6 +97,7 @@ type SchedulerOptions struct {
 	ValidatorExitCh      <-chan ExitDescriptor
 	SlotTickerProvider   slotticker.Provider
 	DutyStore            *dutystore.Store
+	ForkProvider         forks.Provider
 }
 
 type Scheduler struct {
@@ -121,6 +123,8 @@ type Scheduler struct {
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
+
+	forkProvider forks.Provider
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
@@ -152,6 +156,8 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
+
+		forkProvider: opts.ForkProvider,
 	}
 
 	return s
@@ -200,6 +206,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.slotTickerProvider,
 			reorgCh,
 			indicesChangeCh,
+			s.forkProvider,
 		)
 
 		// This call is blocking.
