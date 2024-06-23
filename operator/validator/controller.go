@@ -419,7 +419,6 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
 			)
 		}
-
 		ncv.Lock()
 		return nil
 	}()
