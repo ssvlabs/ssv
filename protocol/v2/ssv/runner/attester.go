@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -223,13 +224,17 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	start := time.Now()
+	var expectedBlockRoot phase0.Root
+	if provider, ok := r.GetBeaconNode().(beacon.SlotRootProvider); ok {
+		expectedBlockRoot, _ = provider.SlotRoot(duty.Slot)
+	}
 	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
 	logger = logger.With(zap.Duration("attestation_data_time", time.Since(start)))
 	if provider, ok := r.GetBeaconNode().(beacon.SlotRootProvider); ok {
-		if err := r.logAttestationData(logger, provider, attData); err != nil {
+		if err := r.logAttestationData(logger, provider, attData, expectedBlockRoot); err != nil {
 			logger.Debug("❌ failed to log attestation data", zap.Error(err))
 		}
 	}
@@ -304,16 +309,21 @@ func (r *AttesterRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-func (r *AttesterRunner) logAttestationData(logger *zap.Logger, provider beacon.SlotRootProvider, attData ssz.Marshaler) error {
+func (r *AttesterRunner) logAttestationData(logger *zap.Logger, provider beacon.SlotRootProvider, attData ssz.Marshaler, expectedBlockRoot phase0.Root) error {
 	data, ok := attData.(*phase0.AttestationData)
 	if !ok {
 		return errors.New("invalid attestation data")
 	}
+	correctHeadVote := "unknown"
 	root, ok := provider.SlotRoot(data.Slot)
+	if ok {
+		correctHeadVote = fmt.Sprintf("%t", data.BeaconBlockRoot == root)
+	}
 	logger.Debug("📜 got attestation data",
 		zap.String("block_root", hex.EncodeToString(data.BeaconBlockRoot[:])),
 		zap.String("expected_block_root", hex.EncodeToString(root[:])),
-		zap.Bool("correct_head_vote", ok && data.BeaconBlockRoot == root),
+		zap.String("correct_head_vote", correctHeadVote),
+		zap.Bool("consistent_head_vote", data.BeaconBlockRoot == expectedBlockRoot || expectedBlockRoot == phase0.Root{}),
 	)
 	return nil
 }
