@@ -10,6 +10,7 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -154,6 +155,8 @@ type goClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	slotRoots            map[phase0.Slot]phase0.Root
+	slotRootsMu          sync.RWMutex
 	commonTimeout        time.Duration
 	longTimeout          time.Duration
 }
@@ -196,6 +199,7 @@ func New(
 		gasLimit:          opt.GasLimit,
 		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		slotRoots:         map[phase0.Slot]phase0.Root{},
 		commonTimeout:     commonTimeout,
 		longTimeout:       longTimeout,
 	}
@@ -272,5 +276,27 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 }
 
 func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
-	return gc.client.Events(ctx, topics, handler)
+	return gc.client.Events(ctx, topics, func(e *v1.Event) {
+		handler(e)
+
+		if e.Data != nil {
+			switch data := e.Data.(type) {
+			case *v1.HeadEvent:
+				// Memorize the block roots for the last epoch.
+				gc.slotRootsMu.Lock()
+				gc.slotRoots[data.Slot] = data.Block
+				oldSlot := data.Slot - phase0.Slot(gc.network.SlotsPerEpoch())
+				delete(gc.slotRoots, oldSlot)
+				gc.slotRootsMu.Unlock()
+			}
+		}
+	})
+}
+
+func (gc *goClient) SlotRoot(slot phase0.Slot) (phase0.Root, bool) {
+	gc.slotRootsMu.RLock()
+	defer gc.slotRootsMu.RUnlock()
+
+	root, ok := gc.slotRoots[slot]
+	return root, ok
 }

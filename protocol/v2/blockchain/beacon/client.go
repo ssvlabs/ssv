@@ -56,6 +56,10 @@ type BeaconNode interface {
 	proposer
 }
 
+type SlotRootProvider interface {
+	SlotRoot(slot phase0.Slot) (phase0.Root, bool)
+}
+
 // Options for controller struct creation
 type Options struct {
 	Context        context.Context

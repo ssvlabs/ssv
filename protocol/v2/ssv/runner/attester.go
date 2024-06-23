@@ -16,9 +16,14 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
+
+type SlotRootProvider interface {
+	SlotRoot(slot phase0.Slot) (phase0.Root, bool)
+}
 
 type AttesterRunner struct {
 	BaseRunner *BaseRunner
@@ -223,6 +228,11 @@ func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) e
 		return errors.Wrap(err, "failed to get attestation data")
 	}
 	logger = logger.With(zap.Duration("attestation_data_time", time.Since(start)))
+	if provider, ok := r.GetBeaconNode().(beacon.SlotRootProvider); ok {
+		if err := r.logAttestationData(logger, provider, attData); err != nil {
+			logger.Debug("❌ failed to log attestation data", zap.Error(err))
+		}
+	}
 
 	r.started = time.Now()
 
@@ -292,4 +302,18 @@ func (r *AttesterRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *AttesterRunner) logAttestationData(logger *zap.Logger, provider beacon.SlotRootProvider, attData ssz.Marshaler) error {
+	data, ok := attData.(*phase0.AttestationData)
+	if !ok {
+		return errors.New("invalid attestation data")
+	}
+	root, ok := provider.SlotRoot(data.Slot)
+	logger.Debug("📜 got attestation data",
+		zap.String("block_root", hex.EncodeToString(data.BeaconBlockRoot[:])),
+		zap.String("expected_block_root", hex.EncodeToString(root[:])),
+		zap.Bool("correct_head_vote", ok && data.BeaconBlockRoot == root),
+	)
+	return nil
 }
