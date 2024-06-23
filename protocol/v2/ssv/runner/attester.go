@@ -321,9 +321,9 @@ func (r *AttesterRunner) logAttestationData(logger *zap.Logger, provider beacon.
 	}
 	logger.Debug("📜 got attestation data",
 		zap.String("block_root", hex.EncodeToString(data.BeaconBlockRoot[:])),
-		zap.String("expected_block_root", hex.EncodeToString(root[:])),
+		zap.String("correct_block_root", hex.EncodeToString(root[:])),
 		zap.String("correct_head_vote", correctHeadVote),
-		zap.Bool("consistent_head_vote", data.BeaconBlockRoot == expectedBlockRoot || expectedBlockRoot == phase0.Root{}),
+		zap.Bool("expected_correct_head_vote", expectedBlockRoot != phase0.Root{}),
 	)
 	return nil
 }
