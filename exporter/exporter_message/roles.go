@@ -6,13 +6,12 @@ const (
 	RoleAttester RunnerRole = iota
 	RoleAggregator
 	RoleProposer
+	BNRoleSyncCommittee
 	RoleSyncCommitteeContribution
 
 	RoleValidatorRegistration
 	RoleVoluntaryExit
 	RoleCommittee
-
-	RoleUnknown = -1
 )
 
 // String returns name of the runner role
