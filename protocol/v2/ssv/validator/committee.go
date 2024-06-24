@@ -124,7 +124,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
-				Slot:               0,
+				Slot:               duty.Slot,
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}

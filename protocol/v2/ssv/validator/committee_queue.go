@@ -40,7 +40,7 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
-				Slot:               0,
+				Slot:               slot,
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
@@ -98,9 +98,8 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 	if err != nil {
 		return err
 	}
-	
+
 	state := *q.queueState
-	state.Slot = slot
 
 	logger.Debug("📬 queue consumer is running")
 	lens := make([]int, 0, 10)
