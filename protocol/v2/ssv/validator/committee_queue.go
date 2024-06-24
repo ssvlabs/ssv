@@ -163,12 +163,11 @@ func (v *Committee) ConsumeQueue(
 		// TODO: (Alan) bring back filter
 		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny)
 		if ctx.Err() != nil {
-			logger.Error("❗ got ctx err:", zap.Error(ctx.Err()))
-			return nil
+			break
 		}
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
-			return nil
+			break
 		}
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
@@ -185,7 +184,7 @@ func (v *Committee) ConsumeQueue(
 				zap.Error(err))
 		}
 	}
-	
+
 	logger.Debug("📪 queue consumer is closed")
 	return nil
 }
