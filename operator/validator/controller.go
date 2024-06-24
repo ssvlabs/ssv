@@ -600,7 +600,9 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	// Start validator (if not already started).
 	// TODO: why its in the map if not started?
 	if v, found := c.validatorsMap.GetValidator(pk); found {
+		//TODO: replace all metadata update occurrences with a function instead
 		v.Share.BeaconMetadata = metadata
+		v.Share.ValidatorIndex = share.ValidatorIndex
 		_, err := c.startValidator(v)
 		if err != nil {
 			c.logger.Warn("could not start validator", zap.Error(err))
@@ -657,6 +659,7 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
 			v.Share.BeaconMetadata = share.BeaconMetadata
+			v.Share.ValidatorIndex = share.ValidatorIndex
 			_, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
