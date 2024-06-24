@@ -114,83 +114,80 @@ func (v *Committee) ConsumeQueue(
 
 	lens := make([]int, 0, 10)
 
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Debug("📪 queue consumer is stopped")
+	for ctx.Err() == nil {
+		// Construct a representation of the current state.
+		state := *q.queueState
+
+		//runner := v.Runners.DutyRunnerForMsgID(msgID)
+		//if runner == nil {
+		//	return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
+		//}
+		//var runningInstance *instance.Instance
+		//if runner.HasRunningDuty() {
+		//	runningInstance = runner.GetBaseRunner().State.RunningInstance
+		//	if runningInstance != nil {
+		//		decided, _ := runningInstance.IsDecided()
+		//		state.HasRunningInstance = !decided
+		//	}
+		//}
+		//state.Height = v.GetLastHeight(msgID)
+		//state.Round = v.GetLastRound(msgID)
+		//state.Quorum = v.Share.Quorum
+		//
+		//filter := queue.FilterAny
+		//if !runner.HasRunningDuty() {
+		//	// If no duty is running, pop only ExecuteDuty messages.
+		//	filter = func(m *queue.DecodedSSVMessage) bool {
+		//		e, ok := m.Body.(*types.EventMsg)
+		//		if !ok {
+		//			return false
+		//		}
+		//		return e.Type == types.ExecuteDuty
+		//	}
+		//} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		//	// If no proposal was accepted for the current round, skip prepare & commit messages
+		//	// for the current height and round.
+		// filter := func(m *queue.DecodedSSVMessage) bool {
+		// 	sm, ok := m.Body.(*specqbft.Message)
+		// 	if !ok {
+		// 		return true
+		// 	}
+
+		// 	if sm.Height != state.Height || sm.Round != state.Round {
+		// 		return true
+		// 	}
+		// 	return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+		// }
+
+		// Pop the highest priority message for the current state.
+		// TODO: (Alan) bring back filter
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny)
+		if ctx.Err() != nil {
+			logger.Error("❗ got ctx err:", zap.Error(ctx.Err()))
 			return nil
-		default:
-			// Construct a representation of the current state.
-			state := *q.queueState
+		}
+		if msg == nil {
+			logger.Error("❗ got nil message from queue, but context is not done!")
+			return nil
+		}
+		lens = append(lens, q.Q.Len())
+		if len(lens) >= 10 {
+			logger.Debug("📬 [TEMPORARY] queue statistics",
+				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
+				zap.Ints("past_10_lengths", lens))
+			lens = lens[:0]
+		}
 
-			//runner := v.Runners.DutyRunnerForMsgID(msgID)
-			//if runner == nil {
-			//	return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
-			//}
-			//var runningInstance *instance.Instance
-			//if runner.HasRunningDuty() {
-			//	runningInstance = runner.GetBaseRunner().State.RunningInstance
-			//	if runningInstance != nil {
-			//		decided, _ := runningInstance.IsDecided()
-			//		state.HasRunningInstance = !decided
-			//	}
-			//}
-			//state.Height = v.GetLastHeight(msgID)
-			//state.Round = v.GetLastRound(msgID)
-			//state.Quorum = v.Share.Quorum
-			//
-			//filter := queue.FilterAny
-			//if !runner.HasRunningDuty() {
-			//	// If no duty is running, pop only ExecuteDuty messages.
-			//	filter = func(m *queue.DecodedSSVMessage) bool {
-			//		e, ok := m.Body.(*types.EventMsg)
-			//		if !ok {
-			//			return false
-			//		}
-			//		return e.Type == types.ExecuteDuty
-			//	}
-			//} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
-			//	// If no proposal was accepted for the current round, skip prepare & commit messages
-			//	// for the current height and round.
-			// filter := func(m *queue.DecodedSSVMessage) bool {
-			// 	sm, ok := m.Body.(*specqbft.Message)
-			// 	if !ok {
-			// 		return true
-			// 	}
-
-			// 	if sm.Height != state.Height || sm.Round != state.Round {
-			// 		return true
-			// 	}
-			// 	return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
-			// }
-
-			// Pop the highest priority message for the current state.
-			// TODO: (Alan) bring back filter
-			msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny)
-			if ctx.Err() != nil {
-				logger.Error("❗ got ctx err:", zap.Error(ctx.Err()))
-				return nil
-			}
-			if msg == nil {
-				logger.Error("❗ got nil message from queue, but context is not done!")
-				return nil
-			}
-			lens = append(lens, q.Q.Len())
-			if len(lens) >= 10 {
-				logger.Debug("📬 [TEMPORARY] queue statistics",
-					fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-					zap.Ints("past_10_lengths", lens))
-				lens = lens[:0]
-			}
-
-			// Handle the message.
-			if err := handler(logger, msg); err != nil {
-				v.logMsg(logger, msg, "❗ could not handle message",
-					fields.MessageType(msg.SSVMessage.MsgType),
-					zap.Error(err))
-			}
+		// Handle the message.
+		if err := handler(logger, msg); err != nil {
+			v.logMsg(logger, msg, "❗ could not handle message",
+				fields.MessageType(msg.SSVMessage.MsgType),
+				zap.Error(err))
 		}
 	}
+	
+	logger.Debug("📪 queue consumer is closed")
+	return nil
 }
 
 func (v *Committee) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, withFields ...zap.Field) {
