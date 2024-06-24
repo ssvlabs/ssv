@@ -73,14 +73,11 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
 func (v *Committee) ConsumeQueue(
+	ctx context.Context,
 	logger *zap.Logger,
 	slot phase0.Slot,
 	handler MessageHandler,
-	stopCh <-chan struct{},
 ) error {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
 	var q queueContainer
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
@@ -91,6 +88,23 @@ func (v *Committee) ConsumeQueue(
 			return errors.New(fmt.Sprintf("queue not found for slot %d", slot))
 		}
 		return nil
+	}()
+
+	// defer cancel
+	defer func() {
+		v.mtx.Lock()
+		defer v.mtx.Unlock()
+		var ok bool
+		q, ok = v.Queues[slot]
+		if !ok {
+			logger.Warn("committee queue not found for slot while stopping the consumer", fields.Slot(slot))
+			return
+		}
+		if q.stopQueueF == nil {
+			logger.Warn("committee queue consumer stopQueueF is nil", fields.Slot(slot))
+			return
+		}
+		q.stopQueueF()
 	}()
 	if err != nil {
 		return err
@@ -103,17 +117,9 @@ func (v *Committee) ConsumeQueue(
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Debug("📪 queue consumer is done")
-			return nil
-		case <-stopCh:
 			logger.Debug("📪 queue consumer is stopped")
 			return nil
 		default:
-			if ctx.Err() != nil {
-				logger.Debug("📪 queue consumer is closed")
-				return nil
-			}
-
 			// Construct a representation of the current state.
 			state := *q.queueState
 
@@ -162,11 +168,12 @@ func (v *Committee) ConsumeQueue(
 			// TODO: (Alan) bring back filter
 			msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny)
 			if ctx.Err() != nil {
-				break
+				logger.Error("❗ got ctx err:", zap.Error(ctx.Err()))
+				return nil
 			}
 			if msg == nil {
 				logger.Error("❗ got nil message from queue, but context is not done!")
-				break
+				return nil
 			}
 			lens = append(lens, q.Q.Len())
 			if len(lens) >= 10 {

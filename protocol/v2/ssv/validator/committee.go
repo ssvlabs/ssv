@@ -118,6 +118,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
+
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithCancel(c.ctx)
+
 	if _, ok := c.Queues[duty.Slot]; !ok {
 		c.Queues[duty.Slot] = queueContainer{
 			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
@@ -131,9 +135,17 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
+	// Setting the cancel function separately due it could be created in HandleMessage
+	q, _ := c.Queues[duty.Slot]
+	q.stopQueueF = cancelF
+
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
-	// TODO alan: stop queue
-	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, r.Stopped())
+	go func() {
+		err := c.ConsumeQueue(queueCtx, logger, duty.Slot, c.ProcessMessage)
+		if err != nil {
+			logger.Error("❗ failed committee queue consumption", zap.Error(err))
+		}
+	}()
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty)

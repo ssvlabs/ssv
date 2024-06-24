@@ -55,7 +55,7 @@ func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 			return fmt.Errorf("timeout event: %w", err)
 		}
 
-		dutyRunner.Stop()
+		c.Queues[slot].stopQueueF()
 
 		return nil
 	case types.ExecuteDuty:
