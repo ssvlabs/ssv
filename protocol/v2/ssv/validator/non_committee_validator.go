@@ -3,6 +3,7 @@ package validator
 import (
 	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/exporter_message"
@@ -18,6 +19,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+const BeaconCommittees = 64
+
 type NonCommitteeValidator struct {
 	logger                 *zap.Logger
 	Share                  *types.SSVShare
@@ -25,6 +28,7 @@ type NonCommitteeValidator struct {
 	qbftController         *qbftcontroller.Controller
 	postConsensusContainer *specssv.PartialSigContainer
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
+	Roots                  map[[32]byte]spectypes.BeaconRole
 }
 
 func NewNonCommitteeValidator(logger *zap.Logger, identifier exporter_message.MessageID, opts Options) *NonCommitteeValidator {
@@ -51,6 +55,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier exporter_message.Me
 		qbftController:         ctrl,
 		postConsensusContainer: specssv.NewPartialSigContainer(opts.SSVShare.Share.Quorum),
 		newDecidedHandler:      opts.NewDecidedHandler,
+		Roots:                  make(map[[32]byte]spectypes.BeaconRole),
 	}
 }
 
@@ -60,14 +65,15 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if msg.GetType() != spectypes.SSVPartialSignatureMsgType {
 		return
 	}
-	spsm := &spectypes.PartialSignatureMessages{}
-	if err := spsm.Decode(msg.SSVMessage.GetData()); err != nil {
+	partialSigMessage := &spectypes.PartialSignatureMessages{}
+	if err := partialSigMessage.Decode(msg.SSVMessage.GetData()); err != nil {
 		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
 		return
 	}
+
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		if err := spsm.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			logger.Debug("❌ got invalid message", zap.Error(err))
+		if err := partialSigMessage.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
+			logger.Debug("❌ got invalid message for role committee", zap.Error(err))
 		}
 	} else {
 		if err := validateMessage(ncv.Share.Share, msg); err != nil {
@@ -76,13 +82,13 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		}
 	}
 
-	if spsm.Type != spectypes.PostConsensusPartialSig {
+	if partialSigMessage.Type != spectypes.PostConsensusPartialSig {
 		return
 	}
 
-	logger = logger.With(fields.Slot(spsm.Slot))
+	logger = logger.With(fields.Slot(partialSigMessage.Slot))
 
-	quorums, err := ncv.processMessage(spsm)
+	quorums, err := ncv.processMessage(partialSigMessage)
 	if err != nil {
 		logger.Debug("❌ could not process SignedPartialSignatureMessage",
 			zap.Error(err))
@@ -92,17 +98,17 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if len(quorums) == 0 {
 		return
 	}
-	for _, quorum := range quorums {
-		role := getRole(msg.MsgID)
+	for root, quorum := range quorums {
+		role := ncv.getRole(msg, root)
 		MsgID := exporter_message.NewMsgID(ncv.Share.DomainType, ncv.Share.ValidatorPubKey[:], role)
-		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, spsm.Slot, quorum); err != nil {
+		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, partialSigMessage.Slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return
 		}
 
 		if ncv.newDecidedHandler != nil {
 			ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
-				Slot:       spsm.Slot,
+				Slot:       partialSigMessage.Slot,
 				Signers:    quorum,
 				Identifier: MsgID,
 			})
@@ -110,11 +116,15 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 }
 
-func getRole(msgID spectypes.MessageID) exporter_message.RunnerRole {
-	if msgID.GetRoleType() == spectypes.RoleCommittee {
-		return exporter_message.RoleAttester
+func (ncv *NonCommitteeValidator) getRole(msg *queue.DecodedSSVMessage, root [32]byte) exporter_message.RunnerRole {
+	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		role, found := ncv.Roots[root]
+		if !found {
+			return exporter_message.RoleAttester
+		}
+		return exporter_message.RunnerRole(role)
 	}
-	return exporter_message.RunnerRole(msgID.GetRoleType())
+	return exporter_message.RunnerRole(msg.MsgID.GetRoleType())
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
@@ -202,3 +212,43 @@ func (ncv *NonCommitteeValidator) verifyBeaconPartialSignature(signer uint64, si
 	}
 	return fmt.Errorf("unknown signer")
 }
+
+func (ncv *NonCommitteeValidator) OnProposalMsg(msg *queue.DecodedSSVMessage) {
+	mssg := &specqbft.Message{}
+	if err := mssg.Decode(msg.SSVMessage.GetData()); err != nil {
+		ncv.logger.Debug("❗ failed to get decode ssv message", zap.Error(err))
+		return
+	}
+
+	// decode consensus data
+	beaconVote := &spectypes.BeaconVote{}
+	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
+		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
+		return
+	}
+	//for committeeIndex := 0; committeeIndex < BeaconCommittees; committeeIndex++ {
+	//	attRoot := runner.ConstructAttestationData(
+	//		beaconVote,
+	//		&spectypes.BeaconDuty{Slot: phase0.Slot(mssg.Height), CommitteeIndex: phase0.CommitteeIndex(committeeIndex)},
+	//	)
+	//	hashRoot, hashError := attRoot.HashTreeRoot()
+	//	if hashError != nil {
+	//		ncv.logger.Debug("❗ failed to get hash tree root", zap.Error(hashError))
+	//		return
+	//	}
+	//	ncv.Roots[hashRoot] = spectypes.BNRoleAttester
+	//}
+	ncv.Roots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
+}
+
+//func (ncv *NonCommitteeValidator) onPostProposalMsg(msg *queue.DecodedSSVMessage) {
+//	role := ncvroots_to_roles[msg.root]
+//	if role == 'attester':
+//	att = Attestation(msg)
+//	attesters[att.index] = att
+//	elif role == 'sync':
+//	sync = Sync(msg)
+//	syncs[sync.index] = sync
+//	else:
+//	raise Exception('Unknown role')
+//}

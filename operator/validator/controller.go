@@ -122,6 +122,7 @@ type Controller interface {
 }
 
 type nonCommitteeValidator struct {
+	partialInit bool
 	*validator.NonCommitteeValidator
 	sync.Mutex
 }
@@ -351,7 +352,7 @@ func (c *controller) handleRouterMessages() {
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
-				if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+				if msg.MsgType != spectypes.SSVPartialSignatureMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
@@ -371,65 +372,232 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
 }
 
 func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
-	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
-	// other handlers from processing
 	var ncv *nonCommitteeValidator
-	err := func() error {
-		c.nonCommitteeMutex.Lock()
-		defer c.nonCommitteeMutex.Unlock()
-
-		item := c.nonCommitteeValidators.Get(msg.GetID())
-		if item != nil {
-			ncv = item.Value()
-		} else {
-			if msg.SignedSSVMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType {
-				return nil
-			}
-			pSigMessages := &spectypes.PartialSignatureMessages{}
-			if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-				return err
-			}
-			validatorByIndex := c.validatorStore.ValidatorByIndex(pSigMessages.Messages[0].ValidatorIndex)
-			if validatorByIndex == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-			}
-			// Create a new nonCommitteeValidator and cache it.
-			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
-			share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
-			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-			}
-			opts := c.validatorOptions
-			opts.SSVShare = share
-			operator, err := c.operatorFromShare(opts.SSVShare)
-			if err != nil {
-				return err
-			}
-
-			opts.Operator = operator
-			MsgID := exporter_message.NewMsgID(spectypes.DomainType(msg.GetID().GetDomain()), validatorByIndex.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
-			ncv = &nonCommitteeValidator{
-				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
-			}
-
-			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-			c.nonCommitteeValidators.Set(
-				msg.GetID(),
-				ncv,
-				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-			)
-		}
-		ncv.Lock()
-		return nil
-	}()
-	if err != nil {
+	if err := c.handleConsensusMessages(msg, &ncv); err != nil {
 		return err
 	}
 
-	// Process the message.
-	defer ncv.Unlock()
-	ncv.ProcessMessage(msg)
+	if err := c.handlePartialSignatureMessages(msg, &ncv); err != nil {
+		return err
+	}
+	return nil
+}
 
+func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv **nonCommitteeValidator) error {
+	c.nonCommitteeMutex.Lock()
+	defer c.nonCommitteeMutex.Unlock()
+	if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+		return nil
+	}
+
+	if msg.MsgType != spectypes.SSVConsensusMsgType {
+		return nil
+	}
+
+	subMsg, ok := msg.Body.(*specqbft.Message)
+	if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+		return nil
+	}
+
+	item := c.getNonCommitteeValidators(msg.GetID())
+	if item != nil {
+		*ncv = item
+	} else {
+		opts := c.validatorOptions
+		opts.SSVShare = &types.SSVShare{
+			Share: spectypes.Share{
+				Quorum: 1,
+			},
+		}
+		*ncv = &nonCommitteeValidator{
+			partialInit:           true,
+			NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, exporter_message.MessageID(msg.MsgID), opts),
+		}
+		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+		c.nonCommitteeValidators.Set(
+			msg.GetID(),
+			*ncv,
+			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+		)
+	}
+
+	(*ncv).OnProposalMsg(msg)
+	return nil
+}
+
+func (c *controller) handlePartialSignatureMessages(msg *queue.DecodedSSVMessage, ncv **nonCommitteeValidator) error {
+	if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+		return nil
+	}
+
+	c.nonCommitteeMutex.Lock()
+	defer c.nonCommitteeMutex.Unlock()
+
+	item := c.getNonCommitteeValidators(msg.GetID())
+	if item != nil && !item.partialInit {
+		*ncv = item
+	} else {
+		pSigMessages := &spectypes.PartialSignatureMessages{}
+		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+			return err
+		}
+
+		validatorByIndex := c.validatorStore.ValidatorByIndex(pSigMessages.Messages[0].ValidatorIndex)
+		if validatorByIndex == nil {
+			return errors.Errorf("could not find validator by index [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
+		}
+
+		share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
+		if share == nil {
+			return errors.Errorf("could not find share for validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
+		}
+
+		opts := c.validatorOptions
+		opts.SSVShare = share
+		operator, err := c.operatorFromShare(opts.SSVShare)
+		if err != nil {
+			return err
+		}
+
+		opts.Operator = operator
+		MsgID := exporter_message.NewMsgID(
+			spectypes.DomainType(msg.GetID().GetDomain()),
+			validatorByIndex.ValidatorPubKey[:],
+			exporter_message.RunnerRole(msg.GetID().GetRoleType()),
+		)
+
+		if item != nil && item.partialInit {
+			item.partialInit = false
+			savedRoot := item.NonCommitteeValidator.Roots
+			item.NonCommitteeValidator = validator.NewNonCommitteeValidator(c.logger, MsgID, opts)
+			item.NonCommitteeValidator.Roots = savedRoot
+			*ncv = item
+		} else {
+			*ncv = &nonCommitteeValidator{
+				partialInit:           false,
+				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
+			}
+		}
+
+		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+		c.nonCommitteeValidators.Set(
+			msg.GetID(),
+			*ncv,
+			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+		)
+	}
+	(*ncv).ProcessMessage(msg)
+	return nil
+}
+
+//func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
+//	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
+//	// other handlers from processing
+//	var ncv *nonCommitteeValidator
+//	err := func() error {
+//		if msg.MsgType != spectypes.SSVConsensusMsgType {
+//			return nil
+//		}
+//		if subMsg, ok := msg.Body.(*specqbft.Message); ok {
+//			if subMsg.MsgType == specqbft.ProposalMsgType {
+//				return nil
+//			}
+//			item := c.getNonCommitteeValidators(msg.GetID())
+//			if item != nil {
+//				println("<<<<<<<<<<<<<<<<<<<<<<<<ProposalMsgType exist>>>>>>>>>>>>>>>>>>>>")
+//				ncv = item
+//			} else {
+//				println("<<<<<<<<<<<<<<<<<<<<<<<<ProposalMsgType not exist>>>>>>>>>>>>>>>>>>>>")
+//				ncv = &nonCommitteeValidator{
+//					partialInit: false,
+//				}
+//				ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+//				c.nonCommitteeValidators.Set(
+//					msg.GetID(),
+//					ncv,
+//					time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+//				)
+//			}
+//			ncv.Lock()
+//		}
+//		return nil
+//	}()
+//	if err != nil {
+//		return err
+//	}
+//
+//	err = func() error {
+//		if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+//			return nil
+//		}
+//		c.nonCommitteeMutex.Lock()
+//		defer c.nonCommitteeMutex.Unlock()
+//		item := c.getNonCommitteeValidators(msg.GetID())
+//		if item != nil && !item.partialInit {
+//			ncv = item
+//		} else {
+//			pSigMessages := &spectypes.PartialSignatureMessages{}
+//			if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+//				return err
+//			}
+//			validatorByIndex := c.validatorStore.ValidatorByIndex(pSigMessages.Messages[0].ValidatorIndex)
+//			if validatorByIndex == nil {
+//				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
+//			}
+//			// Create a new nonCommitteeValidator and cache it.
+//			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
+//			share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
+//			if share == nil {
+//				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
+//			}
+//			opts := c.validatorOptions
+//			opts.SSVShare = share
+//			operator, err := c.operatorFromShare(opts.SSVShare)
+//			if err != nil {
+//				return err
+//			}
+//
+//			opts.Operator = operator
+//			MsgID := exporter_message.NewMsgID(spectypes.DomainType(msg.GetID().GetDomain()), validatorByIndex.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
+//			if item != nil && item.partialInit {
+//				println("<<<<<<<<<<<<<<<<<<<<<<<<update partialInit (1)>>>>>>>>>>>>>>>>>>>>")
+//				item.partialInit = false
+//				item.NonCommitteeValidator = validator.NewNonCommitteeValidator(c.logger, MsgID, opts)
+//				ncv = item
+//			} else {
+//				println("<<<<<<<<<<<<<<<<<<<<<<<<create partialInit (2)>>>>>>>>>>>>>>>>>>>>")
+//				ncv = &nonCommitteeValidator{
+//					partialInit:           false,
+//					NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
+//				}
+//			}
+//
+//			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+//			c.nonCommitteeValidators.Set(
+//				msg.GetID(),
+//				ncv,
+//				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+//			)
+//		}
+//
+//		ncv.Lock()
+//		return nil
+//	}()
+//	if err != nil {
+//		return err
+//	}
+//	// Process the message.
+//	defer ncv.Unlock()
+//	ncv.ProcessMessage(msg)
+//
+//	return nil
+//}
+
+func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *nonCommitteeValidator {
+	item := c.nonCommitteeValidators.Get(messageId)
+	if item != nil {
+		return item.Value()
+	}
 	return nil
 }
 
