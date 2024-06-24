@@ -79,6 +79,25 @@ func (v *Committee) ConsumeQueue(
 	handler MessageHandler,
 ) error {
 	var q queueContainer
+
+	// in case of any error try to call the ctx.cancel to prevent the ctx leak
+	defer func() {
+		v.mtx.Lock()
+		defer v.mtx.Unlock()
+
+		var ok bool
+		q, ok = v.Queues[slot]
+		if !ok {
+			logger.Warn("committee queue not found for slot while stopping the consumer", fields.Slot(slot))
+			return
+		}
+		if q.stopQueueF == nil {
+			logger.Error("⚠️ committee queue consumer stopQueueF is nil", fields.Slot(slot))
+			return
+		}
+		q.stopQueueF()
+	}()
+
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
@@ -88,23 +107,6 @@ func (v *Committee) ConsumeQueue(
 			return errors.New(fmt.Sprintf("queue not found for slot %d", slot))
 		}
 		return nil
-	}()
-
-	// defer cancel
-	defer func() {
-		v.mtx.Lock()
-		defer v.mtx.Unlock()
-		var ok bool
-		q, ok = v.Queues[slot]
-		if !ok {
-			logger.Warn("committee queue not found for slot while stopping the consumer", fields.Slot(slot))
-			return
-		}
-		if q.stopQueueF == nil {
-			logger.Warn("committee queue consumer stopQueueF is nil", fields.Slot(slot))
-			return
-		}
-		q.stopQueueF()
 	}()
 	if err != nil {
 		return err
