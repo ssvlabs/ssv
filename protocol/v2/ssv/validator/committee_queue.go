@@ -91,11 +91,11 @@ func (v *Committee) ConsumeQueue(
 			logger.Warn("committee queue not found for slot while stopping the consumer", fields.Slot(slot))
 			return
 		}
-		if q.stopQueueF == nil {
-			logger.Error("⚠️ committee queue consumer stopQueueF is nil", fields.Slot(slot))
+		if q.StopQueueF == nil {
+			logger.Error("⚠️ committee queue consumer StopQueueF is nil", fields.Slot(slot))
 			return
 		}
-		q.stopQueueF()
+		q.StopQueueF()
 	}()
 
 	err := func() error {

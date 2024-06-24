@@ -23,8 +23,9 @@ type MessageHandler func(logger *zap.Logger, msg *queue.DecodedSSVMessage) error
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
 	Q          queue.Queue
+	StopQueueF context.CancelFunc
+
 	queueState *queue.State
-	stopQueueF context.CancelFunc
 }
 
 // HandleMessage handles a spectypes.SSVMessage.
