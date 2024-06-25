@@ -18,21 +18,21 @@ const (
 func (r RunnerRole) String() string {
 	switch r {
 	case RoleAttester:
-		return "ATTESTER_RUNNER"
+		return "ATTESTER"
 	case RoleAggregator:
-		return "AGGREGATOR_RUNNER"
+		return "AGGREGATOR"
 	case RoleProposer:
-		return "PROPOSER_RUNNER"
+		return "PROPOSER"
 	case RoleSyncCommittee:
-		return "SYNC_COMMITTEE_RUNNER"
+		return "SYNC_COMMITTEE"
 	case RoleSyncCommitteeContribution:
-		return "SYNC_COMMITTEE_CONTRIBUTION_RUNNER"
+		return "SYNC_COMMITTEE_CONTRIBUTION"
 	case RoleValidatorRegistration:
-		return "VALIDATOR_REGISTRATION_RUNNER"
+		return "VALIDATOR_REGISTRATION"
 	case RoleVoluntaryExit:
-		return "VOLUNTARY_EXIT_RUNNER"
+		return "VOLUNTARY_EXIT"
 	case RoleCommittee:
-		return "COMMITTEE_RUNNER"
+		return "COMMITTEE"
 	default:
 		return "UNDEFINED"
 	}
