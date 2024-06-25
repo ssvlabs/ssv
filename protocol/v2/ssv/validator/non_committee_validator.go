@@ -10,6 +10,8 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
+	"strconv"
+	"strings"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -94,7 +96,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			zap.Error(err))
 		return
 	}
-
 	if len(quorums) == 0 {
 		return
 	}
@@ -104,6 +105,18 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, partialSigMessage.Slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return
+		} else {
+			var operatorIDs []string
+			for _, share := range ncv.Share.Committee {
+				operatorIDs = append(operatorIDs, strconv.FormatUint(share.Signer, 10))
+			}
+			joinedOperatorIDs := strings.Join(operatorIDs, ", ")
+			logger.Info("✅saved participants",
+				zap.String("role", role.ToBeaconRole()),
+				zap.String("slot", role.ToBeaconRole()),
+				zap.String("validator_index", strconv.FormatUint(uint64(ncv.Share.ValidatorIndex), 10)),
+				zap.String("signers", joinedOperatorIDs),
+			)
 		}
 
 		if ncv.newDecidedHandler != nil {
@@ -226,18 +239,7 @@ func (ncv *NonCommitteeValidator) OnProposalMsg(msg *queue.DecodedSSVMessage) {
 		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
 		return
 	}
-	//for committeeIndex := 0; committeeIndex < BeaconCommittees; committeeIndex++ {
-	//	attRoot := runner.ConstructAttestationData(
-	//		beaconVote,
-	//		&spectypes.BeaconDuty{Slot: phase0.Slot(mssg.Height), CommitteeIndex: phase0.CommitteeIndex(committeeIndex)},
-	//	)
-	//	hashRoot, hashError := attRoot.HashTreeRoot()
-	//	if hashError != nil {
-	//		ncv.logger.Debug("❗ failed to get hash tree root", zap.Error(hashError))
-	//		return
-	//	}
-	//	ncv.Roots[hashRoot] = spectypes.BNRoleAttester
-	//}
+
 	ncv.Roots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
 }
 
