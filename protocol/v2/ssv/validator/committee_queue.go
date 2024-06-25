@@ -2,10 +2,8 @@ package validator
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -74,44 +72,19 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 // it checks for current state
 func (v *Committee) ConsumeQueue(
 	ctx context.Context,
+	q queueContainer,
 	logger *zap.Logger,
 	slot phase0.Slot,
 	handler MessageHandler,
 ) error {
-	var q queueContainer
-
 	// in case of any error try to call the ctx.cancel to prevent the ctx leak
 	defer func() {
-		var ok bool
-
-		v.mtx.Lock()
-		q, ok = v.Queues[slot]
-		v.mtx.Unlock()
-
-		if !ok {
-			logger.Warn("committee queue not found for slot while stopping the consumer", fields.Slot(slot))
-			return
-		}
 		if q.StopQueueF == nil {
 			logger.Error("⚠️ committee queue consumer StopQueueF is nil", fields.Slot(slot))
 			return
 		}
 		q.StopQueueF()
 	}()
-
-	err := func() error {
-		v.mtx.RLock() // read v.Queues
-		defer v.mtx.RUnlock()
-		var ok bool
-		q, ok = v.Queues[slot]
-		if !ok {
-			return errors.New(fmt.Sprintf("queue not found for slot %d", slot))
-		}
-		return nil
-	}()
-	if err != nil {
-		return err
-	}
 
 	logger.Debug("📬 queue consumer is running")
 

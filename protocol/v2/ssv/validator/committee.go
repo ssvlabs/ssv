@@ -135,13 +135,13 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
-	// Setting the cancel function separately due it could be created in HandleMessage
+	// Setting the cancel function separately due the queue could be created in HandleMessage
 	q, _ := c.Queues[duty.Slot]
 	q.StopQueueF = cancelF
 
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	go func() {
-		err := c.ConsumeQueue(queueCtx, logger, duty.Slot, c.ProcessMessage)
+		err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage)
 		if err != nil {
 			logger.Error("❗ failed committee queue consumption", zap.Error(err))
 		}
@@ -303,6 +303,22 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 	return nil
 
+}
+
+func (c *Committee) StopQueues() {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for slot, q := range c.Queues {
+		if q.StopQueueF == nil {
+			c.logger.Error("⚠️ can't stop committee queue StopQueueF is nil",
+				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+				fields.Slot(slot),
+			)
+			continue
+		}
+		q.StopQueueF()
+	}
 }
 
 // updateAttestingSlotMap updates the highest attesting slot map from beacon duties
