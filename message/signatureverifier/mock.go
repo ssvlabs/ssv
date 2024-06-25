@@ -7,7 +7,7 @@ package signatureverifier
 import (
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
+	"github.com/golang/mock/gomock"
 	types "github.com/ssvlabs/ssv-spec/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"

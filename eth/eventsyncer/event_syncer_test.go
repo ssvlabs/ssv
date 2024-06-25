@@ -15,8 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 

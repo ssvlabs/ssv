@@ -14,8 +14,8 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	common "github.com/ethereum/go-ethereum/common"
+	"github.com/golang/mock/gomock"
 	peer "github.com/libp2p/go-libp2p/core/peer"
-	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 
 	types "github.com/ssvlabs/ssv-spec/types"

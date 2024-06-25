@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rpc"
-	gomock "go.uber.org/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/eth/eventsyncer"

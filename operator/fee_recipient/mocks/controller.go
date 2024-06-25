@@ -7,7 +7,7 @@ package mocks
 import (
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
+	"github.com/golang/mock/gomock"
 	zap "go.uber.org/zap"
 )
 

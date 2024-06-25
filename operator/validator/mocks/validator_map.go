@@ -7,7 +7,7 @@ package mocks
 import (
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
+	"github.com/golang/mock/gomock"
 	types "github.com/ssvlabs/ssv-spec/types"
 	queue "github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
