@@ -12,6 +12,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/golang/mock/gomock"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -19,7 +20,6 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
