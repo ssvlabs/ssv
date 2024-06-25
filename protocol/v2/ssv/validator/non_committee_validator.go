@@ -113,7 +113,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			joinedOperatorIDs := strings.Join(operatorIDs, ", ")
 			logger.Info("✅saved participants",
 				zap.String("role", role.ToBeaconRole()),
-				zap.String("slot", role.ToBeaconRole()),
 				zap.String("validator_index", strconv.FormatUint(uint64(ncv.Share.ValidatorIndex), 10)),
 				zap.String("signers", joinedOperatorIDs),
 			)
@@ -130,6 +129,9 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 }
 
 func (ncv *NonCommitteeValidator) getRole(msg *queue.DecodedSSVMessage, root [32]byte) exporter_message.RunnerRole {
+	ncv.logger.Info("got Role",
+		zap.String("role", msg.MsgID.GetRoleType().String()),
+	)
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		_, found := ncv.Roots[root]
 		if !found {
