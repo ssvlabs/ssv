@@ -62,7 +62,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier exporter_message.Me
 }
 
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
-	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetDutyExecutorID()), fields.Role(msg.MsgID.GetRoleType()))
+	logger := ncv.logger.With(fields.PubKey(ncv.Share.ValidatorPubKey[:]), fields.Role(msg.MsgID.GetRoleType()))
 
 	if msg.GetType() != spectypes.SSVPartialSignatureMsgType {
 		return
@@ -112,7 +112,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			}
 			joinedOperatorIDs := strings.Join(operatorIDs, ", ")
 			logger.Info("✅saved participants",
-				zap.String("role", role.ToBeaconRole()),
+				zap.String("converted_role", role.ToBeaconRole()),
 				zap.String("validator_index", strconv.FormatUint(uint64(ncv.Share.ValidatorIndex), 10)),
 				zap.String("signers", joinedOperatorIDs),
 			)
@@ -129,9 +129,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 }
 
 func (ncv *NonCommitteeValidator) getRole(msg *queue.DecodedSSVMessage, root [32]byte) exporter_message.RunnerRole {
-	ncv.logger.Info("got Role",
-		zap.String("role", msg.MsgID.GetRoleType().String()),
-	)
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		_, found := ncv.Roots[root]
 		if !found {
