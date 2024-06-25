@@ -82,11 +82,12 @@ func (v *Committee) ConsumeQueue(
 
 	// in case of any error try to call the ctx.cancel to prevent the ctx leak
 	defer func() {
-		v.mtx.Lock()
-		defer v.mtx.Unlock()
-
 		var ok bool
+
+		v.mtx.Lock()
 		q, ok = v.Queues[slot]
+		v.mtx.Unlock()
+
 		if !ok {
 			logger.Warn("committee queue not found for slot while stopping the consumer", fields.Slot(slot))
 			return
