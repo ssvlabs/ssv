@@ -59,7 +59,7 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 			PublicKeys: publicKeys,
 			From:       uint64(msgs[0].Slot),
 			To:         uint64(msgs[len(msgs)-1].Slot),
-			Role:       msgs[0].Identifier.GetRoleType().ToBeaconRole(),
+			Role:       msgs[0].Identifier.GetRoleType().String(),
 		},
 		Data: data,
 	}
@@ -78,7 +78,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 			Slot:        msg.Slot,
 			Identifier:  msg.Identifier[:],
 			ValidatorPK: hex.EncodeToString(msg.Identifier.GetDutyExecutorID()),
-			Role:        msg.Identifier.GetRoleType().ToBeaconRole(),
+			Role:        msg.Identifier.GetRoleType().String(),
 			Message: specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.Height(msg.Slot),
