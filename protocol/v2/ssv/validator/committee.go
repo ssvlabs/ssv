@@ -36,7 +36,8 @@ type Committee struct {
 	//sharesMtx sync.RWMutex
 	Shares map[phase0.ValidatorIndex]*spectypes.Share
 
-	Operator                *spectypes.Operator
+	Operator *spectypes.CommitteeMember
+
 	SignatureVerifier       spectypes.SignatureVerifier
 	CreateRunnerFn          func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
@@ -47,7 +48,7 @@ func NewCommittee(
 	ctx context.Context,
 	logger *zap.Logger,
 	beaconNetwork spectypes.BeaconNetwork,
-	operator *spectypes.Operator,
+	operator *spectypes.CommitteeMember,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
@@ -136,7 +137,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
 
 	logger.Info("ℹ️ starting duty processing")
-	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
+	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
 }
 
 // NOT threadsafe

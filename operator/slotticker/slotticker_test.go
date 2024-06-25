@@ -1,6 +1,7 @@
 package slotticker
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,38 @@ func TestSlotTicker(t *testing.T) {
 		require.Equal(t, expectedSlot, slot)
 		expectedSlot++
 	}
+}
+
+func TestSlotTicker2(t *testing.T) {
+	slotDuration := 200 * time.Millisecond
+
+	dummyChan := make(chan struct{}, 1)
+	dummyChan <- struct{}{}
+
+	// Set the genesis time such that we start from slot 1
+	genesisTime := time.Now()
+
+	// Calculate the expected starting slot based on genesisTime
+	//timeSinceGenesis := time.Since(genesisTime)
+	//expectedSlot := phase0.Slot(timeSinceGenesis/slotDuration) + 1
+
+	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
+
+	<-ticker.Next()
+	firstSlot := ticker.Slot()
+	require.Equal(t, phase0.Slot(1), firstSlot)
+
+	select {
+	case <-ticker.Next():
+		require.FailNowf(t, "unexpected tick", "expected to wait for dummyChan")
+		fmt.Println("slot ", ticker.Slot())
+	case <-dummyChan:
+		break
+	}
+
+	<-ticker.Next()
+	secondSlot := ticker.Slot()
+	require.Equal(t, firstSlot+1, secondSlot)
 }
 
 func TestTickerInitialization(t *testing.T) {

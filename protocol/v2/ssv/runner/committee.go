@@ -40,6 +40,8 @@ type CommitteeRunner struct {
 	operatorSigner types.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
+	stoppedValidators map[spectypes.ValidatorPK]struct{}
+
 	started       time.Time
 	consensusDone time.Time
 	postStarted   time.Time
@@ -61,16 +63,17 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		operatorSigner: operatorSigner,
-		valCheck:       valCheck,
+		beacon:            beacon,
+		network:           network,
+		signer:            signer,
+		operatorSigner:    operatorSigner,
+		valCheck:          valCheck,
+		stoppedValidators: make(map[spectypes.ValidatorPK]struct{}),
 	}
 }
 
-func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
-	return cr.BaseRunner.baseStartNewDuty(logger, cr, duty)
+func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	return cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
 }
 
 func (cr *CommitteeRunner) Encode() ([]byte, error) {
@@ -79,13 +82,7 @@ func (cr *CommitteeRunner) Encode() ([]byte, error) {
 
 // StopDuty stops the duty for the given validator
 func (cr *CommitteeRunner) StopDuty(validator types.ValidatorPK) {
-	if cr != nil && cr.BaseRunner != nil && cr.BaseRunner.State != nil && cr.BaseRunner.State.StartingDuty != nil && cr.BaseRunner.State.StartingDuty.(*types.CommitteeDuty) != nil {
-		for _, duty := range cr.BaseRunner.State.StartingDuty.(*types.CommitteeDuty).BeaconDuties {
-			if types.ValidatorPK(duty.PubKey) == validator {
-				duty.IsStopped = true
-			}
-		}
-	}
+	cr.stoppedValidators[validator] = struct{}{}
 }
 
 func (cr *CommitteeRunner) Decode(data []byte) error {
@@ -193,7 +190,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 	ssvMsg := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
 		//TODO: The Domain will be updated after new Domain PR... Will be created after this PR is merged
-		MsgID: types.NewMsgID(types.GenesisMainnet, cr.GetBaseRunner().QBFTController.Share.ClusterID[:],
+		MsgID: types.NewMsgID(types.GenesisMainnet, cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType),
 	}
 	ssvMsg.Data, err = postConsensusMsg.Encode()
@@ -201,7 +198,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
 
-	msgToBroadcast, err := types.SSVMessageToSignedSSVMessage(ssvMsg, cr.BaseRunner.QBFTController.Share.OperatorID,
+	msgToBroadcast, err := types.SSVMessageToSignedSSVMessage(ssvMsg, cr.BaseRunner.QBFTController.CommitteeMember.OperatorID,
 		cr.operatorSigner.SignSSVMessage)
 	if err != nil {
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
@@ -320,7 +317,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				// TODO: (Alan) bulk submit instead of goroutine? (at least properly manage goroutines with wg)
 				go func() {
 					start := time.Now()
-					if err := cr.beacon.SubmitAttestation(att); err != nil {
+					if err := cr.beacon.SubmitAttestations([]*phase0.Attestation{att}); err != nil {
 						vlogger.Error("could not submit to Beacon chain reconstructed attestation",
 							fields.Slot(att.Data.Slot),
 							zap.Error(err),
@@ -346,7 +343,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				// TODO: (Alan) bulk submit instead of goroutine?
 				go func() {
 					start := time.Now()
-					if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
+					if err := cr.beacon.SubmitSyncMessages([]*altair.SyncCommitteeMessage{syncMsg}); err != nil {
 						vlogger.Error("could not submit to Beacon chain reconstructed signed sync committee",
 							fields.Slot(syncMsg.Slot),
 							zap.Error(err),
@@ -428,7 +425,8 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
 	for _, beaconDuty := range duty.(*types.CommitteeDuty).BeaconDuties {
-		if beaconDuty == nil || beaconDuty.IsStopped {
+		_, stopped := cr.stoppedValidators[spectypes.ValidatorPK(beaconDuty.PubKey)]
+		if beaconDuty == nil || stopped {
 			continue
 		}
 		slot := beaconDuty.DutySlot()

@@ -229,7 +229,6 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		nodes = append(nodes, &spectypes.Operator{
 			OperatorID:        spectypes.OperatorID(i),
 			SSVOperatorPubKey: opPubKey,
-			Committee:         []*spectypes.CommitteeMember{{OperatorID: spectypes.OperatorID(i), SSVOperatorPubKey: opPubKey}},
 		})
 		sks[spectypes.OperatorID(i)] = sk
 		rsaKeys = append(rsaKeys, pk)
