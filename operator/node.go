@@ -80,6 +80,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		exporter_message.RoleAttester,
 		exporter_message.RoleAggregator,
 		exporter_message.RoleProposer,
+		exporter_message.RoleSyncCommittee,
 		exporter_message.RoleSyncCommitteeContribution,
 		exporter_message.RoleValidatorRegistration,
 		exporter_message.RoleVoluntaryExit,
