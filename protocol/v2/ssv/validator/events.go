@@ -45,10 +45,11 @@ func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 		}
 
 		c.mtx.Lock()
-		q := c.Queues[slot]
-		dutyRunner, exists := c.Runners[slot]
+		q, qExists := c.Queues[slot]
+		dutyRunner, rExists := c.Runners[slot]
 		c.mtx.Unlock()
-		if !exists {
+
+		if !rExists || !qExists {
 			logger.Error("no committee runner found for slot", fields.Slot(slot), fields.MessageID(msg.MsgID))
 			return nil
 		}

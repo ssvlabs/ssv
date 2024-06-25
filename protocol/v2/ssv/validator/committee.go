@@ -305,7 +305,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 
 }
 
-func (c *Committee) StopQueues() {
+func (c *Committee) Stop() {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
