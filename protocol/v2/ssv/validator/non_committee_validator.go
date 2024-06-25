@@ -7,21 +7,18 @@ import (
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/exporter_message"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
-	"strconv"
-	"strings"
-
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
+	"strconv"
+	"strings"
 )
-
-const BeaconCommittees = 64
 
 type NonCommitteeValidator struct {
 	logger                 *zap.Logger
@@ -64,9 +61,6 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier exporter_message.Me
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	logger := ncv.logger.With(fields.PubKey(ncv.Share.ValidatorPubKey[:]), fields.Role(msg.MsgID.GetRoleType()))
 
-	if msg.GetType() != spectypes.SSVPartialSignatureMsgType {
-		return
-	}
 	partialSigMessage := &spectypes.PartialSignatureMessages{}
 	if err := partialSigMessage.Decode(msg.SSVMessage.GetData()); err != nil {
 		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
@@ -99,6 +93,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if len(quorums) == 0 {
 		return
 	}
+
 	for root, quorum := range quorums {
 		role := ncv.getRole(msg, root)
 		MsgID := exporter_message.NewMsgID(ncv.Share.DomainType, ncv.Share.ValidatorPubKey[:], role)

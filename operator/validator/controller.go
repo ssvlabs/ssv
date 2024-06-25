@@ -330,7 +330,6 @@ func (c *controller) handleRouterMessages() {
 	ctx, cancel := context.WithCancel(c.context)
 	defer cancel()
 	ch := c.messageRouter.GetMessageChan()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -341,7 +340,6 @@ func (c *controller) handleRouterMessages() {
 			if msg.MsgType == message.SSVEventMsgType {
 				continue
 			}
-
 			// TODO: only try copying clusterid if validator failed
 			dutyExecutorID := msg.GetID().GetDutyExecutorID()
 			var cid spectypes.CommitteeID
@@ -352,9 +350,7 @@ func (c *controller) handleRouterMessages() {
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
-				if msg.MsgType != spectypes.SSVPartialSignatureMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
-					continue // not supporting other types
-				}
+				//c.logger.Info("Got message (2): ", zap.Bool("a", a), zap.Bool("b", b), fields.CommitteeID(cid), fields.Role(msg.GetID().GetRoleType()))
 				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
@@ -386,11 +382,11 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv **nonCommitteeValidator) error {
 	c.nonCommitteeMutex.Lock()
 	defer c.nonCommitteeMutex.Unlock()
-	if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+	if msg.MsgType != spectypes.SSVConsensusMsgType {
 		return nil
 	}
 
-	if msg.MsgType != spectypes.SSVConsensusMsgType {
+	if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
 		return nil
 	}
 
@@ -436,57 +432,59 @@ func (c *controller) handlePartialSignatureMessages(msg *queue.DecodedSSVMessage
 	item := c.getNonCommitteeValidators(msg.GetID())
 	if item != nil && !item.partialInit {
 		*ncv = item
+		(*ncv).ProcessMessage(msg)
 	} else {
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return err
 		}
-
-		validatorByIndex := c.validatorStore.ValidatorByIndex(pSigMessages.Messages[0].ValidatorIndex)
-		if validatorByIndex == nil {
-			return errors.Errorf("could not find validator by index [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-		}
-
-		share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
-		if share == nil {
-			return errors.Errorf("could not find share for validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-		}
-
-		opts := c.validatorOptions
-		opts.SSVShare = share
-		operator, err := c.operatorFromShare(opts.SSVShare)
-		if err != nil {
-			return err
-		}
-
-		opts.Operator = operator
-		MsgID := exporter_message.NewMsgID(
-			spectypes.DomainType(msg.GetID().GetDomain()),
-			validatorByIndex.ValidatorPubKey[:],
-			exporter_message.RunnerRole(msg.GetID().GetRoleType()),
-		)
-
-		if item != nil && item.partialInit {
-			item.partialInit = false
-			savedRoot := item.NonCommitteeValidator.Roots
-			item.NonCommitteeValidator = validator.NewNonCommitteeValidator(c.logger, MsgID, opts)
-			item.NonCommitteeValidator.Roots = savedRoot
-			*ncv = item
-		} else {
-			*ncv = &nonCommitteeValidator{
-				partialInit:           false,
-				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
+		for _, signatureMessage := range pSigMessages.Messages {
+			validatorByIndex := c.validatorStore.ValidatorByIndex(signatureMessage.ValidatorIndex)
+			if validatorByIndex == nil {
+				return errors.Errorf("could not find validator by index [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
 			}
-		}
 
-		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-		c.nonCommitteeValidators.Set(
-			msg.GetID(),
-			*ncv,
-			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-		)
+			share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
+			if share == nil {
+				return errors.Errorf("could not find share for validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
+			}
+
+			opts := c.validatorOptions
+			opts.SSVShare = share
+			operator, err := c.operatorFromShare(opts.SSVShare)
+			if err != nil {
+				return err
+			}
+
+			opts.Operator = operator
+			MsgID := exporter_message.NewMsgID(
+				spectypes.DomainType(msg.GetID().GetDomain()),
+				validatorByIndex.ValidatorPubKey[:],
+				exporter_message.RunnerRole(msg.GetID().GetRoleType()),
+			)
+
+			if item != nil && item.partialInit {
+				item.partialInit = false
+				savedRoot := item.NonCommitteeValidator.Roots
+				item.NonCommitteeValidator = validator.NewNonCommitteeValidator(c.logger, MsgID, opts)
+				item.NonCommitteeValidator.Roots = savedRoot
+				*ncv = item
+			} else {
+				*ncv = &nonCommitteeValidator{
+					partialInit:           false,
+					NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
+				}
+			}
+
+			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+			c.nonCommitteeValidators.Set(
+				msg.GetID(),
+				*ncv,
+				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+			)
+			(*ncv).ProcessMessage(msg)
+		}
 	}
-	(*ncv).ProcessMessage(msg)
 	return nil
 }
 
