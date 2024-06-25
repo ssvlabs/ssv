@@ -129,7 +129,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 			Slot:        msg.Slot,
 			Identifier:  msg.Identifier[:],
 			ValidatorPK: hex.EncodeToString(msg.Identifier.GetDutyExecutorID()),
-			Role:        msg.Identifier.GetRoleType().String(),
+			Role:        msg.Identifier.GetRoleType().ToBeaconRole(),
 			Message: specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.Height(msg.Slot),
