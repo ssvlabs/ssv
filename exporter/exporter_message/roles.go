@@ -24,7 +24,7 @@ func (r RunnerRole) String() string {
 	case RoleProposer:
 		return "PROPOSER_RUNNER"
 	case RoleSyncCommittee:
-		return "SYNC_COMMITTEE"
+		return "SYNC_COMMITTEE_RUNNER"
 	case RoleSyncCommitteeContribution:
 		return "SYNC_COMMITTEE_CONTRIBUTION_RUNNER"
 	case RoleValidatorRegistration:

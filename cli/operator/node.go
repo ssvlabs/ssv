@@ -281,6 +281,7 @@ var StartNodeCmd = &cobra.Command{
 			exporter_message.RoleCommittee,
 			exporter_message.RoleAttester,
 			exporter_message.RoleProposer,
+			exporter_message.RoleSyncCommittee,
 			exporter_message.RoleAggregator,
 			exporter_message.RoleSyncCommitteeContribution,
 			exporter_message.RoleValidatorRegistration,
