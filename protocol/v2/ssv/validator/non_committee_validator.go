@@ -122,7 +122,7 @@ func (ncv *NonCommitteeValidator) getRole(msg *queue.DecodedSSVMessage, root [32
 		if !found {
 			return exporter_message.RoleAttester
 		}
-		return exporter_message.BNRoleSyncCommittee
+		return exporter_message.RoleSyncCommittee
 	}
 	return exporter_message.RunnerRole(msg.MsgID.GetRoleType())
 }
