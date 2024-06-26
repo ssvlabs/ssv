@@ -51,15 +51,13 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
 	pkv := identifier.GetDutyExecutorID()
 
-	var publicKeys []string
-	publicKeys = append(publicKeys, hex.EncodeToString(pkv))
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
-			PublicKeys: publicKeys,
-			From:       uint64(msgs[0].Slot),
-			To:         uint64(msgs[len(msgs)-1].Slot),
-			Role:       msgs[0].Identifier.GetRoleType().String(),
+			PublicKey: hex.EncodeToString(pkv),
+			From:      uint64(msgs[0].Slot),
+			To:        uint64(msgs[len(msgs)-1].Slot),
+			Role:      msgs[0].Identifier.GetRoleType().String(),
 		},
 		Data: data,
 	}
@@ -103,7 +101,7 @@ type MessageFilter struct {
 	// Role is the duty type, optional as it's relevant for IBFT data
 	Role string `json:"role,omitempty"`
 	// PublicKeys is optional, used for fetching decided messages or information about specific validator/operator
-	PublicKeys []string `json:"publicKeys,omitempty"`
+	PublicKey string `json:"publicKey,omitempty"`
 }
 
 // MessageType is the type of message being sent
