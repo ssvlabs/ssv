@@ -121,8 +121,8 @@ type Controller interface {
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
-type nonCommitteeValidator struct {
-	*validator.NonCommitteeValidator
+type committeeObserver struct {
+	*validator.CommitteeObserver
 	sync.Mutex
 }
 
@@ -180,10 +180,9 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized nonCommitteeValidator instances
-	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
-	nonCommitteeHandler    *ttlcache.Cache[spectypes.MessageID, *nonCommitteeHandler]
-	nonCommitteeMutex      sync.Mutex
+	// nonCommittees is a cache of initialized committeeObserver instances
+	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
+	committeesObserversMutex sync.Mutex
 
 	recentlyStartedValidators uint64
 	recentlyStartedCommittees uint64
@@ -266,8 +265,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		nonCommitteeValidators: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
+		committeesObservers: ttlcache.New(
+			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
 		),
 		metadataLastUpdated:     make(map[spectypes.ValidatorPK]time.Time),
 		indicesChange:           make(chan struct{}),
@@ -278,7 +277,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
-	go ctrl.nonCommitteeValidators.Start()
+	go ctrl.committeesObservers.Start()
 
 	return &ctrl
 }
@@ -370,33 +369,42 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
 }
 
 func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
-	var ncv *nonCommitteeValidator
+	var ncv *committeeObserver
 	item := c.getNonCommitteeValidators(msg.GetID())
 	if item == nil {
-		ncv = &nonCommitteeValidator{
-			NonCommitteeValidator: validator.NewNonCommitteeValidator(),
+		nonCommitteeOptions := validator.NonCommitteeOptions{
+			Logger:            c.logger,
+			ValidatorStore:    c.validatorStore,
+			Network:           c.validatorOptions.Network,
+			Storage:           c.validatorOptions.Storage,
+			FullNode:          c.validatorOptions.FullNode,
+			Operator:          c.validatorOptions.Operator,
+			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+		}
+		ncv = &committeeObserver{
+			CommitteeObserver: validator.NewNonCommitteeValidator(exporter_message.MessageID(msg.MsgID), nonCommitteeOptions),
 		}
 		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-		c.nonCommitteeValidators.Set(
+		c.committeesObservers.Set(
 			msg.GetID(),
 			ncv,
 			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
 		)
-
+	} else {
+		ncv = item
 	}
 	if err := c.handleConsensusMessages(msg, ncv); err != nil {
 		return err
 	}
-
 	if err := c.handlePostConsensusMessages(msg, ncv); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *nonCommitteeValidator) error {
-	c.nonCommitteeMutex.Lock()
-	defer c.nonCommitteeMutex.Unlock()
+func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
 	if msg.MsgType != spectypes.SSVConsensusMsgType {
 		return nil
 	}
@@ -414,13 +422,13 @@ func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *
 	return nil
 }
 
-func (c *controller) handlePostConsensusMessages(msg *queue.DecodedSSVMessage, ncv *nonCommitteeValidator) error {
+func (c *controller) handlePostConsensusMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
 	if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
 		return nil
 	}
 
-	c.nonCommitteeMutex.Lock()
-	defer c.nonCommitteeMutex.Unlock()
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
 
 	pSigMessages := &spectypes.PartialSignatureMessages{}
 	if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -534,8 +542,8 @@ func (c *controller) handlePostConsensusMessages(msg *queue.DecodedSSVMessage, n
 //	return nil
 //}
 
-func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *nonCommitteeValidator {
-	item := c.nonCommitteeValidators.Get(messageId)
+func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *committeeObserver {
+	item := c.committeesObservers.Get(messageId)
 	if item != nil {
 		return item.Value()
 	}

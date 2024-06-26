@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -13,26 +12,38 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 	"strconv"
 	"strings"
 )
 
-type NonCommitteeValidator struct {
+type CommitteeObserver struct {
 	logger                 *zap.Logger
 	Storage                *storage.QBFTStores
-	Quorum                 uint64
 	qbftController         *qbftcontroller.Controller
-	postConsensusContainer map[phase0.ValidatorIndex]*specssv.PartialSigContainer
+	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
 	Roots                  map[[32]byte]spectypes.BeaconRole
+	postConsensusContainer map[phase0.ValidatorIndex]*specssv.PartialSigContainer
 }
 
-func NewNonCommitteeValidator(logger *zap.Logger, identifier exporter_message.MessageID, opts Options, quorum uint64) *NonCommitteeValidator {
+type NonCommitteeOptions struct {
+	FullNode          bool
+	Logger            *zap.Logger
+	Network           specqbft.Network
+	Storage           *storage.QBFTStores
+	Operator          *spectypes.Operator
+	NewDecidedHandler qbftctrl.NewDecidedHandler
+	ValidatorStore    registrystorage.ValidatorStore
+}
+
+func NewNonCommitteeValidator(identifier exporter_message.MessageID, opts NonCommitteeOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:                types.GetDefaultDomain(),
@@ -46,22 +57,22 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier exporter_message.Me
 	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
-		logger.Debug("❗ failed to load highest instance", zap.Error(err))
+		opts.Logger.Debug("❗ failed to load highest instance", zap.Error(err))
 	}
 
-	return &NonCommitteeValidator{
+	return &CommitteeObserver{
 		qbftController:         ctrl,
-		Quorum:                 quorum,
-		logger:                 logger,
+		logger:                 opts.Logger,
 		Storage:                opts.Storage,
+		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
 		Roots:                  make(map[[32]byte]spectypes.BeaconRole),
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*specssv.PartialSigContainer),
 	}
 }
 
-func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
-	logger := ncv.logger.With(fields.PubKey(ncv.Share.ValidatorPubKey[:]), fields.Role(msg.MsgID.GetRoleType()))
+func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
+	logger := ncv.logger.With(fields.CommitteeID(spectypes.CommitteeID(msg.MsgID.GetDutyExecutorID())), fields.Role(msg.MsgID.GetRoleType()))
 
 	partialSigMessages := &spectypes.PartialSignatureMessages{}
 	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
@@ -80,10 +91,11 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			logger.Debug("❌ got invalid message for role committee", zap.Error(err))
 		}
 	} else {
-		if err := validateMessage(ncv.Share.Share, msg); err != nil {
-			logger.Debug("❌ got invalid message", zap.Error(err))
-			return
-		}
+		//TODO
+		//if err := validateMessage(ncv.Share.Share, msg); err != nil {
+		//	logger.Debug("❌ got invalid message", zap.Error(err))
+		//	return
+		//}
 	}
 
 	quorums, err := ncv.processMessage(partialSigMessages)
@@ -99,8 +111,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 
 	for key, quorum := range quorums {
 		role := ncv.getRole(msg, key.Root)
-		validatorPublicKey := ncv.
-		MsgID := exporter_message.NewMsgID(ncv.Share.DomainType, ncv.Share.ValidatorPubKey[:], role)
+		validator := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+		MsgID := exporter_message.NewMsgID(types.GetDefaultDomain(), validator.ValidatorPubKey[:], role)
 		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return
@@ -111,7 +123,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			}
 			logger.Info("✅saved participants",
 				zap.String("converted_role", role.ToBeaconRole()),
-				zap.String("validator_index", strconv.FormatUint(uint64(ncv.Share.ValidatorIndex), 10)),
+				zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 			)
 		}
@@ -126,7 +138,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 }
 
-func (ncv *NonCommitteeValidator) getRole(msg *queue.DecodedSSVMessage, root [32]byte) exporter_message.RunnerRole {
+func (ncv *CommitteeObserver) getRole(msg *queue.DecodedSSVMessage, root [32]byte) exporter_message.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		_, found := ncv.Roots[root]
 		if !found {
@@ -146,35 +158,35 @@ func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 	return 1
 }
 
-type validatorAndRoot struct {
-	Validator phase0.ValidatorIndex
-	Root [32]byte
+type validatorIndexAndRoot struct {
+	ValidatorIndex phase0.ValidatorIndex
+	Root           [32]byte
 }
 
-func (ncv *NonCommitteeValidator) processMessage(
+func (ncv *CommitteeObserver) processMessage(
 	signedMsg *spectypes.PartialSignatureMessages,
-) (map[validatorAndRoot][]spectypes.OperatorID, error) {
-	quorums := make(map[validatorAndRoot][]spectypes.OperatorID)
+) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
+	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
 
 	for _, msg := range signedMsg.Messages {
+		validator := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
+		if validator == nil {
+			panic("fuck my life")
+		}
 		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
 		if !ok {
-			container = specssv.NewPartialSigContainer(ncv.Quorum)
+			container = specssv.NewPartialSigContainer(validator.Quorum)
 			ncv.postConsensusContainer[msg.ValidatorIndex] = container
 		}
-		//println("<<<<<<<<<<<<<<<<<<<<<<<<,fuck my life>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-		//println(msg.ValidatorIndex)
-		//println(signedMsg.Slot)
-		//println("<<<<<<<<<<<<<<<<<<<<<<<<,fuck my life>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 		if container.HasSigner(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			ncv.resolveDuplicateSignature(container, msg)
+			ncv.resolveDuplicateSignature(container, msg, validator)
 		} else {
 			container.AddSignature(msg)
 		}
 
 		rootSignatures := container.GetSignatures(msg.ValidatorIndex, msg.SigningRoot)
-		if uint64(len(rootSignatures)) >= ncv.Quorum {
-			key := validatorAndRoot{msg.ValidatorIndex, msg.SigningRoot}
+		if uint64(len(rootSignatures)) >= validator.Quorum {
+			key := validatorIndexAndRoot{msg.ValidatorIndex, msg.SigningRoot}
 			longestSigners := quorums[key]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
 				newSigners := make([]spectypes.OperatorID, 0, newLength)
@@ -191,11 +203,11 @@ func (ncv *NonCommitteeValidator) processMessage(
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *NonCommitteeValidator) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *types.SSVShare) {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
-		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot)
+		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)
 		if err == nil {
 			// Keep the previous sigature since it's correct
 			return
@@ -206,17 +218,17 @@ func (ncv *NonCommitteeValidator) resolveDuplicateSignature(container *specssv.P
 	container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 
 	// Hold the new signature, if correct
-	err = ncv.verifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot)
+	err = ncv.verifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot, share)
 	if err == nil {
 		container.AddSignature(msg)
 	}
 }
 
 // copied from BaseRunner
-func (ncv *NonCommitteeValidator) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte) error {
+func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte, share *types.SSVShare) error {
 	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
-	for _, n := range ncv.Share.Committee {
+	for _, n := range share.Committee {
 		if n.Signer == signer {
 			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
@@ -237,7 +249,7 @@ func (ncv *NonCommitteeValidator) verifyBeaconPartialSignature(signer uint64, si
 	return fmt.Errorf("unknown signer")
 }
 
-func (ncv *NonCommitteeValidator) OnProposalMsg(msg *queue.DecodedSSVMessage) {
+func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.DecodedSSVMessage) {
 	mssg := &specqbft.Message{}
 	if err := mssg.Decode(msg.SSVMessage.GetData()); err != nil {
 		ncv.logger.Debug("❗ failed to get decode ssv message", zap.Error(err))
