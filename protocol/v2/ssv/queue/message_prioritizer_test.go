@@ -385,7 +385,7 @@ func (m messageSlice) dump(s *State) string {
 
 		decided := false
 		if _, ok := msg.Body.(*specqbft.Message); ok {
-			decided = isDecidedMesssage(s, msg)
+			decided = isDecidedMessage(s, msg)
 		}
 		tbl.AddRow(
 			fmt.Sprint(i),

@@ -128,7 +128,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
-				Slot:               0,
+				Slot:               duty.Slot,
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
@@ -141,7 +141,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	go func() {
-		err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage)
+		err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r)
 		if err != nil {
 			logger.Error("❗ failed committee queue consumption", zap.Error(err))
 		}

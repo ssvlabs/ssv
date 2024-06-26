@@ -2,13 +2,18 @@ package validator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
 
@@ -35,7 +40,7 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
-				Slot:               0,
+				Slot:               slot,
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
@@ -76,6 +81,7 @@ func (v *Committee) ConsumeQueue(
 	logger *zap.Logger,
 	slot phase0.Slot,
 	handler MessageHandler,
+	runner *runner.CommitteeRunner,
 ) error {
 	// in case of any error try to call the ctx.cancel to prevent the ctx leak
 	defer func() {
@@ -86,58 +92,55 @@ func (v *Committee) ConsumeQueue(
 		q.StopQueueF()
 	}()
 
-	logger.Debug("📬 queue consumer is running")
+	if runner == nil {
+		return errors.New(fmt.Sprintf("duty runner for slot %d is nil", slot))
+	}
 
+	state := *q.queueState
+
+	logger.Debug("📬 queue consumer is running")
 	lens := make([]int, 0, 10)
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
-		state := *q.queueState
+		var runningInstance *instance.Instance
+		if runner.HasRunningDuty() {
+			runningInstance = runner.GetBaseRunner().State.RunningInstance
+			if runningInstance != nil {
+				decided, _ := runningInstance.IsDecided()
+				state.HasRunningInstance = !decided
+			}
+		}
 
-		//runner := v.Runners.DutyRunnerForMsgID(msgID)
-		//if runner == nil {
-		//	return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
-		//}
-		//var runningInstance *instance.Instance
-		//if runner.HasRunningDuty() {
-		//	runningInstance = runner.GetBaseRunner().State.RunningInstance
-		//	if runningInstance != nil {
-		//		decided, _ := runningInstance.IsDecided()
-		//		state.HasRunningInstance = !decided
-		//	}
-		//}
-		//state.Height = v.GetLastHeight(msgID)
-		//state.Round = v.GetLastRound(msgID)
-		//state.Quorum = v.Share.Quorum
-		//
-		//filter := queue.FilterAny
-		//if !runner.HasRunningDuty() {
-		//	// If no duty is running, pop only ExecuteDuty messages.
-		//	filter = func(m *queue.DecodedSSVMessage) bool {
-		//		e, ok := m.Body.(*types.EventMsg)
-		//		if !ok {
-		//			return false
-		//		}
-		//		return e.Type == types.ExecuteDuty
-		//	}
-		//} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
-		//	// If no proposal was accepted for the current round, skip prepare & commit messages
-		//	// for the current height and round.
-		// filter := func(m *queue.DecodedSSVMessage) bool {
-		// 	sm, ok := m.Body.(*specqbft.Message)
-		// 	if !ok {
-		// 		return true
-		// 	}
+		filter := queue.FilterAny
+		if !runner.HasRunningDuty() {
+			// If no duty is running, pop only ExecuteDuty messages.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				e, ok := m.Body.(*types.EventMsg)
+				if !ok {
+					return false
+				}
+				return e.Type == types.ExecuteDuty
+			}
+		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+			// If no proposal was accepted for the current round, skip prepare & commit messages
+			// for the current height and round.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				sm, ok := m.Body.(*specqbft.Message)
+				if !ok {
+					return true
+				}
 
-		// 	if sm.Height != state.Height || sm.Round != state.Round {
-		// 		return true
-		// 	}
-		// 	return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
-		// }
+				if sm.Height != state.Height || sm.Round != state.Round {
+					return true
+				}
+				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+			}
+		}
 
 		// Pop the highest priority message for the current state.
 		// TODO: (Alan) bring back filter
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny)
+		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
 		if ctx.Err() != nil {
 			break
 		}
