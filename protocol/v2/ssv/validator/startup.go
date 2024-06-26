@@ -6,11 +6,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
-
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
@@ -42,7 +40,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			continue
 		}
 
-		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(v.NetworkConfig.Domain, share.ValidatorPubKey[:], role)
 		if ctrl := dutyRunner.GetBaseRunner().QBFTController; ctrl != nil {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {

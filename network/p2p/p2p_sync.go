@@ -188,8 +188,8 @@ func allPeersFilter(id peer.ID) bool {
 
 func waitSubsetOfPeers(
 	logger *zap.Logger,
-	getSubsetOfPeers func(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error),
-	vpk spectypes.ValidatorPK,
+	getSubsetOfPeers func(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error),
+	senderID []byte,
 	minPeers, maxPeers int,
 	timeout time.Duration,
 	filter func(peer.ID) bool,
@@ -207,7 +207,7 @@ func waitSubsetOfPeers(
 	// Wait for minPeers with a deadline.
 	deadline := time.Now().Add(timeout)
 	for {
-		peers, err := getSubsetOfPeers(logger, vpk, maxPeers, filter)
+		peers, err := getSubsetOfPeers(logger, senderID, maxPeers, filter)
 		if err != nil {
 			return nil, err
 		}

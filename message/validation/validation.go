@@ -6,17 +6,21 @@ package validation
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/emirpasic/gods/maps/treemap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -91,9 +95,6 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	reportDone := mv.reportPubSubMetrics(pmsg)
 	defer reportDone()
 
-	// TODO: Alan revert blind accept
-	return mv.validateSelf(pmsg)
-
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
 		return mv.handleValidationError(peerID, decodedMessage, err)
@@ -118,21 +119,27 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 }
 
 func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+	decodedMessage := &queue.DecodedSSVMessage{
+		SignedSSVMessage: signedSSVMessage,
+	}
+
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
-		return nil, err
+		return decodedMessage, err
 	}
 
-	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage, topic); err != nil {
-		return nil, err
+	decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
+
+	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
+		return decodedMessage, err
 	}
 
-	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+	committeeData, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
-		return nil, err
+		return decodedMessage, err
 	}
 
-	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committee); err != nil {
-		return nil, err
+	if err := mv.committeeChecks(signedSSVMessage, committeeData, topic); err != nil {
+		return decodedMessage, err
 	}
 
 	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
@@ -140,31 +147,44 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
-	decodedMessage := &queue.DecodedSSVMessage{
-		SignedSSVMessage: signedSSVMessage,
-		SSVMessage:       signedSSVMessage.SSVMessage,
-	}
-
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
-		if err != nil {
-			return nil, err
-		}
-
+		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeData, receivedAt)
 		decodedMessage.Body = consensusMessage
-	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {
-			return nil, err
+			return decodedMessage, err
 		}
 
+	case spectypes.SSVPartialSignatureMsgType:
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeData, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
+		if err != nil {
+			return decodedMessage, err
+		}
+
 	default:
-		panic("message type assertion should have been done")
+		panic("unreachable: message type assertion should have been done")
 	}
 
 	return decodedMessage, nil
+}
+
+func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeData CommitteeData, topic string) error {
+	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committeeData.operatorIDs); err != nil {
+		return err
+	}
+
+	// Rule: Check if message was sent in the correct topic
+	messageTopics := commons.CommitteeTopicID(committeeData.committeeID)
+	topicBaseName := commons.GetTopicBaseName(topic)
+	if !slices.Contains(messageTopics, topicBaseName) {
+		e := ErrIncorrectTopic
+		e.got = fmt.Sprintf("topic %v / base name %v", topic, topicBaseName)
+		e.want = messageTopics
+		return e
+	}
+
+	return nil
 }
 
 func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) *sync.Mutex {
@@ -174,21 +194,30 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 	if !ok {
 		mutex = &sync.Mutex{}
 		mv.validationLocks[messageID] = mutex
+		// TODO: Clean the map when mutex won't be needed anymore. Now it's a mutex leak...
 	}
 	mv.validationMutex.Unlock()
 
 	return mutex
 }
 
-func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) ([]spectypes.OperatorID, []phase0.ValidatorIndex, error) {
+type CommitteeData struct {
+	operatorIDs []spectypes.OperatorID
+	indices     []phase0.ValidatorIndex
+	committeeID spectypes.CommitteeID
+}
+
+func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeData, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
+
+		// Rule: Cluster does not exist
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
 		if committee == nil {
 			e := ErrNonExistentCommitteeID
 			e.got = hex.EncodeToString(committeeID[:])
-			return nil, nil, e
+			return CommitteeData{}, e
 		}
 
 		validatorIndices := make([]phase0.ValidatorIndex, 0)
@@ -199,39 +228,44 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}
 
 		if len(validatorIndices) == 0 {
-			return nil, nil, ErrNoValidators
+			return CommitteeData{}, ErrNoValidators
 		}
 
-		return committee.Operators, validatorIndices, nil
+		return CommitteeData{
+			operatorIDs: committee.Operators,
+			indices:     validatorIndices,
+			committeeID: committeeID,
+		}, nil
 	}
 
-	// #TODO fixme. can be not only publicKey, but also committeeID
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
 	if err != nil {
 		e := ErrDeserializePublicKey
 		e.innerErr = err
-		return nil, nil, e
+		return CommitteeData{}, e
 	}
 
 	validator := mv.validatorStore.Validator(publicKey.Serialize())
 	if validator == nil {
 		e := ErrUnknownValidator
 		e.got = publicKey.SerializeToHexStr()
-		return nil, nil, e
+		return CommitteeData{}, e
 	}
 
+	// Rule: If validator is liquidated
 	if validator.Liquidated {
-		return nil, nil, ErrValidatorLiquidated
+		return CommitteeData{}, ErrValidatorLiquidated
 	}
 
 	if validator.BeaconMetadata == nil {
-		return nil, nil, ErrNoShareMetadata
+		return CommitteeData{}, ErrNoShareMetadata
 	}
 
+	// Rule: If validator is not active
 	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = validator.BeaconMetadata.Status.String()
-		return nil, nil, e
+		return CommitteeData{}, e
 	}
 
 	var operators []spectypes.OperatorID
@@ -239,7 +273,11 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		operators = append(operators, c.Signer)
 	}
 
-	return operators, []phase0.ValidatorIndex{validator.BeaconMetadata.Index}, nil
+	return CommitteeData{
+		operatorIDs: operators,
+		indices:     []phase0.ValidatorIndex{validator.BeaconMetadata.Index},
+		committeeID: validator.CommitteeID(),
+	}, nil
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
@@ -253,7 +291,8 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
-			signers: make(map[spectypes.OperatorID]*SignerState),
+			state:    make(map[spectypes.OperatorID]*treemap.Map),
+			maxSlots: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance,
 		}
 		mv.consensusStateIndex[id] = cs
 	}
