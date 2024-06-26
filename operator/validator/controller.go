@@ -603,7 +603,9 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	// Start validator (if not already started).
 	// TODO: why its in the map if not started?
 	if v, found := c.validatorsMap.GetValidator(pk); found {
+		//TODO: replace all metadata update occurrences with a function instead
 		v.Share.BeaconMetadata = metadata
+		v.Share.ValidatorIndex = share.ValidatorIndex
 		_, err := c.startValidator(v)
 		if err != nil {
 			c.logger.Warn("could not start validator", zap.Error(err))
@@ -660,6 +662,7 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
 			v.Share.BeaconMetadata = share.BeaconMetadata
+			v.Share.ValidatorIndex = share.ValidatorIndex
 			_, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
@@ -853,16 +856,28 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// remove from ValidatorsMap
 	v := c.validatorsMap.RemoveValidator(pubKey)
 
-	// stop instance
-	if v != nil {
-		v.Stop()
-		c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
+	if v == nil {
+		c.logger.Warn("could not find validator to stop", fields.PubKey(pubKey[:]))
+		return
 	}
 
+	// stop instance
+	v.Stop()
+	c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
 	vc, ok := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
 	if ok {
 		vc.RemoveShare(v.Share.Share.ValidatorIndex)
-		// TODO: (Alan) remove committee if last share and stop
+		if len(vc.Shares) == 0 {
+			deletedCommittee := c.validatorsMap.RemoveCommittee(v.Share.CommitteeID())
+			if deletedCommittee == nil {
+				c.logger.Warn("could not find committee to remove on no validators",
+					fields.CommitteeID(v.Share.CommitteeID()),
+					fields.PubKey(pubKey[:]),
+				)
+				return
+			}
+			// TODO: (Alan) stop committee runners queues consumption
+		}
 	}
 }
 

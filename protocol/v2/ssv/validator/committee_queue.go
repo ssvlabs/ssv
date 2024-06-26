@@ -10,7 +10,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
 
@@ -18,9 +21,6 @@ import (
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
-	v.mtx.RLock() // read v.Queues
-	defer v.mtx.RUnlock()
-
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -31,18 +31,22 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 		return
 	}
 
+	v.mtx.RLock() // read v.Queues
 	q, ok := v.Queues[slot]
+	v.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
 			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
-				Slot:               0,
+				Slot:               slot,
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
+		v.mtx.Lock()
 		v.Queues[slot] = q
+		v.mtx.Unlock()
 		logger.Debug("missing queue for slot created", fields.Slot(slot))
 	}
 
@@ -71,11 +75,16 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler MessageHandler) error {
+func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler MessageHandler, runner *runner.CommitteeRunner) error {
+	if runner == nil {
+		return fmt.Errorf("could not get duty runner for slot %d", slot)
+	}
+
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	var q queueContainer
+
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
@@ -90,58 +99,51 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		return err
 	}
 
-	logger.Debug("📬 queue consumer is running")
+	state := *q.queueState
 
+	logger.Debug("📬 queue consumer is running")
 	lens := make([]int, 0, 10)
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
-		state := *q.queueState
+		var runningInstance *instance.Instance
+		if runner.HasRunningDuty() {
+			runningInstance = runner.GetBaseRunner().State.RunningInstance
+			if runningInstance != nil {
+				decided, _ := runningInstance.IsDecided()
+				state.HasRunningInstance = !decided
+			}
+		}
 
-		//runner := v.Runners.DutyRunnerForMsgID(msgID)
-		//if runner == nil {
-		//	return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
-		//}
-		//var runningInstance *instance.Instance
-		//if runner.HasRunningDuty() {
-		//	runningInstance = runner.GetBaseRunner().State.RunningInstance
-		//	if runningInstance != nil {
-		//		decided, _ := runningInstance.IsDecided()
-		//		state.HasRunningInstance = !decided
-		//	}
-		//}
-		//state.Height = v.GetLastHeight(msgID)
-		//state.Round = v.GetLastRound(msgID)
-		//state.Quorum = v.Share.Quorum
-		//
-		//filter := queue.FilterAny
-		//if !runner.HasRunningDuty() {
-		//	// If no duty is running, pop only ExecuteDuty messages.
-		//	filter = func(m *queue.DecodedSSVMessage) bool {
-		//		e, ok := m.Body.(*types.EventMsg)
-		//		if !ok {
-		//			return false
-		//		}
-		//		return e.Type == types.ExecuteDuty
-		//	}
-		//} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
-		//	// If no proposal was accepted for the current round, skip prepare & commit messages
-		//	// for the current height and round.
-		// filter := func(m *queue.DecodedSSVMessage) bool {
-		// 	sm, ok := m.Body.(*specqbft.Message)
-		// 	if !ok {
-		// 		return true
-		// 	}
+		filter := queue.FilterAny
+		if !runner.HasRunningDuty() {
+			// If no duty is running, pop only ExecuteDuty messages.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				e, ok := m.Body.(*types.EventMsg)
+				if !ok {
+					return false
+				}
+				return e.Type == types.ExecuteDuty
+			}
+		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+			// If no proposal was accepted for the current round, skip prepare & commit messages
+			// for the current height and round.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				sm, ok := m.Body.(*specqbft.Message)
+				if !ok {
+					return true
+				}
 
-		// 	if sm.Height != state.Height || sm.Round != state.Round {
-		// 		return true
-		// 	}
-		// 	return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
-		// }
+				if sm.Height != state.Height || sm.Round != state.Round {
+					return true
+				}
+				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+			}
+		}
 
 		// Pop the highest priority message for the current state.
 		// TODO: (Alan) bring back filter
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny)
+		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
 		if ctx.Err() != nil {
 			break
 		}

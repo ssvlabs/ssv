@@ -76,7 +76,10 @@ func (c *Committee) AddShare(share *spectypes.Share) {
 func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	delete(c.Shares, validatorIndex)
+	if share, exist := c.Shares[validatorIndex]; exist {
+		c.stopValidator(c.logger, share.ValidatorPubKey)
+		delete(c.Shares, validatorIndex)
+	}
 }
 
 // StartDuty starts a new duty for the given slot
@@ -106,7 +109,6 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return nil
 	}
 
-	//todo: mtx to get shares copy
 	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
 	for k, v := range c.Shares {
 		sharesCopy[k] = v
@@ -122,7 +124,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
-				Slot:               0,
+				Slot:               duty.Slot,
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
@@ -131,7 +133,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	// TODO alan: stop queue
-	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
+	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, c.Runners[duty.Slot])
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
@@ -148,6 +150,17 @@ func (c *Committee) stopDuties(logger *zap.Logger, validatorToStopMap map[phase0
 			)
 			r.StopDuty(validator)
 		}
+	}
+}
+
+// NOT threadsafe
+func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
+	for slot, runner := range c.Runners {
+		logger.Debug("trying to stop duty for validator",
+			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+			zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
+		)
+		runner.StopDuty(validator)
 	}
 }
 
