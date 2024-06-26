@@ -18,7 +18,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
@@ -34,7 +33,7 @@ import (
 
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
-	networkConfig  networkconfig.NetworkConfig
+	domain         spectypes.DomainType
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         types.BeaconSigner
@@ -47,7 +46,7 @@ type CommitteeRunner struct {
 }
 
 func NewCommitteeRunner(
-	networkConfig networkconfig.NetworkConfig,
+	domain spectypes.DomainType,
 	beaconNetwork types.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
@@ -64,7 +63,7 @@ func NewCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		networkConfig:  networkConfig,
+		domain:         domain,
 		beacon:         beacon,
 		network:        network,
 		signer:         signer,
@@ -197,7 +196,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 	ssvMsg := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
 		MsgID: types.NewMsgID(
-			cr.networkConfig.Domain,
+			cr.domain,
 			cr.GetBaseRunner().QBFTController.Share.ClusterID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),

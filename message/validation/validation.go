@@ -194,6 +194,7 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 	if !ok {
 		mutex = &sync.Mutex{}
 		mv.validationLocks[messageID] = mutex
+		// TODO: Clean the map when mutex won't be needed anymore. Now it's a mutex leak...
 	}
 	mv.validationMutex.Unlock()
 

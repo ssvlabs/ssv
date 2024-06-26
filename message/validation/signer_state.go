@@ -18,6 +18,8 @@ type SignerState struct {
 func (s *SignerState) Init() {
 	s.Round = specqbft.FirstRound
 	s.SeenSigners = make(map[string]struct{})
+	s.MessageCounts = MessageCounts{}
+	s.ProposalData = []byte{}
 }
 
 // ResetRound resets the state's round, message counts, and proposal data to the given values.
