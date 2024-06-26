@@ -50,7 +50,7 @@ func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 		c.mtx.Unlock()
 
 		if !rExists || !qExists {
-			logger.Error("no committee runner found for slot", fields.Slot(slot), fields.MessageID(msg.MsgID))
+			logger.Error("no committee runner or queue found for slot", fields.Slot(slot), fields.MessageID(msg.MsgID))
 			return nil
 		}
 
