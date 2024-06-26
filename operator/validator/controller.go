@@ -122,7 +122,6 @@ type Controller interface {
 }
 
 type nonCommitteeValidator struct {
-	partialInit bool
 	*validator.NonCommitteeValidator
 	sync.Mutex
 }
@@ -183,6 +182,7 @@ type controller struct {
 
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
+	nonCommitteeHandler    *ttlcache.Cache[spectypes.MessageID, *nonCommitteeHandler]
 	nonCommitteeMutex      sync.Mutex
 
 	recentlyStartedValidators uint64
@@ -350,7 +350,9 @@ func (c *controller) handleRouterMessages() {
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
-				//c.logger.Info("Got message (2): ", zap.Bool("a", a), zap.Bool("b", b), fields.CommitteeID(cid), fields.Role(msg.GetID().GetRoleType()))
+				if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+					return
+				}
 				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
@@ -369,17 +371,30 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
 
 func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 	var ncv *nonCommitteeValidator
-	if err := c.handleConsensusMessages(msg, &ncv); err != nil {
+	item := c.getNonCommitteeValidators(msg.GetID())
+	if item == nil {
+		ncv = &nonCommitteeValidator{
+			NonCommitteeValidator: validator.NewNonCommitteeValidator(),
+		}
+		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+		c.nonCommitteeValidators.Set(
+			msg.GetID(),
+			ncv,
+			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+		)
+
+	}
+	if err := c.handleConsensusMessages(msg, ncv); err != nil {
 		return err
 	}
 
-	if err := c.handlePartialSignatureMessages(msg, &ncv); err != nil {
+	if err := c.handlePostConsensusMessages(msg, ncv); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv **nonCommitteeValidator) error {
+func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *nonCommitteeValidator) error {
 	c.nonCommitteeMutex.Lock()
 	defer c.nonCommitteeMutex.Unlock()
 	if msg.MsgType != spectypes.SSVConsensusMsgType {
@@ -395,33 +410,11 @@ func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *
 		return nil
 	}
 
-	item := c.getNonCommitteeValidators(msg.GetID())
-	if item != nil {
-		*ncv = item
-	} else {
-		opts := c.validatorOptions
-		opts.SSVShare = &types.SSVShare{
-			Share: spectypes.Share{
-				Quorum: 1,
-			},
-		}
-		*ncv = &nonCommitteeValidator{
-			partialInit:           true,
-			NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, exporter_message.MessageID(msg.MsgID), opts),
-		}
-		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-		c.nonCommitteeValidators.Set(
-			msg.GetID(),
-			*ncv,
-			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-		)
-	}
-
-	(*ncv).OnProposalMsg(msg)
+	ncv.OnProposalMsg(msg)
 	return nil
 }
 
-func (c *controller) handlePartialSignatureMessages(msg *queue.DecodedSSVMessage, ncv **nonCommitteeValidator) error {
+func (c *controller) handlePostConsensusMessages(msg *queue.DecodedSSVMessage, ncv *nonCommitteeValidator) error {
 	if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
 		return nil
 	}
@@ -429,62 +422,12 @@ func (c *controller) handlePartialSignatureMessages(msg *queue.DecodedSSVMessage
 	c.nonCommitteeMutex.Lock()
 	defer c.nonCommitteeMutex.Unlock()
 
-	item := c.getNonCommitteeValidators(msg.GetID())
-	if item != nil && !item.partialInit {
-		*ncv = item
-		(*ncv).ProcessMessage(msg)
-	} else {
-		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return err
-		}
-		for _, signatureMessage := range pSigMessages.Messages {
-			validatorByIndex := c.validatorStore.ValidatorByIndex(signatureMessage.ValidatorIndex)
-			if validatorByIndex == nil {
-				return errors.Errorf("could not find validator by index [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-			}
-
-			share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
-			if share == nil {
-				return errors.Errorf("could not find share for validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-			}
-
-			opts := c.validatorOptions
-			opts.SSVShare = share
-			operator, err := c.operatorFromShare(opts.SSVShare)
-			if err != nil {
-				return err
-			}
-
-			opts.Operator = operator
-			MsgID := exporter_message.NewMsgID(
-				spectypes.DomainType(msg.GetID().GetDomain()),
-				validatorByIndex.ValidatorPubKey[:],
-				exporter_message.RunnerRole(msg.GetID().GetRoleType()),
-			)
-
-			if item != nil && item.partialInit {
-				item.partialInit = false
-				savedRoot := item.NonCommitteeValidator.Roots
-				item.NonCommitteeValidator = validator.NewNonCommitteeValidator(c.logger, MsgID, opts)
-				item.NonCommitteeValidator.Roots = savedRoot
-				*ncv = item
-			} else {
-				*ncv = &nonCommitteeValidator{
-					partialInit:           false,
-					NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
-				}
-			}
-
-			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-			c.nonCommitteeValidators.Set(
-				msg.GetID(),
-				*ncv,
-				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-			)
-			(*ncv).ProcessMessage(msg)
-		}
+	pSigMessages := &spectypes.PartialSignatureMessages{}
+	if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+		return err
 	}
+
+	ncv.ProcessMessage(msg)
 	return nil
 }
 
