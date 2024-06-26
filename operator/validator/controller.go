@@ -417,7 +417,6 @@ func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *
 	if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
 		return nil
 	}
-
 	ncv.OnProposalMsg(msg)
 	return nil
 }
@@ -438,109 +437,6 @@ func (c *controller) handlePostConsensusMessages(msg *queue.DecodedSSVMessage, n
 	ncv.ProcessMessage(msg)
 	return nil
 }
-
-//func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
-//	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
-//	// other handlers from processing
-//	var ncv *nonCommitteeValidator
-//	err := func() error {
-//		if msg.MsgType != spectypes.SSVConsensusMsgType {
-//			return nil
-//		}
-//		if subMsg, ok := msg.Body.(*specqbft.Message); ok {
-//			if subMsg.MsgType == specqbft.ProposalMsgType {
-//				return nil
-//			}
-//			item := c.getNonCommitteeValidators(msg.GetID())
-//			if item != nil {
-//				println("<<<<<<<<<<<<<<<<<<<<<<<<ProposalMsgType exist>>>>>>>>>>>>>>>>>>>>")
-//				ncv = item
-//			} else {
-//				println("<<<<<<<<<<<<<<<<<<<<<<<<ProposalMsgType not exist>>>>>>>>>>>>>>>>>>>>")
-//				ncv = &nonCommitteeValidator{
-//					partialInit: false,
-//				}
-//				ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-//				c.nonCommitteeValidators.Set(
-//					msg.GetID(),
-//					ncv,
-//					time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-//				)
-//			}
-//			ncv.Lock()
-//		}
-//		return nil
-//	}()
-//	if err != nil {
-//		return err
-//	}
-//
-//	err = func() error {
-//		if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
-//			return nil
-//		}
-//		c.nonCommitteeMutex.Lock()
-//		defer c.nonCommitteeMutex.Unlock()
-//		item := c.getNonCommitteeValidators(msg.GetID())
-//		if item != nil && !item.partialInit {
-//			ncv = item
-//		} else {
-//			pSigMessages := &spectypes.PartialSignatureMessages{}
-//			if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-//				return err
-//			}
-//			validatorByIndex := c.validatorStore.ValidatorByIndex(pSigMessages.Messages[0].ValidatorIndex)
-//			if validatorByIndex == nil {
-//				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-//			}
-//			// Create a new nonCommitteeValidator and cache it.
-//			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
-//			share := c.sharesStorage.Get(nil, validatorByIndex.ValidatorPubKey[:])
-//			if share == nil {
-//				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-//			}
-//			opts := c.validatorOptions
-//			opts.SSVShare = share
-//			operator, err := c.operatorFromShare(opts.SSVShare)
-//			if err != nil {
-//				return err
-//			}
-//
-//			opts.Operator = operator
-//			MsgID := exporter_message.NewMsgID(spectypes.DomainType(msg.GetID().GetDomain()), validatorByIndex.ValidatorPubKey[:], exporter_message.RunnerRole(msg.GetID().GetRoleType()))
-//			if item != nil && item.partialInit {
-//				println("<<<<<<<<<<<<<<<<<<<<<<<<update partialInit (1)>>>>>>>>>>>>>>>>>>>>")
-//				item.partialInit = false
-//				item.NonCommitteeValidator = validator.NewNonCommitteeValidator(c.logger, MsgID, opts)
-//				ncv = item
-//			} else {
-//				println("<<<<<<<<<<<<<<<<<<<<<<<<create partialInit (2)>>>>>>>>>>>>>>>>>>>>")
-//				ncv = &nonCommitteeValidator{
-//					partialInit:           false,
-//					NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, MsgID, opts),
-//				}
-//			}
-//
-//			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-//			c.nonCommitteeValidators.Set(
-//				msg.GetID(),
-//				ncv,
-//				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-//			)
-//		}
-//
-//		ncv.Lock()
-//		return nil
-//	}()
-//	if err != nil {
-//		return err
-//	}
-//	// Process the message.
-//	defer ncv.Unlock()
-//	ncv.ProcessMessage(msg)
-//
-//	return nil
-//}
 
 func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *committeeObserver {
 	item := c.committeesObservers.Get(messageId)

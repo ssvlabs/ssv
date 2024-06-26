@@ -72,7 +72,8 @@ func NewNonCommitteeValidator(identifier exporter_message.MessageID, opts NonCom
 }
 
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
-	logger := ncv.logger.With(fields.CommitteeID(spectypes.CommitteeID(msg.MsgID.GetDutyExecutorID())), fields.Role(msg.MsgID.GetRoleType()))
+	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
+	logger := ncv.logger.With(fields.CommitteeID(cid), fields.Role(msg.MsgID.GetRoleType()))
 
 	partialSigMessages := &spectypes.PartialSignatureMessages{}
 	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
@@ -86,16 +87,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	slot := partialSigMessages.Slot
 	logger = logger.With(fields.Slot(slot))
 
-	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		if err := partialSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			logger.Debug("❌ got invalid message for role committee", zap.Error(err))
-		}
-	} else {
-		//TODO
-		//if err := validateMessage(ncv.Share.Share, msg); err != nil {
-		//	logger.Debug("❌ got invalid message", zap.Error(err))
-		//	return
-		//}
+	if err := partialSigMessages.Validate(); err != nil {
+		logger.Debug("❌ got invalid message", zap.Error(err))
 	}
 
 	quorums, err := ncv.processMessage(partialSigMessages)
@@ -121,7 +114,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			for _, share := range quorum {
 				operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
 			}
-			logger.Info("✅saved participants",
+			logger.Info("✅ saved participants",
 				zap.String("converted_role", role.ToBeaconRole()),
 				zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
@@ -262,7 +255,9 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.DecodedSSVMessage) {
 		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
 		return
 	}
+	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 
+	ncv.logger.Info("✅ Got proposal message", fields.CommitteeID(cid))
 	ncv.Roots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
 }
 
