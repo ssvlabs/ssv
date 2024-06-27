@@ -9,8 +9,8 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"

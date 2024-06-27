@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	"github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	buffer "go.uber.org/zap/buffer"
 	zapcore "go.uber.org/zap/zapcore"
 )
