@@ -27,7 +27,7 @@ func (i *Instance) uponRoundChange(
 		return err
 	}
 
-	hasQuorumBefore := specqbft.HasQuorum(i.State.Share, roundChangeMsgContainer.MessagesForRound(roundChangeMessage.
+	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, roundChangeMsgContainer.MessagesForRound(roundChangeMessage.
 		Round))
 	// Currently, even if we have a quorum of round change messages, we update the container
 	addedMsg, err := roundChangeMsgContainer.AddFirstMsgForSignerAndRound(signedRoundChange)
@@ -149,7 +149,7 @@ func hasReceivedPartialQuorum(state *specqbft.State, roundChangeMsgContainer *sp
 		}
 	}
 
-	return specqbft.HasPartialQuorum(state.Share, rc), rc
+	return specqbft.HasPartialQuorum(state.CommitteeMember, rc), rc
 }
 
 // hasReceivedProposalJustificationForLeadingRound returns
@@ -172,7 +172,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 
 	roundChanges := roundChangeMsgContainer.MessagesForRound(roundChangeMsg.Round)
 	// optimization, if no round change quorum can return false
-	if !specqbft.HasQuorum(state.Share, roundChanges) {
+	if !specqbft.HasQuorum(state.CommitteeMember, roundChanges) {
 		return nil, nil, nil
 	}
 
@@ -239,7 +239,7 @@ func isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if proposer(state, config, roundChangeMsg.Round) != state.Share.OperatorID {
+	if proposer(state, config, roundChangeMsg.Round) != state.CommitteeMember.OperatorID {
 		return errors.New("not proposer")
 	}
 
@@ -308,7 +308,7 @@ func validRoundChangeForDataIgnoreSignature(
 		return errors.Wrap(err, "roundChange invalid")
 	}
 
-	if !signedMsg.CheckSignersInCommittee(state.Share.Committee) {
+	if !signedMsg.CheckSignersInCommittee(state.CommitteeMember.Committee) {
 		return errors.New("signer not in committee")
 	}
 
@@ -329,7 +329,7 @@ func validRoundChangeForDataIgnoreSignature(
 				state.Height,
 				msg.DataRound,
 				msg.Root,
-				state.Share.Committee); err != nil {
+				state.CommitteeMember.Committee); err != nil {
 				return errors.Wrap(err, "round change justification invalid")
 			}
 		}
@@ -338,7 +338,7 @@ func validRoundChangeForDataIgnoreSignature(
 			return errors.New("H(data) != root")
 		}
 
-		if !specqbft.HasQuorum(state.Share, prepareMsgs) {
+		if !specqbft.HasQuorum(state.CommitteeMember, prepareMsgs) {
 			return errors.New("no justifications quorum")
 		}
 
@@ -367,7 +367,7 @@ func validRoundChangeForDataVerifySignature(
 
 	if config.VerifySignatures() {
 		// Verify signature
-		if err := config.GetSignatureVerifier().Verify(signedMsg, state.Share.Committee); err != nil {
+		if err := config.GetSignatureVerifier().Verify(signedMsg, state.CommitteeMember.Committee); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
@@ -469,5 +469,11 @@ func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound spec
 		DataRound:                round,
 		RoundChangeJustification: justificationsData,
 	}
-	return specqbft.MessageToSignedSSVMessageWithFullData(msg, state.Share.OperatorID, config.GetOperatorSigner(), fullData)
+
+	signedMsg, err := specqbft.Sign(msg, state.CommitteeMember.OperatorID, config.GetOperatorSigner())
+	if err != nil {
+		return nil, errors.Wrap(err, "could not sign round change message")
+	}
+	signedMsg.FullData = fullData
+	return signedMsg, nil
 }

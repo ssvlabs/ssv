@@ -31,7 +31,7 @@ type Runner interface {
 	Getters
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
-	StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error
+	StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error
 	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
@@ -72,16 +72,11 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
 }
 
 // setupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty) {
+func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	// start new state
 	// start new state
 	// TODO nicer way to get quorum
-	var share *spectypes.Share
-	for _, shareInstance := range b.Share {
-		share = shareInstance
-		break // why go all the way?
-	}
-	state := NewRunnerState(share.Quorum, duty)
+	state := NewRunnerState(quorum, duty)
 
 	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
 	// b.State but currently does not write to it
@@ -111,22 +106,22 @@ func NewBaseRunner(
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
-func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty) error {
+func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start duty")
 	}
 
-	b.baseSetupForNewDuty(duty)
+	b.baseSetupForNewDuty(duty, quorum)
 
 	return runner.executeDuty(logger, duty)
 }
 
 // baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
-func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty) error {
+func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start non-beacon duty")
 	}
-	b.baseSetupForNewDuty(duty)
+	b.baseSetupForNewDuty(duty, quorum)
 	return runner.executeDuty(logger, duty)
 }
 

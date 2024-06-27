@@ -26,7 +26,7 @@ type Controller struct {
 	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
-	Share             *spectypes.Operator
+	CommitteeMember   *spectypes.CommitteeMember
 	NewDecidedHandler NewDecidedHandler `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
@@ -34,14 +34,14 @@ type Controller struct {
 
 func NewController(
 	identifier []byte,
-	share *spectypes.Operator,
+	committeeMember *spectypes.CommitteeMember,
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
 	return &Controller{
 		Identifier:      identifier,
 		Height:          specqbft.FirstHeight,
-		Share:           share,
+		CommitteeMember: committeeMember,
 		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
 		config:          config,
 		fullNode:        fullNode,
@@ -92,7 +92,7 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *spectypes.SignedSSVMess
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	isDecided, err := IsDecidedMsg(c.Share, msg)
+	isDecided, err := IsDecidedMsg(c.CommitteeMember, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier, storedInst.State.Height)
 	inst.State = storedInst.State
 	return inst
 }
@@ -216,7 +216,7 @@ func (c *Controller) isFutureMessage(signedMsg *spectypes.SignedSSVMessage) (boo
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
+	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

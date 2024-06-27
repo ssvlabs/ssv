@@ -37,7 +37,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 
 	i := instance.NewInstance(
 		c.config,
-		highestInstance.State.Share,
+		highestInstance.State.CommitteeMember,
 		identifier,
 		highestInstance.State.Height,
 	)

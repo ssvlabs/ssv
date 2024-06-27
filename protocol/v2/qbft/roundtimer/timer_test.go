@@ -13,7 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer/mocks"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 func TestTimeoutForRound(t *testing.T) {

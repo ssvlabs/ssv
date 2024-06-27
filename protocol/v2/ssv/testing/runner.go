@@ -67,7 +67,7 @@ var baseRunner = func(
 	identifier := spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(role))
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
-	operator := spectestingutils.TestingOperator(keySet)
+	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewTestingOperatorSigner(keySet, 1)
 
 	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())

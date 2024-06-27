@@ -48,9 +48,9 @@ func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 	return *resp.Data, spec.DataVersionAltair, nil
 }
 
-// SubmitSyncMessage submits a signed sync committee msg
-func (gc *goClient) SubmitSyncMessage(msg *altair.SyncCommitteeMessage) error {
-	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, []*altair.SyncCommitteeMessage{msg}); err != nil {
+// SubmitSyncMessages submits a signed sync committee msg
+func (gc *goClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
+	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs); err != nil {
 		return err
 	}
 	return nil

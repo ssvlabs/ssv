@@ -71,6 +71,15 @@ func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 	return id
 }
 
+func (s *SSVShare) HasQuorum(cnt int) bool {
+	return uint64(cnt) >= s.Quorum()
+}
+
+func (s *SSVShare) Quorum() uint64 {
+	q, _ := ComputeQuorumAndPartialQuorum(len(s.Committee))
+	return q
+}
+
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
 func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	sort.Slice(operatorIds, func(i, j int) bool {
@@ -94,6 +103,10 @@ func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
 	f := (committeeSize - 1) / 3
 	return uint64(f*2 + 1), uint64(f + 1)
+}
+
+func ComputeF(committeeSize int) uint64 {
+	return uint64(committeeSize-1) / 3
 }
 
 func ValidCommitteeSize(committeeSize int) bool {

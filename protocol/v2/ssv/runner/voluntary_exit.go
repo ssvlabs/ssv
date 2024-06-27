@@ -57,8 +57,8 @@ func NewVoluntaryExitRunner(
 	}
 }
 
-func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
-	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty)
+func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty, quorum)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
