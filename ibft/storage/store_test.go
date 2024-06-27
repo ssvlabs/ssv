@@ -95,7 +95,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 
 	instance := &qbftstorage.StoredInstance{
 		State: &specqbft.State{
-			Share:                           nil,
+			CommitteeMember:                 nil,
 			ID:                              identifier[:],
 			Round:                           1,
 			Height:                          1,
@@ -133,7 +133,7 @@ func TestSaveAndFetchState(t *testing.T) {
 
 	instance := &qbftstorage.StoredInstance{
 		State: &specqbft.State{
-			Share:                           nil,
+			CommitteeMember:                 nil,
 			ID:                              identifier[:],
 			Round:                           1,
 			Height:                          1,

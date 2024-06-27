@@ -277,10 +277,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 	var shareSecret *bls.SecretKey
 
-	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(len(event.OperatorIds))
-
 	operators := make([]*spectypes.Operator, 0)
-	committeeIDs := make([]spectypes.OperatorID, 0)
 	committee := make([]*spectypes.CommitteeMember, 0)
 	shareMembers := make([]*spectypes.ShareMember, 0)
 
@@ -334,14 +331,9 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		operators = append(operators, &spectypes.Operator{
 			OperatorID:        operatorID,
 			SSVOperatorPubKey: od.PublicKey,
-			ClusterID:         spectypes.GetCommitteeID(committeeIDs),
-			Committee:         committee,
-			Quorum:            quorum,
-			PartialQuorum:     partialQuorum,
 		})
 	}
 
-	validatorShare.Quorum = quorum
 	validatorShare.DomainType = eh.networkConfig.Domain
 	validatorShare.Committee = shareMembers
 	validatorShare.Graffiti = []byte("ssv.network")

@@ -181,8 +181,6 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 			}
 			return committee
 		}(),
-		Quorum: share.Quorum,
-		//PartialQuorum: share.PartialQuorum, // TODO:
 		Graffiti:   string(share.Graffiti),
 		Liquidated: share.Liquidated,
 	}

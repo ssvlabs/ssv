@@ -105,7 +105,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 		state.Height = v.GetLastHeight(msgID)
 		state.Round = v.GetLastRound(msgID)
-		state.Quorum = v.Share.Quorum
+		state.Quorum = v.Operator.GetQuorum()
 
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {

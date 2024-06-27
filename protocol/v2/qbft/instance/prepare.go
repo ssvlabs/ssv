@@ -16,7 +16,7 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *spectypes.SignedSSVMessage, prepareMsgContainer *specqbft.MsgContainer) error {
-	hasQuorumBefore := specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
+	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
@@ -30,7 +30,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *spectypes.Sign
 		return nil // already moved to commit stage
 	}
 
-	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+	if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
 
@@ -95,13 +95,13 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 			state.Height,
 			state.LastPreparedRound,
 			r,
-			state.Share.Committee,
+			state.CommitteeMember.Committee,
 		); err == nil {
 			ret = append(ret, msg)
 		}
 	}
 
-	if !specqbft.HasQuorum(state.Share, ret) {
+	if !specqbft.HasQuorum(state.CommitteeMember, ret) {
 		return nil, nil
 	}
 
@@ -115,7 +115,7 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.CommitteeMember) error {
+	operators []*spectypes.Operator) error {
 
 	msg, err := specqbft.DecodeMessage(signedPrepare.SSVMessage.Data)
 	if err != nil {
@@ -157,7 +157,7 @@ func validSignedPrepareForHeightRoundAndRootVerifySignature(
 	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.CommitteeMember) error {
+	operators []*spectypes.Operator) error {
 
 	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(signedPrepare, height, round, root, operators); err != nil {
 		return err
@@ -195,6 +195,6 @@ func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft
 		Root: root,
 	}
 
-	return specqbft.MessageToSignedSSVMessage(msg, state.Share.OperatorID, config.GetOperatorSigner())
+	return specqbft.Sign(msg, state.CommitteeMember.OperatorID, config.GetOperatorSigner())
 
 }

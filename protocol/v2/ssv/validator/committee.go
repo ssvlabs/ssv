@@ -36,7 +36,8 @@ type Committee struct {
 	//sharesMtx sync.RWMutex
 	Shares map[phase0.ValidatorIndex]*spectypes.Share
 
-	Operator                *spectypes.Operator
+	Operator *spectypes.CommitteeMember
+
 	SignatureVerifier       spectypes.SignatureVerifier
 	CreateRunnerFn          func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
@@ -47,7 +48,7 @@ func NewCommittee(
 	ctx context.Context,
 	logger *zap.Logger,
 	beaconNetwork spectypes.BeaconNetwork,
-	operator *spectypes.Operator,
+	operator *spectypes.CommitteeMember,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
@@ -124,7 +125,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
-				Slot:               0,
+				Slot:               duty.Slot,
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
@@ -133,10 +134,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	// TODO alan: stop queue
-	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
+	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, c.Runners[duty.Slot])
 
 	logger.Info("ℹ️ starting duty processing")
-	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
+	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
 }
 
 // NOT threadsafe

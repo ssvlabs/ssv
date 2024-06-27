@@ -38,7 +38,7 @@ type NonCommitteeOptions struct {
 	Logger            *zap.Logger
 	Network           specqbft.Network
 	Storage           *storage.QBFTStores
-	Operator          *spectypes.Operator
+	Operator          *spectypes.CommitteeMember
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
 }
@@ -168,7 +168,7 @@ func (ncv *CommitteeObserver) processMessage(
 		}
 		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
 		if !ok {
-			container = specssv.NewPartialSigContainer(validator.Quorum)
+			container = specssv.NewPartialSigContainer(validator.Quorum())
 			ncv.postConsensusContainer[msg.ValidatorIndex] = container
 		}
 		if container.HasSigner(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
@@ -178,7 +178,7 @@ func (ncv *CommitteeObserver) processMessage(
 		}
 
 		rootSignatures := container.GetSignatures(msg.ValidatorIndex, msg.SigningRoot)
-		if uint64(len(rootSignatures)) >= validator.Quorum {
+		if uint64(len(rootSignatures)) >= validator.Quorum() {
 			key := validatorIndexAndRoot{msg.ValidatorIndex, msg.SigningRoot}
 			longestSigners := quorums[key]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"bytes"
-
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -17,7 +16,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, signedMsg *spectypes.Signed
 	if err := ValidateDecided(
 		c.config,
 		signedMsg,
-		c.Share,
+		c.CommitteeMember,
 	); err != nil {
 		return nil, errors.Wrap(err, "invalid decided msg")
 	}
@@ -34,7 +33,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, signedMsg *spectypes.Signed
 	save := true
 
 	if inst == nil {
-		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Height)
+		i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, msg.Height)
 		i.State.Round = msg.Round
 		i.State.Decided = true
 		i.State.DecidedValue = signedMsg.FullData
@@ -94,9 +93,9 @@ func (c *Controller) UponDecided(logger *zap.Logger, signedMsg *spectypes.Signed
 func ValidateDecided(
 	config qbft.IConfig,
 	signedDecided *spectypes.SignedSSVMessage,
-	share *spectypes.Operator,
+	committeeMember *spectypes.CommitteeMember,
 ) error {
-	isDecided, err := IsDecidedMsg(share, signedDecided)
+	isDecided, err := IsDecidedMsg(committeeMember, signedDecided)
 	if err != nil {
 		return err
 	}
@@ -113,7 +112,7 @@ func ValidateDecided(
 		return errors.Wrap(err, "can't decode inner SSVMessage")
 	}
 
-	if err := instance.BaseCommitValidationVerifySignature(config, signedDecided, msg.Height, share.Committee); err != nil {
+	if err := instance.BaseCommitValidationVerifySignature(config, signedDecided, msg.Height, committeeMember.Committee); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
@@ -133,12 +132,12 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(share *spectypes.Operator, signedDecided *spectypes.SignedSSVMessage) (bool, error) {
+func IsDecidedMsg(committeeMember *spectypes.CommitteeMember, signedDecided *spectypes.SignedSSVMessage) (bool, error) {
 
 	msg, err := specqbft.DecodeMessage(signedDecided.SSVMessage.Data)
 	if err != nil {
 		return false, err
 	}
 
-	return share.HasQuorum(len(signedDecided.GetOperatorIDs())) && msg.MsgType == specqbft.CommitMsgType, nil
+	return committeeMember.HasQuorum(len(signedDecided.GetOperatorIDs())) && msg.MsgType == specqbft.CommitMsgType, nil
 }

@@ -23,7 +23,7 @@ type Options struct {
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
-	Operator          *spectypes.Operator
+	Operator          *spectypes.CommitteeMember
 	Signer            spectypes.BeaconSigner
 	OperatorSigner    spectypes.OperatorSigner
 	SignatureVerifier spectypes.SignatureVerifier
