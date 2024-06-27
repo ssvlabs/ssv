@@ -864,6 +864,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	if ok {
 		vc.RemoveShare(v.Share.Share.ValidatorIndex)
 		if len(vc.Shares) == 0 {
+			vc.Stop()
 			deletedCommittee := c.validatorsMap.RemoveCommittee(v.Share.CommitteeID())
 			if deletedCommittee == nil {
 				c.logger.Warn("could not find committee to remove on no validators",
@@ -872,7 +873,6 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 				)
 				return
 			}
-			// TODO: (Alan) stop committee runners queues consumption
 		}
 	}
 }
@@ -932,9 +932,9 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
 		}...)
 
-		committeRunnerFunc := SetupCommitteeRunners(ctx, logger, opts)
+		committeeRunnerFunc := SetupCommitteeRunners(ctx, logger, opts)
 
-		vc = validator.NewCommittee(c.context, logger, c.beacon.GetBeaconNetwork(), operator, opts.SignatureVerifier, committeRunnerFunc)
+		vc = validator.NewCommittee(c.context, logger, c.beacon.GetBeaconNetwork(), operator, opts.SignatureVerifier, committeeRunnerFunc)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 

@@ -119,6 +119,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
+
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithCancel(c.ctx)
+
 	if _, ok := c.Queues[duty.Slot]; !ok {
 		c.Queues[duty.Slot] = queueContainer{
 			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
@@ -132,9 +136,17 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
+	// Setting the cancel function separately due the queue could be created in HandleMessage
+	q, _ := c.Queues[duty.Slot]
+	q.StopQueueF = cancelF
+
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
-	// TODO alan: stop queue
-	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, c.Runners[duty.Slot])
+	go func() {
+		err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r)
+		if err != nil {
+			logger.Error("❗ failed committee queue consumption", zap.Error(err))
+		}
+	}()
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
@@ -292,6 +304,22 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 	return nil
 
+}
+
+func (c *Committee) Stop() {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for slot, q := range c.Queues {
+		if q.StopQueueF == nil {
+			c.logger.Error("⚠️ can't stop committee queue StopQueueF is nil",
+				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+				fields.Slot(slot),
+			)
+			continue
+		}
+		q.StopQueueF()
+	}
 }
 
 // updateAttestingSlotMap updates the highest attesting slot map from beacon duties
