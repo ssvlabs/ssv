@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"sync"
@@ -35,6 +36,12 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
+	var name = ""
+	if len(identifier) == 56 {
+		name = types.MessageID(identifier).GetRoleType().String()
+	} else {
+		name = base64.StdEncoding.EncodeToString(identifier)
+	}
 	return &Instance{
 		State: &specqbft.State{
 			CommitteeMember:      committeeMember,
@@ -49,7 +56,7 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		metrics:     newMetrics(types.MessageID(identifier).GetRoleType().String()),
+		metrics:     newMetrics(name),
 	}
 }
 
