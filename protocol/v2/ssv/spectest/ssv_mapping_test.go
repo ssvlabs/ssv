@@ -345,7 +345,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
 		if ret.GetBaseRunner().State != nil {
 			if ret.GetBaseRunner().State.RunningInstance != nil {
-				operator := spectestingutils.TestingOperator(ks)
+				operator := spectestingutils.TestingCommitteeMember(ks)
 				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
 			}
 		}
@@ -359,7 +359,7 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,
-		contr.Share,
+		contr.CommitteeMember,
 		config,
 		false,
 	)
@@ -370,13 +370,13 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 		if inst == nil {
 			continue
 		}
-		operator := spectestingutils.TestingOperator(ks)
+		operator := spectestingutils.TestingCommitteeMember(ks)
 		newContr.StoredInstances[i] = fixInstanceForRun(t, inst, newContr, operator)
 	}
 	return newContr
 }
 
-func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.Controller, share *spectypes.Operator) *instance.Instance {
+func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
 	newInst := instance.NewInstance(
 		contr.GetConfig(),
 		share,
@@ -385,7 +385,7 @@ func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.
 
 	newInst.State.DecidedValue = inst.State.DecidedValue
 	newInst.State.Decided = inst.State.Decided
-	newInst.State.Share = inst.State.Share
+	newInst.State.CommitteeMember = inst.State.CommitteeMember
 	newInst.State.Round = inst.State.Round
 	newInst.State.Height = inst.State.Height
 	newInst.State.ProposalAcceptedForCurrentRound = inst.State.ProposalAcceptedForCurrentRound

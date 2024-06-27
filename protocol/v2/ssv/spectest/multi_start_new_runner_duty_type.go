@@ -173,6 +173,6 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	err := test.Runner.StartNewDuty(logger, test.Duty)
+	err := test.Runner.StartNewDuty(logger, test.Duty, 0)
 	return err
 }

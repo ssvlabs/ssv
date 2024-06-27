@@ -2,7 +2,6 @@ package instance
 
 import (
 	"encoding/json"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -49,7 +48,8 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		metrics:     newMetrics(types.MessageID(identifier).GetRoleType().String()),
+		metrics:     newMetrics(string(identifier)),
+		//metrics:     newMetrics(types.MessageID(identifier).GetRoleType().String()),
 	}
 }
 

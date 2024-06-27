@@ -73,13 +73,13 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 }
 
 func keySetForShare(share *spectypes.Share) *testingutils.TestKeySet {
-	if share.Quorum == 5 {
+	if len(share.Committee) == 5 {
 		return testingutils.Testing7SharesSet()
 	}
-	if share.Quorum == 7 {
+	if len(share.Committee) == 7 {
 		return testingutils.Testing10SharesSet()
 	}
-	if share.Quorum == 9 {
+	if len(share.Committee) == 9 {
 		return testingutils.Testing13SharesSet()
 	}
 	return testingutils.Testing4SharesSet()
