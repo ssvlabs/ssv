@@ -165,11 +165,14 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 		return
 	}
 
+	// TODO: (Alan) genesis support - should be spectypes.Duty from pre-fork spec?
+	// range over duties and execute
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
-			// TODO: (Alan) genesis support
-			//toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
+			if !h.AlanForked(slot) {
+				toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
+			}
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
 	}

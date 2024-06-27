@@ -50,6 +50,11 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
+			if !h.AlanForked(slot) {
+				h.logger.Debug("🛠 skip duty execution", zap.String("reason", "alan not forked yet"))
+				continue
+			}
+
 			h.processExecution(period, epoch, slot)
 
 		case <-h.reorg:
@@ -73,7 +78,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
-	// TODO: tmp solution to get committee id fast
+	// TODO: tmp solution to get committee id "fast"
 	vcmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {

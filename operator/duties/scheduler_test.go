@@ -11,7 +11,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -21,6 +21,8 @@ import (
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
+
+var farFutureSlot = phase0.Slot(1<<64 - 1)
 
 type MockSlotTicker interface {
 	Next() <-chan time.Time
@@ -73,7 +75,7 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SafeValue[phase0.Slot]) (
+func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot], alanForkSlot phase0.Slot) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
@@ -84,7 +86,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Safe
 ) {
 	ctrl := gomock.NewController(t)
 	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 200 * time.Millisecond
+	timeout := 420 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
@@ -110,95 +112,8 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Safe
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
 		},
-	}
 
-	s := NewScheduler(opts)
-	s.blockPropagateDelay = 1 * time.Millisecond
-	s.indicesChg = make(chan struct{})
-	s.handlers = []dutyHandler{handler}
-
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().MinGenesisTime().Return(uint64(0)).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotDurationSec().Return(150 * time.Millisecond).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotsPerEpoch().Return(uint64(32)).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
-			return time.Now()
-		},
-	).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) phase0.Epoch {
-			return phase0.Epoch(uint64(slot) / s.network.SlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentSlot().DoAndReturn(
-		func() phase0.Slot {
-			return currentSlot.Get()
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
-		func() phase0.Epoch {
-			return phase0.Epoch(uint64(currentSlot.Get()) / s.network.SlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
-
-	// Create a pool to wait for the scheduler to finish.
-	schedulerPool := pool.New().WithErrors().WithContext(ctx)
-
-	startFunction := func() {
-		err := s.Start(ctx, logger)
-		require.NoError(t, err)
-
-		schedulerPool.Go(func(ctx context.Context) error {
-			return s.Wait()
-		})
-	}
-
-	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
-}
-
-func setupSchedulerAndMocksCommittee(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot]) (
-	*Scheduler,
-	*zap.Logger,
-	*mockSlotTickerService,
-	time.Duration,
-	context.CancelFunc,
-	*pool.ContextPool,
-	func(),
-) {
-	ctrl := gomock.NewController(t)
-	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 200 * time.Millisecond
-
-	ctx, cancel := context.WithCancel(context.Background())
-	logger := logging.TestLogger(t)
-
-	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
-	mockExecutionClient := mocks.NewMockExecutionClient(ctrl)
-	mockValidatorProvider := mocks.NewMockValidatorProvider(ctrl)
-	mockValidatorController := mocks.NewMockValidatorController(ctrl)
-	mockSlotService := &mockSlotTickerService{}
-	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
-	}
-
-	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		ExecutionClient:     mockExecutionClient,
-		Network:             mockNetworkConfig,
-		ValidatorProvider:   mockValidatorProvider,
-		ValidatorController: mockValidatorController,
-		SlotTickerProvider: func() slotticker.SlotTicker {
-			ticker := NewMockSlotTicker()
-			mockSlotService.Subscribe(ticker.Subscribe())
-			return ticker
-		},
+		AlanForkSlot: alanForkSlot,
 	}
 
 	s := NewScheduler(opts)
@@ -457,7 +372,7 @@ func TestScheduler_Run(t *testing.T) {
 
 	// setup mock duty handler expectations
 	for _, mockDutyHandler := range s.handlers {
-		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
 			DoAndReturn(func(ctx context.Context) {
 				<-ctx.Done()

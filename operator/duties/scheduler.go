@@ -96,6 +96,7 @@ type SchedulerOptions struct {
 	ValidatorExitCh      <-chan ExitDescriptor
 	SlotTickerProvider   slotticker.Provider
 	DutyStore            *dutystore.Store
+	AlanForkSlot         phase0.Slot
 }
 
 type Scheduler struct {
@@ -121,6 +122,8 @@ type Scheduler struct {
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
+
+	alanForkSlot phase0.Slot
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
@@ -146,12 +149,15 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
+			// TODO: (Alan) genesis support - consider adding only post fork
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
+
+		alanForkSlot: opts.AlanForkSlot,
 	}
 
 	return s
@@ -200,6 +206,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.slotTickerProvider,
 			reorgCh,
 			indicesChangeCh,
+			s.alanForkSlot,
 		)
 
 		// This call is blocking.

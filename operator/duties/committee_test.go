@@ -10,10 +10,11 @@ import (
 	"github.com/cornelk/hashmap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -94,6 +95,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -104,6 +106,11 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
 				ValidatorIndex: 1,
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Index: 1,
+				},
 			},
 		}}
 	)
@@ -116,7 +123,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 	})
 
 	currentSlot.Set(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -145,6 +152,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -156,6 +164,11 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 				},
 				ValidatorIndex: 1,
 			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Index: 1,
+				},
+			},
 		}}
 	)
 	syncDuties.Set(0, []*eth2apiv1.SyncCommitteeDuty{
@@ -166,7 +179,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 	})
 
 	currentSlot.Set(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -195,6 +208,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -205,6 +219,11 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
 				ValidatorIndex: 1,
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Index: 1,
+				},
 			},
 		}}
 	)
@@ -223,7 +242,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	})
 
 	currentSlot.Set(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -253,6 +272,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -263,6 +283,11 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
 				ValidatorIndex: 1,
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Index: 1,
+				},
 			},
 		}}
 	)
@@ -275,7 +300,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -309,6 +334,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -321,6 +347,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 					},
 					ValidatorIndex: 1,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 1,
+					},
+				},
 			},
 			{
 				Share: spectypes.Share{
@@ -328,6 +359,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 					},
 					ValidatorIndex: 2,
+				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 2,
+					},
 				},
 			},
 			{
@@ -337,11 +373,16 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 					},
 					ValidatorIndex: 3,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 3,
+					},
+				},
 			},
 		}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -406,6 +447,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -418,6 +460,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 					},
 					ValidatorIndex: 1,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 1,
+					},
+				},
 			},
 			{
 				Share: spectypes.Share{
@@ -425,6 +472,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 					},
 					ValidatorIndex: 2,
+				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 2,
+					},
 				},
 			},
 			{
@@ -434,11 +486,16 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 					},
 					ValidatorIndex: 3,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 3,
+					},
+				},
 			},
 		}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -503,6 +560,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -515,6 +573,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 					},
 					ValidatorIndex: 1,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 1,
+					},
+				},
 			},
 			{
 				Share: spectypes.Share{
@@ -522,6 +585,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 5},
 					},
 					ValidatorIndex: 2,
+				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 2,
+					},
 				},
 			},
 		}
@@ -535,7 +603,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -591,6 +659,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -603,12 +672,17 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 					},
 					ValidatorIndex: 1,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 1,
+					},
+				},
 			},
 		}
 	)
 
 	currentSlot.Set(phase0.Slot(63))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -686,6 +760,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -698,6 +773,11 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 					},
 					ValidatorIndex: 1,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 1,
+					},
+				},
 			},
 			{
 				Share: spectypes.Share{
@@ -706,12 +786,17 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 					},
 					ValidatorIndex: 2,
 				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 2,
+					},
+				},
 			},
 		}
 	)
 
 	currentSlot.Set(phase0.Slot(63))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -798,6 +883,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkSlot  = phase0.Slot(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -809,6 +895,11 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 					},
 					ValidatorIndex: 1,
+				},
+				Metadata: ssvtypes.Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Index: 1,
+					},
 				},
 			},
 		}
@@ -824,7 +915,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	currentSlot.Set(phase0.Slot(32))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
