@@ -149,7 +149,6 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
-			// TODO: (Alan) genesis support - consider adding only post fork
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 		},
 
