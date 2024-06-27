@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/rsa"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"math"
 	"testing"
 
@@ -87,11 +88,11 @@ func TestHandleDecidedQuery(t *testing.T) {
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()
 
-	roles := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
-		spectypes.RoleProposer,
-		spectypes.RoleAggregator,
-		spectypes.RoleSyncCommitteeContribution,
+	roles := []exporter_message.RunnerRole{
+		exporter_message.RoleCommittee,
+		exporter_message.RoleProposer,
+		exporter_message.RoleAggregator,
+		exporter_message.RoleSyncCommitteeContribution,
 		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)
@@ -103,10 +104,10 @@ func TestHandleDecidedQuery(t *testing.T) {
 		oids = append(oids, o.OperatorID)
 	}
 
-	role := spectypes.RoleCommittee
+	role := exporter_message.RoleCommittee
 	pk := sks[1].GetPublicKey()
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
+		id := exporter_message.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -120,7 +121,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	// save decided
 	for _, d := range decided250Seq {
 		require.NoError(t, ibftStorage.Get(role).SaveInstance(d))
-		require.NoError(t, ibftStorage.Get(role).SaveParticipants(d.DecidedMessage.SSVMessage.MsgID,
+		require.NoError(t, ibftStorage.Get(role).SaveParticipants(exporter_message.MessageID(d.DecidedMessage.SSVMessage.MsgID),
 			phase0.Slot(d.State.Height),
 			d.DecidedMessage.OperatorIDs),
 		)
@@ -128,7 +129,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	t.Run("valid range", func(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
-		HandleDecidedQuery(l, ibftStorage, nm)
+		HandleParticipantsQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*SignedMessageAPI)
 		require.True(t, ok, "expected []*SignedMessageAPI, got %+v", nm.Msg.Data)
@@ -137,7 +138,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	t.Run("invalid range", func(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
-		HandleDecidedQuery(l, ibftStorage, nm)
+		HandleParticipantsQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		data, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
@@ -146,7 +147,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	t.Run("non-existing validator", func(t *testing.T) {
 		nm := newDecidedAPIMsg("xxx", spectypes.BNRoleAttester, 400, 404)
-		HandleDecidedQuery(l, ibftStorage, nm)
+		HandleParticipantsQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
@@ -155,7 +156,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	t.Run("non-existing role", func(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
-		HandleDecidedQuery(l, ibftStorage, nm)
+		HandleParticipantsQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
@@ -164,7 +165,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	t.Run("non-existing storage", func(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
-		HandleDecidedQuery(l, ibftStorage, nm)
+		HandleParticipantsQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
@@ -198,7 +199,7 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, fu
 	}
 }
 
-func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.RunnerRole) (storage.Storage, *qbftstorage.QBFTStores) {
+func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...exporter_message.RunnerRole) (storage.Storage, *qbftstorage.QBFTStores) {
 	sExporter, err := storage.NewNodeStorage(logger, db)
 	if err != nil {
 		panic(err)
