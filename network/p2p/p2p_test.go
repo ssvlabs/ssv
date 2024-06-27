@@ -36,9 +36,15 @@ func TestRSAUsage(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	testMessage := []byte("message")
+	testMessage := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   spectypes.MessageID(make([]byte, 56)),
+		Data:    []byte("test message"),
+	}
+	testMessageEnc, err := testMessage.Encode()
+	require.NoError(t, err)
 
-	hash := sha256.Sum256(testMessage)
+	hash := sha256.Sum256(testMessageEnc)
 
 	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
 	require.NoError(t, err)
@@ -56,14 +62,17 @@ func TestRSAUsage(t *testing.T) {
 		Bytes: pubKeyBytes,
 	})
 
-	const operatorID = spectypes.OperatorID(0x12345678)
-	sig := [256]byte{}
-	copy(sig[:], signature)
+	operatorIDs := []spectypes.OperatorID{spectypes.OperatorID(0x12345678)}
+
+	sigs := make([][]byte, 0)
+	sigs = append(sigs, signature)
 	signedSSVMsg := &spectypes.SignedSSVMessage{
-		Signature:  sig,
-		OperatorID: operatorID,
-		Data:       testMessage,
+		Signatures:  sigs,
+		OperatorIDs: operatorIDs,
+		SSVMessage:  testMessage,
+		FullData:    testMessageEnc,
 	}
+
 	encodedSignedSSVMessage, err := signedSSVMsg.Encode()
 	require.NoError(t, err)
 
@@ -72,10 +81,10 @@ func TestRSAUsage(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, err)
-	require.Equal(t, operatorID, decodedMsg.OperatorID)
-	require.Equal(t, sig, decodedMsg.Signature)
+	require.Equal(t, operatorIDs, decodedMsg.OperatorIDs)
+	require.Equal(t, sigs, decodedMsg.Signatures)
 
-	messageHash := sha256.Sum256(decodedMsg.Data)
+	messageHash := sha256.Sum256(decodedMsg.FullData)
 
 	block, rest := pem.Decode(pubPEM)
 	require.NotNil(t, block)
@@ -87,8 +96,8 @@ func TestRSAUsage(t *testing.T) {
 	rsaPubKey, ok := pub.(*rsa.PublicKey)
 	require.True(t, ok)
 
-	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedMsg.Signature[:]))
-	require.Equal(t, testMessage, decodedMsg.Data)
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedMsg.Signatures[0][:]))
+	require.Equal(t, testMessageEnc, decodedMsg.FullData)
 }
 
 func TestGetMaxPeers(t *testing.T) {
@@ -199,7 +208,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RunnerRole(spectypes.BNRoleAttester))
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -221,7 +230,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	<-time.After(time.Second)
 
 	node := ln.Nodes[0]
-	res, err := node.(*p2pNetwork).LastDecided(logger, mid)
+	res, err := node.(*p2pNetwork).LastDecided(logger, mid, spectypes.ValidatorPK(pk))
 	require.NoError(t, err)
 	select {
 	case err := <-errors:
@@ -287,7 +296,7 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 	}
 }
 
-func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID, vpk spectypes.ValidatorPK) ([]p2pprotocol.SyncResult, error) {
 	const (
 		minPeers = 3
 		waitTime = time.Second * 24
@@ -296,7 +305,7 @@ func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
 	pid, maxPeers := commons.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetPubKey(), minPeers, maxPeers, waitTime, allPeersFilter)
+	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, vpk, minPeers, maxPeers, waitTime, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
@@ -313,16 +322,12 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 		Protocol: p2pprotocol.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
-			sm := specqbft.SignedMessage{
-				Signature: make([]byte, 96),
-				Signers:   []spectypes.OperatorID{1, 2, 3},
-				Message: specqbft.Message{
-					MsgType:    specqbft.CommitMsgType,
-					Height:     height,
-					Round:      round,
-					Identifier: mid[:],
-					Root:       [32]byte{1, 2, 3},
-				},
+			sm := specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     height,
+				Round:      round,
+				Identifier: mid[:],
+				Root:       [32]byte{1, 2, 3},
 			}
 			data, err := sm.Encode()
 			if err != nil {
@@ -363,13 +368,14 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 
 	var wg sync.WaitGroup
 	for _, pk := range pks {
-		vpk, err := hex.DecodeString(pk)
+		vpkBytes, err := hex.DecodeString(pk)
+		vpk := spectypes.ValidatorPK(vpkBytes)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "could not decode validator public key")
 		}
 		for _, node := range ln.Nodes {
 			wg.Add(1)
-			go func(node network.P2PNetwork, vpk []byte) {
+			go func(node network.P2PNetwork, vpk spectypes.ValidatorPK) {
 				defer wg.Done()
 				if err := node.Subscribe(vpk); err != nil {
 					logger.Warn("could not subscribe to topic", zap.Error(err))
@@ -381,7 +387,8 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	// let the nodes subscribe
 	<-time.After(time.Second)
 	for _, pk := range pks {
-		vpk, err := hex.DecodeString(pk)
+		vpkBytes, err := hex.DecodeString(pk)
+		vpk := spectypes.ValidatorPK(vpkBytes)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "could not decode validator public key")
 		}
@@ -409,28 +416,26 @@ func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
 	atomic.AddUint64(&r.count, 1)
 }
 
-func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
+func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, role)
-	signedMsg := &specqbft.SignedMessage{
-		Message: specqbft.Message{
-			MsgType:    specqbft.CommitMsgType,
-			Round:      2,
-			Identifier: id[:],
-			Height:     specqbft.Height(height),
-			Root:       [32]byte{0x1, 0x2, 0x3},
-		},
-		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv"),
-		Signers:   []spectypes.OperatorID{1, 3, 4},
+	msg := &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Round:      2,
+		Identifier: id[:],
+		Height:     specqbft.Height(height),
+		Root:       [32]byte{0x1, 0x2, 0x3},
 	}
-	data, err := signedMsg.Encode()
+	data, err := msg.Encode()
 	require.NoError(t, err)
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
 		Data:    data,
 	}
+	// Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv"),
+	// Signers:   []spectypes.OperatorID{1, 3, 4},
 	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
 	require.NoError(t, err)
 
@@ -438,9 +443,9 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole)
 }
 
 func dummyMsgAttester(t *testing.T, pkHex string, height int) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
-	return dummyMsg(t, pkHex, height, spectypes.BNRoleAttester)
+	return dummyMsg(t, pkHex, height, spectypes.RunnerRole(spectypes.BNRoleAttester))
 }
 
-func dummySignSSVMessage(data []byte) ([256]byte, error) {
-	return [256]byte{}, nil
+func dummySignSSVMessage(ssvMessage *spectypes.SSVMessage) ([]byte, error) {
+	return []byte{}, nil
 }
