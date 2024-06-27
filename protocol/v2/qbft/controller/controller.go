@@ -32,6 +32,58 @@ type Controller struct {
 	fullNode          bool
 }
 
+//func (b *Controller) MarshalJSON() ([]byte, error) {
+//	type ControllerAlias struct {
+//		State              *State
+//		Share              map[phase0.ValidatorIndex]*spectypes.Share
+//		QBFTController     *controller.Controller
+//		BeaconNetwork      spectypes.BeaconNetwork
+//		RunnerRoleType     spectypes.RunnerRole
+//		highestDecidedSlot phase0.Slot
+//	}
+//
+//	// Create object and marshal
+//	alias := &ControllerAlias{
+//		State:              b.State,
+//		Share:              b.Share,
+//		QBFTController:     b.QBFTController,
+//		BeaconNetwork:      b.BeaconNetwork,
+//		RunnerRoleType:     b.RunnerRoleType,
+//		highestDecidedSlot: b.highestDecidedSlot,
+//	}
+//
+//	byts, err := json.Marshal(alias)
+//
+//	return byts, err
+//}
+//
+//func (b *Controller) UnmarshalJSON(data []byte) error {
+//	type ControllerAlias struct {
+//		State              *State
+//		Share              map[phase0.ValidatorIndex]*spectypes.Share
+//		QBFTController     *controller.Controller
+//		BeaconNetwork      spectypes.BeaconNetwork
+//		RunnerRoleType     spectypes.RunnerRole
+//		highestDecidedSlot phase0.Slot
+//	}
+//
+//	// Unmarshal the JSON data into the auxiliary struct
+//	aux := &ControllerAlias{}
+//	if err := json.Unmarshal(data, &aux); err != nil {
+//		return err
+//	}
+//
+//	// Assign fields
+//	b.State = aux.State
+//	b.Share = aux.Share
+//	b.QBFTController = aux.QBFTController
+//	b.BeaconNetwork = aux.BeaconNetwork
+//	b.RunnerRoleType = aux.RunnerRoleType
+//	b.highestDecidedSlot = aux.highestDecidedSlot
+//
+//	return nil
+//}
+
 func NewController(
 	identifier []byte,
 	committeeMember *spectypes.CommitteeMember,

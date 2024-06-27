@@ -5,14 +5,12 @@ import (
 	"testing"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -39,8 +37,6 @@ func TestMain(m *testing.M) {
 	}
 
 	logger := zap.L().Named("integration-tests")
-
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, p2pv1.LocalNetOptions{
 		Nodes:        maxSupportedCommittee,
