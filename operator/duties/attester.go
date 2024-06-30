@@ -179,7 +179,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			if !h.AlanForked(slot) {
+			if !h.network.AlanForked(slot) {
 				toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
 			}
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))

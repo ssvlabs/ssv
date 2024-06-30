@@ -14,6 +14,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
@@ -25,7 +26,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	currentSlot := &SafeValue[phase0.Slot]{}
 	currentSlot.Set(0)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, farFutureSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	startFn()
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)

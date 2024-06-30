@@ -13,6 +13,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
@@ -81,7 +82,7 @@ func setupSyncCommitteeDutiesMock(
 func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.BeaconDuty {
 	expectedDuties := make([]*spectypes.BeaconDuty, 0)
 	for _, d := range duties {
-		if !handler.AlanForked(slot) {
+		if !handler.network.AlanForked(slot) {
 			expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 		}
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
@@ -91,11 +92,11 @@ func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties [
 
 func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	tests := []struct {
-		name     string
-		forkSlot phase0.Slot
+		name      string
+		forkEpoch phase0.Epoch
 	}{
-		{"PreFork", farFutureSlot},
-		{"PostFork", phase0.Slot(0)},
+		{"PreFork", goclient.FarFutureEpoch},
+		{"PostFork", phase0.Epoch(0)},
 	}
 
 	for _, tt := range tests {
@@ -123,7 +124,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 
 			// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
 			currentSlot.Set(phase0.Slot(1))
-			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkSlot)
+			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkEpoch)
 			fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 			startFn()
 
@@ -168,11 +169,11 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	tests := []struct {
-		name     string
-		forkSlot phase0.Slot
+		name      string
+		forkEpoch phase0.Epoch
 	}{
-		{"PreFork", farFutureSlot},
-		{"PostFork", phase0.Slot(0)},
+		{"PreFork", goclient.FarFutureEpoch},
+		{"PostFork", phase0.Epoch(0)},
 	}
 
 	for _, tt := range tests {
@@ -216,7 +217,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 
 			// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
 			currentSlot.Set(phase0.Slot(256*32 - 49))
-			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkSlot)
+			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkEpoch)
 			fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 			startFn()
 
@@ -265,11 +266,11 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	tests := []struct {
-		name     string
-		forkSlot phase0.Slot
+		name      string
+		forkEpoch phase0.Epoch
 	}{
-		{"PreFork", farFutureSlot},
-		{"PostFork", phase0.Slot(0)},
+		{"PreFork", goclient.FarFutureEpoch},
+		{"PostFork", phase0.Epoch(0)},
 	}
 
 	for _, tt := range tests {
@@ -299,7 +300,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 				}
 			)
 			currentSlot.Set(phase0.Slot(256*32 - 3))
-			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkSlot)
+			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkEpoch)
 			fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 			startFn()
 
@@ -353,11 +354,11 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	tests := []struct {
-		name     string
-		forkSlot phase0.Slot
+		name      string
+		forkEpoch phase0.Epoch
 	}{
-		{"PreFork", farFutureSlot},
-		{"PostFork", phase0.Slot(0)},
+		{"PreFork", goclient.FarFutureEpoch},
+		{"PostFork", phase0.Epoch(0)},
 	}
 
 	for _, tt := range tests {
@@ -387,7 +388,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 				}
 			)
 			currentSlot.Set(phase0.Slot(256*32 - 3))
-			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkSlot)
+			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkEpoch)
 			fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 			startFn()
 
@@ -445,11 +446,11 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 // reorg current dependent root changed
 func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 	tests := []struct {
-		name     string
-		forkSlot phase0.Slot
+		name      string
+		forkEpoch phase0.Epoch
 	}{
-		{"PreFork", farFutureSlot},
-		{"PostFork", phase0.Slot(0)},
+		{"PreFork", goclient.FarFutureEpoch},
+		{"PostFork", phase0.Epoch(0)},
 	}
 
 	for _, tt := range tests {
@@ -479,7 +480,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 				}
 			)
 			currentSlot.Set(phase0.Slot(256*32 - 3))
-			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkSlot)
+			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkEpoch)
 			fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 			startFn()
 
@@ -550,11 +551,11 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 // reorg current dependent root changed including indices change in the same slot
 func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	tests := []struct {
-		name     string
-		forkSlot phase0.Slot
+		name      string
+		forkEpoch phase0.Epoch
 	}{
-		{"PreFork", farFutureSlot},
-		{"PostFork", phase0.Slot(0)},
+		{"PreFork", goclient.FarFutureEpoch},
+		{"PostFork", phase0.Epoch(0)},
 	}
 
 	for _, tt := range tests {
@@ -592,7 +593,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 				}
 			)
 			currentSlot.Set(phase0.Slot(256*32 - 3))
-			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkSlot)
+			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkEpoch)
 			fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 			startFn()
 
@@ -672,11 +673,11 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	tests := []struct {
-		name     string
-		forkSlot phase0.Slot
+		name      string
+		forkEpoch phase0.Epoch
 	}{
-		{"PreFork", farFutureSlot},
-		//{"PostFork", phase0.Slot(0)}, // not relevant?
+		{"PreFork", goclient.FarFutureEpoch},
+		//{"PostFork", phase0.Epoch(0)}, // not relevant?
 	}
 
 	for _, tt := range tests {
@@ -703,7 +704,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 			})
 
 			currentSlot.Set(phase0.Slot(0))
-			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkSlot)
+			scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, tt.forkEpoch)
 			fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 			startFn()
 

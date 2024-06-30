@@ -22,8 +22,6 @@ import (
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
-var farFutureSlot = phase0.Slot(1<<64 - 1)
-
 type MockSlotTicker interface {
 	Next() <-chan time.Time
 	Slot() phase0.Slot
@@ -75,7 +73,7 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot], alanForkSlot phase0.Slot) (
+func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot], alanForkEpoch phase0.Epoch) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
@@ -97,7 +95,8 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
+		Beacon:        mocknetwork.NewMockBeaconNetwork(ctrl),
+		AlanForkEpoch: alanForkEpoch,
 	}
 
 	opts := &SchedulerOptions{
@@ -112,8 +111,6 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
 		},
-
-		AlanForkSlot: alanForkSlot,
 	}
 
 	s := NewScheduler(opts)
@@ -372,7 +369,7 @@ func TestScheduler_Run(t *testing.T) {
 
 	// setup mock duty handler expectations
 	for _, mockDutyHandler := range s.handlers {
-		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
 			DoAndReturn(func(ctx context.Context) {
 				<-ctx.Done()

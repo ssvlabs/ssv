@@ -3,7 +3,6 @@ package duties
 import (
 	"context"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -33,7 +32,6 @@ type dutyHandler interface {
 		slotTickerProvider slotticker.Provider,
 		reorgEvents chan ReorgEvent,
 		indicesChange chan struct{},
-		alanForkSlot phase0.Slot,
 	)
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
@@ -55,7 +53,6 @@ type baseHandler struct {
 	indicesChange chan struct{}
 
 	indicesChanged bool
-	alanForkSlot   phase0.Slot
 }
 
 func (h *baseHandler) Setup(
@@ -71,7 +68,6 @@ func (h *baseHandler) Setup(
 	slotTickerProvider slotticker.Provider,
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
-	alanForkSlot phase0.Slot,
 ) {
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
@@ -84,8 +80,6 @@ func (h *baseHandler) Setup(
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
-
-	h.alanForkSlot = alanForkSlot
 }
 
 func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
@@ -95,8 +89,4 @@ func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
 
 func (h *baseHandler) HandleInitialDuties(context.Context) {
 	// Do nothing
-}
-
-func (h *baseHandler) AlanForked(slot phase0.Slot) bool {
-	return slot >= h.alanForkSlot
 }

@@ -50,7 +50,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			if !h.AlanForked(slot) {
+			if !h.network.AlanForked(slot) {
 				h.logger.Debug("🛠 skip duty execution", zap.String("reason", "alan not forked yet"))
 				continue
 			}

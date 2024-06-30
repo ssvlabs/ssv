@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	networkconfig "github.com/ssvlabs/ssv/networkconfig"
 	slotticker "github.com/ssvlabs/ssv/operator/slotticker"
 	gomock "go.uber.org/mock/gomock"
@@ -82,13 +81,13 @@ func (mr *MockdutyHandlerMockRecorder) Name() *gomock.Call {
 }
 
 // Setup mocks base method.
-func (m *MockdutyHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.NetworkConfig, validatorProvider ValidatorProvider, validatorController ValidatorController, executeDuties ExecuteDutiesFunc, executeCommitteeDuties ExecuteCommitteeDutiesFunc, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}, alanForkSlot phase0.Slot) {
+func (m *MockdutyHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.NetworkConfig, validatorProvider ValidatorProvider, validatorController ValidatorController, executeDuties ExecuteDutiesFunc, executeCommitteeDuties ExecuteCommitteeDutiesFunc, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Setup", name, logger, beaconNode, executionClient, network, validatorProvider, validatorController, executeDuties, executeCommitteeDuties, slotTickerProvider, reorgEvents, indicesChange, alanForkSlot)
+	m.ctrl.Call(m, "Setup", name, logger, beaconNode, executionClient, network, validatorProvider, validatorController, executeDuties, executeCommitteeDuties, slotTickerProvider, reorgEvents, indicesChange)
 }
 
 // Setup indicates an expected call of Setup.
-func (mr *MockdutyHandlerMockRecorder) Setup(name, logger, beaconNode, executionClient, network, validatorProvider, validatorController, executeDuties, executeCommitteeDuties, slotTickerProvider, reorgEvents, indicesChange, alanForkSlot any) *gomock.Call {
+func (mr *MockdutyHandlerMockRecorder) Setup(name, logger, beaconNode, executionClient, network, validatorProvider, validatorController, executeDuties, executeCommitteeDuties, slotTickerProvider, reorgEvents, indicesChange any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), name, logger, beaconNode, executionClient, network, validatorProvider, validatorController, executeDuties, executeCommitteeDuties, slotTickerProvider, reorgEvents, indicesChange, alanForkSlot)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), name, logger, beaconNode, executionClient, network, validatorProvider, validatorController, executeDuties, executeCommitteeDuties, slotTickerProvider, reorgEvents, indicesChange)
 }
