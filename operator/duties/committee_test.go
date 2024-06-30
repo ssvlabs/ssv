@@ -953,7 +953,15 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
 
-	// STEP 2: wait for duties to be fetched for the next fork epoch
+	// skip to the next epoch
+	currentSlot.Set(phase0.Slot(2))
+	for slot := currentSlot.Get(); slot < 47; slot++ {
+		ticker.Send(slot)
+		waitForNoAction(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
+		currentSlot.Set(slot + 1)
+	}
+
+	// wait for duties to be fetched for the next fork epoch
 	currentSlot.Set(phase0.Slot(47))
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
