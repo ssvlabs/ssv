@@ -980,3 +980,84 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 func TestScheduler_Committee_Early_Block(t *testing.T) {
 	t.Skip("TODO")
 }
+
+func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
+	var (
+		dutyStore     = dutystore.New()
+		attHandler    = NewAttesterHandler(dutyStore.Attester)
+		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(2)
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		waitForDuties = &SafeValue[bool]{}
+		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares  = []*ssvtypes.SSVShare{{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 1,
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Index: 1,
+				},
+			},
+		}}
+	)
+	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(1),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(64),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+
+	currentSlot.Set(phase0.Slot(1))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
+	fetchAttesterDutiesCall, executeAttesterDutiesCall := setupAttesterDutiesMock(scheduler, attDuties, waitForDuties)
+	_, _ = setupSyncCommitteeDutiesMock(scheduler, activeShares, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	startFn()
+
+	aDuties, _ := attDuties.Get(0)
+	aExpected := expectedExecutedAttesterDuties(attHandler, aDuties)
+	setExecuteDutyFunc(scheduler, executeAttesterDutiesCall, len(aExpected))
+
+	startTime := time.Now()
+	ticker.Send(currentSlot.Get())
+	waitForDutiesExecution(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout, aExpected)
+
+	// validate the 1/3 of the slot waiting time
+	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+
+	// STEP 2: wait for duties to be fetched for the next fork epoch
+	currentSlot.Set(phase0.Slot(47))
+	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
+	waitForDutiesFetch(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
+
+	currentSlot.Set(phase0.Slot(64))
+	aDuties, _ = attDuties.Get(2)
+	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 2, currentSlot.Get())
+	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+
+	startTime = time.Now()
+	ticker.Send(currentSlot.Get())
+	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
+
+	// validate the 1/3 of the slot waiting time
+	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+
+	// Stop scheduler & wait for graceful exit.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}

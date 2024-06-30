@@ -105,7 +105,6 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 			fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 			startFn()
 
-			// Rest of your test logic
 			duties, _ := dutiesMap.Get(phase0.Epoch(0))
 			expected := expectedExecutedAttesterDuties(handler, duties)
 			setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -155,7 +154,6 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 			fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 			startFn()
 
-			// Rest of your test logic
 			ticker.Send(currentSlot.Get())
 			waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -1087,7 +1085,7 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 			mockTicker.Send(currentSlot.Get())
 			waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
-			// STEP 2: wait for no action to be taken
+			// STEP 2: wait for duties to be fetched for the next epoch
 			currentSlot.Set(phase0.Slot(15))
 			waitForDuties.Set(true)
 			mockTicker.Send(currentSlot.Get())
