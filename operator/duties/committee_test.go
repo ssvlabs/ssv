@@ -14,7 +14,6 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -107,11 +106,6 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 				},
 				ValidatorIndex: 1,
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
-			},
 		}}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
@@ -164,11 +158,6 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 				},
 				ValidatorIndex: 1,
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
-			},
 		}}
 	)
 	syncDuties.Set(0, []*eth2apiv1.SyncCommitteeDuty{
@@ -219,11 +208,6 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
 				ValidatorIndex: 1,
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
 			},
 		}}
 	)
@@ -284,11 +268,6 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 				},
 				ValidatorIndex: 1,
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
-			},
 		}}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
@@ -347,11 +326,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 					},
 					ValidatorIndex: 1,
 				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 1,
-					},
-				},
 			},
 			{
 				Share: spectypes.Share{
@@ -360,11 +334,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 					},
 					ValidatorIndex: 2,
 				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 2,
-					},
-				},
 			},
 			{
 				Share: spectypes.Share{
@@ -372,11 +341,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 					},
 					ValidatorIndex: 3,
-				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 3,
-					},
 				},
 			},
 		}
@@ -460,11 +424,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 					},
 					ValidatorIndex: 1,
 				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 1,
-					},
-				},
 			},
 			{
 				Share: spectypes.Share{
@@ -473,11 +432,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 					},
 					ValidatorIndex: 2,
 				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 2,
-					},
-				},
 			},
 			{
 				Share: spectypes.Share{
@@ -485,11 +439,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 5},
 					},
 					ValidatorIndex: 3,
-				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 3,
-					},
 				},
 			},
 		}
@@ -573,11 +522,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 					},
 					ValidatorIndex: 1,
 				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 1,
-					},
-				},
 			},
 			{
 				Share: spectypes.Share{
@@ -585,11 +529,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 5},
 					},
 					ValidatorIndex: 2,
-				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 2,
-					},
 				},
 			},
 		}
@@ -671,11 +610,6 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 					},
 					ValidatorIndex: 1,
-				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 1,
-					},
 				},
 			},
 		}
@@ -773,11 +707,6 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 					},
 					ValidatorIndex: 1,
 				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 1,
-					},
-				},
 			},
 			{
 				Share: spectypes.Share{
@@ -785,11 +714,6 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 					},
 					ValidatorIndex: 2,
-				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 2,
-					},
 				},
 			},
 		}
@@ -896,11 +820,6 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 					},
 					ValidatorIndex: 1,
 				},
-				Metadata: ssvtypes.Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Index: 1,
-					},
-				},
 			},
 		}
 	)
@@ -998,11 +917,6 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
 				},
 				ValidatorIndex: 1,
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
 			},
 		}}
 	)
