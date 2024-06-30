@@ -19,27 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 )
 
-const (
-	targetContainer = "ssv-node-1"
-
-	verifySignatureErr           = "failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature"
-	reconstructSignatureErr      = "could not reconstruct post consensus signature: could not reconstruct beacon sig: failed to verify reconstruct signature: could not reconstruct a valid signature"
-	pastRoundErr                 = "failed processing consensus message: could not process msg: invalid signed message: past round"
-	reconstructSignaturesSuccess = "reconstructed partial signatures"
-	submittedAttSuccess          = "✅ successfully submitted attestation"
-	gotDutiesSuccess             = "🗂 got duties"
-
-	msgHeightField        = "\"msg_height\":%d"
-	msgRoundField         = "\"msg_round\":%d"
-	msgTypeField          = "\"msg_type\":\"%s\""
-	consensusMsgTypeField = "\"consensus_msg_type\":%d"
-	signersField          = "\"signers\":[%d]"
-	errorField            = "\"error\":\"%s\""
-	dutyIDField           = "\"duty_id\":\"%s\""
-	roleField             = "\"role\":\"%s\""
-	slotField             = "\"slot\":%d"
-)
-
 type logCondition struct {
 	role             string
 	slot             phase0.Slot
@@ -61,7 +40,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	defer startc()
 
 	validatorIndex := fmt.Sprintf("v%d", share.ValidatorIndex)
-	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, targetContainer, cli)
+	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, ssvNodesContainers[0], cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -81,7 +60,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	leader := DetermineLeader(dutySlot, committee)
 	logger.Debug("Leader: ", zap.Uint64("leader", leader))
 
-	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
+	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, ssvNodesContainers[0], cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -160,7 +139,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.ProposalMsgType,
 				signer:           corruptedOperator,
-				error:            verifySignatureErr,
+				error:            failedVerifySigLog,
 			},
 			{
 				role:             types.BNRoleAttester.String(),
@@ -178,7 +157,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.RoundChangeMsgType,
 				signer:           corruptedOperator,
-				error:            verifySignatureErr,
+				error:            failedVerifySigLog,
 			},
 			{
 				role:             types.BNRoleAttester.String(),
@@ -187,7 +166,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.PrepareMsgType,
 				signer:           corruptedOperator,
-				error:            verifySignatureErr,
+				error:            failedVerifySigLog,
 			},
 			// TODO: handle decided failed signature
 		}
@@ -200,7 +179,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.PrepareMsgType,
 				signer:           corruptedOperator,
-				error:            verifySignatureErr,
+				error:            failedVerifySigLog,
 			},
 			{
 				role:             types.BNRoleAttester.String(),
@@ -209,7 +188,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.CommitMsgType,
 				signer:           corruptedOperator,
-				error:            verifySignatureErr,
+				error:            failedVerifySigLog,
 			},
 			// TODO: handle decided failed signature
 		}

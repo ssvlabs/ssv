@@ -16,11 +16,6 @@ type LogsCatcherCmd struct {
 	Mode string `required:"" env:"Mode" help:"Mode of the logs catcher. Can be Slashing or BlsVerification"`
 }
 
-const (
-	SlashingMode        = "Slashing"
-	BlsVerificationMode = "BlsVerification"
-)
-
 type BlsVerificationJSON struct {
 	CorruptedShares []*logs_catcher.CorruptedShare `json:"bls_verification"`
 }
@@ -39,7 +34,7 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 
 	// Execute different logic based on the value of the Mode flag
 	switch cmd.Mode {
-	case SlashingMode:
+	case logs_catcher.SlashingMode:
 		logger.Info("Running slashing mode")
 		err = logs_catcher.FatalListener(ctx, logger, cli)
 		if err != nil {
@@ -50,7 +45,7 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 			return err
 		}
 
-	case BlsVerificationMode:
+	case logs_catcher.BlsVerificationMode:
 		logger.Info("Running BlsVerification mode")
 
 		corruptedShares, err := UnmarshalBlsVerificationJSON(globals.ValidatorsFile)
