@@ -375,6 +375,18 @@ func (mr *MockSharesStorageMockRecorder) List(txn interface{}, filters ...interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockSharesStorage)(nil).List), varargs...)
 }
 
+// Range mocks base method.
+func (m *MockSharesStorage) Range(txn basedb.Reader, fn func(*types0.SSVShare) bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Range", txn, fn)
+}
+
+// Range indicates an expected call of Range.
+func (mr *MockSharesStorageMockRecorder) Range(txn, fn interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Range", reflect.TypeOf((*MockSharesStorage)(nil).Range), txn, fn)
+}
+
 // UpdateValidatorMetadata mocks base method.
 func (m *MockSharesStorage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
 	m.ctrl.T.Helper()

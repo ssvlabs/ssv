@@ -54,13 +54,15 @@ func (h *ProposerHandler) Name() string {
 func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
@@ -148,6 +150,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	allIndices := h.validatorController.AllActiveIndices(epoch, false)
 	if len(allIndices) == 0 {
+		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 

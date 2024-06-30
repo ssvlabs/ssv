@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"sort"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -107,4 +108,15 @@ type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
+
+	// lastUpdated is an internal field that can be used to track the last time the metadata was updated.
+	lastUpdated time.Time
+}
+
+func (m *Metadata) MetadataLastUpdated() time.Time {
+	return m.lastUpdated
+}
+
+func (m *Metadata) SetMetadataLastUpdated(t time.Time) {
+	m.lastUpdated = t
 }
