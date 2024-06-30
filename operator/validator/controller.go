@@ -789,7 +789,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
-	const batchSize = 300
+	const batchSize = 512
 	var sleep = 2 * time.Second
 
 	for {
