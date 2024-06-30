@@ -23,7 +23,7 @@ const (
 	nonSlashableMatchMessage = "successfully submitted attestation"
 )
 
-var secondTargets = []string{"ssv-node-1", "ssv-node-2", "ssv-node-3", "ssv-node-4"}
+var ssvNodes = []string{"ssv-node-1", "ssv-node-2", "ssv-node-3", "ssv-node-4"}
 
 func StartCondition(pctx context.Context, logger *zap.Logger, condition []string, targetContainer string, cli DockerCLI) (string, error) {
 	ctx, cancel := context.WithCancel(pctx)
@@ -61,7 +61,7 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 	grepped := res.Grep(first)
 	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", beaconContainer), zap.Strings("match_string", first))
 
-	for _, target := range secondTargets {
+	for _, target := range ssvNodes {
 		logger.Debug("Reading logs for second target", zap.String("target", target))
 
 		tres, err := docker.DockerLogs(ctx, cli, target, "")
@@ -71,7 +71,7 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 
 		tgrepped := tres.Grep(second)
 		if len(tgrepped) != len(grepped)+plus {
-			return fmt.Errorf("found non matching messages on %v, expected %v, got %v", target, len(grepped), len(tgrepped))
+			return fmt.Errorf("found non matching messages on (2) %v, expected %v, got %v", target, len(grepped), len(tgrepped))
 		}
 
 		logger.Debug("Found matching messages for target", zap.Strings("first", first), zap.Strings("second", second), zap.Int("count", len(tgrepped)), zap.String("target", target))

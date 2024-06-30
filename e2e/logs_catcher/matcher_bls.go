@@ -247,7 +247,7 @@ func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli Docker
 	logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", first))
 
 	if len(filteredLogs) != 1 {
-		return fmt.Errorf("found non matching messages on %v, want %v got %v", target, 1, len(filteredLogs))
+		return fmt.Errorf("found non matching messages on (1) %v, want %v got %v", target, 1, len(filteredLogs))
 	}
 
 	return nil
@@ -286,7 +286,7 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 		logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", fail))
 
 		if len(filteredLogs) != 1 {
-			return fmt.Errorf("found non matching messages on %v, want %v got %v", target, 1, len(filteredLogs))
+			return fmt.Errorf("found non matching messages on (3) %v, want %v got %v", target, 1, len(filteredLogs))
 		}
 	}
 
