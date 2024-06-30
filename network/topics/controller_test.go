@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -18,16 +20,27 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/storage"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -67,8 +80,34 @@ func TestTopicManager(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-
-		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+		ctrl := gomock.NewController(t)
+		logger := zaptest.NewLogger(t)
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		ns, err := storage.NewNodeStorage(logger, db)
+		require.NoError(t, err)
+		dutyStore := dutystore.New()
+		ks := spectestingutils.Testing4SharesSet()
+		shares := generateShares(t, ks, ns, networkconfig.TestNetwork)
+		validatorStore := mocks.NewMockValidatorStore(ctrl)
+		validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) *ssvtypes.SSVShare {
+			for _, share := range []*ssvtypes.SSVShare{
+				shares.active,
+				shares.liquidated,
+				shares.inactive,
+				shares.nonUpdatedMetadata,
+				shares.nonUpdatedMetadataNextEpoch,
+				shares.noMetadata,
+			} {
+				if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
+					return share
+				}
+			}
+			return nil
+		}).AnyTimes()
+		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+		signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier)
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
@@ -224,7 +263,7 @@ func banningTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []
 	// publish some messages
 	for i, msg := range invalidMessages {
 		wg.Add(1)
-		go func(p *P, pk string, msg *spectypes.SSVMessage) {
+		go func(p *P, pk string, msg *spectypes.SignedSSVMessage) {
 			defer wg.Done()
 
 			raw, err := msg.Encode()
@@ -395,8 +434,8 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	return p
 }
 
-func msgSequence(pkHex string, n, committeeSize int, malformed bool) ([]*spectypes.SSVMessage, error) {
-	var messages []*spectypes.SSVMessage
+func msgSequence(pkHex string, n, committeeSize int, malformed bool) ([]*spectypes.SignedSSVMessage, error) {
+	var messages []*spectypes.SignedSSVMessage
 
 	for i := 0; i < n; i++ {
 		height := i * committeeSize
@@ -411,47 +450,42 @@ func msgSequence(pkHex string, n, committeeSize int, malformed bool) ([]*spectyp
 	return messages, nil
 }
 
-func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, error) {
+func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RunnerRole(spectypes.BNRoleAttester))
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err
 	}
-
-	signedMessage := specqbft.SignedMessage{
-		Signature: signature,
-		Signers:   []spectypes.OperatorID{1, 3, 4},
-		Message: specqbft.Message{
-			MsgType:    specqbft.RoundChangeMsgType,
-			Height:     specqbft.Height(height),
-			Round:      2,
-			Identifier: id[:],
-			Root:       [32]byte{},
-		},
-		FullData: nil,
+	msg := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
+		Height:     specqbft.Height(height),
+		Round:      2,
+		Identifier: id[:],
+		Root:       [32]byte{},
 	}
-
-	msgData, err := signedMessage.Encode()
-	if err != nil {
-		return nil, err
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
+	encMsg, err := msg.Encode()
+	ssvMessage := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
-		Data:    msgData,
+		Data:    encMsg,
 	}
-
 	if malformed {
-		ssvMsg.MsgType = math.MaxUint64
+		ssvMessage.MsgType = math.MaxUint64
 	}
 
-	return ssvMsg, nil
+	signedMessage := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{signature},
+		OperatorIDs: []spectypes.OperatorID{1, 3, 4},
+		SSVMessage:  ssvMessage,
+		FullData:    nil,
+	}
+
+	return signedMessage, nil
 }
 
 type DummyMessageValidator struct {
@@ -467,15 +501,123 @@ func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p pee
 	return pubsub.ValidationAccept
 }
 
-func (m *DummyMessageValidator) ValidateSSVMessage(msg *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
-	var descriptor validation.Descriptor
+func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	return 0
+}
 
-	validatorPK := msg.SSVMessage.GetID().GetPubKey()
-	role := msg.SSVMessage.GetID().GetRoleType()
-	descriptor.Role = role
-	descriptor.ValidatorPK = validatorPK
+type shareSet struct {
+	active                      *ssvtypes.SSVShare
+	liquidated                  *ssvtypes.SSVShare
+	inactive                    *ssvtypes.SSVShare
+	nonUpdatedMetadata          *ssvtypes.SSVShare
+	nonUpdatedMetadataNextEpoch *ssvtypes.SSVShare
+	noMetadata                  *ssvtypes.SSVShare
+}
 
-	descriptor.SSVMessageType = msg.SSVMessage.GetType()
+func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
+	activeShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
+			},
+			Liquidated: false,
+		},
+	}
 
-	return msg, descriptor, nil
+	require.NoError(t, ns.Shares().Save(nil, activeShare))
+
+	liquidatedShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
+			},
+			Liquidated: true,
+		},
+	}
+
+	liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(liquidatedShare.ValidatorPubKey[:], liquidatedSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
+
+	inactiveShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateUnknown,
+			},
+			Liquidated: false,
+		},
+	}
+
+	inactiveSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(inactiveShare.ValidatorPubKey[:], inactiveSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, inactiveShare))
+
+	slot := netCfg.Beacon.EstimatedCurrentSlot()
+	epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+
+	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: epoch,
+			},
+			Liquidated: false,
+		},
+	}
+
+	nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(nonUpdatedMetadataShare.ValidatorPubKey[:], nonUpdatedMetadataSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
+
+	nonUpdatedMetadataNextEpochShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: epoch + 1,
+			},
+			Liquidated: false,
+		},
+	}
+
+	nonUpdatedMetadataNextEpochSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(nonUpdatedMetadataNextEpochShare.ValidatorPubKey[:], nonUpdatedMetadataNextEpochSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataNextEpochShare))
+
+	noMetadataShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: nil,
+			Liquidated:     false,
+		},
+	}
+
+	noMetadataShareSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(noMetadataShare.ValidatorPubKey[:], noMetadataShareSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, noMetadataShare))
+
+	return shareSet{
+		active:                      activeShare,
+		liquidated:                  liquidatedShare,
+		inactive:                    inactiveShare,
+		nonUpdatedMetadata:          nonUpdatedMetadataShare,
+		nonUpdatedMetadataNextEpoch: nonUpdatedMetadataNextEpochShare,
+		noMetadata:                  noMetadataShare,
+	}
 }
