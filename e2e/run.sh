@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# clean up everything including exited dockers and volumes before start
 services=$(docker-compose config --services)
 docker-compose down
 for service in $services; do
@@ -8,11 +7,51 @@ for service in $services; do
 done
 docker compose down -v
 
-# Exit on error
 set -e
+trap 'catch $?' EXIT
 
-export BEACON_NODE_URL=http://bn-h-2.stage.bloxinfra.com:3502/
-export EXECUTION_NODE_URL=ws://bn-h-2.stage.bloxinfra.com:8557/ws
+# Get the directory of the script itself
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Set LOG_DIR to a 'logs' directory within the same directory as the script
+LOG_DIR="$SCRIPT_DIR/crash-logs"
+
+catch() {
+  if [ "$1" != "0" ]; then
+    echo "Error $1 occurred. Saving logs..."
+    save_logs
+  fi
+}
+
+save_logs() {
+  echo "Creating directory at: $LOG_DIR"
+  mkdir -p "$LOG_DIR"
+
+  # Define a list of container patterns to save logs from
+  declare -a containers=("ssv-node-1" "ssv-node-2" "ssv-node-3" "ssv-node-4" "beacon_proxy")
+
+  for container_pattern in "${containers[@]}"; do
+    container_ids=$(docker ps -a --filter name=$container_pattern --format "{{.Names}}")
+
+    for container_id in $container_ids; do
+      if [ ! -z "$container_id" ]; then
+        echo "Saving logs for $container_id..."
+        docker logs "$container_id" > "$LOG_DIR/$container_id.txt"
+      fi
+    done
+  done
+
+  # Special handling for logs_catcher to get the most recent container
+  logs_catcher_container=$(docker ps -a --filter ancestor=logs_catcher:latest --format "{{.Names}}" | head -n 1)
+  if [ ! -z "$logs_catcher_container" ]; then
+    echo "Saving logs for the most recent logs_catcher container: $logs_catcher_container..."
+    docker logs "$logs_catcher_container" > "$LOG_DIR/$logs_catcher_container.txt"
+  fi
+}
+
+export BEACON_NODE_URL=http://bn-h-3.stage.bloxinfra.com:5056/
+export EXECUTION_NODE_URL=ws://bn-h-3.stage.bloxinfra.com:8549/ws
+
 # Step 1: Start the beacon_proxy and ssv-node services
 docker compose up -d --build beacon_proxy ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 

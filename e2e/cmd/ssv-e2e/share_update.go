@@ -1,10 +1,9 @@
 package main
 
 import (
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/operator/keys"
 	"os"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -72,21 +71,16 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 		return fmt.Errorf("failed to create node storage: %w", err)
 	}
 
-	opSK, err := base64.StdEncoding.DecodeString(operatorPrivateKey)
+	operatorPrivKey, err := keys.PrivateKeyFromString(operatorPrivateKey)
 	if err != nil {
-		return err
+		logger.Fatal("could not decode operator private key", zap.Error(err))
 	}
-	rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(opSK))
-	if err != nil {
-		return fmt.Errorf("failed to convert PEM to private key: %w", err)
-	}
-
-	rsaPub, err := rsaencryption.ExtractPublicKey(rsaPriv)
+	rsaPub, err := operatorPrivKey.Public().Base64()
 	if err != nil {
 		return fmt.Errorf("failed to extract public key: %w", err)
 	}
 
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(rsaPub))
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, rsaPub)
 	if err != nil {
 		return fmt.Errorf("failed to get operator data: %w", err)
 	}
@@ -99,10 +93,9 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 
 	logger.Info("operator data found", zap.Any("operator ID", operatorData.ID))
 
-	keyBytes := x509.MarshalPKCS1PrivateKey(rsaPriv)
-	hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
+	hashedKey, _ := rsaencryption.HashRsaKey(operatorPrivKey.Base64())
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, false, hashedKey)
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, hashedKey)
 	if err != nil {
 		return fmt.Errorf("failed to create key manager: %w", err)
 	}
@@ -123,7 +116,7 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 
 		var operatorFound bool
 		for i, op := range validatorShare.Committee {
-			if op.OperatorID == operatorData.ID {
+			if op.Signer == operatorData.ID {
 				operatorFound = true
 
 				blsSK, blsPK := blskeygen.GenBLSKeyPair()
@@ -133,13 +126,13 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 
 				preChangePK := validatorShare.SharePubKey
 				validatorShare.SharePubKey = blsPK.Serialize()
-				validatorShare.Share.Committee[i].PubKey = validatorShare.SharePubKey
+				validatorShare.Share.Committee[i].SharePubKey = validatorShare.SharePubKey
 				if err = nodeStorage.Shares().Save(nil, validatorShare); err != nil {
 					return fmt.Errorf("failed to save share: %w", err)
 				}
 
 				logger.Info("validator share was updated successfully",
-					zap.String("validator pub key", hex.EncodeToString(validatorShare.ValidatorPubKey)),
+					zap.String("validator pub key", hex.EncodeToString(validatorShare.SharePubKey)),
 					zap.String("BEFORE: share pub key", hex.EncodeToString(preChangePK)),
 					zap.String("AFTER: share pub key", hex.EncodeToString(validatorShare.SharePubKey)),
 				)

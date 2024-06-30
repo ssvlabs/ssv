@@ -13,32 +13,23 @@ import (
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/logs"
 )
 
-// Test conditions:
-
-const waitTarget = "beacon_proxy"
-const firstTarget = "beacon_proxy"
+const (
+	beaconContainer          = "beacon_proxy"
+	endLogCondition          = "End epoch finished"
+	messagePrefix            = "set up validator"
+	slashableMessage         = "\"attester_slashable\":true"
+	nonSlashableMessage      = "\"attester_slashable\":false"
+	slashableMatchMessage    = "slashable attestation"
+	nonSlashableMatchMessage = "successfully submitted attestation"
+)
 
 var secondTargets = []string{"ssv-node-1", "ssv-node-2", "ssv-node-3", "ssv-node-4"}
-
-const waitFor = "End epoch finished"
-
-// For each in target #1
-const origMessage = "set up validator"
-const slashableMessage = "\"attester_slashable\":true"
-const nonSlashableMessage = "\"attester_slashable\":false"
-
-// Take field
-const idField = "pubkey"
-
-// and find in target #2
-const slashableMatchMessage = "slashable attestation"
-const nonSlashableMatchMessage = "successfully submitted attestation"
 
 func StartCondition(pctx context.Context, logger *zap.Logger, condition []string, targetContainer string, cli DockerCLI) (string, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
 
-	conditionLog := ""
+	var conditionLog string
 
 	logger.Debug("Waiting for start condition at target", zap.String("target", targetContainer), zap.Strings("condition", condition))
 	ch := make(chan string, 1024)
@@ -48,33 +39,30 @@ func StartCondition(pctx context.Context, logger *zap.Logger, condition []string
 				conditionLog = log
 				logger.Info("Start condition arrived", zap.Strings("log_message", condition))
 				cancel()
+				return
 			}
 		}
 	}()
-	// TODO: either apply logs collection on each container or fan in the containers to one log stream
+
 	err := docker.StreamDockerLogs(ctx, cli, targetContainer, ch)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("Log streaming stopped with err ", zap.Error(err))
+		logger.Error("Log streaming stopped with err", zap.Error(err))
 		return conditionLog, err
 	}
 	return conditionLog, nil
 }
 
-// Todo: match messages based on fields. ex: take all X messages from target one,
-// 	extract pubkey field and get all matching messages with this pubkey field on target two.
-
-func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first []string, second []string, plus int) error {
-	res, err := docker.DockerLogs(ctx, cli, firstTarget, "")
+func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first, second []string, plus int) error {
+	res, err := docker.DockerLogs(ctx, cli, beaconContainer, "")
 	if err != nil {
 		return err
 	}
 
 	grepped := res.Grep(first)
-
-	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", firstTarget), zap.Strings("match_string", first))
+	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", beaconContainer), zap.Strings("match_string", first))
 
 	for _, target := range secondTargets {
-		logger.Debug("Reading one of second targets logs", zap.String("target", target))
+		logger.Debug("Reading logs for second target", zap.String("target", target))
 
 		tres, err := docker.DockerLogs(ctx, cli, target, "")
 		if err != nil {
@@ -82,39 +70,35 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 		}
 
 		tgrepped := tres.Grep(second)
-
 		if len(tgrepped) != len(grepped)+plus {
-			return fmt.Errorf("found non matching messages on %v, want %v got %v", target, len(grepped), len(tgrepped))
+			return fmt.Errorf("found non matching messages on %v, expected %v, got %v", target, len(grepped), len(tgrepped))
 		}
 
-		logger.Debug("found matching messages for target", zap.Strings("first", first), zap.Strings("second", second), zap.Int("count", len(tgrepped)), zap.String("target", target))
+		logger.Debug("Found matching messages for target", zap.Strings("first", first), zap.Strings("second", second), zap.Int("count", len(tgrepped)), zap.String("target", target))
 	}
 
 	return nil
 }
 
 func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
-	startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs
-	_, err := StartCondition(startctx, logger, []string{waitFor}, waitTarget, cli)
-	if err != nil {
-		startc() // Cancel the startctx context
-		return err
-	}
-	startc()
+	startCtx, startCancel := context.WithTimeout(pctx, 4*time.Minute*6) // wait max 4 epochs
+	defer startCancel()
 
-	ctx, c := context.WithCancel(pctx)
-	defer c()
-
-	// find slashable attestation not signing for each slashable validator
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, slashableMessage}, []string{slashableMatchMessage}, 0); err != nil {
+	if _, err := StartCondition(startCtx, logger, []string{endLogCondition}, beaconContainer, cli); err != nil {
 		return err
 	}
 
-	// find non-slashable validators successfully submitting (all first round + 1 for second round)
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, nonSlashableMessage}, []string{nonSlashableMatchMessage}, 30); err != nil {
+	ctx, cancel := context.WithCancel(pctx)
+	defer cancel()
+
+	if err := matchMessages(ctx, logger, cli, []string{messagePrefix, slashableMessage}, []string{slashableMatchMessage}, 0); err != nil {
 		return err
 	}
 
-	//TODO: match proposals
+	if err := matchMessages(ctx, logger, cli, []string{messagePrefix, nonSlashableMessage}, []string{nonSlashableMatchMessage}, 30); err != nil {
+		return err
+	}
+
+	// TODO: match proposals
 	return nil
 }

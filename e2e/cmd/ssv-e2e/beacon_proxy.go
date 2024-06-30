@@ -9,10 +9,6 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"golang.org/x/exp/maps"
-
-	"github.com/ssvlabs/ssv/networkconfig"
 
 	//eth2client "github.com/attestantio/go-eth2-client/http"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -87,7 +83,6 @@ func BeaconClientConnection(pctx context.Context, beaconUrl string) error {
 func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	if err := BeaconClientConnection(ctx, cmd.BeaconNodeUrl); err != nil {
 		return err
 	}
@@ -129,7 +124,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 
 	networkCfg := networkconfig.HoleskyE2E
 
-	const startEpochDelay = 1 // TODO: change to 2 after debugging is done
+	const startEpochDelay = 2 // TODO: change to 2 after debugging is done
 	startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
 
 	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, maps.Values(validatorsData))

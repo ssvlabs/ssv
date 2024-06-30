@@ -112,10 +112,7 @@ func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string
 }
 
 func DetermineLeader(dutySlot phase0.Slot, committee []*types.CommitteeMember) types.OperatorID {
-	share := &types.Operator{
-		Committee: committee,
-	}
-	leader := qbft.RoundRobinProposer(&qbft.State{Height: qbft.Height(dutySlot), Share: share}, qbft.FirstRound)
+	leader := qbft.RoundRobinProposer(&qbft.State{Height: qbft.Height(dutySlot), CommitteeMember: committee[0]}, qbft.FirstRound)
 
 	return leader
 }

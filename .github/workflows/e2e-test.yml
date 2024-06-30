@@ -1,15 +1,22 @@
 name: E2E Test
 
 on:
+  workflow_dispatch:
+    inputs:
+      node_group_1_image_tag:
+        type: string
+        required: true
+        description: "Image tag for the first group of nodes. Can be used for production, staging, or temporary environments. Example: v1.2.3-prod"
+
+  pull_request:
+    branches:
+      - main
+
   workflow_run:
-    workflows: [Lint, Unit tests]
+    workflows: ["Lint", "Unit tests"]
     types: [completed]
     branches: [stage, main]
-  #  pull_request:
-  #    branches:
-  #      - "**"
 
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}
@@ -18,7 +25,6 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out the repository
         uses: actions/checkout@v3
@@ -27,6 +33,7 @@ jobs:
         env:
           BEACON_NODE_URL: ${{ secrets.E2E_BEACON_NODE_URL }}
           EXECUTION_NODE_URL: ${{ secrets.E2E_EXECUTION_NODE_URL }}
+          NODE_GROUP_1_IMAGE_TAG: ${{ github.event.inputs.node_group_1_image_tag }}
         run: |
           cd ./e2e/
           chmod +x ./run.sh
@@ -34,3 +41,18 @@ jobs:
 
       - name: clean up
         run: docker compose down -v
+
+      - name: Collect docker logs on failure
+        if: failure()
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          dest: './logs'
+      - name: Tar logs
+        if: failure()
+        run: tar cvzf ./logs.tgz ./logs
+      - name: Upload logs to GitHub
+        if: failure()
+        uses: actions/upload-artifact@master
+        with:
+          name: logs.tgz
+          path: ./logs.tgz
