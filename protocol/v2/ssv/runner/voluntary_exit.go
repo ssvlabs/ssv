@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
@@ -89,21 +90,28 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
+	r.metrics.EndPreConsensus()
 
 	// create SignedVoluntaryExit using VoluntaryExit created on r.executeDuty() and reconstructed signature
 	signedVoluntaryExit := &phase0.SignedVoluntaryExit{
 		Message:   r.voluntaryExit,
 		Signature: specSig,
 	}
-
+	submissionTime := time.Now()
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
+		logger.Error("failed to submit voluntary exit",
+			fields.SubmissionTime(time.Since(submissionTime)),
+			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+			zap.Error(err))
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
 
-	logger.Debug("voluntary exit submitted successfully",
+	logger.Debug("✅ successfully submitted voluntary exit",
 		fields.Epoch(r.voluntaryExit.Epoch),
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
+		fields.SubmissionTime(time.Since(submissionTime)),
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 	)
 
 	r.GetState().Finished = true
@@ -134,6 +142,7 @@ func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // Validator voluntary exit duty doesn't need consensus nor post-consensus.
 // It just performs pre-consensus with VoluntaryExitPartialSig over
 // a VoluntaryExit object to create a SignedVoluntaryExit
+
 func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	voluntaryExit, err := r.calculateVoluntaryExit()
 	if err != nil {

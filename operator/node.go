@@ -3,12 +3,10 @@ package operator
 import (
 	"context"
 	"fmt"
-
 	storage2 "github.com/ssvlabs/ssv/registry/storage"
 
 	"github.com/ssvlabs/ssv/network"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -72,21 +70,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
-	storageMap := qbftstorage.NewStores()
-
-	roles := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
-		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit,
-	}
-	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))
-	}
-
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
 	node := &operatorNode{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
@@ -96,7 +80,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		executionClient:  opts.ExecutionClient,
 		net:              opts.P2PNetwork,
 		storage:          opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:      storageMap,
+		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                  opts.Context,
 			BeaconNode:           opts.BeaconNode,
@@ -194,7 +178,7 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleDecidedQuery(logger, n.qbftStorage, nm)
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm)
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
 	default:

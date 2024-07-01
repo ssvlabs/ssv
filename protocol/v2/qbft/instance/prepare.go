@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -53,7 +54,9 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *spectypes.Sign
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(i.State.Round),
 		zap.Any("prepare-signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))),
-		fields.Root(proposedRoot))
+		fields.Root(proposedRoot),
+		fields.QuorumTime(time.Since(i.started)),
+	)
 
 	commitMsg, err := CreateCommit(i.State, i.config, proposedRoot)
 	if err != nil {

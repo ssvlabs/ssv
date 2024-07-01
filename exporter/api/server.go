@@ -127,7 +127,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 			logger.Debug("context was done")
 		}
 		var incoming Message
-		var nm NetworkMessage
+		var networkMessage NetworkMessage
 		err := conn.ReadJSON(&incoming)
 		if err != nil {
 			if isCloseError(err) {
@@ -135,15 +135,15 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 				return
 			}
 			logger.Warn("could not read incoming message", zap.Error(err))
-			nm = NetworkMessage{incoming, err, conn}
+			networkMessage = NetworkMessage{incoming, err, conn}
 		} else {
-			nm = NetworkMessage{incoming, nil, conn}
+			networkMessage = NetworkMessage{incoming, nil, conn}
 		}
 		// handler is processing the request and updates msg
-		ws.handler(logger, &nm)
+		ws.handler(logger, &networkMessage)
 
 		err = tasks.Retry(func() error {
-			return conn.WriteJSON(&nm.Msg)
+			return conn.WriteJSON(&networkMessage.Msg)
 		}, 3)
 		if err != nil {
 			logger.Error("could not send message", zap.Error(err))

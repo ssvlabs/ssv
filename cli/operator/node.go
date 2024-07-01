@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"log"
 	"math/big"
 	"net/http"
@@ -271,18 +272,20 @@ var StartNodeCmd = &cobra.Command{
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws, cfg.SSVOptions.ValidatorOptions.UseNewExporterAPI)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.RunnerRole{
-			spectypes.RoleCommittee,
-			spectypes.RoleProposer,
-			spectypes.RoleAggregator,
-			spectypes.RoleSyncCommitteeContribution,
-			spectypes.RoleValidatorRegistration,
-			spectypes.RoleVoluntaryExit,
+		storageRoles := []exporter_message.RunnerRole{
+			exporter_message.RoleCommittee,
+			exporter_message.RoleAttester,
+			exporter_message.RoleProposer,
+			exporter_message.RoleSyncCommittee,
+			exporter_message.RoleAggregator,
+			exporter_message.RoleSyncCommitteeContribution,
+			exporter_message.RoleValidatorRegistration,
+			exporter_message.RoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -293,6 +296,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
@@ -375,7 +379,6 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}

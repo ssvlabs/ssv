@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -27,6 +28,7 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
+	started time.Time
 	metrics *metrics
 }
 
@@ -71,6 +73,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
+		i.started = time.Now()
 
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 

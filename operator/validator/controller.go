@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"sync"
 	"time"
 
@@ -20,9 +21,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -82,12 +82,14 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
+	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
+	UseNewExporterAPI          bool `yaml:"UseNewExporterAPI" env:"USE_NEW_EXPORTER_API" env-description:"Use new exporter API which is simpler and has no workarounds"`
 	ValidatorsMap              *validators.ValidatorsMap
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
-	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Buffer size for message workers"`
 	GasLimit        uint64
 }
 
@@ -119,8 +121,8 @@ type Controller interface {
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
-type nonCommitteeValidator struct {
-	*validator.NonCommitteeValidator
+type committeeObserver struct {
+	*validator.CommitteeObserver
 	sync.Mutex
 }
 
@@ -164,6 +166,7 @@ type controller struct {
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
+	validatorStore          registrystorage.ValidatorStore
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validator.Validator) (bool, error)
 	committeeValidatorSetup chan struct{}
@@ -177,9 +180,9 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized nonCommitteeValidator instances
-	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
-	nonCommitteeMutex      sync.Mutex
+	// nonCommittees is a cache of initialized committeeObserver instances
+	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
+	committeesObserversMutex sync.Mutex
 
 	recentlyStartedValidators uint64
 	recentlyStartedCommittees uint64
@@ -243,6 +246,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		operatorsStorage:  options.RegistryStorage,
 		recipientsStorage: options.RegistryStorage,
 		ibftStorageMap:    options.StorageMap,
+		validatorStore:    options.ValidatorStore,
 		context:           options.Context,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
@@ -261,8 +265,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		nonCommitteeValidators: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
+		committeesObservers: ttlcache.New(
+			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
 		),
 		metadataLastUpdated:     make(map[spectypes.ValidatorPK]time.Time),
 		indicesChange:           make(chan struct{}),
@@ -273,7 +277,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
-	go ctrl.nonCommitteeValidators.Start()
+	go ctrl.committeesObservers.Start()
 
 	return &ctrl
 }
@@ -325,7 +329,6 @@ func (c *controller) handleRouterMessages() {
 	ctx, cancel := context.WithCancel(c.context)
 	defer cancel()
 	ch := c.messageRouter.GetMessageChan()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -336,7 +339,6 @@ func (c *controller) handleRouterMessages() {
 			if msg.MsgType == message.SSVEventMsgType {
 				continue
 			}
-
 			// TODO: only try copying clusterid if validator failed
 			dutyExecutorID := msg.GetID().GetDutyExecutorID()
 			var cid spectypes.CommitteeID
@@ -347,8 +349,8 @@ func (c *controller) handleRouterMessages() {
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
-				if msg.MsgType != spectypes.SSVConsensusMsgType {
-					continue // not supporting other types
+				if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+					return
 				}
 				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
@@ -367,55 +369,80 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
 }
 
 func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
-	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
-	// other handlers from processing
-	var ncv *nonCommitteeValidator
-	err := func() error {
-		c.nonCommitteeMutex.Lock()
-		defer c.nonCommitteeMutex.Unlock()
-
-		item := c.nonCommitteeValidators.Get(msg.GetID())
-		if item != nil {
-			ncv = item.Value()
-		} else {
-			// Create a new nonCommitteeValidator and cache it.
-			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
-			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
-			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
-			}
-
-			opts := c.validatorOptions
-			opts.SSVShare = share
-			operator, err := c.committeeMemberFromShare(opts.SSVShare)
-			if err != nil {
-				return err
-			}
-			opts.Operator = operator
-
-			ncv = &nonCommitteeValidator{
-				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, msg.GetID(), opts),
-			}
-
-			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-			c.nonCommitteeValidators.Set(
-				msg.GetID(),
-				ncv,
-				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-			)
+	var ncv *committeeObserver
+	item := c.getNonCommitteeValidators(msg.GetID())
+	if item == nil {
+		nonCommitteeOptions := validator.NonCommitteeOptions{
+			Logger:            c.logger,
+			ValidatorStore:    c.validatorStore,
+			Network:           c.validatorOptions.Network,
+			Storage:           c.validatorOptions.Storage,
+			FullNode:          c.validatorOptions.FullNode,
+			Operator:          c.validatorOptions.Operator,
+			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
 		}
+		ncv = &committeeObserver{
+			CommitteeObserver: validator.NewNonCommitteeValidator(exporter_message.MessageID(msg.MsgID), nonCommitteeOptions),
+		}
+		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+		c.committeesObservers.Set(
+			msg.GetID(),
+			ncv,
+			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+		)
+	} else {
+		ncv = item
+	}
+	if err := c.handleConsensusMessages(msg, ncv); err != nil {
+		return err
+	}
+	if err := c.handlePostConsensusMessages(msg, ncv); err != nil {
+		return err
+	}
+	return nil
+}
 
-		ncv.Lock()
+func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
+	if msg.MsgType != spectypes.SSVConsensusMsgType {
 		return nil
-	}()
-	if err != nil {
+	}
+
+	if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+		return nil
+	}
+
+	subMsg, ok := msg.Body.(*specqbft.Message)
+	if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+		return nil
+	}
+	ncv.OnProposalMsg(msg)
+	return nil
+}
+
+func (c *controller) handlePostConsensusMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
+	if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+		return nil
+	}
+
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
+
+	pSigMessages := &spectypes.PartialSignatureMessages{}
+	if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 		return err
 	}
 
-	// Process the message.
-	defer ncv.Unlock()
-	ncv.ProcessMessage(c.logger, msg)
+	ncv.ProcessMessage(msg)
+	return nil
+}
 
+func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *committeeObserver {
+	item := c.committeesObservers.Get(messageId)
+	if item != nil {
+		return item.Value()
+	}
 	return nil
 }
 
@@ -1177,7 +1204,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(role),
+			Storage:               options.Storage.Get(exporter_message.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.BeaconNetwork, role, nil),
 			SignatureVerification: true,
@@ -1186,7 +1213,6 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 
 		identifier := spectypes.NewMsgID(spectypes.GenesisMainnet, options.Operator.CommitteeID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
-		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
 
@@ -1229,7 +1255,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(role),
+			Storage:               options.Storage.Get(exporter_message.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.BeaconNetwork, role, nil),
 			SignatureVerification: true,
@@ -1238,7 +1264,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 
 		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
-		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
 
