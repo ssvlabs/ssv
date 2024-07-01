@@ -20,7 +20,7 @@ type dutyHandler interface {
 		network networkconfig.NetworkConfig,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
-		dutyExecutor DutiesExecutor,
+		dutiesExecutor DutiesExecutor,
 		slotTickerProvider slotticker.Provider,
 		reorgEvents chan ReorgEvent,
 		indicesChange chan struct{},
@@ -54,7 +54,7 @@ func (h *baseHandler) Setup(
 	network networkconfig.NetworkConfig,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
-	dutyExecutor DutiesExecutor,
+	dutiesExecutor DutiesExecutor,
 	slotTickerProvider slotticker.Provider,
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
@@ -65,7 +65,7 @@ func (h *baseHandler) Setup(
 	h.network = network
 	h.validatorProvider = validatorProvider
 	h.validatorController = validatorController
-	h.dutiesExecutor = dutyExecutor
+	h.dutiesExecutor = dutiesExecutor
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
