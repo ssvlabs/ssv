@@ -270,7 +270,7 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 			// The mock function increments the number of peers by 1 for each call, up to maxPeers
 			peersCount := 0
 			start := time.Now()
-			mockGetSubsetOfPeers := func(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+			mockGetSubsetOfPeers := func(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 				if tt.minPeers == 0 {
 					return []peer.ID{}, nil
 				}
