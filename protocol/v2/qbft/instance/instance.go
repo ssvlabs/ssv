@@ -5,10 +5,10 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
@@ -34,6 +34,7 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
+
 	return &Instance{
 		State: &specqbft.State{
 			CommitteeMember:      committeeMember,
@@ -48,9 +49,19 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		metrics:     newMetrics(string(identifier)),
+		// TODO  FIX THIS. 4 bytes msg ID from spec types can't be converted to 56 bytes message ID
+		metrics: newMetrics(messageIDFromBytes(identifier).GetRoleType().String()),
 		//metrics:     newMetrics(types.MessageID(identifier).GetRoleType().String()),
 	}
+}
+
+// TODO remove
+func messageIDFromBytes(mid []byte) spectypes.MessageID {
+	if len(mid) < 56 {
+		return spectypes.MessageID{}
+	}
+
+	return spectypes.MessageID(mid)
 }
 
 func (i *Instance) ForceStop() {
