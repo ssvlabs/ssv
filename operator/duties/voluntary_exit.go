@@ -65,7 +65,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			h.dutyQueue = pendingDuties
 
 			if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-				h.executeDuties(h.logger, dutiesForExecution)
+				h.dutiesExecutor.ExecuteDuties(h.logger, dutiesForExecution)
 				h.logger.Debug("executed voluntary exit duties",
 					fields.Slot(currentSlot),
 					fields.Count(dutyCount))

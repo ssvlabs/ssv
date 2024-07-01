@@ -139,7 +139,7 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
-	h.executeDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
