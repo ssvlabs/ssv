@@ -162,17 +162,12 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 func dummySSVConsensusMsg(pk spectypes.ValidatorPK, height qbft.Height) (*spectypes.SSVMessage, error) {
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk[:], spectypes.RunnerRole(spectypes.BNRoleAttester))
 	ks := spectestingutils.Testing4SharesSet()
-	
-	validSignedMessage := spectestingutils.TestingRoundChangeMessageWithHeightAndIdentifier(ks.OperatorKeys[1], 1, height, id[:])
 
-	encodedSignedMessage, err := validSignedMessage.Encode()
-	if err != nil {
-		return nil, err
-	}
+	validSignedMessage := spectestingutils.TestingRoundChangeMessageWithHeightAndIdentifier(ks.OperatorKeys[1], 1, height, id[:])
 
 	return &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
-		Data:    encodedSignedMessage,
+		Data:    validSignedMessage.SSVMessage.Data,
 	}, nil
 }
