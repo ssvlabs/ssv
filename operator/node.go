@@ -3,8 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
-
 	storage2 "github.com/ssvlabs/ssv/registry/storage"
 
 	"github.com/ssvlabs/ssv/network"
@@ -72,23 +70,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
-	storageMap := qbftstorage.NewStores()
-
-	roles := []exporter_message.RunnerRole{
-		exporter_message.RoleCommittee,
-		exporter_message.RoleAttester,
-		exporter_message.RoleAggregator,
-		exporter_message.RoleProposer,
-		exporter_message.RoleSyncCommittee,
-		exporter_message.RoleSyncCommitteeContribution,
-		exporter_message.RoleValidatorRegistration,
-		exporter_message.RoleVoluntaryExit,
-	}
-	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))
-	}
-
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
 	node := &operatorNode{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
@@ -98,7 +80,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		executionClient:  opts.ExecutionClient,
 		net:              opts.P2PNetwork,
 		storage:          opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:      storageMap,
+		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                  opts.Context,
 			BeaconNode:           opts.BeaconNode,

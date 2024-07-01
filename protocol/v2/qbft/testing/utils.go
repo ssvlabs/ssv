@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+	"github.com/ssvlabs/ssv/exporter/exporter_message"
 
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -14,7 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.RunnerRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role exporter_message.RunnerRole) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner:   testingutils.NewTestingKeyManager(),
 		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
