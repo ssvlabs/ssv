@@ -19,6 +19,7 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
+		// TODO: will return when a non-genesis is malformed
 		if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
 			return nil, ErrGenesisSignedSSVMessage
 		}

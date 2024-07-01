@@ -69,25 +69,23 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			peer := vNet.NodeByPeerID(p)
 			signedSSVMsg := &spectypes.SignedSSVMessage{}
 			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
-			msg, err := signedSSVMsg.GetSSVMessageFromData()
-			require.NoError(t, err)
 
-			decodedMsg, err := queue.DecodeSSVMessage(msg)
+			decodedMsg, err := queue.DecodeSSVMessage(signedSSVMsg.SSVMessage)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg
 			mtx.Lock()
 			// Validation according to role.
 			var validation pubsub.ValidationResult
-			switch msg.MsgID.GetRoleType() {
-			case acceptedRole:
+			switch signedSSVMsg.SSVMessage.MsgID.GetRoleType() {
+			case spectypes.RunnerRole(acceptedRole):
 				messageValidators[i].Accepted[peer.Index]++
 				messageValidators[i].TotalAccepted++
 				validation = pubsub.ValidationAccept
-			case ignoredRole:
+			case spectypes.RunnerRole(ignoredRole):
 				messageValidators[i].Ignored[peer.Index]++
 				messageValidators[i].TotalIgnored++
 				validation = pubsub.ValidationIgnore
-			case rejectedRole:
+			case spectypes.RunnerRole(rejectedRole):
 				messageValidators[i].Rejected[peer.Index]++
 				messageValidators[i].TotalRejected++
 				validation = pubsub.ValidationReject
@@ -128,7 +126,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				roleBroadcasts[role]++
 				mu.Unlock()
 
-				msgID, msg := dummyMsg(t, validators[rand.Intn(len(validators))], int(height.Add(1)), role)
+				msgID, msg := dummyMsg(t, validators[rand.Intn(len(validators))], int(height.Add(1)), spectypes.RunnerRole(role))
 				err := node.Broadcast(msgID, msg)
 				if err != nil {
 					return err
@@ -274,7 +272,11 @@ func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer
 	return v.ValidateFunc(ctx, p, pmsg)
 }
 
-func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+// func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+// 	panic("not implemented") // TODO: Implement
+// }
+
+func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	panic("not implemented") // TODO: Implement
 }
 

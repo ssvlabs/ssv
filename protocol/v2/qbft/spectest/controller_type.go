@@ -61,7 +61,7 @@ func generateController(logger *zap.Logger) *controller.Controller {
 	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.RunnerRole(spectypes.RoleCommittee))
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
-		spectestingutils.TestingOperator(spectestingutils.Testing4SharesSet()),
+		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
 		config,
 		false,
 	)
@@ -110,13 +110,13 @@ func testBroadcastedDecided(
 	config *qbft.Config,
 	identifier []byte,
 	runData *spectests.RunInstanceData,
-	operators []*spectypes.CommitteeMember,
+	committee []*spectypes.Operator,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
 		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedSignedMsgs), 0)
-		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
+		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
 		found := false
 		for _, msg := range broadcastedSignedMsgs {
 
@@ -158,7 +158,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.Share.Committee)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
 
 	// test root
 	r, err := contr.GetRoot()
