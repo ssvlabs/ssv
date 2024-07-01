@@ -15,7 +15,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
@@ -141,7 +140,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 	var blockByNumberCalls atomic.Uint64
 
-	scheduler.executionClient.(*mocks.MockExecutionClient).EXPECT().BlockByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
+	scheduler.executionClient.(*MockExecutionClient).EXPECT().BlockByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
 			blockByNumberCalls.Add(1)
 			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, nil, trie.NewStackTrie(nil))

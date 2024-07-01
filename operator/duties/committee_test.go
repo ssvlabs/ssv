@@ -13,7 +13,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -55,7 +54,7 @@ func setupCommitteeDutiesMock(
 		},
 	).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
@@ -64,7 +63,7 @@ func setupCommitteeDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	s.beaconNode.(*MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
@@ -74,16 +73,16 @@ func setupCommitteeDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
-	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.validatorController.(*MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
 			return indicesFromShares(activeShares)
 		}).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.beaconNode.(*MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.beaconNode.(*MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
@@ -937,18 +936,18 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 
 	currentSlot.Set(phase0.Slot(1))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
-	fetchAttesterDutiesCall, executeAttesterDutiesCall := setupAttesterDutiesMock(scheduler, attDuties, waitForDuties)
+	fetchAttesterDutiesCall, executeAttesterDutiesCall := setupAttesterGenesisDutiesMock(scheduler, attDuties, waitForDuties)
 	_, _ = setupSyncCommitteeDutiesMock(scheduler, activeShares, syncDuties, waitForDuties)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
 	aDuties, _ := attDuties.Get(0)
-	aExpected := expectedExecutedAttesterDuties(attHandler, aDuties)
-	setExecuteDutyFunc(scheduler, executeAttesterDutiesCall, len(aExpected))
+	aExpected := expectedExecutedGenesisAttesterDuties(attHandler, aDuties)
+	setExecuteGenesisDutyFunc(scheduler, executeAttesterDutiesCall, len(aExpected))
 
 	startTime := time.Now()
 	ticker.Send(currentSlot.Get())
-	waitForDutiesExecution(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout, aExpected)
+	waitForGenesisDutiesExecution(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout, aExpected)
 
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
@@ -957,7 +956,7 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 	currentSlot.Set(phase0.Slot(2))
 	for slot := currentSlot.Get(); slot < 47; slot++ {
 		ticker.Send(slot)
-		waitForNoAction(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
+		waitForNoActionGenesis(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
 		currentSlot.Set(slot + 1)
 	}
 
@@ -965,7 +964,7 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 	currentSlot.Set(phase0.Slot(47))
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	waitForDutiesFetch(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
+	waitForGenesisDutiesFetch(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
 
 	currentSlot.Set(phase0.Slot(64))
 	aDuties, _ = attDuties.Get(2)

@@ -3,7 +3,6 @@ package duties
 import (
 	"context"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -11,12 +10,6 @@ import (
 )
 
 //go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
-
-// ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
-type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
-
-// ExecuteCommitteeDutiesFunc is a non-blocking function which executes the given committee duties.
-type ExecuteCommitteeDutiesFunc func(logger *zap.Logger, duties committeeDutiesMap)
 
 type dutyHandler interface {
 	Setup(
@@ -27,8 +20,7 @@ type dutyHandler interface {
 		network networkconfig.NetworkConfig,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
-		executeDuties ExecuteDutiesFunc,
-		executeCommitteeDuties ExecuteCommitteeDutiesFunc,
+		dutyExecutor DutiesExecutor,
 		slotTickerProvider slotticker.Provider,
 		reorgEvents chan ReorgEvent,
 		indicesChange chan struct{},
@@ -39,15 +31,14 @@ type dutyHandler interface {
 }
 
 type baseHandler struct {
-	logger                 *zap.Logger
-	beaconNode             BeaconNode
-	executionClient        ExecutionClient
-	network                networkconfig.NetworkConfig
-	validatorProvider      ValidatorProvider
-	validatorController    ValidatorController
-	executeDuties          ExecuteDutiesFunc
-	executeCommitteeDuties ExecuteCommitteeDutiesFunc
-	ticker                 slotticker.SlotTicker
+	logger              *zap.Logger
+	beaconNode          BeaconNode
+	executionClient     ExecutionClient
+	network             networkconfig.NetworkConfig
+	validatorProvider   ValidatorProvider
+	validatorController ValidatorController
+	dutiesExecutor      DutiesExecutor
+	ticker              slotticker.SlotTicker
 
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
@@ -63,8 +54,7 @@ func (h *baseHandler) Setup(
 	network networkconfig.NetworkConfig,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
-	executeDuties ExecuteDutiesFunc,
-	executeCommitteeDuties ExecuteCommitteeDutiesFunc,
+	dutyExecutor DutiesExecutor,
 	slotTickerProvider slotticker.Provider,
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
@@ -75,8 +65,7 @@ func (h *baseHandler) Setup(
 	h.network = network
 	h.validatorProvider = validatorProvider
 	h.validatorController = validatorController
-	h.executeDuties = executeDuties
-	h.executeCommitteeDuties = executeCommitteeDuties
+	h.dutiesExecutor = dutyExecutor
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange

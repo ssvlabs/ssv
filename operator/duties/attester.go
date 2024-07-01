@@ -7,6 +7,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -174,19 +175,27 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		return
 	}
 
-	// TODO: (Alan) genesis support - should be spectypes.Duty from pre-fork spec?
-	// range over duties and execute
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
+	if !h.network.AlanForked(slot) {
+		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
+		for _, d := range duties {
+			if h.shouldExecute(d) {
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
+			}
+		}
+
+		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+		return
+	}
+
+	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			if !h.network.AlanForked(slot) {
-				toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
-			}
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
 
-	h.executeDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
@@ -236,6 +245,19 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
 	return &spectypes.BeaconDuty{
+		Type:                    role,
+		PubKey:                  duty.PubKey,
+		Slot:                    duty.Slot,
+		ValidatorIndex:          duty.ValidatorIndex,
+		CommitteeIndex:          duty.CommitteeIndex,
+		CommitteeLength:         duty.CommitteeLength,
+		CommitteesAtSlot:        duty.CommitteesAtSlot,
+		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
+	}
+}
+
+func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
+	return &genesisspectypes.Duty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,
