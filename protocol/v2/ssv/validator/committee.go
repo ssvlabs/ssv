@@ -2,7 +2,9 @@ package validator
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -292,6 +294,24 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 	return nil
 
+}
+
+func (c *Committee) Encode() ([]byte, error) {
+	return json.Marshal(c)
+}
+
+func (c *Committee) Decode(data []byte) error {
+	return json.Unmarshal(data, &c)
+}
+
+// GetRoot returns the state's deterministic root
+func (c *Committee) GetRoot() ([32]byte, error) {
+	marshaledRoot, err := c.Encode()
+	if err != nil {
+		return [32]byte{}, errors.Wrap(err, "could not encode state")
+	}
+	ret := sha256.Sum256(marshaledRoot)
+	return ret, nil
 }
 
 // updateAttestingSlotMap updates the highest attesting slot map from beacon duties
