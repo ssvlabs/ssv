@@ -6,16 +6,17 @@ import (
 	"testing"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-	"github.com/stretchr/testify/require"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInstances_FindInstance(t *testing.T) {
 	i := InstanceContainer{
-		&instance.Instance{State: &genesisspecqbft.State{Height: 1}},
-		&instance.Instance{State: &genesisspecqbft.State{Height: 2}},
-		&instance.Instance{State: &genesisspecqbft.State{Height: 3}},
+		&instance.Instance{State: &types.State{Height: 1}},
+		&instance.Instance{State: &types.State{Height: 2}},
+		&instance.Instance{State: &types.State{Height: 3}},
 	}
 
 	t.Run("find 1", func(t *testing.T) {
@@ -33,20 +34,20 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	t.Run("add to full", func(t *testing.T) {
 		i := append(
 			make(InstanceContainer, 0, 5),
-			&instance.Instance{State: &genesisspecqbft.State{Height: 1}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 2}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 3}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 4}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 5}},
+			&instance.Instance{State: &types.State{Height: 1}},
+			&instance.Instance{State: &types.State{Height: 2}},
+			&instance.Instance{State: &types.State{Height: 3}},
+			&instance.Instance{State: &types.State{Height: 4}},
+			&instance.Instance{State: &types.State{Height: 5}},
 		)
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 6}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 6}})
 
 		requireHeights(t, i, 6, 1, 2, 3, 4)
 	})
 
 	t.Run("add to empty", func(t *testing.T) {
 		i := make(InstanceContainer, 0, 5)
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 1}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 1}})
 
 		require.EqualValues(t, 1, i[0].State.Height)
 		require.Len(t, i, 1)
@@ -55,11 +56,11 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	t.Run("add to semi full", func(t *testing.T) {
 		i := append(
 			make(InstanceContainer, 0, 5),
-			&instance.Instance{State: &genesisspecqbft.State{Height: 1}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 2}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 3}},
+			&instance.Instance{State: &types.State{Height: 1}},
+			&instance.Instance{State: &types.State{Height: 2}},
+			&instance.Instance{State: &types.State{Height: 3}},
 		)
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 4}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 4}})
 
 		requireHeights(t, i, 4, 1, 2, 3)
 	})
@@ -67,13 +68,13 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	t.Run("add to full with lower height", func(t *testing.T) {
 		i := append(
 			make(InstanceContainer, 0, 5),
-			&instance.Instance{State: &genesisspecqbft.State{Height: 1}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 2}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 3}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 4}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 5}},
+			&instance.Instance{State: &types.State{Height: 1}},
+			&instance.Instance{State: &types.State{Height: 2}},
+			&instance.Instance{State: &types.State{Height: 3}},
+			&instance.Instance{State: &types.State{Height: 4}},
+			&instance.Instance{State: &types.State{Height: 5}},
 		)
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 0}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 0}})
 
 		requireHeights(t, i, 1, 2, 3, 4, 5)
 	})
@@ -81,13 +82,13 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	t.Run("add to full with higher height", func(t *testing.T) {
 		i := append(
 			make(InstanceContainer, 0, 5),
-			&instance.Instance{State: &genesisspecqbft.State{Height: 1}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 2}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 3}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 4}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 5}},
+			&instance.Instance{State: &types.State{Height: 1}},
+			&instance.Instance{State: &types.State{Height: 2}},
+			&instance.Instance{State: &types.State{Height: 3}},
+			&instance.Instance{State: &types.State{Height: 4}},
+			&instance.Instance{State: &types.State{Height: 5}},
 		)
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 6}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 6}})
 
 		requireHeights(t, i, 6, 1, 2, 3, 4)
 	})
@@ -95,16 +96,16 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	t.Run("add to semi-full with higher height", func(t *testing.T) {
 		i := append(
 			make(InstanceContainer, 0, 5),
-			&instance.Instance{State: &genesisspecqbft.State{Height: 9}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 7}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 5}},
-			&instance.Instance{State: &genesisspecqbft.State{Height: 1}},
+			&instance.Instance{State: &types.State{Height: 9}},
+			&instance.Instance{State: &types.State{Height: 7}},
+			&instance.Instance{State: &types.State{Height: 5}},
+			&instance.Instance{State: &types.State{Height: 1}},
 		)
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 4}})
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 3}})
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 6}})
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 8}})
-		i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: 8}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 4}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 3}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 6}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 8}})
+		i.addNewInstance(&instance.Instance{State: &types.State{Height: 8}})
 
 		requireHeights(t, i, 9, 8, 8, 7, 6)
 	})
@@ -121,7 +122,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 			numberOfRandomHeights := 100
 			for _, height := range rand.Perm(numberOfRandomHeights) {
 				// Add height to InstanceContainer.
-				i.addNewInstance(&instance.Instance{State: &genesisspecqbft.State{Height: genesisspecqbft.Height(height)}})
+				i.addNewInstance(&instance.Instance{State: &types.State{Height: genesisspecqbft.Height(height)}})
 
 				// Add height to mirror.
 				mirror = append(mirror, genesisspecqbft.Height(height))

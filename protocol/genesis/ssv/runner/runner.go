@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type Getters interface {
@@ -21,7 +20,6 @@ type Getters interface {
 	GetBeaconNode() genesisspecssv.BeaconNode
 	GetValCheckF() genesisspecqbft.ProposedValueCheckF
 	GetSigner() genesisspectypes.KeyManager
-	GetOperatorSigner() types.OperatorSigner
 	GetNetwork() genesisspecssv.Network
 }
 

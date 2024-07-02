@@ -10,20 +10,20 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ssvlabs/ssv/logging"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
-	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -109,14 +109,11 @@ func testBroadcastedDecided(
 	config *qbft.Config,
 	identifier []byte,
 	runData *spectests.RunInstanceData,
-	operators []*genesisspectypes.Operator,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
-		require.Greater(t, len(broadcastedSignedMsgs), 0)
-		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
-		broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
+		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		require.Greater(t, len(broadcastedMsgs), 0)
 		found := false
 		for _, msg := range broadcastedMsgs {
 
@@ -160,7 +157,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height genesisspecqbf
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.Share.Committee)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData)
 
 	// test root
 	r, err := contr.GetRoot()

@@ -4,17 +4,15 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-
-	"go.uber.org/zap"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 // uponPrepare process prepare message
@@ -87,7 +85,8 @@ func getRoundChangeJustification(state *types.State, config qbft.IConfig, prepar
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
 	ret := make([]*genesisspecqbft.SignedMessage, 0)
 	for _, msg := range prepareMsgs {
-		if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+		if err := validSignedPrepareForHeightRoundAndRoot(
+			config,
 			msg,
 			state.Height,
 			state.LastPreparedRound,
@@ -105,15 +104,38 @@ func getRoundChangeJustification(state *types.State, config qbft.IConfig, prepar
 	return ret, nil
 }
 
-// validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
+// validPreparesForHeightRoundAndValue returns an aggregated prepare msg for a specific Height and round
+// func validPreparesForHeightRoundAndValue(
+//	config IConfig,
+//	prepareMessages []*SignedMessage,
+//	height Height,
+//	round Round,
+//	value []byte,
+//	operators []*types.Operator) *SignedMessage {
+//	var aggregatedPrepareMsg *SignedMessage
+//	for _, signedMsg := range prepareMessages {
+//		if err := validSignedPrepareForHeightRoundAndValue(config, signedMsg, height, round, value, operators); err == nil {
+//			if aggregatedPrepareMsg == nil {
+//				aggregatedPrepareMsg = signedMsg
+//			} else {
+//				// TODO: check error
+//				// nolint
+//				aggregatedPrepareMsg.Aggregate(signedMsg)
+//			}
+//		}
+//	}
+//	return aggregatedPrepareMsg
+// }
+
+// validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+func validSignedPrepareForHeightRoundAndRoot(
+	config qbft.IConfig,
 	signedPrepare *genesisspecqbft.SignedMessage,
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	root [32]byte,
 	operators []*spectypes.ShareMember) error {
-
 	if signedPrepare.Message.MsgType != genesisspecqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -134,25 +156,6 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 
 	if len(signedPrepare.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
-	}
-
-	if !CheckSignersInCommittee(signedPrepare, operators) {
-		return errors.New("signer not in committee")
-	}
-
-	return nil
-}
-
-func validSignedPrepareForHeightRoundAndRootVerifySignature(
-	config qbft.IConfig,
-	signedPrepare *genesisspecqbft.SignedMessage,
-	height genesisspecqbft.Height,
-	round genesisspecqbft.Round,
-	root [32]byte,
-	operators []*spectypes.ShareMember) error {
-
-	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(signedPrepare, height, round, root, operators); err != nil {
-		return err
 	}
 
 	if config.VerifySignatures() {
@@ -185,14 +188,14 @@ func CreatePrepare(state *types.State, config qbft.IConfig, newRound genesisspec
 
 		Root: root,
 	}
-	sig, err := config.GetShareSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorSigner().GetOperatorID()},
+		Signers:   []genesisspectypes.OperatorID{state.Share.Committee[0].Signer},
 		Message:   *msg,
 	}
 	return signedMsg, nil

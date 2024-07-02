@@ -4,18 +4,17 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
-	"go.uber.org/zap"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 // uponProposal process proposal message
@@ -82,10 +81,11 @@ func isValidProposal(
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if !CheckSignersInCommittee(signedProposal, state.Share.Committee) {
-		return errors.New("signer not in committee")
+	if config.VerifySignatures() {
+		if err := genesisssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
 	}
-
 	if !signedProposal.MatchedSigners([]genesisspectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
@@ -173,7 +173,7 @@ func isProposalJustification(
 		// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
 		// prepared
 		for _, rc := range roundChangeMsgs {
-			if err := validRoundChangeForDataVerifySignature(state, config, rc, height, round, fullData); err != nil {
+			if err := validRoundChangeForData(state, config, rc, height, round, fullData); err != nil {
 				return errors.Wrap(err, "change round msg not valid")
 			}
 		}
@@ -225,7 +225,7 @@ func isProposalJustification(
 
 			// validate each prepare message against the highest previously prepared fullData and round
 			for _, pm := range prepareMsgs {
-				if err := validSignedPrepareForHeightRoundAndRootVerifySignature(
+				if err := validSignedPrepareForHeightRoundAndRoot(
 					config,
 					pm,
 					height,
@@ -284,14 +284,14 @@ func CreateProposal(state *types.State, config qbft.IConfig, fullData []byte, ro
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
-	sig, err := config.GetShareSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing proposal msg")
 	}
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorSigner().GetOperatorID()},
+		Signers:   []genesisspectypes.OperatorID{state.Share.Committee[0].Signer},
 		Message:   *msg,
 
 		FullData: fullData,

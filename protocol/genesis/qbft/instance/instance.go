@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/ssvlabs/ssv/logging/fields"
+
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -11,7 +13,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
@@ -78,7 +79,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height genesisspecqbf
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
-		if proposerID == i.config.GetOperatorSigner().GetOperatorID() {
+		if proposerID == i.State.Share.Committee[0].Signer {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -108,19 +109,12 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *genesisspecqbft.SignedMess
 	msgID := genesisspectypes.MessageID{}
 	copy(msgID[:], msg.Message.Identifier)
 
-	ssvMsg := &genesisspectypes.SSVMessage{
+	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVConsensusMsgType,
 		MsgID:   msgID,
 		Data:    byts,
 	}
-
-	operatorSigner := i.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, i.config.GetOperatorSigner().GetOperatorID(), operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	return i.config.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast)
+	return i.config.GetNetwork().Broadcast(msgToBroadcast)
 }
 
 func allSigners(all []*genesisspecqbft.SignedMessage) []genesisspectypes.OperatorID {
@@ -189,7 +183,8 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
-		return validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+		return validSignedPrepareForHeightRoundAndRoot(
+			i.config,
 			msg,
 			i.State.Height,
 			i.State.Round,
@@ -202,6 +197,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			return errors.New("did not receive proposal for this round")
 		}
 		return validateCommit(
+			i.config,
 			msg,
 			i.State.Height,
 			i.State.Round,
@@ -209,7 +205,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			i.State.Share.Committee,
 		)
 	case genesisspecqbft.RoundChangeMsgType:
-		return validRoundChangeForDataIgnoreSignature(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
+		return validRoundChangeForData(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
 	default:
 		return errors.New("signed message type not supported")
 	}

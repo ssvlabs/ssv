@@ -4,8 +4,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
@@ -17,7 +15,7 @@ func (c *Controller) OnTimeout(logger *zap.Logger, msg types.EventMsg) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get timeout data")
 	}
-	instance := c.StoredInstances.FindInstance(genesisspecqbft.Height(timeoutData.Height))
+	instance := c.StoredInstances.FindInstance(timeoutData.Height)
 	if instance == nil {
 		return errors.New("instance is nil")
 	}

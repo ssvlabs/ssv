@@ -5,11 +5,10 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInstance_Marshaling(t *testing.T) {
@@ -39,8 +38,8 @@ func TestInstance_Marshaling(t *testing.T) {
 		PartialQuorum:   2,
 		Committee: []*genesisspectypes.Operator{
 			{
-				OperatorID:  1,
-				SharePubKey: TestingSK.GetPublicKey().Serialize(),
+				OperatorID: 1,
+				PubKey:     TestingSK.GetPublicKey().Serialize(),
 			},
 		},
 	}

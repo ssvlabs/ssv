@@ -1,8 +1,6 @@
 package qbft
 
 import (
-	"github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/types"
@@ -12,10 +10,8 @@ import (
 )
 
 type signing interface {
-	// GetShareSigner returns a ShareSigner instance
-	GetShareSigner() genesisspectypes.ShareSigner
-	// GetOperatorSigner returns an operator signer instance
-	GetOperatorSigner() genesisrunner.OperatorSigner
+	// GetSigner returns a Signer instance
+	GetSigner() genesisspectypes.SSVSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() genesisspectypes.DomainType
 }
@@ -37,26 +33,20 @@ type IConfig interface {
 }
 
 type Config struct {
-	ShareSigner           genesisspectypes.ShareSigner
-	OperatorSigner        genesisspectypes.OperatorSigner
+	Signer                genesisspectypes.SSVSigner
 	SigningPK             []byte
 	Domain                genesisspectypes.DomainType
 	ValueCheckF           genesisspecqbft.ProposedValueCheckF
-	ProposerF             func(state *genesisrunner.State, round genesisspecqbft.Round) types.OperatorID
+	ProposerF             genesisspecqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
 	Network               genesisspecqbft.Network
 	Timer                 roundtimer.Timer
 	SignatureVerification bool
 }
 
-// GetShareSigner returns a ShareSigner instance
-func (c *Config) GetShareSigner() genesisspectypes.ShareSigner {
-	return c.ShareSigner
-}
-
-// GetOperatorSigner returns a OperatorSigner instance
-func (c *Config) GetOperatorSigner() genesisspectypes.OperatorSigner {
-	return c.OperatorSigner
+// GetSigner returns a Signer instance
+func (c *Config) GetSigner() genesisspectypes.SSVSigner {
+	return c.Signer
 }
 
 // GetSigningPubKey returns the public key used to sign all QBFT messages
@@ -75,7 +65,7 @@ func (c *Config) GetValueCheckF() genesisspecqbft.ProposedValueCheckF {
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() func(state *genesisrunner.State, round genesisspecqbft.Round) types.OperatorID {
+func (c *Config) GetProposerF() genesisspecqbft.ProposerF {
 	return c.ProposerF
 }
 

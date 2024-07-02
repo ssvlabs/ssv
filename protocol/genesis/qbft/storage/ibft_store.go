@@ -3,9 +3,9 @@ package qbftstorage
 import (
 	"encoding/json"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 

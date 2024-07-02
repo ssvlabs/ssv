@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ssvlabs/ssv/logging"
-	qbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/stretchr/testify/require"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 func TestController_Marshaling(t *testing.T) {
@@ -38,15 +39,13 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	// Initialize logger
 	logger := logging.TestLogger(t)
 
-	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		ShareSigner:    spectestingutils.NewTestingKeyManager(),
-		OperatorSigner: spectestingutils.NewTestingOperatorSigner(keySet, 1),
-		Network:        spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-		Timer:          roundtimer.NewTestingTimer(),
+		Signer:  genesisspectestingutils.NewTestingKeyManager(),
+		Network: genesisspectestingutils.NewTestingNetwork(),
+		Timer:   roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingShare(keySet)
+	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())
 	inst := instance.NewInstance(
 		testConfig,
 		share,

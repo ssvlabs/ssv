@@ -3,25 +3,23 @@ package testing
 import (
 	"bytes"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
-	types2 "github.com/ssvlabs/ssv/protocol/genesis/types"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
 	return &qbft.Config{
-		ShareSigner:    testingutils.NewTestingKeyManager(),
-		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
-		SigningPK:      keySet.Shares[1].GetPublicKey().Serialize(),
-		Domain:         testingutils.TestingSSVDomainType,
+		Signer:    testingutils.NewTestingKeyManager(),
+		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
+		Domain:    testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
 				return errors.New("invalid value")
@@ -33,11 +31,11 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			}
 			return nil
 		},
-		ProposerF: func(state *types2.State, round genesisspecqbft.Round) types.OperatorID {
+		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) types.OperatorID {
 			return 1
 		},
 		Storage:               TestingStores(logger).Get(role),
-		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Network:               testingutils.NewTestingNetwork(),
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,
 	}

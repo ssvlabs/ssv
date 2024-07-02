@@ -2,11 +2,10 @@ package controller
 
 import (
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) (*instance.Instance, error) {
