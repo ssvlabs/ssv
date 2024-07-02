@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv-spec/ssv"
@@ -153,7 +154,7 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		overrideStateComparisonCommitteeTest(t, test, path, reflect.TypeOf(tests).String())
+		overrideStateComparisonCommitteeSpecTest(t, test, path, reflect.TypeOf(tests).String())
 	}
 }
 
@@ -167,4 +168,21 @@ func (tests *MultiCommitteeSpecTest) GetPostState() (interface{}, error) {
 		ret[test.Name] = test.Committee
 	}
 	return ret, nil
+}
+
+func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
+	committee := &ssv.Committee{}
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+
+	require.NoError(t, err)
+	committee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, committee)
+	require.NoError(t, err)
+
+	// override
+	test.PostDutyCommittee = committee
+
+	root, err := committee.GetRoot()
+	require.NoError(t, err)
+
+	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
 }

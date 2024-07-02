@@ -108,6 +108,9 @@ func SignMsg(t *testing.T, sks []*rsa.PrivateKey, signers []spectypes.OperatorID
 
 func GetSSVMappingSpecTestJSON(path string, module string) ([]byte, error) {
 	p, err := GetSpecDir(path, module)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get spec test dir")
+	}
 	gzPath := filepath.Join(p, "spectest", "generate", "tests.json.gz")
 	untypedTests := map[string]interface{}{}
 
