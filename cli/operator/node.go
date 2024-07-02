@@ -304,7 +304,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
