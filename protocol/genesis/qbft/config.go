@@ -37,7 +37,7 @@ type Config struct {
 	SigningPK             []byte
 	Domain                genesisspectypes.DomainType
 	ValueCheckF           genesisspecqbft.ProposedValueCheckF
-	ProposerF             genesisspecqbft.ProposerF
+	ProposerF             func(state *genesisrunner.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
 	Storage               qbftstorage.QBFTStore
 	Network               genesisspecqbft.Network
 	Timer                 roundtimer.Timer
@@ -65,7 +65,7 @@ func (c *Config) GetValueCheckF() genesisspecqbft.ProposedValueCheckF {
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() genesisspecqbft.ProposerF {
+func (c *Config) GetProposerF() func(state *genesisrunner.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 	return c.ProposerF
 }
 

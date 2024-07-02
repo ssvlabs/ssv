@@ -5,9 +5,9 @@ import (
 	"sync"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisqbftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"go.uber.org/zap"
 
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -38,6 +38,6 @@ var allRoles = []genesisspectypes.BeaconRole{
 	genesisspectypes.BNRoleVoluntaryExit,
 }
 
-func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	return qbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
+func TestingStores(logger *zap.Logger) *genesisqbftstorage.QBFTStores {
+	return genesisqbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
 }
