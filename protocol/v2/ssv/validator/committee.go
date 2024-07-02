@@ -53,21 +53,22 @@ func NewCommittee(
 	operator *spectypes.CommitteeMember,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
+	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
 ) *Committee {
 	return &Committee{
 		logger:        logger,
 		BeaconNetwork: beaconNetwork,
 		ctx:           ctx,
 		// TODO alan: drain maps
-		Queues:                  make(map[phase0.Slot]queueContainer),
-		Runners:                 make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:                  make(map[phase0.ValidatorIndex]*spectypes.Share),
+		Queues:  make(map[phase0.Slot]queueContainer),
+		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:  make(map[phase0.ValidatorIndex]*spectypes.Share),
+		//Shares:                  share,
 		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
 		Operator:                operator,
 		SignatureVerifier:       verifier,
 		CreateRunnerFn:          createRunnerFn,
 	}
-
 }
 
 func (c *Committee) AddShare(share *spectypes.Share) {

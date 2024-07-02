@@ -71,10 +71,10 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	case *runner.CommitteeRunner:
 		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner))
 
-		if !test.DontStartDuty {
-			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
-		} else {
+		if test.DontStartDuty {
 			c.Runners[test.Duty.DutySlot()] = test.Runner.(*runner.CommitteeRunner)
+		} else {
+			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
 
 		for _, msg := range test.Messages {
@@ -246,7 +246,7 @@ var baseCommitteeWithRunnerSample = func(
 		).(*runner.CommitteeRunner)
 	}
 
-	return validator.NewCommittee(
+	c := validator.NewCommittee(
 		ctx,
 		logger,
 		runnerSample.GetBaseRunner().BeaconNetwork,
@@ -254,4 +254,7 @@ var baseCommitteeWithRunnerSample = func(
 		spectestingutils.NewTestingVerifier(),
 		createRunnerF,
 	)
+	c.Shares = shareMap
+
+	return c
 }

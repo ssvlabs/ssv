@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/committee"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/partialsigcontainer"
@@ -19,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -48,15 +51,32 @@ func TestSSVMapping(t *testing.T) {
 
 	types.SetDefaultDomain(spectestingutils.TestingSSVDomainType)
 
+	//wg := &sync.WaitGroup{}
+
 	for name, test := range untypedTests {
 		name, test := name, test
+
+		////if strings.Contains(name, "past msg duty finished") || strings.Contains(name, "empty_committee_duty") {
+		////	continue
+		////}
+		if !strings.Contains(name, "wrong beacon vote") {
+			continue
+		}
+		fmt.Println(name)
+
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
+			//wg.Add(1)
+			//go func() {
 			t.Run(r.name, func(t *testing.T) {
 				t.Parallel()
 				r.test(t)
+				//wg.Done()
 			})
+			//}()
+			//wg.Wait()
 		}
+
 	}
 }
 
@@ -521,7 +541,8 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		}
 	}
 
-	c := fixCommitteeForRun(t, logger, committeeMap)
+	ctx := context.Background() // TODO refactor this
+	c := fixCommitteeForRun(t, ctx, logger, committeeMap)
 
 	return &CommitteeSpecTest{
 		Name:                   m["Name"].(string),
@@ -534,18 +555,21 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
-	//func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]interface{}) *specssv.Committee {
-
+func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
 	byts, _ := json.Marshal(committeeMap)
-	c := &validator.Committee{}
-	require.NoError(t, json.Unmarshal(byts, c))
+	specCommittee := &specssv.Committee{}
+	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
-	c.CreateRunnerFn = func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
-		return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
-	}
-
-	c.SignatureVerifier = testingutils.NewTestingVerifier()
+	c := validator.NewCommittee(
+		ctx,
+		logger,
+		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		&specCommittee.CommitteeMember,
+		testingutils.NewTestingVerifier(),
+		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+			return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
+		},
+	)
 
 	for slot := range c.Runners {
 
@@ -558,13 +582,8 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), testingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
 	}
+	c.Shares = specCommittee.Share
 
-	//specCommitte := &specssv.Committee{
-	//	Runners: c.Runners,
-	//
-	//}
-
-	//return specCommitte
 	return c
 }
 

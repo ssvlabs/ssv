@@ -10,14 +10,17 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/types"
@@ -40,7 +43,8 @@ func (test *CommitteeSpecTest) TestName() string {
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
-	lastErr := test.runPreTesting()
+	logger := logging.TestLogger(t)
+	lastErr := test.runPreTesting(logger)
 
 	if len(test.ExpectedError) != 0 {
 		require.EqualError(t, lastErr, test.ExpectedError)
@@ -78,7 +82,7 @@ func (test *CommitteeSpecTest) Run(t *testing.T) {
 	test.RunAsPartOfMultiTest(t)
 }
 
-func (test *CommitteeSpecTest) runPreTesting() error {
+func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 
 	var lastErr error
 
@@ -87,9 +91,13 @@ func (test *CommitteeSpecTest) runPreTesting() error {
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
-			err = test.Committee.StartDuty(nil, input.(*spectypes.CommitteeDuty))
+			err = test.Committee.StartDuty(logger, input.(*spectypes.CommitteeDuty))
 		case *spectypes.SignedSSVMessage:
-			err = test.Committee.ProcessMessage(nil, &queue.DecodedSSVMessage{SignedSSVMessage: input})
+			msg, err := queue.DecodeSignedSSVMessage(input)
+			if err != nil {
+				return errors.Wrap(err, "failed to decode SignedSSVMessage")
+			}
+			err = test.Committee.ProcessMessage(nil, msg)
 		default:
 			panic("input is neither duty or SignedSSVMessage")
 		}
@@ -121,8 +129,8 @@ func overrideStateComparisonCommitteeTest(t *testing.T, test *CommitteeSpecTest,
 	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
 }
 
-func (test *CommitteeSpecTest) GetPostState() (interface{}, error) {
-	lastErr := test.runPreTesting()
+func (test *CommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
+	lastErr := test.runPreTesting(logger)
 	if lastErr != nil && len(test.ExpectedError) == 0 {
 		return nil, lastErr
 	}
@@ -154,14 +162,16 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		overrideStateComparisonCommitteeSpecTest(t, test, path, reflect.TypeOf(tests).String())
+		strType := reflect.TypeOf(tests).String()
+		strType = strings.Replace(strType, "spectest.", "committee.", 1)
+		overrideStateComparisonCommitteeSpecTest(t, test, path, strType)
 	}
 }
 
-func (tests *MultiCommitteeSpecTest) GetPostState() (interface{}, error) {
+func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
 	ret := make(map[string]types.Root, len(tests.Tests))
 	for _, test := range tests.Tests {
-		err := test.runPreTesting()
+		err := test.runPreTesting(logger)
 		if err != nil && test.ExpectedError != err.Error() {
 			return nil, err
 		}
