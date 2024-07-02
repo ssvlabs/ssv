@@ -103,7 +103,7 @@ spec:
           - name: HOST_ADDRESS
             value: ""
           - name: DB_PATH
-            value: "./data/db-mainnet--test-refetch-duties-2024-07-02"
+            value: "./data/db-mainnet"
           - name: METRICS_API_PORT
             value: "15017"
           - name: SSV_API_PORT
