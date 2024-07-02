@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -154,9 +153,9 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 	)
 
 	// TODO: (Alan) revert
-	if !strings.Contains(ni.Metadata.NodeVersion, "ALANTEST") {
-		return errors.New("non Alan node version is not supported")
-	}
+	// if !strings.Contains(ni.Metadata.NodeVersion, "ALANTEST") {
+	// 	return errors.New("non Alan node version is not supported")
+	// }
 
 	return nil
 }
