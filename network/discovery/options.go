@@ -80,13 +80,10 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 	return ipAddr, bindIP, n
 }
 
-var pid = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
-
 // DiscV5Cfg creates discv5 config from the options
 func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, error) {
 	dv5Cfg := discover.Config{
-		PrivateKey:   opts.NetworkKey,
-		V5ProtocolID: &pid, // TODO: REVERT!
+		PrivateKey: opts.NetworkKey,
 	}
 	if len(opts.Bootnodes) > 0 {
 		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)

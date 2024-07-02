@@ -82,7 +82,6 @@ func (s *sharesStorage) load() error {
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
-		val.DomainType = types.GetDefaultDomain()
 		s.shares[hex.EncodeToString(val.ValidatorPubKey)] = val
 		return nil
 	})
