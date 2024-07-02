@@ -711,7 +711,6 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 				c.logger.Debug("started share after metadata update", zap.Bool("started", started))
 			}
 		}
-		return nil
 	}
 
 	return nil
