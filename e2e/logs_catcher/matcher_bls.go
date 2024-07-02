@@ -246,7 +246,6 @@ func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli Docker
 	}
 
 	filteredLogs := res.Grep(first)
-
 	logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", first))
 
 	if len(filteredLogs) != 1 {
