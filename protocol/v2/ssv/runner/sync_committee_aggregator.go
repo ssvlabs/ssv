@@ -222,6 +222,9 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	r.metrics.EndPostConsensus()
 
 	consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return errors.Wrap(err, "failed to decode decided value")
+	}
 
 	// get contributions
 	contributions, err := consensusData.GetSyncCommitteeContributions()

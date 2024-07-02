@@ -2,6 +2,8 @@ package spectest
 
 import (
 	"encoding/hex"
+	"github.com/ssvlabs/ssv/integration/qbft/tests"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -54,7 +56,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator
 		share = validatorShare
 		break
 	}
-	v := protocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
+	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
 	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork()
 
@@ -102,7 +104,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 }
 
 func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-	broadcastedRoots := test.Runner.GetBeaconNode().(*spectestingutils.TestingBeaconNode).BroadcastedRoots
+	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).Bn.BroadcastedRoots
 	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
 	for _, r1 := range test.BeaconBroadcastedRoots {
 		found := false

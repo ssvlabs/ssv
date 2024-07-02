@@ -13,6 +13,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/logging"
@@ -31,8 +32,8 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForOperator(test.Pre.State.Share), msgId.GetRoleType()),
-		test.Pre.State.Share,
+		qbfttesting.TestingConfig(logger, testingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember), msgId.GetRoleType()),
+		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
 	)

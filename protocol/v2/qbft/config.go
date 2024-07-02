@@ -1,6 +1,7 @@
 package qbft
 
 import (
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -93,7 +94,7 @@ func (c *Config) GetStorage() qbftstorage.QBFTStore {
 }
 
 // GetTimer returns round timer
-func (c *Config) GetTimer() roundtimer.Timer {
+func (c *Config) GetTimer() qbft.Timer {
 	return c.Timer
 }
 

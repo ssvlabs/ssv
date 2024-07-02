@@ -7,16 +7,16 @@ import (
 
 type TestingBeaconNodeWrapped struct {
 	beacon.BeaconNode
-	bn *spectestingutils.TestingBeaconNode
+	Bn *spectestingutils.TestingBeaconNode
 }
 
 func (bn *TestingBeaconNodeWrapped) SetSyncCommitteeAggregatorRootHexes(roots map[string]bool) {
-	bn.bn.SetSyncCommitteeAggregatorRootHexes(roots)
+	bn.SetSyncCommitteeAggregatorRootHexes(roots)
 }
 
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {
 	bnw := &TestingBeaconNodeWrapped{}
-	bnw.bn = spectestingutils.NewTestingBeaconNode()
+	bnw.Bn = spectestingutils.NewTestingBeaconNode()
 
 	return bnw
 }

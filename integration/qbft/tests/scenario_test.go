@@ -7,6 +7,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
+	oldspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -85,8 +86,9 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
+				role := spectypes.RunnerRole(oldspectypes.MessageIDFromBytes(identifier[:]).GetRoleType())
 				var err error
-				storedInstance, err = s.validators[id].Storage.Get(spectypes.MessageIDFromBytes(identifier[:]).GetRoleType()).GetHighestInstance(identifier[:])
+				storedInstance, err = s.validators[id].Storage.Get(role).GetHighestInstance(identifier[:])
 				require.NoError(t, err)
 
 				if storedInstance != nil {
@@ -143,7 +145,6 @@ func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) 
 		ValidatorPubKey: spectypes.ValidatorPK(keySet.ValidatorPK.Serialize()),
 		SharePubKey:     keySet.Shares[id].GetPublicKey().Serialize(),
 		DomainType:      testingutils.TestingSSVDomainType,
-		Quorum:          keySet.Threshold,
 		Committee:       keySet.Committee(),
 	}
 }
@@ -200,7 +201,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 				Liquidated:   false,
 			},
 		},
-		Beacon: spectestingutils.NewTestingBeaconNode(),
+		Beacon: NewTestingBeaconNodeWrapped(),
 		Signer: km,
 	}
 

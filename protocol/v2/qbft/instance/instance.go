@@ -36,7 +36,7 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
-	var name = ""
+	var name string
 	if len(identifier) == 56 {
 		name = types.MessageID(identifier).GetRoleType().String()
 	} else {

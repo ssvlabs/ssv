@@ -173,6 +173,7 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	err := test.Runner.StartNewDuty(logger, test.Duty)
+	//TODO: need to check if spec tests provide or fix 4 quorum is good enough
+	err := test.Runner.StartNewDuty(logger, test.Duty, 4)
 	return err
 }

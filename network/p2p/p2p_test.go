@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
@@ -32,37 +33,54 @@ import (
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
-func TestRSAUsage(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
+func generateRandomOperatorID() (spectypes.OperatorID, error) {
+	var idBytes [8]byte
+	if _, err := rand.Read(idBytes[:]); err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint64(idBytes[:]), nil
+}
 
+func TestRSAUsage(t *testing.T) {
+	var OperatorIDs []spectypes.OperatorID
+	var Signatures [][]byte
+	var PubBlocks [][]byte
 	testMessage := []byte("message")
 
-	hash := sha256.Sum256(testMessage)
+	for i := 0; i < 4; i++ {
+		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
 
-	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
-	require.NoError(t, err)
+		hash := sha256.Sum256(testMessage)
 
-	publicKey := &privateKey.PublicKey
+		signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
+		require.NoError(t, err)
 
-	pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		fmt.Println("Error marshalling public key:", err)
-		return
+		operatorID, err := generateRandomOperatorID()
+		require.NoError(t, err)
+
+		publicKey := &privateKey.PublicKey
+
+		pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+		if err != nil {
+			fmt.Println("Error marshalling public key:", err)
+			return
+		}
+
+		pubPEM := pem.EncodeToMemory(&pem.Block{
+			Type:  "RSA PUBLIC KEY",
+			Bytes: pubKeyBytes,
+		})
+
+		PubBlocks = append(PubBlocks, pubPEM)
+		Signatures = append(Signatures, signature)
+		OperatorIDs = append(OperatorIDs, operatorID)
 	}
 
-	pubPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PUBLIC KEY",
-		Bytes: pubKeyBytes,
-	})
-
-	const operatorID = spectypes.OperatorID(0x12345678)
-	sig := [256]byte{}
-	copy(sig[:], signature)
 	signedSSVMsg := &spectypes.SignedSSVMessage{
-		Signature:  sig,
-		OperatorID: operatorID,
-		Data:       testMessage,
+		Signatures:  Signatures,
+		OperatorIDs: OperatorIDs,
+		FullData:    testMessage,
 	}
 	encodedSignedSSVMessage, err := signedSSVMsg.Encode()
 	require.NoError(t, err)
@@ -71,24 +89,26 @@ func TestRSAUsage(t *testing.T) {
 	err = decodedMsg.Decode(encodedSignedSSVMessage)
 	require.NoError(t, err)
 
-	require.NoError(t, err)
-	require.Equal(t, operatorID, decodedMsg.OperatorID)
-	require.Equal(t, sig, decodedMsg.Signature)
+	for i := 0; i < 4; i++ {
+		require.NoError(t, err)
+		require.Equal(t, OperatorIDs[i], decodedMsg.OperatorIDs[i])
+		require.Equal(t, Signatures[i], decodedMsg.Signatures[i])
 
-	messageHash := sha256.Sum256(decodedMsg.Data)
+		messageHash := sha256.Sum256(decodedMsg.FullData)
 
-	block, rest := pem.Decode(pubPEM)
-	require.NotNil(t, block)
-	require.Empty(t, rest, "extra data after PEM decoding")
+		block, rest := pem.Decode(PubBlocks[i])
+		require.NotNil(t, block)
+		require.Empty(t, rest, "extra data after PEM decoding")
 
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	require.NoError(t, err)
+		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+		require.NoError(t, err)
 
-	rsaPubKey, ok := pub.(*rsa.PublicKey)
-	require.True(t, ok)
+		rsaPubKey, ok := pub.(*rsa.PublicKey)
+		require.True(t, ok)
 
-	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedMsg.Signature[:]))
-	require.Equal(t, testMessage, decodedMsg.Data)
+		require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedMsg.Signatures[i][:]))
+		require.Equal(t, testMessage, decodedMsg.FullData)
+	}
 }
 
 func TestGetMaxPeers(t *testing.T) {
