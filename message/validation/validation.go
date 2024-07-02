@@ -28,6 +28,8 @@ import (
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
+const MaxPartialSignatureMsgSize = 1952
+
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult

@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	genesisValidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"golang.org/x/exp/slices"
 )
 
@@ -23,10 +22,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > genesisValidation.MaxPartialSignatureMsgSize {
+	if len(ssvMessage.Data) > MaxPartialSignatureMsgSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = genesisValidation.MaxPartialSignatureMsgSize
+		e.want = MaxPartialSignatureMsgSize
 		return nil, e
 	}
 
