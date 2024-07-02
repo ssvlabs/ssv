@@ -47,18 +47,22 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	return resp.Data, spec.DataVersionPhase0, nil
 }
 
-// SubmitAttestation implements Beacon interface
-func (gc *goClient) SubmitAttestation(attestation *phase0.Attestation) error {
-	signingRoot, err := gc.getSigningRoot(attestation.Data)
-	if err != nil {
-		return errors.Wrap(err, "failed to get signing root")
+// SubmitAttestations implements Beacon interface
+func (gc *goClient) SubmitAttestations(attestations []*phase0.Attestation) error {
+
+	// TODO: better way to return error and not stop sending other attestations
+	for _, attestation := range attestations {
+		signingRoot, err := gc.getSigningRoot(attestation.Data)
+		if err != nil {
+			return errors.Wrap(err, "failed to get signing root")
+		}
+
+		if err := gc.slashableAttestationCheck(gc.ctx, signingRoot); err != nil {
+			return errors.Wrap(err, "failed attestation slashing protection check")
+		}
 	}
 
-	if err := gc.slashableAttestationCheck(gc.ctx, signingRoot); err != nil {
-		return errors.Wrap(err, "failed attestation slashing protection check")
-	}
-
-	return gc.client.SubmitAttestations(gc.ctx, []*phase0.Attestation{attestation})
+	return gc.client.SubmitAttestations(gc.ctx, attestations)
 }
 
 // getSigningRoot returns signing root

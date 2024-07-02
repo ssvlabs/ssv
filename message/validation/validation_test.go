@@ -19,7 +19,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	"go.uber.org/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"

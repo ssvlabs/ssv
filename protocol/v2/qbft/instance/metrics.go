@@ -6,7 +6,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
 
@@ -43,12 +42,12 @@ type metrics struct {
 	round            prometheus.Gauge
 }
 
-func newMetrics(msgID spectypes.MessageID) *metrics {
+func newMetrics(role string) *metrics {
 	return &metrics{
 		proposalDuration: metricsStageDuration.WithLabelValues("proposal"),
 		prepareDuration:  metricsStageDuration.WithLabelValues("prepare"),
 		commitDuration:   metricsStageDuration.WithLabelValues("commit"),
-		round:            metricsRound.WithLabelValues(msgID.GetRoleType().String()),
+		round:            metricsRound.WithLabelValues(role),
 	}
 }
 

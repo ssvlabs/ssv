@@ -390,7 +390,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 
 			opts := c.validatorOptions
 			opts.SSVShare = share
-			operator, err := c.operatorFromShare(opts.SSVShare)
+			operator, err := c.committeeMemberFromShare(opts.SSVShare)
 			if err != nil {
 				return err
 			}
@@ -687,7 +687,6 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 				c.logger.Debug("started share after metadata update", zap.Bool("started", started))
 			}
 		}
-		return nil
 	}
 
 	return nil
@@ -896,7 +895,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		return nil, nil, fmt.Errorf("could not set share fee recipient: %w", err)
 	}
 
-	operator, err := c.operatorFromShare(share)
+	operator, err := c.committeeMemberFromShare(share)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -921,7 +920,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	}
 
 	// Start a committee validator.
-	vc, found := c.validatorsMap.GetCommittee(operator.ClusterID)
+	vc, found := c.validatorsMap.GetCommittee(operator.CommitteeID)
 	if !found {
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
@@ -934,14 +933,14 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		logger := c.logger.With([]zap.Field{
 			zap.String("committee", fields.FormatCommittee(operator.Committee)),
-			zap.String("committee_id", hex.EncodeToString(operator.ClusterID[:])),
+			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
 		}...)
 
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
 		vc = validator.NewCommittee(c.context, logger, c.beacon.GetBeaconNetwork(), operator, opts.SignatureVerifier, committeeRunnerFunc)
 		vc.AddShare(&share.Share)
-		c.validatorsMap.PutCommittee(operator.ClusterID, vc)
+		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 
 		c.printShare(share, "setup committee done")
 
@@ -953,10 +952,9 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	return v, vc, nil
 }
 
-func (c *controller) operatorFromShare(share *ssvtypes.SSVShare) (*spectypes.Operator, error) {
+func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*spectypes.CommitteeMember, error) {
 
-	committeemembers := make([]*spectypes.CommitteeMember, len(share.Committee))
-
+	operators := make([]*spectypes.Operator, len(share.Committee))
 	for i, cm := range share.Committee {
 		opdata, found, err := c.operatorsStorage.GetOperatorData(nil, cm.Signer)
 		if err != nil {
@@ -966,21 +964,20 @@ func (c *controller) operatorFromShare(share *ssvtypes.SSVShare) (*spectypes.Ope
 			//TODO alan: support removed ops
 			return nil, fmt.Errorf("operator not found")
 		}
-		committeemembers[i] = &spectypes.CommitteeMember{
+		operators[i] = &spectypes.Operator{
 			OperatorID:        cm.Signer,
 			SSVOperatorPubKey: opdata.PublicKey,
 		}
 	}
 
-	q, pc := types.ComputeQuorumAndPartialQuorum(len(share.Committee))
+	f := types.ComputeF(len(share.Committee))
 
-	return &spectypes.Operator{
+	return &spectypes.CommitteeMember{
 		OperatorID:        c.operatorDataStore.GetOperatorID(),
-		ClusterID:         share.CommitteeID(),
+		CommitteeID:       share.CommitteeID(),
 		SSVOperatorPubKey: c.operatorDataStore.GetOperatorData().PublicKey,
-		Quorum:            q,
-		PartialQuorum:     pc,
-		Committee:         committeemembers,
+		FaultyNodes:       f,
+		Committee:         operators,
 	}, nil
 }
 
@@ -1192,7 +1189,7 @@ func SetupCommitteeRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.Domain, options.Operator.ClusterID[:], role)
+		identifier := spectypes.NewMsgID(options.Domain, options.Operator.CommitteeID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl

@@ -65,7 +65,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *spectypes.Signed
 // returns true if there is a quorum for the current round for this provided value
 func commitQuorumForRoundRoot(state *specqbft.State, commitMsgContainer *specqbft.MsgContainer, root [32]byte, round specqbft.Round) (bool, []*spectypes.SignedSSVMessage, error) {
 	signers, msgs := commitMsgContainer.LongestUniqueSignersForRoundAndRoot(round, root)
-	return state.Share.HasQuorum(len(signers)), msgs, nil
+	return state.CommitteeMember.HasQuorum(len(signers)), msgs, nil
 }
 
 func aggregateCommitMsgs(msgs []*spectypes.SignedSSVMessage, fullData []byte) (*spectypes.SignedSSVMessage, error) {
@@ -135,13 +135,13 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, root [32]byte) (*s
 
 		Root: root,
 	}
-	return specqbft.MessageToSignedSSVMessage(msg, state.Share.OperatorID, config.GetOperatorSigner())
+	return specqbft.Sign(msg, state.CommitteeMember.OperatorID, config.GetOperatorSigner())
 }
 
 func baseCommitValidationIgnoreSignature(
 	signedCommit *spectypes.SignedSSVMessage,
 	height specqbft.Height,
-	operators []*spectypes.CommitteeMember,
+	operators []*spectypes.Operator,
 ) error {
 
 	if err := signedCommit.Validate(); err != nil {
@@ -171,7 +171,7 @@ func BaseCommitValidationVerifySignature(
 	config qbft.IConfig,
 	signedCommit *spectypes.SignedSSVMessage,
 	height specqbft.Height,
-	operators []*spectypes.CommitteeMember,
+	operators []*spectypes.Operator,
 ) error {
 
 	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
@@ -195,7 +195,7 @@ func validateCommit(
 	height specqbft.Height,
 	round specqbft.Round,
 	proposedSignedMsg *spectypes.SignedSSVMessage,
-	operators []*spectypes.CommitteeMember,
+	operators []*spectypes.Operator,
 ) error {
 	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
 		return err

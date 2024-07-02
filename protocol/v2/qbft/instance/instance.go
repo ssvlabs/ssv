@@ -1,7 +1,9 @@
 package instance
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -30,14 +32,19 @@ type Instance struct {
 
 func NewInstance(
 	config qbft.IConfig,
-	share *spectypes.Operator,
+	committeeMember *spectypes.CommitteeMember,
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
-	msgId := spectypes.MessageIDFromBytes(identifier)
+	var name = ""
+	if len(identifier) == 56 {
+		name = types.MessageID(identifier).GetRoleType().String()
+	} else {
+		name = base64.StdEncoding.EncodeToString(identifier)
+	}
 	return &Instance{
 		State: &specqbft.State{
-			Share:                share,
+			CommitteeMember:      committeeMember,
 			ID:                   identifier,
 			Round:                specqbft.FirstRound,
 			Height:               height,
@@ -49,7 +56,7 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		metrics:     newMetrics(msgId),
+		metrics:     newMetrics(name),
 	}
 }
 
@@ -75,7 +82,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
-		if proposerID == i.State.Share.OperatorID {
+		if proposerID == i.State.CommitteeMember.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -200,7 +207,7 @@ func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) erro
 			i.State.Height,
 			i.State.Round,
 			proposedMsg.Root,
-			i.State.Share.Committee,
+			i.State.CommitteeMember.Committee,
 		)
 	case specqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
@@ -212,7 +219,7 @@ func (i *Instance) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) erro
 			i.State.Height,
 			i.State.Round,
 			i.State.ProposalAcceptedForCurrentRound,
-			i.State.Share.Committee,
+			i.State.CommitteeMember.Committee,
 		)
 	case specqbft.RoundChangeMsgType:
 		return validRoundChangeForDataIgnoreSignature(i.State, i.config, signedMsg, i.State.Height, msg.Round, signedMsg.FullData)

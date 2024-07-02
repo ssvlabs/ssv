@@ -33,7 +33,7 @@ type Validator struct {
 	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 
-	Operator          *spectypes.Operator
+	Operator          *spectypes.CommitteeMember
 	Share             *types.SSVShare
 	Signer            spectypes.BeaconSigner
 	OperatorSigner    spectypes.OperatorSigner
@@ -120,7 +120,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
 	logger.Info("ℹ️ starting duty processing")
 
-	return dutyRunner.StartNewDuty(logger, duty)
+	return dutyRunner.StartNewDuty(logger, duty, v.Operator.GetQuorum())
 }
 
 // ProcessMessage processes Network Message of all types
