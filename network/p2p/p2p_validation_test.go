@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+
 	"os"
 	"sort"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/message/validation"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -69,8 +71,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			peer := vNet.NodeByPeerID(p)
 			signedSSVMsg := &spectypes.SignedSSVMessage{}
 			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
-			msg, err := signedSSVMsg.GetSSVMessageFromData()
-			require.NoError(t, err)
+			msg := signedSSVMsg.SSVMessage
 
 			decodedMsg, err := queue.DecodeSSVMessage(msg)
 			require.NoError(t, err)
@@ -274,7 +275,7 @@ func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer
 	return v.ValidateFunc(ctx, p, pmsg)
 }
 
-func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, genesisvalidation.Descriptor, error) {
 	panic("not implemented") // TODO: Implement
 }
 

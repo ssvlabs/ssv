@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"github.com/ssvlabs/ssv-spec/types"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -219,7 +220,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RoleCommittee)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -389,7 +390,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 		}
 		for _, node := range ln.Nodes {
 			wg.Add(1)
-			go func(node network.P2PNetwork, vpk []byte) {
+			go func(node network.P2PNetwork, vpk types.ValidatorPK) {
 				defer wg.Done()
 				if err := node.Subscribe(vpk); err != nil {
 					logger.Warn("could not subscribe to topic", zap.Error(err))
