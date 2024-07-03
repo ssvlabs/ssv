@@ -27,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -417,7 +416,7 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err
@@ -463,19 +462,6 @@ func (m *DummyMessageValidator) ValidatorForTopic(topic string) func(ctx context
 	}
 }
 
-func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return pubsub.ValidationAccept
-}
-
-func (m *DummyMessageValidator) ValidateSSVMessage(msg *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
-	var descriptor validation.Descriptor
-
-	validatorPK := msg.SSVMessage.GetID().GetPubKey()
-	role := msg.SSVMessage.GetID().GetRoleType()
-	descriptor.Role = role
-	descriptor.ValidatorPK = validatorPK
-
-	descriptor.SSVMessageType = msg.SSVMessage.GetType()
-
-	return msg, descriptor, nil
 }
