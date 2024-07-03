@@ -72,7 +72,8 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	require.NoError(t, err)
 
 	if test.PostDutyCommitteeRoot != hex.EncodeToString(postRoot[:]) {
-		t.Errorf("post runner state not equal: %v", cmp.Diff(test.Committee, test.PostDutyCommittee, cmp.Exporter(func(p reflect.Type) bool { return true })))
+		diff := cmp.Diff(test.Committee, test.PostDutyCommittee, cmp.Exporter(func(p reflect.Type) bool { return true }))
+		t.Errorf("post runner state not equal: %v", diff)
 	}
 }
 
@@ -92,17 +93,20 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		switch input := input.(type) {
 		case spectypes.Duty:
 			err = test.Committee.StartDuty(logger, input.(*spectypes.CommitteeDuty))
+			if err != nil {
+				lastErr = err
+			}
 		case *spectypes.SignedSSVMessage:
 			msg, err := queue.DecodeSignedSSVMessage(input)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
 			err = test.Committee.ProcessMessage(nil, msg)
+			if err != nil {
+				lastErr = err
+			}
 		default:
 			panic("input is neither duty or SignedSSVMessage")
-		}
-		if err != nil {
-			lastErr = err
 		}
 	}
 

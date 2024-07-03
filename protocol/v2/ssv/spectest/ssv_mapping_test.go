@@ -51,14 +51,9 @@ func TestSSVMapping(t *testing.T) {
 
 	types.SetDefaultDomain(spectestingutils.TestingSSVDomainType)
 
-	//wg := &sync.WaitGroup{}
-
 	for name, test := range untypedTests {
 		name, test := name, test
 
-		////if strings.Contains(name, "past msg duty finished") || strings.Contains(name, "empty_committee_duty") {
-		////	continue
-		////}
 		if !strings.Contains(name, "wrong beacon vote") {
 			continue
 		}
@@ -66,15 +61,10 @@ func TestSSVMapping(t *testing.T) {
 
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
-			//wg.Add(1)
-			//go func() {
 			t.Run(r.name, func(t *testing.T) {
 				t.Parallel()
 				r.test(t)
-				//wg.Done()
 			})
-			//}()
-			//wg.Wait()
 		}
 
 	}

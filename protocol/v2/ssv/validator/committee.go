@@ -8,12 +8,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -313,6 +312,87 @@ func (c *Committee) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (c *Committee) MarshalJSON() ([]byte, error) {
+	type CommitteeAlias struct {
+		Runners                 map[phase0.Slot]*runner.CommitteeRunner
+		Operator                spectypes.CommitteeMember
+		Shares                  map[phase0.ValidatorIndex]*spectypes.Share
+		HighestAttestingSlotMap map[string]phase0.Slot
+		BeaconNetwork           spectypes.BeaconNetwork
+		Queues                  map[phase0.Slot]queueContainer
+	}
+
+	// Convert HighestAttestingSlotMap to a map with string keys
+	stringKeyMap := make(map[string]phase0.Slot)
+	for k, v := range c.HighestAttestingSlotMap {
+		stringKeyMap[phase0.BLSPubKey(k).String()] = v // Assuming spectypes.ValidatorPK has a String() method
+	}
+
+	// Create object and marshal
+	alias := &CommitteeAlias{
+		Runners:                 c.Runners,
+		Operator:                *c.Operator,
+		Shares:                  c.Shares,
+		HighestAttestingSlotMap: stringKeyMap,
+		BeaconNetwork:           c.BeaconNetwork,
+		Queues:                  c.Queues,
+	}
+
+	byts, err := json.Marshal(alias)
+
+	return byts, err
+}
+
+func stringToBLSPubKey(s string) (phase0.BLSPubKey, error) {
+	var pubKey phase0.BLSPubKey
+	decoded, err := hex.DecodeString(s)
+	if err != nil {
+		return pubKey, err
+	}
+	if len(decoded) != len(pubKey) {
+		return pubKey, fmt.Errorf("invalid length, got %d, want %d", len(decoded), len(pubKey))
+	}
+	copy(pubKey[:], decoded)
+	return pubKey, nil
+}
+
+func (c *Committee) UnmarshalJSON(data []byte) error {
+	type CommitteeAlias struct {
+		Runners                 map[phase0.Slot]*runner.CommitteeRunner
+		Operator                spectypes.CommitteeMember
+		Shares                  map[phase0.ValidatorIndex]*spectypes.Share
+		HighestAttestingSlotMap map[string]phase0.Slot
+		BeaconNetwork           spectypes.BeaconNetwork
+		Queues                  map[phase0.Slot]queueContainer
+	}
+
+	// Unmarshal the JSON data into the auxiliary struct
+	aux := &CommitteeAlias{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Convert HighestAttestingSlotMap to a map with string keys
+	highestAttestingSlotMap := make(map[spectypes.ValidatorPK]phase0.Slot)
+	for k, v := range aux.HighestAttestingSlotMap {
+		pk, err := stringToBLSPubKey(k)
+		if err != nil {
+			return err
+		}
+		highestAttestingSlotMap[spectypes.ValidatorPK(pk)] = v // Assuming spectypes.ValidatorPK has a String() method
+	}
+
+	// Assign fields
+	c.Runners = aux.Runners
+	c.Operator = &aux.Operator
+	c.Shares = aux.Shares
+	c.HighestAttestingSlotMap = highestAttestingSlotMap
+	c.BeaconNetwork = aux.BeaconNetwork
+	c.Queues = aux.Queues
+
+	return nil
 }
 
 // updateAttestingSlotMap updates the highest attesting slot map from beacon duties
