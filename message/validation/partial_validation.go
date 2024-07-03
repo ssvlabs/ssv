@@ -225,8 +225,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 
 	signerStateInterface, ok := stateBySlot.Get(messageSlot)
 	if !ok {
-		signerState = &SignerState{}
-		signerState.Init()
+		signerState = NewSignerState()
 		stateBySlot.Put(messageSlot, signerState)
 		mv.pruneOldSlots(stateBySlot, messageSlot)
 	} else {
