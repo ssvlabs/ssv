@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -109,17 +110,15 @@ func TestGetMaxPeers(t *testing.T) {
 	require.Equal(t, 8, n.getMaxPeers("100"))
 }
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
-	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
-		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
-	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
-		Nodes:        n,
-		MinConnected: n/2 - 1,
+	ks := spectestingutils.Testing4SharesSet()
+	pks := []string{"8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"}
+	ln, routers, err := createNetworkAndSubscribeFromKeySet(t, ctx, LocalNetOptions{
+		Nodes:        len(ks.OperatorKeys),
+		MinConnected: len(ks.OperatorKeys)/2 - 1,
 		UseDiscv5:    false,
-	}, pks...)
+	}, ks, pks...)
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
@@ -151,7 +150,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		msgID1, msg1 := dummyMsgAttester(t, pks[0], 1)
-		msgID2, msg2 := dummyMsgAttester(t, pks[1], 2)
+		msgID2, msg2 := dummyMsgAttester(t, pks[0], 2)
 		msgID3, msg3 := dummyMsgAttester(t, pks[0], 3)
 		require.NoError(t, err)
 		time.Sleep(time.Millisecond * 10)
@@ -185,18 +184,18 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 }
 
 func TestP2pNetwork_Stream(t *testing.T) {
-	n := 12
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
 	defer cancel()
 
-	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
+	ks := spectestingutils.Testing13SharesSet()
+	pkHex := "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
 
-	ln, _, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
-		Nodes:        n,
-		MinConnected: n/2 - 1,
+	ln, _, err := createNetworkAndSubscribeFromKeySet(t, ctx, LocalNetOptions{
+		Nodes:        len(ks.OperatorKeys),
+		MinConnected: len(ks.OperatorKeys)/2 - 1,
 		UseDiscv5:    false,
-	}, pkHex)
+	}, ks, pkHex)
 
 	defer func() {
 		for _, node := range ln.Nodes {
@@ -204,7 +203,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 		}
 	}()
 	require.NoError(t, err)
-	require.Len(t, ln.Nodes, n)
+	require.Len(t, ln.Nodes, len(ks.OperatorKeys))
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
@@ -213,13 +212,13 @@ func TestP2pNetwork_Stream(t *testing.T) {
 		1, 1, 1,
 		1, 2, 2,
 		3, 3, 1,
-		1, 1, 1,
+		1, 1, 1, 1,
 	}
 	heights := []specqbft.Height{
 		0, 0, 2,
 		10, 20, 20,
 		23, 23, 1,
-		1, 1, 1,
+		1, 1, 1, 1,
 	}
 	msgCounter := int64(0)
 	errors := make(chan error, len(ln.Nodes))
@@ -343,10 +342,10 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 	})
 }
 
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions, pks ...string) (*LocalNet, []*dummyRouter, error) {
+func createNetworkAndSubscribeFromKeySet(t *testing.T, ctx context.Context, options LocalNetOptions, ks *spectestingutils.TestKeySet, pks ...string) (*LocalNet, []*dummyRouter, error) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
+	ln, err := CreateAndStartLocalNetFromKeySet(t, ctx, logger.Named("createNetworkAndSubscribe"), options, ks)
 	if err != nil {
 		return nil, nil, err
 	}

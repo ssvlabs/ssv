@@ -150,6 +150,7 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 	if err := n.setupDiscovery(logger); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
 	}
+	fmt.Printf("Setting up pub sub...")
 	if err := n.setupPubsub(logger); err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}

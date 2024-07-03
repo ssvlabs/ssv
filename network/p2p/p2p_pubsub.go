@@ -11,7 +11,6 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -57,6 +56,7 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
+// TODO: msgID not used
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
@@ -82,16 +82,27 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
+	// TODO: check the logic here
 	var committeeID spectypes.CommitteeID
-	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		committeeID = spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
-	} else {
-		share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
-		if share == nil {
-			return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
-		}
-		committeeID = share.CommitteeID()
+
+	// if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+	// 	fmt.Printf("committeeID = spectypes.CommitteeID")
+	// 	committeeID = spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
+	// } else {
+	// 	fmt.Printf("n.nodeStorage.ValidatorStore().Validator")
+	// 	share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+	// 	if share == nil {
+	// 		return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
+	// 	}
+	// 	committeeID = share.CommitteeID()
+	// }
+
+	share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+	if share == nil {
+		return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
 	}
+	committeeID = share.CommitteeID()
+
 	topics := commons.CommitteeTopicID(committeeID)
 
 	for _, topic := range topics {
@@ -208,6 +219,7 @@ func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) err
 	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
+		n.interfaceLogger.Debug("subscribing to topic", fields.Topic(topic))
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")
 			return err
@@ -226,16 +238,26 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		if msg == nil {
 			return nil
 		}
+		// TODO: check the logic
 
-		var decodedMsg *queue.DecodedSSVMessage
-		if msg.ValidatorData != nil {
-			m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
-			if ok {
-				decodedMsg = m
-			}
+		// var decodedMsg *queue.DecodedSSVMessage
+		// if msg.ValidatorData != nil {
+		// 	m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
+		// 	if ok {
+		// 		decodedMsg = m
+		// 	}
+		// }
+		// if decodedMsg == nil {
+		// 	return errors.New("message was not decoded")
+		// }
+
+		signedSSVMessage := &spectypes.SignedSSVMessage{}
+		if err := signedSSVMessage.Decode(msg.GetData()); err != nil {
+			return fmt.Errorf("message was not decoded: %w", err)
 		}
-		if decodedMsg == nil {
-			return errors.New("message was not decoded")
+		decodedMsg, err := queue.DecodeSignedSSVMessage(signedSSVMessage)
+		if err != nil {
+			return fmt.Errorf("message was not decoded: %w", err)
 		}
 
 		//p2pID := decodedMsg.GetID().String()

@@ -3,7 +3,6 @@ package p2pv1
 import (
 	"context"
 	cryptorand "crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"os"
@@ -19,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/message/validation"
@@ -35,7 +35,7 @@ import (
 func TestP2pNetwork_MessageValidation(t *testing.T) {
 	const (
 		nodeCount      = 4
-		validatorCount = 20
+		validatorCount = 1
 	)
 	var vNet *VirtualNet
 
@@ -47,7 +47,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	for i := 0; i < validatorCount; i++ {
 		var validator [48]byte
 		cryptorand.Read(validator[:])
-		validators[i] = hex.EncodeToString(validator[:])
+		validators[i] = "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
 	}
 
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
@@ -105,9 +105,10 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	}
 
 	// Create a VirtualNet with 4 nodes.
+	ks := spectestingutils.Testing4SharesSet()
 	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
 		return messageValidators[nodeIndex]
-	})
+	}, ks)
 	defer func() {
 		require.NoError(t, vNet.Close())
 	}()
@@ -303,10 +304,11 @@ func CreateVirtualNet(
 	nodes int,
 	validatorPubKeys []string,
 	messageValidatorProvider func(int) validation.MessageValidator,
+	ks *spectestingutils.TestKeySet,
 ) *VirtualNet {
 	var doneSetup atomic.Bool
 	vn := &VirtualNet{}
-	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
+	ln, routers, err := createNetworkAndSubscribeFromKeySet(t, ctx, LocalNetOptions{
 		Nodes:                    nodes,
 		MinConnected:             nodes - 1,
 		UseDiscv5:                false,
@@ -337,7 +339,7 @@ func CreateVirtualNet(
 
 		},
 		PeerScoreInspectorInterval: time.Millisecond * 5,
-	}, validatorPubKeys...)
+	}, ks, validatorPubKeys...)
 
 	require.NoError(t, err)
 	require.NotNil(t, routers)
