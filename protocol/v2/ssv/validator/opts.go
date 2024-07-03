@@ -21,7 +21,6 @@ const (
 type Options struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	Network           specqbft.Network
-	Domain            spectypes.DomainType
 	Beacon            beacon.BeaconNode
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores

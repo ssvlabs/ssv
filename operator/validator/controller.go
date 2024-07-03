@@ -929,7 +929,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts := c.validatorOptions
 		opts.SSVShare = share
 		opts.Operator = operator
-		opts.Domain = c.networkConfig.Domain
 
 		logger := c.logger.With([]zap.Field{
 			zap.String("committee", fields.FormatCommittee(operator.Committee)),
@@ -1175,7 +1174,7 @@ func SetupCommitteeRunners(
 			OperatorSigner:    options.OperatorSigner,
 			SigningPK:         options.SSVShare.ValidatorPubKey[:], // TODO right val?
 			SignatureVerifier: options.SignatureVerifier,
-			Domain:            options.Domain,
+			Domain:            options.NetworkConfig.Domain,
 			ValueCheckF:       nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
@@ -1189,7 +1188,7 @@ func SetupCommitteeRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.Domain, options.Operator.CommitteeID[:], role)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.Domain, options.Operator.CommitteeID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
@@ -1200,7 +1199,7 @@ func SetupCommitteeRunners(
 		epoch := options.BeaconNetwork.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch) // TODO: (Alan) fix slashing check (committee is not 1 pubkey)
 		crunner := runner.NewCommitteeRunner(
-			options.Domain,
+			options.NetworkConfig.Domain,
 			options.BeaconNetwork.GetBeaconNetwork(),
 			shares,
 			buildController(spectypes.RoleCommittee, valCheck),
