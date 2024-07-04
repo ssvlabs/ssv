@@ -26,7 +26,8 @@ const (
 	appSpecificWeight = 0
 
 	// P6
-	ipColocationFactorThreshold = 10
+	// TODO: REVERT!
+	ipColocationFactorThreshold = 1000
 	ipColocationFactorWeight    = -topicScoreCap
 
 	// P7
