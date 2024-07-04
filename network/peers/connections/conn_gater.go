@@ -85,7 +85,7 @@ func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.Di
 }
 
 // TODO: REVERT!
-const DISABLE_IP_RATE_LIMIT = false
+const DISABLE_IP_RATE_LIMIT = true
 
 func (n *connGater) validateDial(addr multiaddr.Multiaddr) bool {
 	if DISABLE_IP_RATE_LIMIT {
