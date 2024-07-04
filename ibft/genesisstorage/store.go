@@ -1,4 +1,4 @@
-package storage
+package genesisstorage
 
 import (
 	"encoding/binary"
@@ -6,10 +6,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
