@@ -29,7 +29,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
-	"github.com/ssvlabs/ssv/genesisadapter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -267,7 +266,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
-		genesisKeyManager := &genesisadapter.GenesisKeyManagerAdapter{KeyManager: keyManager}
+		genesisKeyManager := &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.KeyManager = genesisKeyManager
 
 		if cfg.WsAPIPort != 0 {
