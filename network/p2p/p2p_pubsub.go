@@ -219,7 +219,6 @@ func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) err
 	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
-		n.interfaceLogger.Debug("subscribing to topic", fields.Topic(topic))
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")
 			return err
