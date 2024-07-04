@@ -84,7 +84,13 @@ func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.Di
 	return true, 0
 }
 
+// TODO: REVERT!
+const DISABLE_IP_RATE_LIMIT = false
+
 func (n *connGater) validateDial(addr multiaddr.Multiaddr) bool {
+	if DISABLE_IP_RATE_LIMIT {
+		return true
+	}
 	ip, err := manet.ToIP(addr)
 	if err != nil {
 		return false
