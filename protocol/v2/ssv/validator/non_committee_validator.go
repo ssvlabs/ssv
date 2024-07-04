@@ -46,8 +46,9 @@ type NonCommitteeOptions struct {
 func NewNonCommitteeValidator(identifier exporter_message.MessageID, opts NonCommitteeOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:                types.GetDefaultDomain(),
-		Storage:               opts.Storage.Get(identifier.GetRoleType()),
+		Domain:  types.GetDefaultDomain(),
+		Storage: opts.Storage.Get(identifier.GetRoleType()),
+
 		Network:               opts.Network,
 		SignatureVerification: true,
 	}
@@ -82,6 +83,11 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
 		return
+	}
+
+	if msg.MsgID.GetRoleType() == spectypes.RoleSyncCommitteeContribution {
+		println("<<<<<<<<<<<<<<<<<<<<<<<<works>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+		logger.Fatal("works!!!")
 	}
 
 	slot := partialSigMessages.Slot
