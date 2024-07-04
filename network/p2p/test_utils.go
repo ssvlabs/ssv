@@ -140,19 +140,9 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-
-	// hash, err := keys.OperatorKey.StorageHash()
-	if err != nil {
-		panic(err)
-	}
-
 	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, ssv_testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
-	// cfg.NodeStorage = mock.NodeStorage{
-	// 	MockPrivateKeyHash:              hash,
-	// 	RegisteredOperatorPublicKeyPEMs: []string{},
-	// }
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, err
@@ -166,8 +156,6 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 
 	cfg.NodeStorage = ns
 	cfg.Metrics = nil
-
-	// cfg.MessageValidator = nil //validation.NewMessageValidator(networkconfig.TestNetwork)
 
 	ctrl := gomock.NewController(t)
 	cfg.MessageValidator = newMockMessageValidator(ctrl, networkconfig.TestNetwork, ks, shares)

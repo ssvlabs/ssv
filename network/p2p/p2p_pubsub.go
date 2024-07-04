@@ -252,7 +252,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 
 		signedSSVMessage := &spectypes.SignedSSVMessage{}
 		if err := signedSSVMessage.Decode(msg.GetData()); err != nil {
-			return fmt.Errorf("message was not decoded: %w", err)
+			return fmt.Errorf("signed message was not decoded: %w", err)
 		}
 		decodedMsg, err := queue.DecodeSignedSSVMessage(signedSSVMessage)
 		if err != nil {

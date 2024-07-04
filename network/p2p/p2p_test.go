@@ -433,8 +433,6 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		MsgID:   id,
 		Data:    data,
 	}
-	// Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv"),
-	// Signers:   []spectypes.OperatorID{1, 3, 4},
 	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
 	require.NoError(t, err)
 
@@ -442,7 +440,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 }
 
 func dummyMsgAttester(t *testing.T, pkHex string, height int) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
-	return dummyMsg(t, pkHex, height, spectypes.RunnerRole(spectypes.BNRoleAttester))
+	return dummyMsg(t, pkHex, height, spectypes.RoleCommittee)
 }
 
 func dummySignSSVMessage(ssvMessage *spectypes.SSVMessage) ([]byte, error) {

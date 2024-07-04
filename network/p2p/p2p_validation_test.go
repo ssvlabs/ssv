@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	cryptorand "crypto/rand"
 	"fmt"
 	"math/rand"
 	"os"
@@ -43,13 +42,14 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	defer cancel()
 
 	// Create 20 fake validator public keys.
+	// validators := make([]string, validatorCount)
+	// for i := 0; i < validatorCount; i++ {
+	// 	var validator [48]byte
+	// 	cryptorand.Read(validator[:])
+	// 	validators[i] = hex.EncodeToString(validator[:])
+	// }
 	validators := make([]string, validatorCount)
-	for i := 0; i < validatorCount; i++ {
-		var validator [48]byte
-		cryptorand.Read(validator[:])
-		validators[i] = "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
-	}
-
+	validators[0] = "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
 		acceptedRole = spectypes.BNRoleProposer
@@ -272,10 +272,6 @@ func (v *MockMessageValidator) ValidatorForTopic(topic string) func(ctx context.
 func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return v.ValidateFunc(ctx, p, pmsg)
 }
-
-// func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
-// 	panic("not implemented") // TODO: Implement
-// }
 
 func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	panic("not implemented") // TODO: Implement
