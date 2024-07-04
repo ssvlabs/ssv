@@ -207,7 +207,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RunnerRole(spectypes.BNRoleAttester))
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RoleCommittee)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,

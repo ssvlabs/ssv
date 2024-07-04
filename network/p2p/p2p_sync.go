@@ -86,7 +86,8 @@ func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPe
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
 	// TODO: fork support
-	topics := commons.CommitteeTopicID(spectypes.CommitteeID(senderID[16:]))
+	cmtid := n.nodeStorage.ValidatorStore().Validator(senderID[:]).CommitteeID()
+	topics := commons.CommitteeTopicID(spectypes.CommitteeID(cmtid))
 	for _, topic := range topics {
 		ps, err = n.topicsCtrl.Peers(topic)
 		if err != nil {
