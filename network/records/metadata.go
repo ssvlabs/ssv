@@ -14,6 +14,8 @@ type NodeMetadata struct {
 	ConsensusNode string
 	// Subnets represents the subnets that our node is subscribed to
 	Subnets string
+	// SSV network version
+	SSVForkVersion bool
 }
 
 // Encode encodes the metadata into bytes

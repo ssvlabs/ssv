@@ -6,11 +6,15 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
+
+// Epoch to start fork version
+const SSVForkEpoch phase0.Epoch = 295185
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
@@ -67,4 +71,9 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+}
+
+func (n NetworkConfig) SSVFork() bool {
+	currentEpoch := n.Beacon.EstimatedCurrentEpoch()
+	return currentEpoch >= SSVForkEpoch
 }

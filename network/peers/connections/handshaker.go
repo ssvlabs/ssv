@@ -53,6 +53,8 @@ type handshaker struct {
 	net        libp2pnetwork.Network
 
 	subnetsProvider SubnetsProvider
+
+	ssvfork bool
 }
 
 // HandshakerCfg is the configuration for creating an handshaker instance
@@ -66,6 +68,7 @@ type HandshakerCfg struct {
 	IDService       identify.IDService
 	OperatorSigner  keys.OperatorSigner
 	SubnetsProvider SubnetsProvider
+	SSVFork         bool
 }
 
 // NewHandshaker creates a new instance of handshaker
@@ -81,6 +84,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 		peerInfos:       cfg.PeerInfos,
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
+		ssvfork:         cfg.SSVFork,
 	}
 	return h
 }
@@ -152,10 +156,10 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 		zap.String("networkID", ni.GetNodeInfo().NetworkID),
 	)
 
-	// TODO: (Alan) revert
-	// if !strings.Contains(ni.Metadata.NodeVersion, "ALANTEST") {
-	// 	return errors.New("non Alan node version is not supported")
-	// }
+	// Check if a node is fork version
+	if !h.ssvfork && !ni.Metadata.SSVForkVersion {
+		return errors.New("non fork node version is not supported")
+	}
 
 	return nil
 }

@@ -208,6 +208,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
+		cfg.P2pNetworkConfig.SSVForkVersion = networkConfig.SSVFork()
 
 		validatorsMap := validators.New(cmd.Context())
 
@@ -221,9 +222,9 @@ var StartNodeCmd = &cobra.Command{
 
 		var messageValidator validation.MessageValidator
 
-		alanFork := true
+		// alanFork := true
 
-		if alanFork {
+		if networkConfig.SSVFork() {
 			messageValidator = validation.New(
 				networkConfig,
 				validatorStore,
@@ -320,7 +321,7 @@ var StartNodeCmd = &cobra.Command{
 				"consensus client": consensusClient.(nodeprobe.Node),
 			},
 		)
-
+		consensusClient.GetBeaconNetwork().EstimatedCurrentEpoch()
 		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
 		logger.Info("ethereum node(s) are healthy")

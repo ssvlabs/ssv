@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 const (
@@ -172,10 +173,9 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
-		// TODO: (Alan) revert
-		// NodeVersion: commons.GetNodeVersion(),
-		NodeVersion: "ALANTEST",
-		Subnets:     records.Subnets(n.subnets).String(),
+		SSVForkVersion: n.cfg.SSVForkVersion,
+		NodeVersion:    commons.GetNodeVersion(),
+		Subnets:        records.Subnets(n.subnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
@@ -214,6 +214,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		IDService:       ids,
 		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
+		SSVFork:         n.cfg.SSVForkVersion,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
