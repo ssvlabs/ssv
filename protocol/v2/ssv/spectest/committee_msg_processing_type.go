@@ -16,7 +16,10 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
@@ -193,9 +196,54 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	require.NoError(t, err)
 
 	// override
-	test.PostDutyCommittee = committee
+	ssvCommittee := &validator.Committee{}
 
-	root, err := committee.GetRoot()
+	ssvCommittee.Shares = committee.Share
+	ssvCommittee.Operator = &committee.CommitteeMember
+	ssvCommittee.Runners = make(map[phase0.Slot]*runner.CommitteeRunner)
+
+	for slot, r := range committee.Runners {
+		fixedRunner := &runner.CommitteeRunner{}
+		br := r.GetBaseRunner()
+		ctrl := &controller.Controller{
+			Height:          br.QBFTController.Height,
+			CommitteeMember: ssvCommittee.Operator,
+			Identifier:      br.QBFTController.Identifier,
+		}
+
+		for _, inst := range br.QBFTController.StoredInstances {
+			ctrl.StoredInstances = append(ctrl.StoredInstances, instance.NewInstance(
+				nil,
+				inst.State.CommitteeMember,
+				inst.State.ID,
+				inst.GetHeight(),
+			))
+		}
+
+		fixedRunner.BaseRunner = &runner.BaseRunner{
+			State: &runner.State{
+				PreConsensusContainer:  br.State.PreConsensusContainer,
+				PostConsensusContainer: br.State.PostConsensusContainer,
+				DecidedValue:           br.State.DecidedValue,
+				StartingDuty:           br.State.StartingDuty,
+				Finished:               br.State.Finished,
+			},
+			Share:          make(map[phase0.ValidatorIndex]*types.Share),
+			BeaconNetwork:  br.BeaconNetwork,
+			RunnerRoleType: br.RunnerRoleType,
+			QBFTController: ctrl,
+		}
+		fixedRunner.BaseRunner.Share = br.Share
+		fixedRunner.BaseRunner.State.RunningInstance = &instance.Instance{
+			State: br.State.RunningInstance.State,
+		}
+
+		ssvCommittee.Runners[slot] = fixedRunner
+	}
+
+	test.PostDutyCommittee = ssvCommittee
+
+	root, err := ssvCommittee.GetRoot()
 	require.NoError(t, err)
 
 	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])

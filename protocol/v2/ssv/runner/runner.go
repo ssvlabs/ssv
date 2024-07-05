@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"encoding/json"
 	"sync"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -64,6 +65,66 @@ type BaseRunner struct {
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
+}
+
+func (b *BaseRunner) Encode() ([]byte, error) {
+	return json.Marshal(b)
+}
+
+func (b *BaseRunner) Decode(data []byte) error {
+	return json.Unmarshal(data, &b)
+}
+
+func (b *BaseRunner) MarshalJSON() ([]byte, error) {
+	type BaseRunnerAlias struct {
+		//State *State // TODO FIX THIS
+		Share map[phase0.ValidatorIndex]*spectypes.Share
+		//QBFTController     *controller.Controller// TODO FIX THIS
+		BeaconNetwork      spectypes.BeaconNetwork
+		RunnerRoleType     spectypes.RunnerRole
+		highestDecidedSlot phase0.Slot
+	}
+
+	// Create object and marshal
+	alias := &BaseRunnerAlias{
+		//State: b.State,
+		Share: b.Share,
+		//QBFTController:     b.QBFTController,// TODO FIX THIS
+		BeaconNetwork:      b.BeaconNetwork,
+		RunnerRoleType:     b.RunnerRoleType,
+		highestDecidedSlot: b.highestDecidedSlot,
+	}
+
+	byts, err := json.Marshal(alias)
+
+	return byts, err
+}
+
+func (b *BaseRunner) UnmarshalJSON(data []byte) error {
+	type BaseRunnerAlias struct {
+		//State *State
+		Share map[phase0.ValidatorIndex]*spectypes.Share
+		//QBFTController     *controller.Controller
+		BeaconNetwork      spectypes.BeaconNetwork
+		RunnerRoleType     spectypes.RunnerRole
+		highestDecidedSlot phase0.Slot
+	}
+
+	// Unmarshal the JSON data into the auxiliary struct
+	aux := &BaseRunnerAlias{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Assign fields
+	//b.State = aux.State // TODO FIX THIS
+	b.Share = aux.Share
+	//b.QBFTController = aux.QBFTController // TODO FIX THIS
+	b.BeaconNetwork = aux.BeaconNetwork
+	b.RunnerRoleType = aux.RunnerRoleType
+	b.highestDecidedSlot = aux.highestDecidedSlot
+
+	return nil
 }
 
 // SetHighestDecidedSlot set highestDecidedSlot for base runner

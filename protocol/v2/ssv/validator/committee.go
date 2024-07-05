@@ -316,28 +316,16 @@ func (c *Committee) GetRoot() ([32]byte, error) {
 
 func (c *Committee) MarshalJSON() ([]byte, error) {
 	type CommitteeAlias struct {
-		Runners                 map[phase0.Slot]*runner.CommitteeRunner
-		Operator                spectypes.CommitteeMember
-		Shares                  map[phase0.ValidatorIndex]*spectypes.Share
-		HighestAttestingSlotMap map[string]phase0.Slot
-		BeaconNetwork           spectypes.BeaconNetwork
-		Queues                  map[phase0.Slot]queueContainer
-	}
-
-	// Convert HighestAttestingSlotMap to a map with string keys
-	stringKeyMap := make(map[string]phase0.Slot)
-	for k, v := range c.HighestAttestingSlotMap {
-		stringKeyMap[phase0.BLSPubKey(k).String()] = v // Assuming spectypes.ValidatorPK has a String() method
+		Runners  map[phase0.Slot]*runner.CommitteeRunner
+		Operator *spectypes.CommitteeMember
+		Shares   map[phase0.ValidatorIndex]*spectypes.Share
 	}
 
 	// Create object and marshal
 	alias := &CommitteeAlias{
-		Runners:                 c.Runners,
-		Operator:                *c.Operator,
-		Shares:                  c.Shares,
-		HighestAttestingSlotMap: stringKeyMap,
-		BeaconNetwork:           c.BeaconNetwork,
-		Queues:                  c.Queues,
+		Runners:  c.Runners,
+		Operator: c.Operator,
+		Shares:   c.Shares,
 	}
 
 	byts, err := json.Marshal(alias)
@@ -345,27 +333,11 @@ func (c *Committee) MarshalJSON() ([]byte, error) {
 	return byts, err
 }
 
-func stringToBLSPubKey(s string) (phase0.BLSPubKey, error) {
-	var pubKey phase0.BLSPubKey
-	decoded, err := hex.DecodeString(s)
-	if err != nil {
-		return pubKey, err
-	}
-	if len(decoded) != len(pubKey) {
-		return pubKey, fmt.Errorf("invalid length, got %d, want %d", len(decoded), len(pubKey))
-	}
-	copy(pubKey[:], decoded)
-	return pubKey, nil
-}
-
 func (c *Committee) UnmarshalJSON(data []byte) error {
 	type CommitteeAlias struct {
-		Runners                 map[phase0.Slot]*runner.CommitteeRunner
-		Operator                spectypes.CommitteeMember
-		Shares                  map[phase0.ValidatorIndex]*spectypes.Share
-		HighestAttestingSlotMap map[string]phase0.Slot
-		BeaconNetwork           spectypes.BeaconNetwork
-		Queues                  map[phase0.Slot]queueContainer
+		Runners  map[phase0.Slot]*runner.CommitteeRunner
+		Operator *spectypes.CommitteeMember
+		Shares   map[phase0.ValidatorIndex]*spectypes.Share
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -374,23 +346,10 @@ func (c *Committee) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	// Convert HighestAttestingSlotMap to a map with string keys
-	highestAttestingSlotMap := make(map[spectypes.ValidatorPK]phase0.Slot)
-	for k, v := range aux.HighestAttestingSlotMap {
-		pk, err := stringToBLSPubKey(k)
-		if err != nil {
-			return err
-		}
-		highestAttestingSlotMap[spectypes.ValidatorPK(pk)] = v // Assuming spectypes.ValidatorPK has a String() method
-	}
-
 	// Assign fields
 	c.Runners = aux.Runners
-	c.Operator = &aux.Operator
+	c.Operator = aux.Operator
 	c.Shares = aux.Shares
-	c.HighestAttestingSlotMap = highestAttestingSlotMap
-	c.BeaconNetwork = aux.BeaconNetwork
-	c.Queues = aux.Queues
 
 	return nil
 }

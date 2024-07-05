@@ -98,6 +98,68 @@ func (cr *CommitteeRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
+func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
+	type CommitteeAlias struct {
+		BaseRunner     *BaseRunner
+		beacon         beacon.BeaconNode
+		network        specqbft.Network
+		signer         types.BeaconSigner
+		operatorSigner types.OperatorSigner
+		valCheck       specqbft.ProposedValueCheckF
+	}
+
+	// Create object and marshal
+	alias := &CommitteeAlias{
+		BaseRunner:     cr.BaseRunner,
+		beacon:         cr.beacon,
+		network:        cr.network,
+		signer:         cr.signer,
+		operatorSigner: cr.operatorSigner,
+		valCheck:       cr.valCheck,
+	}
+
+	byts, err := json.Marshal(alias)
+
+	return byts, err
+}
+
+func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
+	type CommitteeAlias struct {
+		BaseRunner     *BaseRunner
+		beacon         beacon.BeaconNode
+		network        specqbft.Network
+		signer         types.BeaconSigner
+		operatorSigner types.OperatorSigner
+		valCheck       specqbft.ProposedValueCheckF
+		//
+		//stoppedValidators map[spectypes.ValidatorPK]struct{}
+		//
+		//started       time.Time
+		//consensusDone time.Time
+		//postStarted   time.Time
+	}
+
+	// Unmarshal the JSON data into the auxiliary struct
+	aux := &CommitteeAlias{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Assign fields
+	cr.BaseRunner = aux.BaseRunner
+	cr.beacon = aux.beacon
+	cr.network = aux.network
+	cr.signer = aux.signer
+	cr.operatorSigner = aux.operatorSigner
+	cr.valCheck = aux.valCheck
+	//cr.stoppedValidators = aux.stoppedValidators
+	//cr.started = aux.started
+	//cr.consensusDone = aux.consensusDone
+	//cr.postStarted = aux.postStarted
+
+	return nil
+}
+
 func (cr *CommitteeRunner) GetBaseRunner() *BaseRunner {
 	return cr.BaseRunner
 }
