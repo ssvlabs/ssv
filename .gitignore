@@ -61,3 +61,9 @@ bin/
 patches/
 
 differ
+e2e/crash-logs/beacon_proxy.txt
+e2e/crash-logs/e2e-logs_catcher-run-bf2e22b08e6e.txt
+e2e/crash-logs/ssv-node-1.txt
+e2e/crash-logs/ssv-node-2.txt
+e2e/crash-logs/ssv-node-3.txt
+e2e/crash-logs/ssv-node-4.txt
