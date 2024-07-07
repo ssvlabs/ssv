@@ -181,7 +181,7 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 }
 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) ([]spectypes.OperatorID, []phase0.ValidatorIndex, error) {
-	if mv.committeeRole(msgID.GetRoleType()) {
+	if msgID.GetRoleType() == spectypes.RoleCommittee {
 		// TODO: add metrics and logs for committee role
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID

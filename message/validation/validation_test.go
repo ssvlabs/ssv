@@ -743,7 +743,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						require.NoError(t, err)
 
 						senderID := shares.active.ValidatorPubKey[:]
-						if validator.committeeRole(role) {
+						if role == spectypes.RoleCommittee {
 							senderID = encodedCommitteeID
 						}
 						ssvMessage := &spectypes.SSVMessage{
@@ -757,7 +757,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						receivedAt := netCfg.Beacon.GetSlotStartTime(spectestingutils.TestingDutySlot)
 						var topicID string
 						topicID = commons.ValidatorTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())[0]
-						if validator.committeeRole(role) {
+						if role == spectypes.RoleCommittee {
 							topicID = commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 						}
 
@@ -822,7 +822,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						require.NoError(t, err)
 
 						pk := shares.active.ValidatorPubKey[:]
-						if validator.committeeRole(role) {
+						if role == spectypes.RoleCommittee {
 							pk = encodedCommitteeID
 						}
 						ssvMessage := &spectypes.SSVMessage{
@@ -835,7 +835,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 						receivedAt := netCfg.Beacon.GetSlotStartTime(spectestingutils.TestingDutySlot)
 						topicID := commons.ValidatorTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())[0]
-						if validator.committeeRole(role) {
+						if role == spectypes.RoleCommittee {
 							topicID = commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 						}
 						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
@@ -1032,7 +1032,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			role, receivedAt := role, receivedAt
 			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
 				senderID := shares.active.ValidatorPubKey[:]
-				if validator.committeeRole(role) {
+				if role == spectypes.RoleCommittee {
 					senderID = encodedCommitteeID
 				}
 
@@ -1041,7 +1041,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				var topicID string
 				topicID = commons.ValidatorTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())[0]
-				if validator.committeeRole(role) {
+				if role == spectypes.RoleCommittee {
 					topicID = commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 				}
 				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
@@ -1310,7 +1310,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			role, round := role, round
 			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
 				senderID := shares.active.ValidatorPubKey[:]
-				if validator.committeeRole(role) {
+				if role == spectypes.RoleCommittee {
 					senderID = encodedCommitteeID
 				}
 
@@ -1323,7 +1323,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				var topicID string
 				topicID = commons.ValidatorTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())[0]
-				if validator.committeeRole(role) {
+				if role == spectypes.RoleCommittee {
 					topicID = commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 				}
 

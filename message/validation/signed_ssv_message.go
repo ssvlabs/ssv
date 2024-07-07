@@ -19,7 +19,6 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
-		// TODO: will return when a non-genesis is malformed
 		if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
 			return nil, ErrGenesisSignedSSVMessage
 		}
@@ -160,7 +159,7 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 // topicMatches checks if the message was sent on the right topic.
 func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic string) bool {
 	var topics []string
-	if mv.committeeRole(ssvMessage.GetID().GetRoleType()) {
+	if ssvMessage.GetID().GetRoleType() == spectypes.RoleCommittee {
 		cid := spectypes.CommitteeID(ssvMessage.GetID().GetDutyExecutorID()[16:])
 		topics = commons.CommitteeTopicID(cid)
 	} else {
