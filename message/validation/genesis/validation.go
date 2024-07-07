@@ -46,7 +46,7 @@ const (
 
 	maxMessageSize             = maxConsensusMsgSize
 	maxConsensusMsgSize        = 6291829
-	MaxPartialSignatureMsgSize = 1952
+	maxPartialSignatureMsgSize = 1952
 	allowedRoundsInFuture      = 1
 	allowedRoundsInPast        = 2
 	lateSlotAllowance          = 2
@@ -468,10 +468,10 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 			}
 
 		case spectypes.SSVPartialSignatureMsgType:
-			if len(ssvMessage.Data) > MaxPartialSignatureMsgSize {
+			if len(ssvMessage.Data) > maxPartialSignatureMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
-				e.want = MaxPartialSignatureMsgSize
+				e.want = maxPartialSignatureMsgSize
 				return nil, descriptor, e
 			}
 

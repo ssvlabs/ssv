@@ -131,6 +131,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		panic(err)
 	}
 
+	// TODO: (Alan) decide if the code in this comment is needed, else remove
 	//db, err := kv.NewInMemory(logger, basedb.Options{})
 	//if err != nil {
 	//	return nil, err
@@ -152,6 +153,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
+	// TODO: (Alan) decide if the code in this comment is needed, else remove
 	cfg.MessageValidator = nil //validation.New(
 	//networkconfig.TestNetwork,
 	//nodeStorage.ValidatorStore(),
