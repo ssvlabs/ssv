@@ -299,9 +299,7 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 		stateBySlot := consensusState.GetOrCreate(signer)
 		signerStateInterface, ok := stateBySlot.Get(msgSlot)
 		if !ok {
-			signerState = NewSignerState()
-			signerState.Reset(consensusMessage.Round)
-
+			signerState = NewSignerState(consensusMessage.Round)
 			stateBySlot.Put(msgSlot, signerState)
 			mv.pruneOldSlots(stateBySlot, msgSlot)
 		} else {

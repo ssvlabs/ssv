@@ -15,13 +15,10 @@ type SignerState struct {
 	SeenSigners   map[string]struct{}
 }
 
-func NewSignerState() *SignerState {
-	return &SignerState{
-		Round:         specqbft.FirstRound,
-		SeenSigners:   make(map[string]struct{}),
-		MessageCounts: MessageCounts{},
-		ProposalData:  []byte{},
-	}
+func NewSignerState(round specqbft.Round) *SignerState {
+	s := &SignerState{}
+	s.Reset(round)
+	return s
 }
 
 // Reset resets the state's round, message counts, and proposal data to the given values.

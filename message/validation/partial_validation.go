@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
@@ -225,7 +226,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 
 	signerStateInterface, ok := stateBySlot.Get(messageSlot)
 	if !ok {
-		signerState = NewSignerState()
+		signerState = NewSignerState(specqbft.FirstRound)
 		stateBySlot.Put(messageSlot, signerState)
 		mv.pruneOldSlots(stateBySlot, messageSlot)
 	} else {
