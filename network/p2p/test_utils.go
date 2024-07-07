@@ -179,6 +179,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
+		// TODO: (Alan) decide if the code in this comment is needed, else remove
 		cfg.MessageValidator = nil //validation.New(
 		//networkconfig.TestNetwork,
 		//nodeStorage.ValidatorStore(),
