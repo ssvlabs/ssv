@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -98,8 +100,6 @@ type Controller interface {
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
-	ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
-	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
@@ -117,6 +117,8 @@ type Controller interface {
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
+
+	duties.DutyExecutor
 }
 
 type nonCommitteeValidator struct {
@@ -695,6 +697,10 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 // GetValidator returns a validator instance from ValidatorsMap
 func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
+}
+
+func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty) {
+	panic("implement me")
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty) {

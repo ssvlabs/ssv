@@ -221,9 +221,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
-	// TODO ALAN: revert
-	return nil
-
 	if ec.isClosed() {
 		return ErrClosed
 	}
