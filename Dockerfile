@@ -66,4 +66,3 @@ EXPOSE 5678 5000 4000/udp
 ENV GODEBUG="netdns=go"
 
 #ENTRYPOINT ["/go/bin/ssvnode"]
-
