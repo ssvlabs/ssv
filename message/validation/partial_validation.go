@@ -14,7 +14,7 @@ import (
 
 func (mv *messageValidator) validatePartialSignatureMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
-	committeeData CommitteeData,
+	committeeInfo CommitteeInfo,
 	receivedAt time.Time,
 ) (
 	*spectypes.PartialSignatureMessages,
@@ -36,13 +36,13 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, e
 	}
 
-	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeData.indices); err != nil {
+	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.indices); err != nil {
 		return nil, err
 	}
 
 	msgID := ssvMessage.GetID()
 	state := mv.consensusState(msgID)
-	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeData, receivedAt, state); err != nil {
+	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedAt, state); err != nil {
 		return nil, err
 	}
 
@@ -126,7 +126,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
-	committeeData CommitteeData,
+	committeeInfo CommitteeInfo,
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
@@ -146,7 +146,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		}
 	}
 
-	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeData.indices); err != nil {
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.indices); err != nil {
 		return err
 	}
 
@@ -175,12 +175,12 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
-	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeData.indices, signerStateBySlot); err != nil {
+	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.indices, signerStateBySlot); err != nil {
 		return err
 	}
 
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
-	clusterValidatorCount := len(committeeData.indices)
+	clusterValidatorCount := len(committeeInfo.indices)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster

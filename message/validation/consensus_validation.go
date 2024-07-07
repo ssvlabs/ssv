@@ -23,7 +23,7 @@ import (
 
 func (mv *messageValidator) validateConsensusMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
-	committeeData CommitteeData,
+	committeeInfo CommitteeInfo,
 	receivedAt time.Time,
 ) (*specqbft.Message, error) {
 	ssvMessage := signedSSVMessage.SSVMessage
@@ -44,17 +44,17 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.GetOperatorIDs()))
 
-	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeData.operatorIDs); err != nil {
+	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.operatorIDs); err != nil {
 		return consensusMessage, err
 	}
 
 	state := mv.consensusState(signedSSVMessage.SSVMessage.GetID())
 
-	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeData.operatorIDs, receivedAt, state); err != nil {
+	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo.operatorIDs, receivedAt, state); err != nil {
 		return consensusMessage, err
 	}
 
-	if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeData.indices, receivedAt, state); err != nil {
+	if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeInfo.indices, receivedAt, state); err != nil {
 		return consensusMessage, err
 	}
 
@@ -300,14 +300,14 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 		signerStateInterface, ok := stateBySlot.Get(msgSlot)
 		if !ok {
 			signerState = NewSignerState()
-			signerState.ResetRound(consensusMessage.Round)
+			signerState.Reset(consensusMessage.Round)
 
 			stateBySlot.Put(msgSlot, signerState)
 			mv.pruneOldSlots(stateBySlot, msgSlot)
 		} else {
 			signerState = signerStateInterface.(*SignerState)
 			if consensusMessage.Round > signerState.Round {
-				signerState.ResetRound(consensusMessage.Round)
+				signerState.Reset(consensusMessage.Round)
 			}
 		}
 

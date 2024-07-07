@@ -135,12 +135,12 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
-	committeeData, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err
 	}
 
-	if err := mv.committeeChecks(signedSSVMessage, committeeData, topic); err != nil {
+	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
 		return decodedMessage, err
 	}
 
@@ -151,14 +151,14 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeData, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeData, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
@@ -171,13 +171,13 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	return decodedMessage, nil
 }
 
-func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeData CommitteeData, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committeeData.operatorIDs); err != nil {
+func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
+	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committeeInfo.operatorIDs); err != nil {
 		return err
 	}
 
 	// Rule: Check if message was sent in the correct topic
-	messageTopics := commons.CommitteeTopicID(committeeData.committeeID)
+	messageTopics := commons.CommitteeTopicID(committeeInfo.committeeID)
 	topicBaseName := commons.GetTopicBaseName(topic)
 	if !slices.Contains(messageTopics, topicBaseName) {
 		e := ErrIncorrectTopic
@@ -203,13 +203,13 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 	return mutex
 }
 
-type CommitteeData struct {
+type CommitteeInfo struct {
 	operatorIDs []spectypes.OperatorID
 	indices     []phase0.ValidatorIndex
 	committeeID spectypes.CommitteeID
 }
 
-func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeData, error) {
+func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
@@ -219,7 +219,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		if committee == nil {
 			e := ErrNonExistentCommitteeID
 			e.got = hex.EncodeToString(committeeID[:])
-			return CommitteeData{}, e
+			return CommitteeInfo{}, e
 		}
 
 		validatorIndices := make([]phase0.ValidatorIndex, 0)
@@ -230,10 +230,10 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}
 
 		if len(validatorIndices) == 0 {
-			return CommitteeData{}, ErrNoValidators
+			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return CommitteeData{
+		return CommitteeInfo{
 			operatorIDs: committee.Operators,
 			indices:     validatorIndices,
 			committeeID: committeeID,
@@ -244,30 +244,30 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	if err != nil {
 		e := ErrDeserializePublicKey
 		e.innerErr = err
-		return CommitteeData{}, e
+		return CommitteeInfo{}, e
 	}
 
 	validator := mv.validatorStore.Validator(publicKey.Serialize())
 	if validator == nil {
 		e := ErrUnknownValidator
 		e.got = publicKey.SerializeToHexStr()
-		return CommitteeData{}, e
+		return CommitteeInfo{}, e
 	}
 
 	// Rule: If validator is liquidated
 	if validator.Liquidated {
-		return CommitteeData{}, ErrValidatorLiquidated
+		return CommitteeInfo{}, ErrValidatorLiquidated
 	}
 
 	if validator.BeaconMetadata == nil {
-		return CommitteeData{}, ErrNoShareMetadata
+		return CommitteeInfo{}, ErrNoShareMetadata
 	}
 
 	// Rule: If validator is not active
 	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = validator.BeaconMetadata.Status.String()
-		return CommitteeData{}, e
+		return CommitteeInfo{}, e
 	}
 
 	var operators []spectypes.OperatorID
@@ -275,7 +275,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		operators = append(operators, c.Signer)
 	}
 
-	return CommitteeData{
+	return CommitteeInfo{
 		operatorIDs: operators,
 		indices:     []phase0.ValidatorIndex{validator.BeaconMetadata.Index},
 		committeeID: validator.CommitteeID(),

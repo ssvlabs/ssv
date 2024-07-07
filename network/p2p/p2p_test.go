@@ -233,7 +233,7 @@ func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
 	pid, maxPeers := commons.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetSenderID(), minPeers, maxPeers, waitTime, allPeersFilter)
+	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetDutyExecutorID(), minPeers, maxPeers, waitTime, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
@@ -347,14 +347,14 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 	require.NoError(t, err)
 
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, role)
-	signedMsg := &specqbft.Message{
+	qbftMsg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      2,
 		Identifier: id[:],
 		Height:     specqbft.Height(height),
 		Root:       [32]byte{0x1, 0x2, 0x3},
 	}
-	data, err := signedMsg.Encode()
+	data, err := qbftMsg.Encode()
 	require.NoError(t, err)
 
 	ssvMsg := &spectypes.SSVMessage{
