@@ -75,12 +75,15 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 
 	if test.PostDutyCommitteeRoot != hex.EncodeToString(postRoot[:]) {
 		diff := cmp.Diff(test.Committee, test.PostDutyCommittee, cmp.Exporter(func(p reflect.Type) bool { return true }))
-		logJSON(t, "test_committee", test.Committee)
-		logJSON(t, "test_post_duty_committee", test.PostDutyCommittee)
+		//// DEBUG
+		//logJSON(t, "test_committee", test.Committee)
+		//logJSON(t, "test_post_duty_committee", test.PostDutyCommittee)
+		//
 		t.Errorf("post runner state not equal: %v", diff)
 	}
 }
 
+// TODO: REMOVE when tests alignment is finished
 func logJSON(t *testing.T, name string, value interface{}) {
 	bytes, err := json.Marshal(value)
 	require.NoError(t, err)
@@ -112,7 +115,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
-			err = test.Committee.ProcessMessage(nil, msg)
+			err = test.Committee.ProcessMessage(logger, msg)
 			if err != nil {
 				lastErr = err
 			}
@@ -125,24 +128,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 }
 
 func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
-	overrideStateComparisonCommitteeTest(t, test, test.Name, reflect.TypeOf(test).String())
-}
-
-func overrideStateComparisonCommitteeTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
-	// TOOD REWORK THIS
-	committee := &ssv.Committee{}
-	basedir, err := os.Getwd()
-	require.NoError(t, err)
-	committee, err = typescomparable.UnmarshalStateComparison(basedir, name, testType, committee)
-	require.NoError(t, err)
-
-	// override
-	test.PostDutyCommittee = committee
-
-	root, err := committee.GetRoot()
-	require.NoError(t, err)
-
-	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
+	overrideStateComparisonCommitteeSpecTest(t, test, test.Name, reflect.TypeOf(test).String())
 }
 
 func (test *CommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
@@ -210,12 +196,12 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	committee.Shares = specCommittee.Share
 	committee.Operator = &specCommittee.CommitteeMember
 
-	// DEBUG
-	bytes, err := committee.MarshalJSON()
-	require.NoError(t, err)
-	err = os.WriteFile("test_serialized.json", bytes, 0644)
-	require.NoError(t, err)
-	//
+	//// DEBUG
+	//bytes, err := committee.MarshalJSON()
+	//require.NoError(t, err)
+	//err = os.WriteFile("test_serialized.json", bytes, 0644)
+	//require.NoError(t, err)
+	////
 
 	root, err := committee.GetRoot()
 	require.NoError(t, err)

@@ -61,6 +61,12 @@ func TestSSVMapping(t *testing.T) {
 		//if !strings.Contains(name, "new duty valid") { // Nil pointer panic. QBFTController is nil.
 		//	continue
 		//}
+		//if !strings.Contains(name, "new duty post decided") {
+		//	continue
+		//}
+		//if !strings.Contains(name, "shuffled happy flow duties with different validators") {
+		//	continue
+		//}
 		//fmt.Println(name)
 
 		r := prepareTest(t, logger, name, test)

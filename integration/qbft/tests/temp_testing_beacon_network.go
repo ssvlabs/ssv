@@ -2,6 +2,7 @@ package tests
 
 import (
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -56,6 +57,12 @@ func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(pubkey []byte, f
 }
 func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
 	return bn.bn.SubmitVoluntaryExit(voluntaryExit)
+}
+func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*phase0.Attestation) error {
+	return bn.bn.SubmitAttestations(attestations)
+}
+func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
+	return bn.bn.SubmitSyncMessages(msgs)
 }
 
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {
