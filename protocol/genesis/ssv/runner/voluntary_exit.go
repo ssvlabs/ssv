@@ -16,13 +16,14 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 // Duty runner for validator voluntary exit duty
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon     genesisspecssv.BeaconNode
+	beacon     beacon.BeaconNode
 	network    genesisspecssv.Network
 	signer     genesisspectypes.KeyManager
 	valCheck   genesisspecqbft.ProposedValueCheckF
@@ -36,7 +37,7 @@ type VoluntaryExitRunner struct {
 func NewVoluntaryExitRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *spectypes.Share,
-	beacon genesisspecssv.BeaconNode,
+	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
 	operatorId genesisspectypes.OperatorID,
@@ -202,7 +203,7 @@ func (r *VoluntaryExitRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *VoluntaryExitRunner) GetBeaconNode() genesisspecssv.BeaconNode {
+func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 

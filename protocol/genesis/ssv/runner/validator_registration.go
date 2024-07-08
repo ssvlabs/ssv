@@ -18,12 +18,13 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon     genesisspecssv.BeaconNode
+	beacon     beacon.BeaconNode
 	network    genesisspecssv.Network
 	signer     genesisspectypes.KeyManager
 	valCheck   genesisqbft.ProposedValueCheckF
@@ -36,7 +37,7 @@ func NewValidatorRegistrationRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
-	beacon genesisspecssv.BeaconNode,
+	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
 	operatorId genesisspectypes.OperatorID,
@@ -188,7 +189,7 @@ func (r *ValidatorRegistrationRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *ValidatorRegistrationRunner) GetBeaconNode() genesisspecssv.BeaconNode {
+func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 

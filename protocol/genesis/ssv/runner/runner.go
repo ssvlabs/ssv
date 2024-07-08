@@ -13,11 +13,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
-	GetBeaconNode() genesisspecssv.BeaconNode
+	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() genesisspecqbft.ProposedValueCheckF
 	GetSigner() genesisspectypes.KeyManager
 	GetNetwork() genesisspecssv.Network

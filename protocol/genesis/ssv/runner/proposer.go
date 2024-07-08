@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type ProposerRunner struct {
@@ -33,7 +34,7 @@ type ProposerRunner struct {
 	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
 	ProducesBlindedBlocks bool
 
-	beacon     genesisspecssv.BeaconNode
+	beacon     beacon.BeaconNode
 	network    genesisspecssv.Network
 	signer     genesisspectypes.KeyManager
 	valCheck   genesisspecqbft.ProposedValueCheckF
@@ -46,7 +47,7 @@ func NewProposerRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
-	beacon genesisspecssv.BeaconNode,
+	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
@@ -115,19 +116,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *gene
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
 	var start = time.Now()
-	if r.ProducesBlindedBlocks {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get blinded beacon block")
-		}
-	} else {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get beacon block")
-		}
+
+	// get block data
+	obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+	if err != nil {
+		return errors.Wrap(err, "failed to get beacon block")
 	}
+
 	took := time.Since(start)
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
@@ -379,7 +374,7 @@ func (r *ProposerRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() genesisspecssv.BeaconNode {
+func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 

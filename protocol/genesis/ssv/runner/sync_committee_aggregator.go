@@ -17,12 +17,13 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type SyncCommitteeAggregatorRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon     genesisspecssv.BeaconNode
+	beacon     beacon.BeaconNode
 	network    genesisspecssv.Network
 	signer     genesisspectypes.KeyManager
 	valCheck   genesisspecqbft.ProposedValueCheckF
@@ -35,7 +36,7 @@ func NewSyncCommitteeAggregatorRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
-	beacon genesisspecssv.BeaconNode,
+	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
@@ -406,7 +407,7 @@ func (r *SyncCommitteeAggregatorRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() genesisspecssv.BeaconNode {
+func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
