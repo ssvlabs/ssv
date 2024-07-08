@@ -291,7 +291,7 @@ func CreateProposal(state *types.State, config qbft.IConfig, fullData []byte, ro
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{state.Share.Committee[0].Signer},
+		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
 		Message:   *msg,
 
 		FullData: fullData,

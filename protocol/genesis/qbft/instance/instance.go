@@ -79,7 +79,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height genesisspecqbf
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
-		if proposerID == i.State.Share.Committee[0].Signer {
+		if proposerID == i.config.GetOperatorID() {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {

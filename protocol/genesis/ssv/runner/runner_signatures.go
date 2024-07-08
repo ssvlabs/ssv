@@ -30,7 +30,7 @@ func (b *BaseRunner) signBeaconObject(
 	return &genesisspectypes.PartialSignatureMessage{
 		PartialSignature: sig,
 		SigningRoot:      r,
-		Signer:           runner.GetBaseRunner().Share.Committee[0].Signer,
+		Signer:           runner.GetOperatorID(),
 	}, nil
 }
 
@@ -43,7 +43,7 @@ func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *genesisspectypes.P
 	return &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   *msg,
 		Signature: signature,
-		Signer:    b.Share.Committee[0].Signer,
+		Signer:    runner.GetOperatorID(),
 	}, nil
 }
 

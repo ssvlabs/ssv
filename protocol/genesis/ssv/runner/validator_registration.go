@@ -23,10 +23,11 @@ import (
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   genesisspecssv.BeaconNode
-	network  genesisspecssv.Network
-	signer   genesisspectypes.KeyManager
-	valCheck genesisqbft.ProposedValueCheckF
+	beacon     genesisspecssv.BeaconNode
+	network    genesisspecssv.Network
+	signer     genesisspectypes.KeyManager
+	valCheck   genesisqbft.ProposedValueCheckF
+	operatorId genesisspectypes.OperatorID
 
 	metrics metrics.ConsensusMetrics
 }
@@ -38,6 +39,7 @@ func NewValidatorRegistrationRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
+	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
@@ -47,10 +49,11 @@ func NewValidatorRegistrationRunner(
 			QBFTController: qbftController,
 		},
 
-		beacon:  beacon,
-		network: network,
-		signer:  signer,
-		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleValidatorRegistration),
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		operatorId: operatorId,
+		metrics:    metrics.NewConsensusMetrics(genesisspectypes.BNRoleValidatorRegistration),
 	}
 }
 
@@ -143,7 +146,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *gene
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.GetShare().Committee[0].Signer,
+		Signer:    r.operatorId,
 	}
 
 	// broadcast
@@ -223,4 +226,8 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *ValidatorRegistrationRunner) GetOperatorID() genesisspectypes.OperatorID {
+	return r.operatorId
 }

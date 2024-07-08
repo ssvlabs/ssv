@@ -22,10 +22,11 @@ import (
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   genesisspecssv.BeaconNode
-	network  genesisspecssv.Network
-	signer   genesisspectypes.KeyManager
-	valCheck genesisspecqbft.ProposedValueCheckF
+	beacon     genesisspecssv.BeaconNode
+	network    genesisspecssv.Network
+	signer     genesisspectypes.KeyManager
+	valCheck   genesisspecqbft.ProposedValueCheckF
+	operatorId genesisspectypes.OperatorID
 
 	voluntaryExit *phase0.VoluntaryExit
 
@@ -38,6 +39,7 @@ func NewVoluntaryExitRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
+	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
@@ -46,9 +48,11 @@ func NewVoluntaryExitRunner(
 			Share:          share,
 		},
 
-		beacon:  beacon,
-		network: network,
-		signer:  signer,
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		operatorId: operatorId,
+
 		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleVoluntaryExit),
 	}
 }
@@ -156,7 +160,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.GetShare().Committee[0].Signer,
+		Signer:    r.operatorId,
 	}
 
 	// broadcast
@@ -236,4 +240,8 @@ func (r *VoluntaryExitRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *VoluntaryExitRunner) GetOperatorID() genesisspectypes.OperatorID {
+	return r.operatorId
 }

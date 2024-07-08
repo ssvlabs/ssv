@@ -33,10 +33,11 @@ type ProposerRunner struct {
 	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
 	ProducesBlindedBlocks bool
 
-	beacon   genesisspecssv.BeaconNode
-	network  genesisspecssv.Network
-	signer   genesisspectypes.KeyManager
-	valCheck genesisspecqbft.ProposedValueCheckF
+	beacon     genesisspecssv.BeaconNode
+	network    genesisspecssv.Network
+	signer     genesisspectypes.KeyManager
+	valCheck   genesisspecqbft.ProposedValueCheckF
+	operatorId genesisspectypes.OperatorID
 
 	metrics metrics.ConsensusMetrics
 }
@@ -50,6 +51,7 @@ func NewProposerRunner(
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
@@ -60,11 +62,13 @@ func NewProposerRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(genesisspectypes.BNRoleProposer),
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		valCheck:   valCheck,
+		operatorId: operatorId,
+
+		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleProposer),
 	}
 }
 
@@ -344,7 +348,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.GetShare().Committee[0].Signer,
+		Signer:    r.operatorId,
 	}
 
 	// broadcast
@@ -495,4 +499,8 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		summary.Version = spec.DataVersionDeneb
 	}
 	return
+}
+
+func (r *ProposerRunner) GetOperatorID() genesisspectypes.OperatorID {
+	return r.operatorId
 }

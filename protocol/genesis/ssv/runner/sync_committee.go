@@ -24,10 +24,11 @@ import (
 type SyncCommitteeRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   genesisspecssv.BeaconNode
-	network  genesisspecssv.Network
-	signer   genesisspectypes.KeyManager
-	valCheck genesisspecqbft.ProposedValueCheckF
+	beacon     genesisspecssv.BeaconNode
+	network    genesisspecssv.Network
+	signer     genesisspectypes.KeyManager
+	valCheck   genesisspecqbft.ProposedValueCheckF
+	operatorId genesisspectypes.OperatorID
 
 	metrics metrics.ConsensusMetrics
 }
@@ -41,6 +42,7 @@ func NewSyncCommitteeRunner(
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
@@ -51,11 +53,12 @@ func NewSyncCommitteeRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(genesisspectypes.BNRoleSyncCommittee),
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		valCheck:   valCheck,
+		operatorId: operatorId,
+		metrics:    metrics.NewConsensusMetrics(genesisspectypes.BNRoleSyncCommittee),
 	}
 }
 
@@ -270,4 +273,8 @@ func (r *SyncCommitteeRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *SyncCommitteeRunner) GetOperatorID() genesisspectypes.OperatorID {
+	return r.operatorId
 }

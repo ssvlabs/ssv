@@ -22,10 +22,11 @@ import (
 type SyncCommitteeAggregatorRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   genesisspecssv.BeaconNode
-	network  genesisspecssv.Network
-	signer   genesisspectypes.KeyManager
-	valCheck genesisspecqbft.ProposedValueCheckF
+	beacon     genesisspecssv.BeaconNode
+	network    genesisspecssv.Network
+	signer     genesisspectypes.KeyManager
+	valCheck   genesisspecqbft.ProposedValueCheckF
+	operatorId genesisspectypes.OperatorID
 
 	metrics metrics.ConsensusMetrics
 }
@@ -39,6 +40,7 @@ func NewSyncCommitteeAggregatorRunner(
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
@@ -49,11 +51,12 @@ func NewSyncCommitteeAggregatorRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(genesisspectypes.BNRoleSyncCommitteeContribution),
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		valCheck:   valCheck,
+		operatorId: operatorId,
+		metrics:    metrics.NewConsensusMetrics(genesisspectypes.BNRoleSyncCommitteeContribution),
 	}
 }
 
@@ -375,7 +378,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *ge
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.GetShare().Committee[0].Signer,
+		Signer:    r.operatorId,
 	}
 
 	// broadcast
@@ -441,4 +444,8 @@ func (r *SyncCommitteeAggregatorRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetOperatorID() genesisspectypes.OperatorID {
+	return r.operatorId
 }

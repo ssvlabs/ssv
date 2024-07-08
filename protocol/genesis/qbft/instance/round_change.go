@@ -201,7 +201,7 @@ func isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if proposer(state, config, roundChangeMsg.Message.Round) != state.Share.Committee[0].Signer {
+	if proposer(state, config, roundChangeMsg.Message.Round) != config.GetOperatorID() {
 		return errors.New("not proposer")
 	}
 
@@ -397,7 +397,7 @@ func CreateRoundChange(state *types.State, config qbft.IConfig, newRound genesis
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{state.Share.Committee[0].Signer},
+		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
 		Message:   *msg,
 
 		FullData: fullData,

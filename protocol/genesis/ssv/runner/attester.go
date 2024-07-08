@@ -25,10 +25,11 @@ import (
 type AttesterRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   genesisspecssv.BeaconNode
-	network  genesisspecssv.Network
-	signer   genesisspectypes.KeyManager
-	valCheck genesisspecqbft.ProposedValueCheckF
+	beacon     genesisspecssv.BeaconNode
+	network    genesisspecssv.Network
+	signer     genesisspectypes.KeyManager
+	valCheck   genesisspecqbft.ProposedValueCheckF
+	operatorId genesisspectypes.OperatorID
 
 	started time.Time
 	metrics metrics.ConsensusMetrics
@@ -43,6 +44,7 @@ func NewAttesterRunnner(
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
@@ -53,10 +55,11 @@ func NewAttesterRunnner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		valCheck:   valCheck,
+		operatorId: operatorId,
 
 		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleAttester),
 	}
@@ -294,4 +297,8 @@ func (r *AttesterRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *AttesterRunner) GetOperatorID() genesisspectypes.OperatorID {
+	return r.operatorId
 }

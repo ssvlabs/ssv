@@ -21,6 +21,7 @@ type Getters interface {
 	GetValCheckF() genesisspecqbft.ProposedValueCheckF
 	GetSigner() genesisspectypes.KeyManager
 	GetNetwork() genesisspecssv.Network
+	GetOperatorID() genesisspectypes.OperatorID
 }
 
 type Runner interface {
