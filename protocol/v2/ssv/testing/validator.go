@@ -42,8 +42,10 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 				spectypes.RoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
 				spectypes.RoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
 			},
-			GenesisDutyRunners: map[genesisspectypes.BeaconRole]genesisrunner.Runner{
-				// TODO
+			GenesisOptions: validator.GenesisOptions{
+				DutyRunners: map[genesisspectypes.BeaconRole]genesisrunner.Runner{
+					// TODO
+				},
 			},
 		},
 	)

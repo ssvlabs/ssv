@@ -1,7 +1,8 @@
-package storage
+package genesisstorage
 
 import (
 	"github.com/cornelk/hashmap"
+
 	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 
