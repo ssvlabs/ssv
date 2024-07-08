@@ -87,6 +87,7 @@ func (mv *messageValidator) validateDutyCount(
 func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, validatorIndices []phase0.ValidatorIndex) (int, bool) {
 	switch msgID.GetRoleType() {
 	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		// TODO: better solution for RoleValidatorRegistration: https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667687976
 		return 2, true
 
 	case spectypes.RoleCommittee:
