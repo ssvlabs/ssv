@@ -22,7 +22,6 @@ type Options struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	Network           specqbft.Network
 	Beacon            beacon.BeaconNode
-	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
 	Operator          *spectypes.CommitteeMember

@@ -629,7 +629,7 @@ func TestSetupValidators(t *testing.T) {
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorOptions: validator.Options{
-					BeaconNetwork: networkconfig.TestNetwork.Beacon,
+					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
 				},
 				metadataLastUpdated: metadataLastMap,
