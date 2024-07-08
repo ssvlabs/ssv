@@ -62,11 +62,15 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMe
 
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
-		descriptor.Slot = phase0.Slot(m.Height)
-		descriptor.Consensus.Round = m.Round
-		descriptor.Consensus.QBFTMessageType = m.MsgType
+		if m != nil {
+			descriptor.Slot = phase0.Slot(m.Height)
+			descriptor.Consensus.Round = m.Round
+			descriptor.Consensus.QBFTMessageType = m.MsgType
+		}
 	case *spectypes.PartialSignatureMessages:
-		descriptor.Slot = m.Slot
+		if m != nil {
+			descriptor.Slot = m.Slot
+		}
 	}
 
 	return descriptor
