@@ -4,14 +4,12 @@ import (
 	"math/big"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var Mainnet = NetworkConfig{
 	Name:                 "mainnet",
 	Beacon:               beacon.NewNetwork(spectypes.MainNetwork),
-	Domain:               spectypes.GenesisMainnet,
 	GenesisEpoch:         218450,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: "0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1",

@@ -169,9 +169,9 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-
-	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
-	self := records.NewNodeInfo(domain)
+	domain := n.cfg.Network.Domain()
+	domainString := "0x" + hex.EncodeToString(domain[:])
+	self := records.NewNodeInfo(domainString)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
@@ -200,7 +200,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 
 	filters := func() []connections.HandshakeFilter {
 		return []connections.HandshakeFilter{
-			connections.NetworkIDFilter(domain),
+			connections.NetworkIDFilter(domainString),
 		}
 	}
 
@@ -255,7 +255,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
-		DomainType:  n.cfg.Network.Domain,
+		DomainType:  n.cfg.Network.Domain(),
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {

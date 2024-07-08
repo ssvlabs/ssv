@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
@@ -118,10 +118,11 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	// Rule: If domain is different then self domain
-	if !bytes.Equal(ssvMessage.GetID().GetDomain(), mv.netCfg.Domain[:]) {
+	domain := mv.netCfg.Domain()
+	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		err.want = hex.EncodeToString(domain[:])
 		return err
 	}
 

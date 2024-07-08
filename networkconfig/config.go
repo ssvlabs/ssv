@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -33,7 +33,6 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 type NetworkConfig struct {
 	Name                 string
 	Beacon               beacon.BeaconNetwork
-	Domain               spectypes.DomainType
 	GenesisEpoch         phase0.Epoch
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address
@@ -74,4 +73,26 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+}
+
+// Domain returns current domain type of the network
+func (n NetworkConfig) Domain() spectypes.DomainType {
+	fork := n.Beacon.ForkVersion()
+	switch fork {
+	case [4]byte{0, 0, 0, 0}:
+		if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
+			return spectypes.AlanMainnet
+		}
+		return spectypes.GenesisMainnet
+	case [4]byte{0x01, 0x01, 0x70, 0x00}:
+		if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
+			return spectypes.JatoAlanTestnet
+		}
+		return spectypes.JatoTestnet
+	default:
+		if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
+			return spectypes.AlanMainnet
+		}
+		return spectypes.GenesisMainnet
+	}
 }

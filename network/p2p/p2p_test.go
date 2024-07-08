@@ -9,21 +9,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -136,7 +135,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 
-	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RoleCommittee)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain(), pk, spectypes.RoleCommittee)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -346,7 +345,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, role)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain(), pk, role)
 	qbftMsg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      2,
