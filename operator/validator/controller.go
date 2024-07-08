@@ -1204,8 +1204,7 @@ func SetupCommitteeRunners(
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch) // TODO: (Alan) fix slashing check (committee is not 1 pubkey)
 		crunner := runner.NewCommitteeRunner(
-			options.NetworkConfig.Domain,
-			options.NetworkConfig.Beacon.GetBeaconNetwork(),
+			options.NetworkConfig,
 			shares,
 			buildController(spectypes.RoleCommittee, valCheck),
 			options.Beacon,
