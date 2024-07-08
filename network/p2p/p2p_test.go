@@ -363,15 +363,8 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		Data:    data,
 	}
 
-	signedSSVMsg := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{[]byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv")},
-		OperatorIDs: []spectypes.OperatorID{1, 3, 4},
-		SSVMessage:  ssvMsg,
-	}
-
-	// TODO: remove or use?
-	//signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
-	//require.NoError(t, err)
+	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
+	require.NoError(t, err)
 
 	return id, signedSSVMsg
 }

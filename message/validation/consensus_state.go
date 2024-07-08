@@ -11,8 +11,8 @@ import (
 
 // consensusID uniquely identifies a public key and role pair to keep track of state.
 type consensusID struct {
-	SenderID string
-	Role     spectypes.RunnerRole
+	DutyExecutorID string
+	Role           spectypes.RunnerRole
 }
 
 // consensusState keeps track of the signers for a given public key and role.

@@ -135,6 +135,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
+	// TODO: leverage the ValidatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err
@@ -215,7 +216,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
 
 		// Rule: Cluster does not exist
-		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
+		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole duty executor ID
 		if committee == nil {
 			e := ErrNonExistentCommitteeID
 			e.got = hex.EncodeToString(committeeID[:])
@@ -287,8 +288,8 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	defer mv.consensusStateIndexMu.Unlock()
 
 	id := consensusID{
-		SenderID: string(messageID.GetDutyExecutorID()),
-		Role:     messageID.GetRoleType(),
+		DutyExecutorID: string(messageID.GetDutyExecutorID()),
+		Role:           messageID.GetRoleType(),
 	}
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {

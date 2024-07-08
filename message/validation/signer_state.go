@@ -3,6 +3,8 @@ package validation
 // signer_state.go describes state of a signer.
 
 import (
+	"crypto/sha256"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
@@ -12,7 +14,7 @@ type SignerState struct {
 	Round         specqbft.Round
 	MessageCounts MessageCounts
 	ProposalData  []byte
-	SeenSigners   map[string]struct{}
+	SeenSigners   map[[sha256.Size]byte]struct{}
 }
 
 func NewSignerState(round specqbft.Round) *SignerState {
@@ -27,5 +29,5 @@ func (s *SignerState) Reset(round specqbft.Round) {
 	s.Round = round
 	s.MessageCounts = MessageCounts{}
 	s.ProposalData = nil
-	s.SeenSigners = make(map[string]struct{})
+	s.SeenSigners = make(map[[sha256.Size]byte]struct{})
 }

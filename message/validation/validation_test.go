@@ -19,7 +19,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -746,13 +746,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						encodedMessages, err := messages.Encode()
 						require.NoError(t, err)
 
-						senderID := shares.active.ValidatorPubKey[:]
+						dutyExecutorID := shares.active.ValidatorPubKey[:]
 						if validator.committeeRole(role) {
-							senderID = encodedCommitteeID
+							dutyExecutorID = encodedCommitteeID
 						}
 						ssvMessage := &spectypes.SSVMessage{
 							MsgType: spectypes.SSVPartialSignatureMsgType,
-							MsgID:   spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, senderID, role),
+							MsgID:   spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, dutyExecutorID, role),
 							Data:    encodedMessages,
 						}
 
@@ -1022,12 +1022,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		for role, receivedAt := range tests {
 			role, receivedAt := role, receivedAt
 			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
-				senderID := shares.active.ValidatorPubKey[:]
+				dutyExecutorID := shares.active.ValidatorPubKey[:]
 				if validator.committeeRole(role) {
-					senderID = encodedCommitteeID
+					dutyExecutorID = encodedCommitteeID
 				}
 
-				msgID := spectypes.NewMsgID(netCfg.Domain, senderID, role)
+				msgID := spectypes.NewMsgID(netCfg.Domain, dutyExecutorID, role)
 				signedSSVMessage := generateSignedMessage(ks, msgID, slot)
 
 				topicID := commons.CommitteeTopicID(committeeID)[0]
@@ -1343,12 +1343,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		for role, round := range tests {
 			role, round := role, round
 			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
-				senderID := shares.active.ValidatorPubKey[:]
+				dutyExecutorID := shares.active.ValidatorPubKey[:]
 				if validator.committeeRole(role) {
-					senderID = encodedCommitteeID
+					dutyExecutorID = encodedCommitteeID
 				}
 
-				msgID := spectypes.NewMsgID(netCfg.Domain, senderID, role)
+				msgID := spectypes.NewMsgID(netCfg.Domain, dutyExecutorID, role)
 				signedSSVMessage := generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
 					message.MsgType = specqbft.PrepareMsgType
 					message.Round = round
