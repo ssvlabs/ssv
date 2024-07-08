@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/pkg/errors"
@@ -20,7 +21,7 @@ type State struct {
 	RunningInstance        *instance.Instance
 	DecidedValue           []byte //spectypes.Encoder
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
-	StartingDuty spectypes.Duty
+	StartingDuty spectypes.Duty `json:"-"`
 	// flags
 	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
 }

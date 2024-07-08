@@ -54,15 +54,19 @@ func TestSSVMapping(t *testing.T) {
 	for name, test := range untypedTests {
 		name, test := name, test
 
-		if !strings.Contains(name, "wrong beacon vote") {
+		if !strings.Contains(name, "wrong beacon vote") { // PROBLEM WITH MARSHALING OF COMMITTEE STRUCTURE TO CALCULATE THE STATE ROOT HASH
 			continue
 		}
-		fmt.Println(name)
+
+		//if !strings.Contains(name, "new duty valid") { // Nil pointer panic. QBFTController is nil.
+		//	continue
+		//}
+		//fmt.Println(name)
 
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
-				t.Parallel()
+				//t.Parallel()
 				r.test(t)
 			})
 		}
@@ -576,26 +580,3 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 
 	return c
 }
-
-//var committeeRunnerWithShareMap = func(shareMap map[phase0.ValidatorIndex]*spectypes.Share) runner.Runner {
-//	//return baseRunnerWithShareMap(
-//	//	spectypes.RoleCommittee,
-//	//	ssv.BeaconVoteValueCheckF(
-//	//		spectestingutils.NewTestingKeyManager(),
-//	//		spectestingutils.TestingDutySlot,
-//	//		nil,
-//	//		spectestingutils.TestingDutyEpoch,
-//	//	),
-//	//	shareMap,
-//	//)
-//	return testing.baseRunner(
-//		spectypes.RoleCommittee,
-//		ssv.BeaconVoteValueCheckF(
-//			spectestingutils.NewTestingKeyManager(),
-//			spectestingutils.TestingDutySlot,
-//			nil,
-//			spectestingutils.TestingDutyEpoch,
-//		),
-//		shareMap,
-//	)
-//}

@@ -316,16 +316,16 @@ func (c *Committee) GetRoot() ([32]byte, error) {
 
 func (c *Committee) MarshalJSON() ([]byte, error) {
 	type CommitteeAlias struct {
-		Runners  map[phase0.Slot]*runner.CommitteeRunner
-		Operator *spectypes.CommitteeMember
-		Shares   map[phase0.ValidatorIndex]*spectypes.Share
+		Runners         map[phase0.Slot]*runner.CommitteeRunner
+		CommitteeMember *spectypes.CommitteeMember
+		Share           map[phase0.ValidatorIndex]*spectypes.Share
 	}
 
 	// Create object and marshal
 	alias := &CommitteeAlias{
-		Runners:  c.Runners,
-		Operator: c.Operator,
-		Shares:   c.Shares,
+		Runners:         c.Runners,
+		CommitteeMember: c.Operator,
+		Share:           c.Shares,
 	}
 
 	byts, err := json.Marshal(alias)

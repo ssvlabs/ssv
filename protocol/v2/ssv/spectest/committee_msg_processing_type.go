@@ -2,6 +2,8 @@ package spectest
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,10 +18,7 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
@@ -76,8 +75,17 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 
 	if test.PostDutyCommitteeRoot != hex.EncodeToString(postRoot[:]) {
 		diff := cmp.Diff(test.Committee, test.PostDutyCommittee, cmp.Exporter(func(p reflect.Type) bool { return true }))
+		logJSON(t, "test_committee", test.Committee)
+		logJSON(t, "test_post_duty_committee", test.PostDutyCommittee)
 		t.Errorf("post runner state not equal: %v", diff)
 	}
+}
+
+func logJSON(t *testing.T, name string, value interface{}) {
+	bytes, err := json.Marshal(value)
+	require.NoError(t, err)
+	err = os.WriteFile(fmt.Sprintf("%s_test_serialized.json", name), bytes, 0644)
+	require.NoError(t, err)
 }
 
 // Run as an individual test
@@ -121,6 +129,7 @@ func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
 }
 
 func overrideStateComparisonCommitteeTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
+	// TOOD REWORK THIS
 	committee := &ssv.Committee{}
 	basedir, err := os.Getwd()
 	require.NoError(t, err)
@@ -188,63 +197,30 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 }
 
 func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
-	committee := &ssv.Committee{}
+	specCommittee := &ssv.Committee{}
 	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	require.NoError(t, err)
+	specCommittee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, specCommittee)
 
 	require.NoError(t, err)
+	committee := &validator.Committee{}
 	committee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, committee)
 	require.NoError(t, err)
 
-	// override
-	ssvCommittee := &validator.Committee{}
+	committee.Shares = specCommittee.Share
+	committee.Operator = &specCommittee.CommitteeMember
 
-	ssvCommittee.Shares = committee.Share
-	ssvCommittee.Operator = &committee.CommitteeMember
-	ssvCommittee.Runners = make(map[phase0.Slot]*runner.CommitteeRunner)
+	// DEBUG
+	bytes, err := committee.MarshalJSON()
+	require.NoError(t, err)
+	err = os.WriteFile("test_serialized.json", bytes, 0644)
+	require.NoError(t, err)
+	//
 
-	for slot, r := range committee.Runners {
-		fixedRunner := &runner.CommitteeRunner{}
-		br := r.GetBaseRunner()
-		ctrl := &controller.Controller{
-			Height:          br.QBFTController.Height,
-			CommitteeMember: ssvCommittee.Operator,
-			Identifier:      br.QBFTController.Identifier,
-		}
-
-		for _, inst := range br.QBFTController.StoredInstances {
-			ctrl.StoredInstances = append(ctrl.StoredInstances, instance.NewInstance(
-				nil,
-				inst.State.CommitteeMember,
-				inst.State.ID,
-				inst.GetHeight(),
-			))
-		}
-
-		fixedRunner.BaseRunner = &runner.BaseRunner{
-			State: &runner.State{
-				PreConsensusContainer:  br.State.PreConsensusContainer,
-				PostConsensusContainer: br.State.PostConsensusContainer,
-				DecidedValue:           br.State.DecidedValue,
-				StartingDuty:           br.State.StartingDuty,
-				Finished:               br.State.Finished,
-			},
-			Share:          make(map[phase0.ValidatorIndex]*types.Share),
-			BeaconNetwork:  br.BeaconNetwork,
-			RunnerRoleType: br.RunnerRoleType,
-			QBFTController: ctrl,
-		}
-		fixedRunner.BaseRunner.Share = br.Share
-		fixedRunner.BaseRunner.State.RunningInstance = &instance.Instance{
-			State: br.State.RunningInstance.State,
-		}
-
-		ssvCommittee.Runners[slot] = fixedRunner
-	}
-
-	test.PostDutyCommittee = ssvCommittee
-
-	root, err := ssvCommittee.GetRoot()
+	root, err := committee.GetRoot()
 	require.NoError(t, err)
 
 	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
+
+	test.PostDutyCommittee = committee
 }

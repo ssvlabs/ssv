@@ -77,9 +77,9 @@ func (b *BaseRunner) Decode(data []byte) error {
 
 func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	type BaseRunnerAlias struct {
-		//State *State // TODO FIX THIS
-		Share map[phase0.ValidatorIndex]*spectypes.Share
-		//QBFTController     *controller.Controller// TODO FIX THIS
+		State              *State
+		Share              map[phase0.ValidatorIndex]*spectypes.Share
+		QBFTController     *controller.Controller
 		BeaconNetwork      spectypes.BeaconNetwork
 		RunnerRoleType     spectypes.RunnerRole
 		highestDecidedSlot phase0.Slot
@@ -87,9 +87,9 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 
 	// Create object and marshal
 	alias := &BaseRunnerAlias{
-		//State: b.State,
-		Share: b.Share,
-		//QBFTController:     b.QBFTController,// TODO FIX THIS
+		State:              b.State,
+		Share:              b.Share,
+		QBFTController:     b.QBFTController,
 		BeaconNetwork:      b.BeaconNetwork,
 		RunnerRoleType:     b.RunnerRoleType,
 		highestDecidedSlot: b.highestDecidedSlot,
@@ -98,33 +98,6 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	byts, err := json.Marshal(alias)
 
 	return byts, err
-}
-
-func (b *BaseRunner) UnmarshalJSON(data []byte) error {
-	type BaseRunnerAlias struct {
-		//State *State
-		Share map[phase0.ValidatorIndex]*spectypes.Share
-		//QBFTController     *controller.Controller
-		BeaconNetwork      spectypes.BeaconNetwork
-		RunnerRoleType     spectypes.RunnerRole
-		highestDecidedSlot phase0.Slot
-	}
-
-	// Unmarshal the JSON data into the auxiliary struct
-	aux := &BaseRunnerAlias{}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	// Assign fields
-	//b.State = aux.State // TODO FIX THIS
-	b.Share = aux.Share
-	//b.QBFTController = aux.QBFTController // TODO FIX THIS
-	b.BeaconNetwork = aux.BeaconNetwork
-	b.RunnerRoleType = aux.RunnerRoleType
-	b.highestDecidedSlot = aux.highestDecidedSlot
-
-	return nil
 }
 
 // SetHighestDecidedSlot set highestDecidedSlot for base runner
