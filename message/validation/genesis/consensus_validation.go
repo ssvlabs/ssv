@@ -128,7 +128,7 @@ func (mv *messageValidator) validateConsensusMessage(
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
 		} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
-			signerState.ResetRound(msgRound)
+			signerState.Reset(msgRound)
 		}
 
 		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
