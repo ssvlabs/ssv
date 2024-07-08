@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 )
 
 const (

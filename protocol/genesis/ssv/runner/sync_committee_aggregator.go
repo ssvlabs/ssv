@@ -3,9 +3,7 @@ package genesisrunner
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,24 +12,21 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type SyncCommitteeAggregatorRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         genesisspecssv.BeaconNode
-	network        genesisspecssv.Network
-	signer         genesisspectypes.KeyManager
-	operatorSigner types.OperatorSigner
-	valCheck       genesisspecqbft.ProposedValueCheckF
+	beacon     genesisspecssv.BeaconNode
+	network    genesisspecssv.Network
+	signer     genesisspectypes.KeyManager
+	valCheck   genesisspecqbft.ProposedValueCheckF
+	operatorId genesisspectypes.OperatorID
 
 	metrics metrics.ConsensusMetrics
 }
@@ -43,9 +38,9 @@ func NewSyncCommitteeAggregatorRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorSigner types.OperatorSigner,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
@@ -56,13 +51,12 @@ func NewSyncCommitteeAggregatorRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		valCheck:       valCheck,
-		operatorSigner: operatorSigner,
-
-		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleSyncCommitteeContribution),
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		valCheck:   valCheck,
+		operatorId: operatorId,
+		metrics:    metrics.NewConsensusMetrics(genesisspectypes.BNRoleSyncCommitteeContribution),
 	}
 }
 
@@ -128,17 +122,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
+	duty := r.GetState().StartingDuty
 
 	// fetch contributions
 	r.metrics.PauseDutyFullFlow()
-	r.metrics.StartBeaconData()
-	duty := r.GetState().StartingDuty
 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, selectionProofs, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee contribution")
 	}
-	r.metrics.EndBeaconData()
 	r.metrics.ContinueDutyFullFlow()
 
 	byts, err := contributions.MarshalSSZ()
@@ -210,18 +201,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
 
-	ssvMsg := &genesisspectypes.SSVMessage{
+	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
-		Data:    data,
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:][:], r.BaseRunner.BeaconRoleType),
+
+		Data: data,
 	}
 
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.operatorSigner.GetOperatorID(), r.operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
@@ -236,6 +223,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	if !quorum {
 		return nil
 	}
+
+	r.metrics.EndPostConsensus()
 
 	// get contributions
 	contributions, err := r.GetState().DecidedValue.GetSyncCommitteeContributions()
@@ -254,10 +243,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
-		r.metrics.EndPostConsensus()
 
 		for _, contribution := range contributions {
-			start := time.Now()
 			// match the right contrib and proof root to signed root
 			contribAndProof, contribAndProofRoot, err := r.generateContributionAndProof(contribution.Contribution, contribution.SelectionProofSig)
 			if err != nil {
@@ -279,27 +266,17 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			}
 
 			submissionEnd := r.metrics.StartBeaconSubmission()
-			logger = logger.With(
-				zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-				fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
-				fields.ConsensusTime(r.metrics.GetConsensusTime()),
-				fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
-				zap.String("block_root", hex.EncodeToString(contribAndProof.Contribution.BeaconBlockRoot[:])),
-			)
+
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				r.metrics.RoleSubmissionFailed()
-				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
-					fields.SubmissionTime(time.Since(start)),
-					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
 
 			submissionEnd()
-			r.metrics.EndDutyFullFlow(specqbft.Round(r.GetState().RunningInstance.State.Round))
+			r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 			r.metrics.RoleSubmitted()
-			logger.Debug("✅ successfully submitted sync committee aggregator",
-				fields.SubmissionTime(time.Since(start)),
-			)
+
+			logger.Debug("✅ submitted successfully sync committee aggregator!")
 			break
 		}
 	}
@@ -401,7 +378,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *ge
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.operatorSigner.GetOperatorID(),
+		Signer:    r.operatorId,
 	}
 
 	// broadcast
@@ -409,18 +386,13 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *ge
 	if err != nil {
 		return errors.Wrap(err, "failed to encode contribution proofs pre-consensus signature msg")
 	}
-	ssvMsg := &genesisspectypes.SSVMessage{
+	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:][:], r.BaseRunner.BeaconRoleType),
 
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.operatorSigner.GetOperatorID(), r.operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
+		Data: data,
 	}
-
-	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial contribution proof sig")
 	}
 	return nil
@@ -454,10 +426,6 @@ func (r *SyncCommitteeAggregatorRunner) GetSigner() genesisspectypes.KeyManager 
 	return r.signer
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() types.OperatorSigner {
-	return r.operatorSigner
-}
-
 // Encode returns the encoded struct in bytes or error
 func (r *SyncCommitteeAggregatorRunner) Encode() ([]byte, error) {
 	return json.Marshal(r)
@@ -476,4 +444,8 @@ func (r *SyncCommitteeAggregatorRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetOperatorID() genesisspectypes.OperatorID {
+	return r.operatorId
 }

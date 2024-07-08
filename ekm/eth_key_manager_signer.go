@@ -23,9 +23,10 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 const (
@@ -62,6 +63,9 @@ type KeyManager interface {
 	AddShare(shareKey *bls.SecretKey) error
 	// RemoveShare removes a share key
 	RemoveShare(pubKey string) error
+
+	// SignRoot TODO: (Alan) genesis support - should be removed after alan fork
+	SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error)
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner

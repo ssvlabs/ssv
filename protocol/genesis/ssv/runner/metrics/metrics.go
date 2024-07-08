@@ -3,12 +3,12 @@ package metrics
 import (
 	"time"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 var (
@@ -64,11 +64,6 @@ var (
 		Name: "ssv_instances_decided",
 		Help: "Number of decided QBFT instances",
 	}, []string{"role"})
-	metricsBeaconDataDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_beacon_data_duration_seconds",
-		Help:    "Beacon Data duration (seconds)",
-		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
 )
 
 func init() {
@@ -80,7 +75,6 @@ func init() {
 		metricsDutyFullFlowDuration,
 		metricsRolesSubmitted,
 		metricsRolesSubmissionFailures,
-		metricsBeaconDataDuration,
 	}
 	logger := zap.L()
 	for _, metric := range metricsList {
@@ -98,7 +92,6 @@ type ConsensusMetrics struct {
 	beaconSubmission               prometheus.Observer
 	dutyFullFlow                   prometheus.Observer
 	dutyFullFlowFirstRound         prometheus.Observer
-	beaconData                     prometheus.Observer
 	rolesSubmitted                 prometheus.Counter
 	rolesSubmissionFailures        prometheus.Counter
 	metricsInstancesStarted        prometheus.Counter
@@ -107,12 +100,7 @@ type ConsensusMetrics struct {
 	consensusStart                 time.Time
 	postConsensusStart             time.Time
 	dutyFullFlowStart              time.Time
-	beaconDataStart                time.Time
-	preConsensusDuration           time.Duration
-	consensusDuration              time.Duration
-	postConsensusDuration          time.Duration
 	dutyFullFlowCumulativeDuration time.Duration
-	beaconDataDuration             time.Duration
 }
 
 func NewConsensusMetrics(role genesisspectypes.BeaconRole) ConsensusMetrics {
@@ -124,25 +112,11 @@ func NewConsensusMetrics(role genesisspectypes.BeaconRole) ConsensusMetrics {
 		beaconSubmission:        metricsBeaconSubmissionDuration.WithLabelValues(values...),
 		dutyFullFlow:            metricsDutyFullFlowDuration.WithLabelValues(values...),
 		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
-		beaconData:              metricsBeaconDataDuration.WithLabelValues(values...),
 		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
 		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
 		metricsInstancesStarted: metricsInstancesStarted.WithLabelValues(values...),
 		metricsInstancesDecided: metricsInstancesDecided.WithLabelValues(values...),
 	}
-}
-
-func (cm *ConsensusMetrics) GetPreConsensusTime() time.Duration {
-	return cm.preConsensusDuration
-}
-func (cm *ConsensusMetrics) GetConsensusTime() time.Duration {
-	return cm.consensusDuration
-}
-func (cm *ConsensusMetrics) GetPostConsensusTime() time.Duration {
-	return cm.postConsensusDuration
-}
-func (cm *ConsensusMetrics) GetBeaconDataTime() time.Duration {
-	return cm.beaconDataDuration
 }
 
 // StartPreConsensus stores pre-consensus start time.
@@ -155,9 +129,7 @@ func (cm *ConsensusMetrics) StartPreConsensus() {
 // EndPreConsensus sends metrics for pre-consensus duration.
 func (cm *ConsensusMetrics) EndPreConsensus() {
 	if cm != nil && cm.preConsensus != nil && !cm.preConsensusStart.IsZero() {
-		duration := time.Since(cm.preConsensusStart)
-		cm.preConsensusDuration = duration
-		cm.preConsensus.Observe(duration.Seconds())
+		cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
 		cm.preConsensusStart = time.Time{}
 	}
 }
@@ -173,9 +145,7 @@ func (cm *ConsensusMetrics) StartConsensus() {
 // EndConsensus sends metrics for consensus duration.
 func (cm *ConsensusMetrics) EndConsensus() {
 	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
-		duration := time.Since(cm.consensusStart)
-		cm.consensusDuration = duration
-		cm.consensus.Observe(duration.Seconds())
+		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
 		cm.consensusStart = time.Time{}
 		cm.metricsInstancesDecided.Inc()
 	}
@@ -191,9 +161,7 @@ func (cm *ConsensusMetrics) StartPostConsensus() {
 // EndPostConsensus sends metrics for post-consensus duration.
 func (cm *ConsensusMetrics) EndPostConsensus() {
 	if cm != nil && cm.postConsensus != nil && !cm.postConsensusStart.IsZero() {
-		duration := time.Since(cm.postConsensusStart)
-		cm.postConsensus.Observe(duration.Seconds())
-		cm.postConsensusDuration = duration
+		cm.postConsensus.Observe(time.Since(cm.postConsensusStart).Seconds())
 		cm.postConsensusStart = time.Time{}
 	}
 }
@@ -222,7 +190,7 @@ func (cm *ConsensusMetrics) ContinueDutyFullFlow() {
 }
 
 // EndDutyFullFlow sends metrics for duty full flow duration.
-func (cm *ConsensusMetrics) EndDutyFullFlow(round specqbft.Round) {
+func (cm *ConsensusMetrics) EndDutyFullFlow(round genesisspecqbft.Round) {
 	if cm != nil && cm.dutyFullFlow != nil && !cm.dutyFullFlowStart.IsZero() {
 		cm.dutyFullFlowCumulativeDuration += time.Since(cm.dutyFullFlowStart)
 		cm.dutyFullFlow.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
@@ -259,22 +227,5 @@ func (cm *ConsensusMetrics) RoleSubmitted() {
 func (cm *ConsensusMetrics) RoleSubmissionFailed() {
 	if cm != nil && cm.rolesSubmissionFailures != nil {
 		cm.rolesSubmissionFailures.Inc()
-	}
-}
-
-// StartBeaconData stores data start time.
-func (cm *ConsensusMetrics) StartBeaconData() {
-	if cm != nil {
-		cm.beaconDataStart = time.Now()
-	}
-}
-
-// EndBeaconData sends metrics for data duration.
-func (cm *ConsensusMetrics) EndBeaconData() {
-	if cm != nil && cm.beaconData != nil && !cm.beaconDataStart.IsZero() {
-		duration := time.Since(cm.beaconDataStart)
-		cm.beaconDataDuration = duration
-		cm.beaconData.Observe(duration.Seconds())
-		cm.beaconDataStart = time.Time{}
 	}
 }

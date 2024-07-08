@@ -8,7 +8,7 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 func (b *BaseRunner) signBeaconObject(
@@ -30,7 +30,7 @@ func (b *BaseRunner) signBeaconObject(
 	return &genesisspectypes.PartialSignatureMessage{
 		PartialSignature: sig,
 		SigningRoot:      r,
-		Signer:           runner.GetOperatorSigner().GetOperatorID(),
+		Signer:           runner.GetOperatorID(),
 	}, nil
 }
 
@@ -43,7 +43,7 @@ func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *genesisspectypes.P
 	return &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   *msg,
 		Signature: signature,
-		Signer:    runner.GetOperatorSigner().GetOperatorID(),
+		Signer:    runner.GetOperatorID(),
 	}, nil
 }
 
@@ -80,7 +80,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature genes
 
 	for _, n := range b.Share.Committee {
 		if n.Signer == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
+			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey[:])
 			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}

@@ -4,9 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
-
-	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
 )
 
 func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported

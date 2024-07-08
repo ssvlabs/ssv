@@ -234,19 +234,12 @@ func (c *Controller) broadcastDecided(aggregatedCommit *genesisspecqbft.SignedMe
 		return errors.Wrap(err, "could not encode decided message")
 	}
 
-	ssvMsg := &genesisspectypes.SSVMessage{
+	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVConsensusMsgType,
 		MsgID:   genesisspecqbft.ControllerIdToMessageID(c.Identifier),
 		Data:    byts,
 	}
-
-	operatorSigner := c.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := genesisspectypes.SSVMessageToSignedSSVMessage(ssvMsg, c.config.GetOperatorSigner().GetOperatorID(), operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	if err := c.GetConfig().GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+	if err := c.GetConfig().GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		// We do not return error here, just Log broadcasting error.
 		return errors.Wrap(err, "could not broadcast decided")
 	}

@@ -5,11 +5,10 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
 )
 
 func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {

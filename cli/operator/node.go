@@ -266,6 +266,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
+		genesisKeyManager := &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
+		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.KeyManager = genesisKeyManager
+
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws

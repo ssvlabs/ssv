@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	testing2 "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 
-	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
-	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 func TestQBFTMapping(t *testing.T) {

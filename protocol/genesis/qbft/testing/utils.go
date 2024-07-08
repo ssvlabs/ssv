@@ -3,25 +3,25 @@ package testing
 import (
 	"bytes"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
-	types2 "github.com/ssvlabs/ssv/protocol/genesis/types"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role genesisspectypes.BeaconRole) *qbft.Config {
 	return &qbft.Config{
-		ShareSigner:    testingutils.NewTestingKeyManager(),
-		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
-		SigningPK:      keySet.Shares[1].GetPublicKey().Serialize(),
-		Domain:         testingutils.TestingSSVDomainType,
+		Signer:    testingutils.NewTestingKeyManager(),
+		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
+		Domain:    testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
 				return errors.New("invalid value")
@@ -33,11 +33,11 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			}
 			return nil
 		},
-		ProposerF: func(state *types2.State, round genesisspecqbft.Round) types.OperatorID {
+		ProposerF: func(state *genesisrunner.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 			return 1
 		},
 		Storage:               TestingStores(logger).Get(role),
-		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Network:               testingutils.NewTestingNetwork(),
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,
 	}
@@ -45,8 +45,8 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 
 var TestingInvalidValueCheck = []byte{1, 1, 1, 1}
 
-var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
-	return &types.Share{
+var TestingShare = func(keysSet *testingutils.TestKeySet) *genesisspectypes.Share {
+	return &genesisspectypes.Share{
 		OperatorID:      1,
 		ValidatorPubKey: keysSet.ValidatorPK.Serialize(),
 		SharePubKey:     keysSet.Shares[1].GetPublicKey().Serialize(),
@@ -73,7 +73,7 @@ var ThirteenOperatorsInstance = func() *genesisspecqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing13SharesSet()), testingutils.Testing13SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, identifier []byte) *genesisspecqbft.Instance {
+var baseInstance = func(share *genesisspectypes.Share, keySet *testingutils.TestKeySet, identifier []byte) *genesisspecqbft.Instance {
 	ret := genesisspecqbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, genesisspecqbft.FirstHeight)
 	ret.StartValue = []byte{1, 2, 3, 4}
 	return ret
@@ -81,7 +81,7 @@ var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, ide
 
 func NewTestingQBFTController(
 	identifier []byte,
-	share *types.Share,
+	share *spectypes.Share,
 	config qbft.IConfig,
 	fullNode bool,
 ) *controller.Controller {

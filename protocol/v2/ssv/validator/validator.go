@@ -30,10 +30,9 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	NetworkConfig      networkconfig.NetworkConfig
-	DutyRunners        runner.ValidatorDutyRunners
-	GenesisDutyRunners genesisrunner.DutyRunners
-	Network            specqbft.Network
+	NetworkConfig networkconfig.NetworkConfig
+	DutyRunners   runner.ValidatorDutyRunners
+	Network       specqbft.Network
 
 	Operator          *spectypes.Operator
 	Share             *types.SSVShare
@@ -50,6 +49,12 @@ type Validator struct {
 	state uint32
 
 	messageValidator validation.MessageValidator
+
+	GenesisValidator
+}
+
+type GenesisValidator struct {
+	DutyRunners genesisrunner.DutyRunners
 }
 
 // NewValidator creates a new instance of Validator.
@@ -61,23 +66,26 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	v := &Validator{
-		mtx:                &sync.RWMutex{},
-		ctx:                pctx,
-		cancel:             cancel,
-		NetworkConfig:      options.NetworkConfig,
-		DutyRunners:        options.DutyRunners,
-		GenesisDutyRunners: options.GenesisDutyRunners,
-		Network:            options.Network,
-		Storage:            options.Storage,
-		Operator:           options.Operator,
-		Share:              options.SSVShare,
-		Signer:             options.Signer,
-		OperatorSigner:     options.OperatorSigner,
-		SignatureVerifier:  options.SignatureVerifier,
-		Queues:             make(map[spectypes.RunnerRole]queueContainer),
-		state:              uint32(NotStarted),
-		dutyIDs:            hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
-		messageValidator:   options.MessageValidator,
+		mtx:               &sync.RWMutex{},
+		ctx:               pctx,
+		cancel:            cancel,
+		NetworkConfig:     options.NetworkConfig,
+		DutyRunners:       options.DutyRunners,
+		Network:           options.Network,
+		Storage:           options.Storage,
+		Operator:          options.Operator,
+		Share:             options.SSVShare,
+		Signer:            options.Signer,
+		OperatorSigner:    options.OperatorSigner,
+		SignatureVerifier: options.SignatureVerifier,
+		Queues:            make(map[spectypes.RunnerRole]queueContainer),
+		state:             uint32(NotStarted),
+		dutyIDs:           hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
+		messageValidator:  options.MessageValidator,
+
+		GenesisValidator: GenesisValidator{
+			DutyRunners: options.GenesisOptions.DutyRunners,
+		},
 	}
 
 	for _, dutyRunner := range options.DutyRunners {

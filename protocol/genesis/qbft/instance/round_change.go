@@ -4,16 +4,14 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-
-	"go.uber.org/zap"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 // uponRoundChange process round change messages.
@@ -203,7 +201,7 @@ func isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if proposer(state, config, roundChangeMsg.Message.Round) != config.GetOperatorSigner().GetOperatorID() {
+	if proposer(state, config, roundChangeMsg.Message.Round) != config.GetOperatorID() {
 		return errors.New("not proposer")
 	}
 
@@ -241,7 +239,7 @@ func isReceivedProposalJustification(
 	return nil
 }
 
-func validRoundChangeForDataIgnoreSignature(
+func validRoundChangeForData(
 	state *types.State,
 	config qbft.IConfig,
 	signedMsg *genesisspecqbft.SignedMessage,
@@ -262,12 +260,14 @@ func validRoundChangeForDataIgnoreSignature(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if err := signedMsg.Validate(); err != nil {
-		return errors.Wrap(err, "roundChange invalid")
+	if config.VerifySignatures() {
+		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
 	}
 
-	if !CheckSignersInCommittee(signedMsg, state.Share.Committee) {
-		return errors.New("signer not in committee")
+	if err := signedMsg.Message.Validate(); err != nil {
+		return errors.Wrap(err, "roundChange invalid")
 	}
 
 	// Addition to formal spec
@@ -281,7 +281,7 @@ func validRoundChangeForDataIgnoreSignature(
 		// validate prepare message justifications
 		prepareMsgs, _ := signedMsg.Message.GetRoundChangeJustifications() // no need to check error, checked on signedMsg.Message.Validate()
 		for _, pm := range prepareMsgs {
-			if err := validSignedPrepareForHeightRoundAndRootVerifySignature(
+			if err := validSignedPrepareForHeightRoundAndRoot(
 				config,
 				pm,
 				state.Height,
@@ -306,29 +306,6 @@ func validRoundChangeForDataIgnoreSignature(
 
 		return nil
 	}
-
-	return nil
-}
-
-func validRoundChangeForDataVerifySignature(
-	state *types.State,
-	config qbft.IConfig,
-	signedMsg *genesisspecqbft.SignedMessage,
-	height genesisspecqbft.Height,
-	round genesisspecqbft.Round,
-	fullData []byte,
-) error {
-
-	if err := validRoundChangeForDataIgnoreSignature(state, config, signedMsg, height, round, fullData); err != nil {
-		return err
-	}
-
-	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
-	}
-
 	return nil
 }
 
@@ -413,14 +390,14 @@ func CreateRoundChange(state *types.State, config qbft.IConfig, newRound genesis
 		DataRound:                round,
 		RoundChangeJustification: justificationsData,
 	}
-	sig, err := config.GetShareSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing round change msg")
 	}
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorSigner().GetOperatorID()},
+		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
 		Message:   *msg,
 
 		FullData: fullData,

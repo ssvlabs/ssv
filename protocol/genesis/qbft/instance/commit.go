@@ -112,20 +112,21 @@ func CreateCommit(state *types.State, config qbft.IConfig, root [32]byte) (*gene
 
 		Root: root,
 	}
-	sig, err := config.GetShareSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing commit msg")
 	}
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorSigner().GetOperatorID()},
+		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
 		Message:   *msg,
 	}
 	return signedMsg, nil
 }
 
-func baseCommitValidationIgnoreSignature(
+func BaseCommitValidation(
+	config qbft.IConfig,
 	signedCommit *genesisspecqbft.SignedMessage,
 	height genesisspecqbft.Height,
 	operators []*spectypes.ShareMember,
@@ -141,24 +142,6 @@ func baseCommitValidationIgnoreSignature(
 		return errors.Wrap(err, "signed commit invalid")
 	}
 
-	if !CheckSignersInCommittee(signedCommit, operators) {
-		return errors.New("signer not in committee")
-	}
-
-	return nil
-}
-
-func BaseCommitValidationVerifySignature(
-	config qbft.IConfig,
-	signedCommit *genesisspecqbft.SignedMessage,
-	height genesisspecqbft.Height,
-	operators []*spectypes.ShareMember,
-) error {
-
-	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
-		return err
-	}
-
 	if config.VerifySignatures() {
 		if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
@@ -169,13 +152,14 @@ func BaseCommitValidationVerifySignature(
 }
 
 func validateCommit(
+	config qbft.IConfig,
 	signedCommit *genesisspecqbft.SignedMessage,
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	proposedMsg *genesisspecqbft.SignedMessage,
 	operators []*spectypes.ShareMember,
 ) error {
-	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
+	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return err
 	}
 
