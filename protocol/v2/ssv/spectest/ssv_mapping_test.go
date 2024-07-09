@@ -668,7 +668,7 @@ var ignoreList = []string{
 	//"consensus valid msg",
 	//"consensus unordered expected roots",
 	//"consensus valid msg 7 operators",
-	"flow",
+	"flow", // <<<
 	//"msg duty not finished",
 	//"decided duties",
 	//"beacon vote",
