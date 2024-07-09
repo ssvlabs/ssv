@@ -28,7 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
-const MaxPartialSignatureMsgSize = 1952
+const MaxPartialSignatureMsgSize = 144020
 
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
@@ -193,6 +193,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) *sync.Mutex {
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
+	// TODO: make sure that we check that message ID exists in advance
 	mutex, ok := mv.validationLocks[messageID]
 	if !ok {
 		mutex = &sync.Mutex{}
