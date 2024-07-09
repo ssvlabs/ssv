@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -63,6 +64,9 @@ func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*phase0.At
 }
 func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
 	return bn.bn.SubmitSyncMessages(msgs)
+}
+func (bn *TestingBeaconNodeWrapped) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
+	return bn.bn.SubmitBlindedBeaconBlock(block, sig)
 }
 
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {

@@ -71,11 +71,14 @@ func TestSSVMapping(t *testing.T) {
 		//if !strings.Contains(name, "shuffled happy flow duties with different validators") {
 		//	continue
 		//}
-		//if !strings.Contains(name, "pre consensus post decided") {
+		//if !strings.Contains(name, "accepts blinded block proposal") {
 		//	//if !strings.Contains(name, "sync committee aggregator selection proof") {
 		//	continue
 		//}
 		//fmt.Println(name)
+		if !strings.Contains(name, "post consensus nil ssvmessage") {
+			continue
+		}
 
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
@@ -611,14 +614,14 @@ var ignoreList = []string{
 	//"duty first height",
 	//"duty valid",
 	//"consensus partial invalid sig quorum then valid quorum",
-	"consensus unordered roots",
+	//"consensus unordered roots", /// <<<<<
 	//"consensus valid msg 7 operators",
 	//"consensus quorum",
 	//"duty role",
 	//"blocks",
 	//"value check far future target",
 	//"happy flow duties with different validators",
-	"proposer accepts blinded block proposal", // <<<<<<
+	//"proposer accepts blinded block proposal", // <<<<<<
 	//"consensus no running duty",
 	//"consensus quorum",
 	//"consensus invalid signed msg",
@@ -642,7 +645,7 @@ var ignoreList = []string{
 	//"committee aggregator all are aggregators",
 	//"future message",
 	//"consensus nil ssvmessage",
-	"duty",
+	"duty", /// <<<<
 	//"consensus invalid expected roots",
 	//"consensus invalid operator signature",
 	//"consensus valid msg 13 operators",
@@ -651,7 +654,7 @@ var ignoreList = []string{
 	//"consensus quorum 7 operators",
 	//"duty post future decided",
 	//"future decided",
-	"consensus too many roots",
+	//"consensus too many roots", /// <<<<
 	//"consensus invalid then quorum",
 	//"consensus valid msg 10 operators",
 	//"value check source higher than target",
@@ -671,7 +674,7 @@ var ignoreList = []string{
 	//"duty not decided",
 	//"consensus invalid quorum then valid quorum",
 	//"invalid signature",
-	"consensus nil ssvmessage",
+	//"consensus nil ssvmessage", /// <<<<
 	//"consensus post quorum",
 	//"consensus post quorum",
 	//"duty pubkey",
