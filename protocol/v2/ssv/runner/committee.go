@@ -318,6 +318,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		return errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
 	}
 
+	// CHECK this
 	for _, root := range roots {
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
 		// TODO: (Alan) revert?

@@ -2,12 +2,14 @@ package spectest
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -23,6 +25,7 @@ type StartNewRunnerDutySpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
 	Duty                    spectypes.Duty
+	Threshold               uint64
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages          []*spectypes.PartialSignatureMessages
@@ -97,6 +100,27 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 	// post root
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
+
+	a, err := json.Marshal(test.Runner)
+	require.NoError(t, err)
+	b, err := json.Marshal(test.PostDutyRunnerState)
+	require.NoError(t, err)
+	diff :=
+		cmp.Diff(a, b,
+			cmp.FilterValues(func(x, y []byte) bool {
+				return json.Valid(x) && json.Valid(y)
+			}, cmp.Transformer("ParseJSON", func(in []byte) (out interface{}) {
+				if err := json.Unmarshal(in, &out); err != nil {
+					panic(err) // should never occur given previous filter to ensure valid JSON
+				}
+				return out
+			}),
+			),
+		)
+	if len(diff) > 0 {
+		logJSON(t, "test_SHOULDBE_PostDutyRunnerState_"+test.Name, test.PostDutyRunnerState)
+		logJSON(t, "test_HAVE_Runner"+test.Name, test.Runner)
+	}
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 
 	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
@@ -173,6 +197,6 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	err := test.Runner.StartNewDuty(logger, test.Duty, 0)
+	err := test.Runner.StartNewDuty(logger, test.Duty, test.Threshold)
 	return err
 }

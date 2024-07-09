@@ -76,8 +76,8 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	if test.PostDutyCommitteeRoot != hex.EncodeToString(postRoot[:]) {
 		diff := cmp.Diff(test.Committee, test.PostDutyCommittee, cmp.Exporter(func(p reflect.Type) bool { return true }))
 		//// DEBUG
-		//logJSON(t, "test_committee", test.Committee)
-		//logJSON(t, "test_post_duty_committee", test.PostDutyCommittee)
+		//logJSON(t, "test_committee#"+test.Name+"#", test.Committee)
+		//logJSON(t, "test_post_duty_committee#"+test.Name+"#", test.PostDutyCommittee)
 		//
 		t.Errorf("post runner state not equal: %v", diff)
 	}
@@ -128,7 +128,9 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 }
 
 func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
-	overrideStateComparisonCommitteeSpecTest(t, test, test.Name, reflect.TypeOf(test).String())
+	strType := reflect.TypeOf(test).String()
+	strType = strings.Replace(strType, "spectest.", "committee.", 1)
+	overrideStateComparisonCommitteeSpecTest(t, test, test.Name, strType)
 }
 
 func (test *CommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
