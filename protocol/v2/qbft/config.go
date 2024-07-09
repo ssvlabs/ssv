@@ -3,7 +3,6 @@ package qbft
 import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
@@ -41,7 +40,7 @@ type Config struct {
 	BeaconSigner          spectypes.BeaconSigner
 	OperatorSigner        spectypes.OperatorSigner
 	SigningPK             []byte
-	Domain                spectypes.DomainType
+	Domain                func() spectypes.DomainType
 	ValueCheckF           specqbft.ProposedValueCheckF
 	ProposerF             specqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
@@ -69,7 +68,7 @@ func (c *Config) GetSigningPubKey() []byte {
 
 // GetSignatureDomainType returns the Domain type used for signatures
 func (c *Config) GetSignatureDomainType() spectypes.DomainType {
-	return c.Domain
+	return c.Domain()
 }
 
 // GetValueCheckF returns value check instance

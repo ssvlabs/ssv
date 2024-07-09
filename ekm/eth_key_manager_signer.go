@@ -45,7 +45,7 @@ type ethKeyManagerSigner struct {
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
 	storage           Storage
-	domain            spectypes.DomainType
+	domain            func() spectypes.DomainType
 	slashingProtector core.SlashingProtector
 }
 
@@ -101,7 +101,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            network.DomainType(),
+		domain:            network.DomainType,
 		slashingProtector: slashingProtector,
 	}, nil
 }
@@ -261,7 +261,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 		return nil, errors.Wrap(err, "could not get signing account")
 	}
 
-	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, sigType))
+	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain(), sigType))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}

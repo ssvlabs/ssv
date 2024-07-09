@@ -79,7 +79,10 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 // Domain returns current domain type of the network
 func (n NetworkConfig) DomainType() spectypes.DomainType {
 	if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
-		copy(n.domainType[2:3], []byte{0x1})
+		forkDomain := make([]byte, 4)
+		copy(forkDomain, n.domainType[:2])
+		copy(forkDomain[2:], []byte{0x1})
+		return spectypes.DomainType(forkDomain)
 	}
 	return n.domainType
 }

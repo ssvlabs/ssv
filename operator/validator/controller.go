@@ -1178,7 +1178,7 @@ func SetupCommitteeRunners(
 			OperatorSigner:    options.OperatorSigner,
 			SigningPK:         options.SSVShare.ValidatorPubKey[:], // TODO right val?
 			SignatureVerifier: options.SignatureVerifier,
-			Domain:            options.NetworkConfig.DomainType(),
+			Domain:            options.NetworkConfig.DomainType,
 			ValueCheckF:       nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
@@ -1241,7 +1241,7 @@ func SetupRunners(
 			BeaconSigner:      options.Signer,
 			OperatorSigner:    options.OperatorSigner,
 			SigningPK:         options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:            options.NetworkConfig.DomainType(),
+			Domain:            options.NetworkConfig.DomainType,
 			SignatureVerifier: options.SignatureVerifier,
 			ValueCheckF:       nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {

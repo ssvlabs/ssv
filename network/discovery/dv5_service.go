@@ -56,7 +56,7 @@ type DiscV5Service struct {
 	publishState int32
 	conn         *net.UDPConn
 
-	domainType spectypes.DomainType
+	domainType func() spectypes.DomainType
 	subnets    []byte
 }
 
@@ -68,7 +68,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 		subnetsIdx:   discOpts.SubnetsIdx,
-		domainType:   discOpts.DomainType,
+		domainType:   discOpts.DomainTypeProvider,
 		subnets:      discOpts.DiscV5Opts.Subnets,
 	}
 
@@ -151,7 +151,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
 	if err != nil {
 		// TODO: skip missing domain type (likely old node).
-	} else if nodeDomainType != dvs.domainType {
+	} else if nodeDomainType != dvs.domainType() {
 		// TODO: skip different domain type.
 	}
 
@@ -205,7 +205,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType))
+		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainTypeProvider()))
 
 	return nil
 }
@@ -331,14 +331,14 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
-		DecorateWithDomainType(dvs.domainType),
+		DecorateWithDomainType(dvs.domainType()),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType), fields.Subnets(opts.Subnets))
+	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType()), fields.Subnets(opts.Subnets))
 
 	return localNode, nil
 }
@@ -356,14 +356,13 @@ func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, erro
 	return conn, nil
 }
 
-func (dvs *DiscV5Service) UpdateDomainTypeAtFork(logger *zap.Logger, domain spectypes.DomainType) error {
-	updated, err := records.UpdateDomainTypeAtFork(dvs.dv5Listener.LocalNode(), domain)
+func (dvs *DiscV5Service) UpdateDomainTypeAtFork(logger *zap.Logger) error {
+	updated, err := records.UpdateENRDomainType(dvs.dv5Listener.LocalNode(), dvs.domainType())
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
 	if updated != nil {
-		dvs.domainType = domain
-		logger.Debug("updated domain", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
+		logger.Debug("updated domain", fields.Domain(dvs.domainType()), fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		go dvs.publishENR(logger)
 	}
 	return nil

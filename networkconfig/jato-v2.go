@@ -10,6 +10,7 @@ import (
 var JatoV2 = NetworkConfig{
 	Name:                 "jato-v2",
 	Beacon:               beacon.NewNetwork(spectypes.PraterNetwork),
+	domainType:           spectypes.JatoV2Testnet,
 	GenesisEpoch:         192100,
 	RegistrySyncOffset:   new(big.Int).SetInt64(9203578),
 	RegistryContractAddr: "0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D",

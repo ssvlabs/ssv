@@ -6,7 +6,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-func UpdateDomainTypeAtFork(node *enode.LocalNode, domain spectypes.DomainType) ([]byte, error) {
+func UpdateENRDomainType(node *enode.LocalNode, domain spectypes.DomainType) ([]byte, error) {
 	if err := SetDomainTypeEntry(node, domain); err != nil {
 		return nil, err
 	}

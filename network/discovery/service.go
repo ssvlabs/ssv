@@ -42,7 +42,7 @@ type Options struct {
 	HostDNS     string
 
 	// DomainType is the SSV network domain of the node
-	DomainType spectypes.DomainType
+	DomainTypeProvider func() spectypes.DomainType
 }
 
 // Service is the interface for discovery
@@ -52,7 +52,7 @@ type Service interface {
 	RegisterSubnets(logger *zap.Logger, subnets ...int) error
 	DeregisterSubnets(logger *zap.Logger, subnets ...int) error
 	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
-	UpdateDomainTypeAtFork(logger *zap.Logger, domain spectypes.DomainType) error
+	UpdateDomainTypeAtFork(logger *zap.Logger) error
 }
 
 // NewService creates new discovery.Service
