@@ -11,22 +11,24 @@ import (
 	"go.uber.org/mock/gomock"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/operator/duties/mocks"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.BeaconDuty) {
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().ProposerDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	s.beaconNode.(*MockBeaconNode).EXPECT().ProposerDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
 			fetchDutiesCall <- struct{}{}
 			duties, _ := dutiesMap.Get(epoch)
 			return duties, nil
 		}).AnyTimes()
 
-	getIndices := func(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	getShares := func(epoch phase0.Epoch) []*types.SSVShare {
 		uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
 		duties, _ := dutiesMap.Get(epoch)
@@ -34,20 +36,21 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			uniqueIndices[d.ValidatorIndex] = true
 		}
 
-		indices := make([]phase0.ValidatorIndex, 0, len(uniqueIndices))
+		shares := make([]*types.SSVShare, 0, len(uniqueIndices))
 		for index := range uniqueIndices {
-			indices = append(indices, index)
+			share := &types.SSVShare{
+				Share: spectypes.Share{
+					ValidatorIndex: index,
+				},
+			}
+			shares = append(shares, share)
 		}
 
-		return indices
+		return shares
 	}
 
-	getIndicesBool := func(epoch phase0.Epoch, wait bool) []phase0.ValidatorIndex {
-		return getIndices(epoch)
-	}
-
-	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
-	s.ValidatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getIndicesBool).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
@@ -63,11 +66,11 @@ func expectedExecutedProposerDuties(handler *ProposerHandler, duties []*eth2apiv
 func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 	var (
 		handler     = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
-		currentSlot = &SlotValue{}
+		currentSlot = &SafeValue[phase0.Slot]{}
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	currentSlot.SetSlot(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
+	currentSlot.Set(phase0.Slot(0))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -84,7 +87,7 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 	expected := expectedExecutedProposerDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
@@ -96,11 +99,11 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 	var (
 		handler     = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
-		currentSlot = &SlotValue{}
+		currentSlot = &SafeValue[phase0.Slot]{}
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	currentSlot.SetSlot(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
+	currentSlot.Set(phase0.Slot(0))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -113,21 +116,21 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 	})
 
 	// STEP 1: wait for proposer duties to be fetched
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
-	currentSlot.SetSlot(phase0.Slot(1))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(1))
+	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for proposer duties to be executed
-	currentSlot.SetSlot(phase0.Slot(2))
+	currentSlot.Set(phase0.Slot(2))
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedProposerDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
@@ -139,21 +142,21 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 	var (
 		handler     = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
-		currentSlot = &SlotValue{}
+		currentSlot = &SafeValue[phase0.Slot]{}
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	currentSlot.SetSlot(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
+	currentSlot.Set(phase0.Slot(0))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startFn()
 
 	// STEP 1: wait for no action to be taken
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
-	currentSlot.SetSlot(phase0.Slot(1))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(1))
+	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: trigger a change in active indices
@@ -179,19 +182,19 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for proposer duties to be fetched again
-	currentSlot.SetSlot(phase0.Slot(2))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(2))
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 2
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for proposer duties to be executed
-	currentSlot.SetSlot(phase0.Slot(3))
+	currentSlot.Set(phase0.Slot(3))
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[2]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
@@ -202,11 +205,11 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	var (
 		handler     = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
-		currentSlot = &SlotValue{}
+		currentSlot = &SafeValue[phase0.Slot]{}
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	currentSlot.SetSlot(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
+	currentSlot.Set(phase0.Slot(0))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -219,7 +222,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	})
 
 	// STEP 1: wait for proposer duties to be fetched
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
@@ -243,35 +246,35 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	}))
 
 	// STEP 4: wait for proposer duties to be fetched again
-	currentSlot.SetSlot(phase0.Slot(1))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(1))
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for proposer duties to be executed
-	currentSlot.SetSlot(phase0.Slot(2))
+	currentSlot.Set(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[0]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 6: wait for proposer duties to be executed
-	currentSlot.SetSlot(phase0.Slot(3))
+	currentSlot.Set(phase0.Slot(3))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
 	expected = expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 7: wait for proposer duties to be executed
-	currentSlot.SetSlot(phase0.Slot(4))
+	currentSlot.Set(phase0.Slot(4))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
 	expected = expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[2]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
@@ -283,11 +286,11 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 	var (
 		handler     = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
-		currentSlot = &SlotValue{}
+		currentSlot = &SafeValue[phase0.Slot]{}
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	currentSlot.SetSlot(phase0.Slot(34))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
+	currentSlot.Set(phase0.Slot(34))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -300,13 +303,13 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 	})
 
 	// STEP 1: wait for proposer duties to be fetched
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.GetSlot(),
+			Slot:                     currentSlot.Get(),
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -314,14 +317,14 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.SetSlot(phase0.Slot(35))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(35))
+	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.GetSlot(),
+			Slot:                     currentSlot.Get(),
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -337,17 +340,17 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 
 	// STEP 5: wait for proposer duties to be fetched again for the current epoch.
 	// The first assigned duty should not be executed
-	currentSlot.SetSlot(phase0.Slot(36))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(36))
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
-	currentSlot.SetSlot(phase0.Slot(37))
+	currentSlot.Set(phase0.Slot(37))
 	duties, _ := dutiesMap.Get(phase0.Epoch(1))
 	expected := expectedExecutedProposerDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
@@ -359,11 +362,11 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	var (
 		handler     = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
-		currentSlot = &SlotValue{}
+		currentSlot = &SafeValue[phase0.Slot]{}
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	currentSlot.SetSlot(phase0.Slot(34))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
+	currentSlot.Set(phase0.Slot(34))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -376,13 +379,13 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	})
 
 	// STEP 1: wait for proposer duties to be fetched
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.GetSlot(),
+			Slot:                     currentSlot.Get(),
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -390,14 +393,14 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.SetSlot(phase0.Slot(35))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(35))
+	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.GetSlot(),
+			Slot:                     currentSlot.Get(),
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -423,26 +426,26 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 
 	// STEP 6: wait for proposer duties to be fetched again for the current epoch.
 	// The first assigned duty should not be executed
-	currentSlot.SetSlot(phase0.Slot(36))
-	ticker.Send(currentSlot.GetSlot())
+	currentSlot.Set(phase0.Slot(36))
+	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
-	currentSlot.SetSlot(phase0.Slot(37))
+	currentSlot.Set(phase0.Slot(37))
 	duties, _ = dutiesMap.Get(phase0.Epoch(1))
 	expected := expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[0]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 8: The second assigned duty should be executed
-	currentSlot.SetSlot(phase0.Slot(38))
+	currentSlot.Set(phase0.Slot(38))
 	duties, _ = dutiesMap.Get(phase0.Epoch(1))
 	expected = expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.

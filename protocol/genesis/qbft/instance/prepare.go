@@ -18,7 +18,7 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbft.SignedMessage, prepareMsgContainer *genesisspecqbft.MsgContainer) error {
-	hasQuorumBefore := HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
+	hasQuorumBefore := HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
@@ -37,7 +37,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 		return nil // already moved to commit stage
 	}
 
-	if !HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+	if !HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
 
@@ -91,13 +91,13 @@ func getRoundChangeJustification(state *types.State, config qbft.IConfig, prepar
 			state.Height,
 			state.LastPreparedRound,
 			r,
-			state.Share.Committee,
+			state.CommitteeMember.Committee,
 		); err == nil {
 			ret = append(ret, msg)
 		}
 	}
 
-	if !HasQuorum(state.Share, ret) {
+	if !HasQuorum(state.CommitteeMember, ret) {
 		return nil, nil
 	}
 
@@ -135,7 +135,7 @@ func validSignedPrepareForHeightRoundAndRoot(
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	root [32]byte,
-	operators []*spectypes.ShareMember) error {
+	operators []*spectypes.Operator) error {
 	if signedPrepare.Message.MsgType != genesisspecqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -188,7 +188,7 @@ func CreatePrepare(state *types.State, config qbft.IConfig, newRound genesisspec
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.CommitteeMember.SSVOperatorPubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}

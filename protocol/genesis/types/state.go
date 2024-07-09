@@ -6,12 +6,13 @@ import (
 
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // State is copied from spec with changed Share
 type State struct {
-	Share                           *spectypes.Share
+	CommitteeMember                 *spectypes.CommitteeMember
 	ID                              []byte // instance Identifier
 	Round                           genesisspecqbft.Round
 	Height                          genesisspecqbft.Height
@@ -45,4 +46,14 @@ func (s *State) Encode() ([]byte, error) {
 // Decode returns error if decoding failed
 func (s *State) Decode(data []byte) error {
 	return json.Unmarshal(data, &s)
+}
+
+func RoundRobinProposer(state *State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+	firstRoundIndex := 0
+	if state.Height != genesisspecqbft.FirstHeight {
+		firstRoundIndex += int(state.Height) % len(state.CommitteeMember.Committee)
+	}
+
+	index := (firstRoundIndex + int(round) - int(genesisspecqbft.FirstRound)) % len(state.CommitteeMember.Committee)
+	return state.CommitteeMember.Committee[index].OperatorID
 }

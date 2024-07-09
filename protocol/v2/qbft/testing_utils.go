@@ -28,7 +28,7 @@ var TestingSK = func() *rsa.PrivateKey {
 
 var TestingInstanceStruct = &specqbft.Instance{
 	State: &specqbft.State{
-		Share:                           testingutils.TestingOperator(testingutils.Testing4SharesSet()),
+		CommitteeMember:                 testingutils.TestingCommitteeMember(testingutils.Testing4SharesSet()),
 		ID:                              []byte{1, 2, 3, 4},
 		Round:                           1,
 		Height:                          1,
@@ -72,6 +72,6 @@ var TestingInstanceStruct = &specqbft.Instance{
 var TestingControllerStruct = &specqbft.Controller{
 	Identifier:      []byte{1, 2, 3, 4},
 	Height:          specqbft.Height(1),
-	Share:           testingutils.TestingOperator(testingutils.Testing4SharesSet()),
+	CommitteeMember: testingutils.TestingCommitteeMember(testingutils.Testing4SharesSet()),
 	StoredInstances: specqbft.InstanceContainer{TestingInstanceStruct},
 }

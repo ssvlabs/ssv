@@ -63,8 +63,8 @@ func NewSyncCommitteeRunner(
 	}
 }
 
-func (r *SyncCommitteeRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
+func (r *SyncCommitteeRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty, quorum)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -166,7 +166,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 
 		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
 
-		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
+		if err := r.GetBeaconNode().SubmitSyncMessages([]*altair.SyncCommitteeMessage{msg}); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}

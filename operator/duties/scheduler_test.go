@@ -9,14 +9,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
@@ -73,7 +73,7 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SlotValue) (
+func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot], alanForkEpoch phase0.Epoch) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
@@ -89,20 +89,25 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
 
-	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
-	mockExecutionClient := mocks.NewMockExecutionClient(ctrl)
-	mockValidatorProvider := mocks.NewMockValidatorProvider(ctrl)
+	mockBeaconNode := NewMockBeaconNode(ctrl)
+	mockExecutionClient := NewMockExecutionClient(ctrl)
+	mockValidatorProvider := NewMockValidatorProvider(ctrl)
+	mockValidatorController := NewMockValidatorController(ctrl)
+	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
+		Beacon:        mocknetwork.NewMockBeaconNetwork(ctrl),
+		AlanForkEpoch: alanForkEpoch,
 	}
 
 	opts := &SchedulerOptions{
-		Ctx:               ctx,
-		BeaconNode:        mockBeaconNode,
-		ExecutionClient:   mockExecutionClient,
-		Network:           mockNetworkConfig,
-		ValidatorProvider: mockValidatorProvider,
+		Ctx:                 ctx,
+		BeaconNode:          mockBeaconNode,
+		ExecutionClient:     mockExecutionClient,
+		Network:             mockNetworkConfig,
+		ValidatorProvider:   mockValidatorProvider,
+		ValidatorController: mockValidatorController,
+		DutyExecutor:        mockDutyExecutor,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			ticker := NewMockSlotTicker()
 			mockSlotService.Subscribe(ticker.Subscribe())
@@ -113,7 +118,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	s := NewScheduler(opts)
 	s.blockPropagateDelay = 1 * time.Millisecond
 	s.indicesChg = make(chan struct{})
-	s.handlers = []dutyHandler{handler}
+	s.handlers = handlers
 
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
@@ -133,13 +138,13 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot.GetSlot()
+			return currentSlot.Get()
 		},
 	).AnyTimes()
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
-			return phase0.Epoch(uint64(currentSlot.GetSlot()) / s.network.SlotsPerEpoch())
+			return phase0.Epoch(uint64(currentSlot.Get()) / s.network.SlotsPerEpoch())
 		},
 	).AnyTimes()
 
@@ -162,23 +167,90 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.BeaconDuty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.BeaconDuty, executeDutiesCallSize)
-	s.executeDuty = func(logger *zap.Logger, duty *spectypes.BeaconDuty) {
-		logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
-		executeDutiesBuffer <- duty
 
-		// Check if all expected duties have been received
-		if len(executeDutiesBuffer) == executeDutiesCallSize {
-			// Build the array of duties
-			var duties []*spectypes.BeaconDuty
-			for i := 0; i < executeDutiesCallSize; i++ {
-				d := <-executeDutiesBuffer
-				duties = append(duties, d)
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(logger *zap.Logger, duty *spectypes.BeaconDuty) error {
+			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+			executeDutiesBuffer <- duty
+
+			// Check if all expected duties have been received
+			if len(executeDutiesBuffer) == executeDutiesCallSize {
+				// Build the array of duties
+				var duties []*spectypes.BeaconDuty
+				for i := 0; i < executeDutiesCallSize; i++ {
+					d := <-executeDutiesBuffer
+					duties = append(duties, d)
+				}
+
+				// Send the array of duties to executeDutiesCall
+				executeDutiesCall <- duties
 			}
+			return nil
+		},
+	).AnyTimes()
+}
 
-			// Send the array of duties to executeDutiesCall
-			executeDutiesCall <- duties
-		}
+func setExecuteGenesisDutyFunc(s *Scheduler, executeDutiesCall chan []*genesisspectypes.Duty, executeDutiesCallSize int) {
+	executeDutiesBuffer := make(chan *genesisspectypes.Duty, executeDutiesCallSize)
+
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteGenesisDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(logger *zap.Logger, duty *genesisspectypes.Duty) error {
+			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+			executeDutiesBuffer <- duty
+
+			// Check if all expected duties have been received
+			if len(executeDutiesBuffer) == executeDutiesCallSize {
+				// Build the array of duties
+				var duties []*genesisspectypes.Duty
+				for i := 0; i < executeDutiesCallSize; i++ {
+					d := <-executeDutiesBuffer
+					duties = append(duties, d)
+				}
+
+				// Send the array of duties to executeDutiesCall
+				executeDutiesCall <- duties
+			}
+			return nil
+		},
+	).AnyTimes()
+}
+
+func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
+	type committeeDuty struct {
+		spectypes.CommitteeID
+		*spectypes.CommitteeDuty
 	}
+	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
+
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(logger *zap.Logger, duty *spectypes.BeaconDuty) error {
+			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+			return nil
+		},
+	).AnyTimes()
+
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+			logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
+			executeDutiesBuffer <- &committeeDuty{CommitteeID: committeeID, CommitteeDuty: duty}
+
+			// Check if all expected duties have been received
+			if len(executeDutiesBuffer) == executeDutiesCallSize {
+				// Build the array of duties
+				duties := make(committeeDutiesMap)
+				for i := 0; i < executeDutiesCallSize; i++ {
+					d := <-executeDutiesBuffer
+
+					if _, ok := duties[d.CommitteeID]; !ok {
+						duties[d.CommitteeID] = d.CommitteeDuty
+					}
+				}
+
+				// Send the array of duties to executeDutiesCall
+				executeDutiesCall <- duties
+			}
+		},
+	).AnyTimes()
 }
 
 func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.BeaconDuty, timeout time.Duration) {
@@ -192,7 +264,29 @@ func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan s
 	}
 }
 
+func waitForGenesisDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration) {
+	select {
+	case <-fetchDutiesCall:
+		logger.Debug("duties fetched")
+	case <-executeDutiesCall:
+		require.FailNow(t, "unexpected execute duty call")
+	case <-time.After(timeout):
+		require.FailNow(t, "timed out waiting for duties to be fetched")
+	}
+}
+
 func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.BeaconDuty, timeout time.Duration) {
+	select {
+	case <-fetchDutiesCall:
+		require.FailNow(t, "unexpected duties call")
+	case <-executeDutiesCall:
+		require.FailNow(t, "unexpected execute duty call")
+	case <-time.After(timeout):
+		// No action as expected.
+	}
+}
+
+func waitForNoActionGenesis(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -227,21 +321,100 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 	}
 }
 
-type SlotValue struct {
-	mu   sync.Mutex
-	slot phase0.Slot
+func waitForGenesisDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration, expectedDuties []*genesisspectypes.Duty) {
+	select {
+	case <-fetchDutiesCall:
+		require.FailNow(t, "unexpected duties call")
+	case duties := <-executeDutiesCall:
+		logger.Debug("duties executed", zap.Any("duties", duties))
+		logger.Debug("expected duties", zap.Any("duties", expectedDuties))
+		require.Len(t, duties, len(expectedDuties))
+		for _, e := range expectedDuties {
+			found := false
+			for _, d := range duties {
+				if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
+					found = true
+					break
+				}
+			}
+			require.True(t, found)
+		}
+
+	case <-time.After(timeout):
+		require.FailNow(t, "timed out waiting for duty to be executed")
+	}
 }
 
-func (sv *SlotValue) SetSlot(s phase0.Slot) {
-	sv.mu.Lock()
-	defer sv.mu.Unlock()
-	sv.slot = s
+func waitForDutiesFetchCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
+	select {
+	case <-fetchDutiesCall:
+		break
+	case <-executeDutiesCall:
+		require.FailNow(t, "unexpected execute duty call")
+	case <-time.After(timeout):
+		require.FailNow(t, "timed out waiting for duties to be fetched")
+	}
 }
 
-func (sv *SlotValue) GetSlot() phase0.Slot {
+func waitForNoActionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
+	select {
+	case <-fetchDutiesCall:
+		require.FailNow(t, "unexpected duties call")
+	case <-executeDutiesCall:
+		require.FailNow(t, "unexpected execute duty call")
+	case <-time.After(timeout):
+		// No action as expected.
+	}
+}
+
+func waitForDutiesExecutionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration, expectedDuties committeeDutiesMap) {
+	select {
+	case <-fetchDutiesCall:
+		require.FailNow(t, "unexpected duties call")
+	case actualDuties := <-executeDutiesCall:
+		require.Len(t, actualDuties, len(expectedDuties))
+		for eCommitteeID, eCommDuty := range expectedDuties {
+			aCommDuty, ok := actualDuties[eCommitteeID]
+			if !ok {
+				require.FailNow(t, "missing cluster id")
+			}
+			require.Len(t, aCommDuty.BeaconDuties, len(eCommDuty.BeaconDuties))
+
+			for _, e := range eCommDuty.BeaconDuties {
+				found := false
+				for _, d := range aCommDuty.BeaconDuties {
+					if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
+						found = true
+						break
+					}
+				}
+				require.True(t, found)
+			}
+		}
+
+	case <-time.After(timeout):
+		require.FailNow(t, "timed out waiting for duty to be executed")
+	}
+}
+
+// SafeValue is a generic type that can hold any type specified by T.
+type SafeValue[T any] struct {
+	mu sync.Mutex
+	v  T
+}
+
+// Set sets the value of SafeValue to the specified value of type T.
+func (sv *SafeValue[T]) Set(v T) {
 	sv.mu.Lock()
 	defer sv.mu.Unlock()
-	return sv.slot
+	sv.v = v
+}
+
+// Get returns the current value of SafeValue of type T.
+func (sv *SafeValue[T]) Get() T {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.v
 }
 
 func TestScheduler_Run(t *testing.T) {
@@ -251,8 +424,8 @@ func TestScheduler_Run(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
 
-	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
-	mockValidatorProvider := mocks.NewMockValidatorProvider(ctrl)
+	mockBeaconNode := NewMockBeaconNode(ctrl)
+	mockValidatorProvider := NewMockValidatorProvider(ctrl)
 	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 	// create multiple mock duty handlers
 	mockDutyHandler1 := NewMockdutyHandler(ctrl)
@@ -304,8 +477,8 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	defer cancel()
 	logger := logging.TestLogger(t)
 
-	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
-	mockValidatorProvider := mocks.NewMockValidatorProvider(ctrl)
+	mockBeaconNode := NewMockBeaconNode(ctrl)
+	mockValidatorProvider := NewMockValidatorProvider(ctrl)
 	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 	// create multiple mock duty handlers
 

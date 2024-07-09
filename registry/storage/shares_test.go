@@ -251,14 +251,11 @@ func generateRandomValidatorSpecShare(splitKeys map[uint64]*bls.SecretKey) (*ssv
 		return ibftCommittee[i].Signer < ibftCommittee[j].Signer
 	})
 
-	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(splitKeys))
-
 	return &ssvtypes.SSVShare{
 		Share: spectypes.Share{
 			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
-			Quorum:              quorum,
 			DomainType:          networkconfig.TestNetwork.Domain,
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),

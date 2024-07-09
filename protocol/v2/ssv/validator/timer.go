@@ -86,7 +86,6 @@ func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 		//if v.state != uint32(Started) {
 		//	return
 		//}
-
 		dr := v.Runners[phase0.Slot(height)]
 		hasDuty := dr.HasRunningDuty()
 		if !hasDuty {

@@ -66,8 +66,8 @@ func NewAttesterRunnner(
 	}
 }
 
-func (r *AttesterRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
+func (r *AttesterRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty, quorum)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -181,7 +181,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 
 		// Submit it to the BN.
 		start := time.Now()
-		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
+		if err := r.beacon.SubmitAttestations([]*phase0.Attestation{signedAtt}); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")

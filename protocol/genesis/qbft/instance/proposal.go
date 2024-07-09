@@ -14,7 +14,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
@@ -70,7 +69,7 @@ func isValidProposal(
 	config qbft.IConfig,
 	signedProposal *genesisspecqbft.SignedMessage,
 	valCheck genesisspecqbft.ProposedValueCheckF,
-	operators []*spectypes.ShareMember,
+	operators []*spectypes.Operator,
 ) error {
 	if signedProposal.Message.MsgType != genesisspecqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
@@ -129,7 +128,7 @@ func isValidProposal(
 
 func IsProposalJustification(
 	config qbft.IConfig,
-	share *ssvtypes.SSVShare,
+	committeeMember *spectypes.CommitteeMember,
 	roundChangeMsgs []*genesisspecqbft.SignedMessage,
 	prepareMsgs []*genesisspecqbft.SignedMessage,
 	height genesisspecqbft.Height,
@@ -138,8 +137,8 @@ func IsProposalJustification(
 ) error {
 	return isProposalJustification(
 		&types.State{
-			Share:  &share.Share,
-			Height: height,
+			CommitteeMember: committeeMember,
+			Height:          height,
 		},
 		config,
 		roundChangeMsgs,
@@ -179,7 +178,7 @@ func isProposalJustification(
 		}
 
 		// check there is a quorum
-		if !HasQuorum(state.Share, roundChangeMsgs) {
+		if !HasQuorum(state.CommitteeMember, roundChangeMsgs) {
 			return errors.New("change round has no quorum")
 		}
 
@@ -201,7 +200,7 @@ func isProposalJustification(
 		} else {
 
 			// check prepare quorum
-			if !HasQuorum(state.Share, prepareMsgs) {
+			if !HasQuorum(state.CommitteeMember, prepareMsgs) {
 				return errors.New("prepares has no quorum")
 			}
 
@@ -231,7 +230,7 @@ func isProposalJustification(
 					height,
 					rcm.Message.DataRound,
 					rcm.Message.Root,
-					state.Share.Committee,
+					state.CommitteeMember.Committee,
 				); err != nil {
 					return errors.New("signed prepare not valid")
 				}
@@ -284,7 +283,7 @@ func CreateProposal(state *types.State, config qbft.IConfig, fullData []byte, ro
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.CommitteeMember.SSVOperatorPubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing proposal msg")
 	}

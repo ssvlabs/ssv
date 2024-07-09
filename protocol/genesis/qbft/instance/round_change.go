@@ -23,7 +23,7 @@ func (i *Instance) uponRoundChange(
 	roundChangeMsgContainer *genesisspecqbft.MsgContainer,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 ) error {
-	hasQuorumBefore := HasQuorum(i.State.Share, roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.
+	hasQuorumBefore := HasQuorum(i.State.CommitteeMember, roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.
 		Round))
 	// Currently, even if we have a quorum of round change messages, we update the container
 	addedMsg, err := roundChangeMsgContainer.AddFirstMsgForSignerAndRound(signedRoundChange)
@@ -128,7 +128,7 @@ func hasReceivedPartialQuorum(state *types.State, roundChangeMsgContainer *genes
 		}
 	}
 
-	return HasPartialQuorum(state.Share, rc), rc
+	return HasPartialQuorum(state.CommitteeMember, rc), rc
 }
 
 // hasReceivedProposalJustificationForLeadingRound returns
@@ -145,7 +145,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 ) (*genesisspecqbft.SignedMessage, []byte, error) {
 	roundChanges := roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.Round)
 	// optimization, if no round change quorum can return false
-	if !HasQuorum(state.Share, roundChanges) {
+	if !HasQuorum(state.CommitteeMember, roundChanges) {
 		return nil, nil, nil
 	}
 
@@ -261,7 +261,7 @@ func validRoundChangeForData(
 	}
 
 	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.CommitteeMember.Committee); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
@@ -287,7 +287,7 @@ func validRoundChangeForData(
 				state.Height,
 				signedMsg.Message.DataRound,
 				signedMsg.Message.Root,
-				state.Share.Committee); err != nil {
+				state.CommitteeMember.Committee); err != nil {
 				return errors.Wrap(err, "round change justification invalid")
 			}
 		}
@@ -296,7 +296,7 @@ func validRoundChangeForData(
 			return errors.New("H(data) != root")
 		}
 
-		if !HasQuorum(state.Share, prepareMsgs) {
+		if !HasQuorum(state.CommitteeMember, prepareMsgs) {
 			return errors.New("no justifications quorum")
 		}
 
@@ -390,7 +390,7 @@ func CreateRoundChange(state *types.State, config qbft.IConfig, newRound genesis
 		DataRound:                round,
 		RoundChangeJustification: justificationsData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.CommitteeMember.SSVOperatorPubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing round change msg")
 	}

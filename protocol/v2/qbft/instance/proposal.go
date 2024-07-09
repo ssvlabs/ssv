@@ -86,7 +86,7 @@ func isValidProposal(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if !signedProposal.CheckSignersInCommittee(state.Share.Committee) {
+	if !signedProposal.CheckSignersInCommittee(state.CommitteeMember.Committee) {
 		return errors.New("signer not in committee")
 	}
 
@@ -133,7 +133,7 @@ func isValidProposal(
 
 func IsProposalJustification(
 	config qbft.IConfig,
-	share *spectypes.Operator,
+	committeeMember *spectypes.CommitteeMember,
 	roundChangeMsgs []*spectypes.SignedSSVMessage,
 	prepareMsgs []*spectypes.SignedSSVMessage,
 	height specqbft.Height,
@@ -142,8 +142,8 @@ func IsProposalJustification(
 ) error {
 	return isProposalJustification(
 		&specqbft.State{
-			Share:  share,
-			Height: height,
+			CommitteeMember: committeeMember,
+			Height:          height,
 		},
 		config,
 		roundChangeMsgs,
@@ -183,7 +183,7 @@ func isProposalJustification(
 		}
 
 		// check there is a quorum
-		if !specqbft.HasQuorum(state.Share, roundChangeMsgs) {
+		if !specqbft.HasQuorum(state.CommitteeMember, roundChangeMsgs) {
 			return errors.New("change round has no quorum")
 		}
 
@@ -211,7 +211,7 @@ func isProposalJustification(
 		} else {
 
 			// check prepare quorum
-			if !specqbft.HasQuorum(state.Share, prepareMsgs) {
+			if !specqbft.HasQuorum(state.CommitteeMember, prepareMsgs) {
 				return errors.New("prepares has no quorum")
 			}
 
@@ -246,7 +246,7 @@ func isProposalJustification(
 					height,
 					rcMsg.DataRound,
 					rcMsg.Root,
-					state.Share.Committee,
+					state.CommitteeMember.Committee,
 				); err != nil {
 					return errors.New("signed prepare not valid")
 				}
@@ -299,5 +299,11 @@ func CreateProposal(state *specqbft.State, config qbft.IConfig, fullData []byte,
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
-	return specqbft.MessageToSignedSSVMessageWithFullData(msg, state.Share.OperatorID, config.GetOperatorSigner(), fullData)
+
+	signedMsg, err := specqbft.Sign(msg, state.CommitteeMember.OperatorID, config.GetOperatorSigner())
+	if err != nil {
+		return nil, errors.Wrap(err, "could not wrap proposal message")
+	}
+	signedMsg.FullData = fullData
+	return signedMsg, nil
 }

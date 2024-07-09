@@ -14,15 +14,16 @@ import (
 )
 
 type NonCommitteeValidator struct {
-	Share          *types.SSVShare
-	Storage        *storage.QBFTStores
-	qbftController *qbftcontroller.Controller
+	CommitteeMember *spectypes.CommitteeMember
+	Share           *types.SSVShare
+	Storage         *storage.QBFTStores
+	qbftController  *qbftcontroller.Controller
 }
 
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:                types.GetDefaultDomain(),
+		Domain:                opts.NetworkConfig.Domain,
 		Storage:               opts.Storage.Get(identifier.GetRoleType()),
 		Network:               opts.Network,
 		SignatureVerification: true,
@@ -38,9 +39,10 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 
 	return &NonCommitteeValidator{
-		Share:          opts.SSVShare,
-		Storage:        opts.Storage,
-		qbftController: ctrl,
+		CommitteeMember: opts.Operator,
+		Share:           opts.SSVShare,
+		Storage:         opts.Storage,
+		qbftController:  ctrl,
 	}
 }
 
@@ -67,7 +69,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 		}
 
 		// only supports decided msg's
-		if decMsg.MsgType != specqbft.CommitMsgType || !ncv.Share.HasQuorum(len(signedMsg.OperatorIDs)) {
+		if decMsg.MsgType != specqbft.CommitMsgType || !ncv.CommitteeMember.HasQuorum(len(signedMsg.OperatorIDs)) {
 			return
 		}
 

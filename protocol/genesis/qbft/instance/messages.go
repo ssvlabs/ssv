@@ -23,7 +23,7 @@ func CheckSignersInCommittee(signedMsg *genesisspecqbft.SignedMessage, committee
 	return true
 }
 
-func HasQuorum(share *spectypes.Share, msgs []*genesisspecqbft.SignedMessage) bool {
+func HasQuorum(share *spectypes.CommitteeMember, msgs []*genesisspecqbft.SignedMessage) bool {
 	uniqueSigners := make(map[spectypes.OperatorID]bool)
 	for _, msg := range msgs {
 		for _, signer := range msg.GetSigners() {
@@ -34,7 +34,7 @@ func HasQuorum(share *spectypes.Share, msgs []*genesisspecqbft.SignedMessage) bo
 }
 
 // HasPartialQuorum returns true if a unique set of signers has partial quorum
-func HasPartialQuorum(share *spectypes.Share, msgs []*genesisspecqbft.SignedMessage) bool {
+func HasPartialQuorum(share *spectypes.CommitteeMember, msgs []*genesisspecqbft.SignedMessage) bool {
 	uniqueSigners := make(map[spectypes.OperatorID]bool)
 	for _, msg := range msgs {
 		for _, signer := range msg.GetSigners() {

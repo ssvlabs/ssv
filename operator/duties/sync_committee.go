@@ -8,6 +8,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -32,7 +33,6 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitt
 		duties: duties,
 	}
 	h.fetchCurrentPeriod = true
-	h.fetchFirst = true
 	return h
 }
 
@@ -81,18 +81,11 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			if h.fetchFirst {
-				h.fetchFirst = false
-				h.processFetching(ctx, period, true)
-				if !h.network.AlanFork() {
-					h.processExecution(period, slot)
-				}
-			} else {
+
+			if !h.network.AlanFork() {
 				h.processExecution(period, slot)
-				if !h.network.AlanFork() {
-					h.processExecution(period, slot)
-				}
 			}
+			h.processFetching(ctx, period, true)
 			cancel()
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next period in the next slot.
@@ -148,11 +141,6 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 	h.processFetching(ctx, period, false)
-
-	// At the init time we may not have enough duties to fetch
-	// we should not set those values to false in processFetching() call
-	h.fetchNextPeriod = true
-	h.fetchCurrentPeriod = true
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
@@ -183,14 +171,27 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 		return
 	}
 
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
+	if !h.network.AlanForked(slot) {
+		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
+		for _, d := range duties {
+			if h.shouldExecute(d, slot) {
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommittee))
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommitteeContribution))
+			}
+		}
+
+		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+		return
+	}
+
+	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
-			//toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
 	}
-	h.executeDuties(h.logger, toExecute)
+
+	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
@@ -202,7 +203,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	allActiveIndices := indicesFromShares(h.validatorProvider.ParticipatingValidators(firstEpoch))
+	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
 	if len(allActiveIndices) == 0 {
 		return nil
 	}
@@ -260,6 +261,20 @@ func (h *SyncCommitteeHandler) prepareDutiesResultLog(period uint64, duties []*e
 		zap.String("period", fmt.Sprintf("p%v", period)),
 		zap.Any("duties", b.String()),
 		fields.Duration(start))
+}
+
+func (h *SyncCommitteeHandler) toGenesisSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
+	indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
+	for i, index := range duty.ValidatorSyncCommitteeIndices {
+		indices[i] = uint64(index)
+	}
+	return &genesisspectypes.Duty{
+		Type:                          role,
+		PubKey:                        duty.PubKey,
+		Slot:                          slot, // in order for the duty scheduler to execute
+		ValidatorIndex:                duty.ValidatorIndex,
+		ValidatorSyncCommitteeIndices: indices,
+	}
 }
 
 func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.BeaconDuty {

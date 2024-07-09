@@ -150,3 +150,7 @@ spec:
           configMap:
             name: ssv-exporter-holesky-cm
       hostNetwork: true
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/role
+        operator: Exists

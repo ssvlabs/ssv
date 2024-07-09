@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -34,10 +34,12 @@ type NetworkConfig struct {
 	Name                 string
 	Beacon               beacon.BeaconNetwork
 	Domain               spectypes.DomainType
-	GenesisEpoch         spec.Epoch
+	GenesisEpoch         phase0.Epoch
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address
 	Bootnodes            []string
+
+	AlanForkEpoch phase0.Epoch
 }
 
 func (n NetworkConfig) String() string {
@@ -47,6 +49,11 @@ func (n NetworkConfig) String() string {
 	}
 
 	return string(b)
+}
+
+func (n NetworkConfig) AlanForked(slot phase0.Slot) bool {
+	epoch := n.Beacon.EstimatedEpochAtSlot(slot)
+	return epoch >= n.AlanForkEpoch
 }
 
 // ForkVersion returns the fork version of the network.

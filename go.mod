@@ -11,11 +11,13 @@ require (
 	github.com/cornelk/hashmap v1.0.8
 	github.com/dgraph-io/badger/v4 v4.1.0
 	github.com/dgraph-io/ristretto v0.1.1
+	github.com/emirpasic/gods v1.18.1
 	github.com/ethereum/go-ethereum v1.13.14
 	github.com/ferranbt/fastssz v0.1.3
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
 	github.com/golang/gddo v0.0.0-20200528160355-8d077c1d8f4c
+	github.com/golang/mock v1.6.0
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
@@ -39,7 +41,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
-	github.com/ssvlabs/ssv-spec v0.3.10-0.20240519064657-54fad5befec4
+	github.com/ssvlabs/ssv-spec v0.3.10-0.20240624121006-7adef2ac3ea6
 	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240628184706-f15056ffda04
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
@@ -226,6 +228,8 @@ require (
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
+
+replace github.com/attestantio/go-eth2-client => github.com/moshe-blox/go-eth2-client v0.0.0-20240529101804-84ddfd928b95
 
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 

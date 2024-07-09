@@ -34,14 +34,14 @@ type Instance struct {
 
 func NewInstance(
 	config qbft.IConfig,
-	share *spectypes.Share,
+	committeeMember *spectypes.CommitteeMember,
 	identifier []byte,
 	height genesisspecqbft.Height,
 ) *Instance {
 	msgId := genesisspectypes.MessageIDFromBytes(identifier)
 	return &Instance{
 		State: &types.State{
-			Share:                share,
+			CommitteeMember:      committeeMember,
 			ID:                   identifier,
 			Round:                genesisspecqbft.FirstRound,
 			Height:               height,
@@ -176,7 +176,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			i.config,
 			msg,
 			i.config.GetValueCheckF(),
-			i.State.Share.Committee,
+			i.State.CommitteeMember.Committee,
 		)
 	case genesisspecqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
@@ -189,7 +189,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			i.State.Height,
 			i.State.Round,
 			proposedMsg.Message.Root,
-			i.State.Share.Committee,
+			i.State.CommitteeMember.Committee,
 		)
 	case genesisspecqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
@@ -202,7 +202,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			i.State.Height,
 			i.State.Round,
 			i.State.ProposalAcceptedForCurrentRound,
-			i.State.Share.Committee,
+			i.State.CommitteeMember.Committee,
 		)
 	case genesisspecqbft.RoundChangeMsgType:
 		return validRoundChangeForData(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)

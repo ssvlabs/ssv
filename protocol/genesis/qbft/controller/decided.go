@@ -17,7 +17,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.Signed
 	if err := ValidateDecided(
 		c.config,
 		msg,
-		c.Share,
+		c.CommitteeMember,
 	); err != nil {
 		return nil, errors.Wrap(err, "invalid decided msg")
 	}
@@ -29,7 +29,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.Signed
 	save := true
 
 	if inst == nil {
-		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
+		i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = msg.FullData
@@ -82,9 +82,9 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.Signed
 func ValidateDecided(
 	config qbft.IConfig,
 	signedDecided *genesisspecqbft.SignedMessage,
-	share *spectypes.Share,
+	committeeMemeber *spectypes.CommitteeMember,
 ) error {
-	if !IsDecidedMsg(share, signedDecided) {
+	if !IsDecidedMsg(committeeMemeber, signedDecided) {
 		return errors.New("not a decided msg")
 	}
 
@@ -92,7 +92,7 @@ func ValidateDecided(
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
-	if err := instance.BaseCommitValidation(config, signedDecided, signedDecided.Message.Height, share.Committee); err != nil {
+	if err := instance.BaseCommitValidation(config, signedDecided, signedDecided.Message.Height, committeeMemeber.Committee); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
@@ -112,6 +112,6 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(share *spectypes.Share, signedDecided *genesisspecqbft.SignedMessage) bool {
-	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == genesisspecqbft.CommitMsgType
+func IsDecidedMsg(committeeMember *spectypes.CommitteeMember, signedDecided *genesisspecqbft.SignedMessage) bool {
+	return committeeMember.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == genesisspecqbft.CommitMsgType
 }

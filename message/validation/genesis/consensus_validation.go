@@ -128,7 +128,7 @@ func (mv *messageValidator) validateConsensusMessage(
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
 		} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
-			signerState.ResetRound(msgRound)
+			signerState.Reset(msgRound)
 		}
 
 		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
@@ -404,7 +404,7 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *g
 
 	case !share.HasQuorum(len(m.Signers)) || len(m.Signers) > len(share.Committee):
 		e := ErrWrongSignersLength
-		e.want = fmt.Sprintf("between %v and %v", share.Quorum, len(share.Committee))
+		e.want = fmt.Sprintf("between %v and %v", share.Quorum(), len(share.Committee))
 		e.got = len(m.Signers)
 		return e
 	}
