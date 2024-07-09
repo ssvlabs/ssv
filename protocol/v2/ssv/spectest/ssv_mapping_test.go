@@ -83,7 +83,7 @@ func TestSSVMapping(t *testing.T) {
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
-				//t.Parallel()
+				t.Parallel()
 				r.test(t)
 			})
 			if t.Failed() {
@@ -645,7 +645,7 @@ var ignoreList = []string{
 	//"committee aggregator all are aggregators",
 	//"future message",
 	//"consensus nil ssvmessage",
-	"duty", /// <<<<
+	"duty", /// <<<< DIFFERENT ROOTS. CHECK JSON
 	//"consensus invalid expected roots",
 	//"consensus invalid operator signature",
 	//"consensus valid msg 13 operators",
@@ -694,29 +694,29 @@ var ignoreList = []string{
 	//"consensus invalid msg signature",
 	//"data value check nil",
 	//"committee duty",
-	"valid post finish",
+	"valid post finish", /// <<<<
 	//"consensus duplicate msg different root then quorum",
 	//"consensus quorum 10 operators",
-	"consensus valid msg",
+	//"consensus valid msg",/// <<<<
 	//"msg duty finished",
 	//"valid decided 13 operators",
 	//"consensus quorum 7 operators",
 	//"value check valid",
 	//"value check with slashable majority",
 	//"beacon vote",
-	"quorum",
+	"quorum", /// <<<<
 	//"consensus before decided",
 	"decided duties",
-	"than successful duties",
+	"than successful duties", /// <<<<
 	"decided invalid value",
 	//"duty post invalid decided",
-	"invalid",
+	//"invalid", /// <<<<
 	//"consensus no running duty",
 	//"consensus unknown msg signer",
-	"consensus duplicate msg",
+	//"consensus duplicate msg", /// <<<<
 	//"value check slashable",
 	//"duty post wrong decided",
-	"proposer accepts normal block proposal",
+	//"proposer accepts normal block proposal",/// <<<<
 	//"valid decided",
 	//"valid decided 10 operators",
 	//"consensus invalid msg slot",
@@ -739,8 +739,8 @@ var ignoreList = []string{
 	//"consensus invalid then quorum",
 	//"consensus invalid msg slot",
 	//"consensus too few roots",
-	"message ID",
-	"duty finished",
-	"committee aggregator none is aggregator",
-	"consensus too few roots",
+	"message ID", /// <<<<
+	//"duty finished",/// <<<<
+	//"committee aggregator none is aggregator",/// <<<<
+	//"consensus too few roots",/// <<<<
 }

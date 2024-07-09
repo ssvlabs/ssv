@@ -68,6 +68,15 @@ func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(msgs []*altair.SyncCommit
 func (bn *TestingBeaconNodeWrapped) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
 	return bn.bn.SubmitBlindedBeaconBlock(block, sig)
 }
+func (bn *TestingBeaconNodeWrapped) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
+	return bn.bn.SubmitSignedContributionAndProof(contribution)
+}
+func (bn *TestingBeaconNodeWrapped) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
+	return bn.bn.SubmitSignedAggregateSelectionProof(msg)
+}
+func (bn *TestingBeaconNodeWrapped) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
+	return bn.bn.SubmitBeaconBlock(block, sig)
+}
 
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {
 	bnw := &TestingBeaconNodeWrapped{}
