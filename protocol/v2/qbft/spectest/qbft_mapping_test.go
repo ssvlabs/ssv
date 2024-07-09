@@ -18,7 +18,6 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -30,8 +29,6 @@ func TestQBFTMapping(t *testing.T) {
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
-
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	for name, test := range untypedTests {
 		name, test := name, test
