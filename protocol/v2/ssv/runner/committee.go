@@ -551,8 +551,9 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 }
 
 func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty types.Duty) error {
+	slot := duty.DutySlot()
 	//TODO committeeIndex is 0, is this correct?
-	attData, _, err := cr.GetBeaconNode().GetAttestationData(duty.DutySlot(), 0)
+	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot, 0)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
