@@ -76,7 +76,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -95,7 +95,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
-		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)
+		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
 		state := validator.consensusState(msgID)
 		for i := spectypes.OperatorID(1); i <= 4; i++ {
 			signerState := state.GetSignerState(i)
@@ -265,7 +265,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    bytes.Repeat([]byte{1}, 500),
 		}
 
@@ -295,7 +295,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    bytes.Repeat([]byte{0x1}, maxMessageSize),
 		}
 
@@ -324,7 +324,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message := &queue.DecodedSSVMessage{
 			SSVMessage: &alanspectypes.SSVMessage{
 				MsgType: alanspectypes.MsgType(spectypes.SSVConsensusMsgType),
-				MsgID:   alanspectypes.MessageID(spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)),
+				MsgID:   alanspectypes.MessageID(spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)),
 				Data:    []byte{},
 			},
 		}
@@ -347,7 +347,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message := &queue.DecodedSSVMessage{
 			SSVMessage: &alanspectypes.SSVMessage{
 				MsgType: alanspectypes.MsgType(spectypes.SSVConsensusMsgType),
-				MsgID:   alanspectypes.MessageID(spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)),
+				MsgID:   alanspectypes.MessageID(spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)),
 				Data:    bytes.Repeat([]byte{0x1}, tooBigMsgSize),
 			},
 		}
@@ -371,7 +371,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: math.MaxUint64,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -402,7 +402,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), spectypes.ValidatorPK{}, roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), spectypes.ValidatorPK{}, roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -426,7 +426,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), sk.PublicKey().Marshal(), roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), sk.PublicKey().Marshal(), roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -464,7 +464,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrWrongDomain
 		expectedErr.got = hex.EncodeToString(wrongDomain[:])
-		domain := netCfg.Domain()
+		domain := netCfg.DomainType()
 		expectedErr.want = hex.EncodeToString(domain[:])
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -482,7 +482,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], math.MaxUint64),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], math.MaxUint64),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -507,7 +507,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], spectypes.BNRoleValidatorRegistration),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], spectypes.BNRoleValidatorRegistration),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -520,7 +520,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg = &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], spectypes.BNRoleVoluntaryExit),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], spectypes.BNRoleVoluntaryExit),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -557,7 +557,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), liquidatedShare.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), liquidatedShare.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -597,7 +597,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), inactiveShare.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), inactiveShare.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -648,7 +648,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), nonUpdatedMetadataShare.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), nonUpdatedMetadataShare.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -698,7 +698,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), nonUpdatedMetadataShare.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), nonUpdatedMetadataShare.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -736,7 +736,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), noMetadataShare.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), noMetadataShare.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -765,7 +765,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -781,7 +781,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg2 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -797,7 +797,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg3 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -824,7 +824,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], spectypes.BNRoleProposer),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], spectypes.BNRoleProposer),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -867,7 +867,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -892,7 +892,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -918,7 +918,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -947,7 +947,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -973,7 +973,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -999,7 +999,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -1038,7 +1038,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
 					validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
-					msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], role)
+					msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], role)
 
 					innerSig, r, err := spectestingutils.NewTestingKeyManager().SignBeaconObject(spectypes.SSZUint64(spectestingutils.TestingDutyEpoch), phase0.Domain{}, ks.Shares[1].GetPublicKey().Serialize(), phase0.DomainType{})
 					require.NoError(t, err)
@@ -1085,7 +1085,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// Get error when receiving a message with an incorrect message type
 		t.Run("invalid message type", func(t *testing.T) {
 			validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
-			msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)
+			msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
 
 			msg := &spectypes.SignedPartialSignatureMessage{
 				Message: spectypes.PartialSignatureMessages{
@@ -1127,7 +1127,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
 					validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
-					msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], role)
+					msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], role)
 
 					msg := &spectypes.SignedPartialSignatureMessage{
 						Message: spectypes.PartialSignatureMessages{
@@ -1178,7 +1178,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1221,7 +1221,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			ssvMsg := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    encoded,
 			}
 
@@ -1244,7 +1244,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			ssvMsg := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVPartialSignatureMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    encoded,
 			}
 
@@ -1272,7 +1272,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -1318,7 +1318,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			ssvMsg := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), zeroSignerShare.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), zeroSignerShare.ValidatorPubKey[:], roleAttester),
 				Data:    encodedValidSignedMessage,
 			}
 
@@ -1340,7 +1340,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			ssvMsg := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVPartialSignatureMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), zeroSignerShare.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), zeroSignerShare.ValidatorPubKey[:], roleAttester),
 				Data:    encoded,
 			}
 
@@ -1371,7 +1371,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -1399,7 +1399,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -1427,7 +1427,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -1457,7 +1457,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encoded,
 		}
 
@@ -1494,7 +1494,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		for role, receivedAt := range tests {
 			role, receivedAt := role, receivedAt
 			t.Run(role.String(), func(t *testing.T) {
-				msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], role)
+				msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], role)
 
 				ssvMsg := &spectypes.SSVMessage{
 					MsgType: spectypes.SSVConsensusMsgType,
@@ -1524,7 +1524,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1549,7 +1549,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1579,7 +1579,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1611,7 +1611,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1646,7 +1646,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1676,7 +1676,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1704,7 +1704,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
@@ -1730,7 +1730,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg1 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned1,
 		}
 
@@ -1751,7 +1751,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg2 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned2,
 		}
 
@@ -1775,7 +1775,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg1 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned1,
 		}
 
@@ -1794,7 +1794,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg2 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned2,
 		}
 
@@ -1819,7 +1819,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg1 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned1,
 		}
 
@@ -1836,7 +1836,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg2 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned2,
 		}
 
@@ -1861,7 +1861,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg1 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned1,
 		}
 
@@ -1878,7 +1878,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ssvMsg2 := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 			Data:    encodedSigned2,
 		}
 
@@ -1897,7 +1897,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)
+		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
 
 		signed := spectestingutils.TestingCommitMultiSignerMessageWithRound(
 			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, 1)
@@ -1941,7 +1941,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		for role, round := range tests {
 			role, round := role, round
 			t.Run(role.String(), func(t *testing.T) {
-				msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], role)
+				msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], role)
 
 				signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, round)
 				encodedMessage, err := signedMessage.Encode()
@@ -1967,7 +1967,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("round already advanced", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)
+		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, 2)
@@ -2006,7 +2006,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Initialize tests for testing when sending a message with a slot before the current one
 	t.Run("slot already advanced", func(t *testing.T) {
-		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)
+		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
@@ -2099,7 +2099,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("event message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester)
+		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		eventMsg := &ssvtypes.EventMsg{}
@@ -2134,7 +2134,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			message := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    encoded,
 			}
 
@@ -2167,7 +2167,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			message := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    encoded,
 			}
 
@@ -2230,7 +2230,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			message := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    encoded,
 			}
 
@@ -2294,7 +2294,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			message := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.Domain()), share.ValidatorPubKey[:], roleAttester),
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    encoded,
 			}
 

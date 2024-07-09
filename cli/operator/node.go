@@ -564,7 +564,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.Domain()),
+		fields.Domain(networkConfig.DomainType()),
 		zap.String("nodeType", nodeType),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),

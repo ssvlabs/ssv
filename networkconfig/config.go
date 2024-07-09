@@ -34,6 +34,7 @@ type NetworkConfig struct {
 	Name                 string
 	Beacon               beacon.BeaconNetwork
 	GenesisEpoch         phase0.Epoch
+	domainType           spectypes.DomainType
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address
 	Bootnodes            []string
@@ -76,23 +77,9 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 }
 
 // Domain returns current domain type of the network
-func (n NetworkConfig) Domain() spectypes.DomainType {
-	fork := n.Beacon.ForkVersion()
-	switch fork {
-	case [4]byte{0, 0, 0, 0}:
-		if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
-			return spectypes.AlanMainnet
-		}
-		return spectypes.GenesisMainnet
-	case [4]byte{0x01, 0x01, 0x70, 0x00}:
-		if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
-			return spectypes.JatoAlanTestnet
-		}
-		return spectypes.JatoTestnet
-	default:
-		if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
-			return spectypes.AlanMainnet
-		}
-		return spectypes.GenesisMainnet
+func (n NetworkConfig) DomainType() spectypes.DomainType {
+	if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
+		copy(n.domainType[2:3], []byte{0x1})
 	}
+	return n.domainType
 }

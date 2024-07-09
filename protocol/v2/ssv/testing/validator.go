@@ -3,13 +3,14 @@ package testing
 import (
 	"context"
 
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -23,8 +24,8 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 		cancel,
 		validator.Options{
 			Network:       spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+			NetworkConfig: networkconfig.TestNetwork,
 			Beacon:        tests.NewTestingBeaconNodeWrapped(),
-			BeaconNetwork: networkconfig.TestNetwork.Beacon,
 			Storage:       testing.TestingStores(logger),
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex),

@@ -208,7 +208,7 @@ func (mv *messageValidator) validateQBFTLogic(
 			}
 
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
-			if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
+			if _, ok := signerState.SeenSigners[encodedOperators]; ok {
 				return ErrDecidedWithSameSigners
 			}
 		}
@@ -330,7 +330,7 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 			return ErrEncodeOperators
 		}
 
-		signerState.SeenSigners[string(encodedOperators)] = struct{}{}
+		signerState.SeenSigners[encodedOperators] = struct{}{}
 	}
 
 	signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
@@ -457,13 +457,13 @@ func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round spe
 	return committee[index]
 }
 
-func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+func encodeOperators(operators []spectypes.OperatorID) ([sha256.Size]byte, error) {
 	buf := new(bytes.Buffer)
 	for _, operator := range operators {
 		if err := binary.Write(buf, binary.LittleEndian, operator); err != nil {
-			return nil, err
+			return [sha256.Size]byte{}, err
 		}
 	}
 	hash := sha256.Sum256(buf.Bytes())
-	return hash[:], nil
+	return hash, nil
 }

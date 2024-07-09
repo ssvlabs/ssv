@@ -4,18 +4,18 @@ import (
 	"context"
 	"time"
 
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-
-	"github.com/ssvlabs/ssv/logging"
-
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging"
 )
 
 const (
@@ -120,5 +120,10 @@ func (md *localDiscovery) Close() error {
 	if err := md.svc.Close(); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (dvs *localDiscovery) UpdateDomainTypeAtFork(logger *zap.Logger, domain spectypes.DomainType) error {
+	// TODO
 	return nil
 }

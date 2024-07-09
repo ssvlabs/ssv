@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -355,4 +354,17 @@ func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, erro
 		return nil, errors.Wrap(err, "could not listen to UDP")
 	}
 	return conn, nil
+}
+
+func (dvs *DiscV5Service) UpdateDomainTypeAtFork(logger *zap.Logger, domain spectypes.DomainType) error {
+	updated, err := records.UpdateDomainTypeAtFork(dvs.dv5Listener.LocalNode(), domain)
+	if err != nil {
+		return errors.Wrap(err, "could not update ENR")
+	}
+	if updated != nil {
+		dvs.domainType = domain
+		logger.Debug("updated domain", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
+		go dvs.publishENR(logger)
+	}
+	return nil
 }

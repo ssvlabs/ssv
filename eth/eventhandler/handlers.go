@@ -333,7 +333,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		})
 	}
 
-	validatorShare.DomainType = eh.networkConfig.Domain()
+	validatorShare.DomainType = eh.networkConfig.DomainType()
 	validatorShare.Committee = shareMembers
 	validatorShare.Graffiti = []byte("ssv.network")
 
@@ -373,7 +373,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	}
 
 	removeDecidedMessages := func(role spectypes.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(eh.networkConfig.Domain(), share.ValidatorPubKey[:], role)
+		messageID := spectypes.NewMsgID(eh.networkConfig.DomainType(), share.ValidatorPubKey[:], role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)

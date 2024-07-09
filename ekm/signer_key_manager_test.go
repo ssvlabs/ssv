@@ -713,7 +713,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.Domain()),
+			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)
@@ -745,7 +745,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.Domain()),
+			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)

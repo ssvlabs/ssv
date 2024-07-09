@@ -4,18 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	storage2 "github.com/ssvlabs/ssv/registry/storage"
-
-	"github.com/ssvlabs/ssv/network"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -24,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -109,6 +107,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
 			DutyStore:           opts.DutyStore,
 			SlotTickerProvider:  slotTickerProvider,
+			P2PNetwork:          opts.P2PNetwork,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,
