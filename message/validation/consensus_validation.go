@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -169,12 +168,10 @@ func (mv *messageValidator) validateQBFTLogic(
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerStateBySlot := state.GetOrCreate(signer)
-		signerStateInterface, ok := signerStateBySlot.Get(msgSlot)
-		if !ok {
+		signerState := signerStateBySlot[msgSlot%mv.maxSlotsInState()]
+		if signerState == nil || signerState.Slot != msgSlot {
 			continue
 		}
-
-		signerState := signerStateInterface.(*SignerState)
 
 		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
 			// Rule: Ignore if peer already advanced to a later round. Only for non-decided messages
@@ -235,8 +232,14 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.GetOperatorIDs() {
 			signerStateBySlot := state.GetOrCreate(signer)
-			maxSlot, _ := signerStateBySlot.Max()
-			if maxSlot != nil && maxSlot.(phase0.Slot) > phase0.Slot(consensusMessage.Height) {
+			var maxSlot phase0.Slot
+			// TODO: store max slot to avoid iterating all values
+			for _, s := range signerStateBySlot {
+				if s != nil && s.Slot > maxSlot {
+					maxSlot = s.Slot
+				}
+			}
+			if maxSlot != 0 && maxSlot > phase0.Slot(consensusMessage.Height) {
 				e := ErrSlotAlreadyAdvanced
 				e.got = consensusMessage.Height
 				e.want = maxSlot
@@ -294,18 +297,14 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 	msgSlot := phase0.Slot(consensusMessage.Height)
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
-		var signerState *SignerState
-
 		stateBySlot := consensusState.GetOrCreate(signer)
-		signerStateInterface, ok := stateBySlot.Get(msgSlot)
-		if !ok {
-			signerState = NewSignerState(consensusMessage.Round)
-			stateBySlot.Put(msgSlot, signerState)
-			mv.pruneOldSlots(stateBySlot, msgSlot)
+		signerState := stateBySlot[msgSlot%mv.maxSlotsInState()]
+		if signerState == nil || signerState.Slot != msgSlot {
+			signerState = NewSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
+			stateBySlot[msgSlot%mv.maxSlotsInState()] = signerState
 		} else {
-			signerState = signerStateInterface.(*SignerState)
 			if consensusMessage.Round > signerState.Round {
-				signerState.Reset(consensusMessage.Round)
+				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
 			}
 		}
 
@@ -337,21 +336,8 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 	return nil
 }
 
-func (mv *messageValidator) pruneOldSlots(stateBySlot *treemap.Map, lastSlot phase0.Slot) {
-	maxSlotsInState := phase0.Slot(mv.netCfg.SlotsPerEpoch()) + lateSlotAllowance
-
-	// Check underflow.
-	if lastSlot <= maxSlotsInState {
-		return
-	}
-
-	for {
-		slot, _ := stateBySlot.Min()
-		if slot == nil || slot.(phase0.Slot) >= lastSlot-maxSlotsInState {
-			break
-		}
-		stateBySlot.Remove(slot.(phase0.Slot))
-	}
+func (mv *messageValidator) maxSlotsInState() phase0.Slot {
+	return phase0.Slot(mv.netCfg.SlotsPerEpoch()) + lateSlotAllowance
 }
 
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {

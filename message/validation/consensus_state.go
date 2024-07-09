@@ -4,8 +4,6 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
-	"github.com/emirpasic/gods/utils"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -17,22 +15,18 @@ type consensusID struct {
 
 // consensusState keeps track of the signers for a given public key and role.
 type consensusState struct {
-	state    map[spectypes.OperatorID]*treemap.Map // TODO: use *treemap.Map[phase0.Slot, *SignerState] after updating to Go 1.21
-	maxSlots phase0.Slot
-	mu       sync.Mutex
+	state           map[spectypes.OperatorID][]*SignerState // the slice index is slot % storedSlotCount
+	storedSlotCount phase0.Slot
+	mu              sync.Mutex
 }
 
-func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) *treemap.Map {
+func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) []*SignerState {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
 	if _, ok := cs.state[signer]; !ok {
-		cs.state[signer] = treemap.NewWith(slotComparator)
+		cs.state[signer] = make([]*SignerState, cs.storedSlotCount)
 	}
 
 	return cs.state[signer]
-}
-
-func slotComparator(a, b interface{}) int {
-	return utils.UInt64Comparator(uint64(a.(phase0.Slot)), uint64(b.(phase0.Slot)))
 }

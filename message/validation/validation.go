@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -295,8 +294,8 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
-			state:    make(map[spectypes.OperatorID]*treemap.Map),
-			maxSlots: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance,
+			state:           make(map[spectypes.OperatorID][]*SignerState),
+			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance,
 		}
 		mv.consensusStateIndex[id] = cs
 	}

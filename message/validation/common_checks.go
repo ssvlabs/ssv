@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -56,16 +55,17 @@ func (mv *messageValidator) validateDutyCount(
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
 	validatorIndices []phase0.ValidatorIndex,
-	signerStateBySlot *treemap.Map,
+	signerStateBySlot []*SignerState,
 ) error {
 	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
 	dutyCount := 0
-	signerStateBySlot.Each(func(slot any, state any) {
-		if mv.netCfg.Beacon.EstimatedEpochAtSlot(slot.(phase0.Slot)) == msgEpoch {
+	for _, state := range signerStateBySlot {
+		if state != nil && mv.netCfg.Beacon.EstimatedEpochAtSlot(state.Slot) == msgEpoch {
 			dutyCount++
 		}
-	})
-	if _, ok := signerStateBySlot.Get(msgSlot); !ok {
+	}
+
+	if state := signerStateBySlot[msgSlot%mv.maxSlotsInState()]; state == nil || state.Slot != msgSlot {
 		dutyCount++
 	}
 
