@@ -238,7 +238,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	// Validate message
 	if msg.GetType() != message.SSVEventMsgType {
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid signed message")
+			return errors.Wrap(err, "invalid SignedSSVMessage")
 		}
 
 		// Verify SignedSSVMessage's signature

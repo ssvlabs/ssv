@@ -76,9 +76,9 @@ func TestSSVMapping(t *testing.T) {
 		//	continue
 		//}
 		//fmt.Println(name)
-		if !strings.Contains(name, "post consensus nil ssvmessage") {
-			continue
-		}
+		//if !strings.Contains(name, "post consensus nil ssvmessage") {
+		//	continue
+		//}
 
 		r := prepareTest(t, logger, name, test)
 		if r != nil {

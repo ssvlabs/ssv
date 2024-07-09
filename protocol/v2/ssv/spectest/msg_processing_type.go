@@ -78,7 +78,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		}
 
 		for _, msg := range test.Messages {
-			dmsg, err := queue.DecodeSignedSSVMessage(msg)
+			dmsg, err := wrapSignedSSVMessageToDecodedSSVMessage(msg)
 			if err != nil {
 				lastErr = err
 				continue
@@ -98,7 +98,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			lastErr = v.StartDuty(logger, test.Duty)
 		}
 		for _, msg := range test.Messages {
-			dmsg, err := queue.DecodeSignedSSVMessage(msg)
+			dmsg, err := wrapSignedSSVMessageToDecodedSSVMessage(msg)
 			if err != nil {
 				lastErr = err
 				continue
@@ -257,4 +257,24 @@ var baseCommitteeWithRunnerSample = func(
 	c.Shares = shareMap
 
 	return c
+}
+
+// wrapSignedSSVMessageToDecodedSSVMessage - wraps a SignedSSVMessage to a DecodedSSVMessage to pass the queue.DecodedSSVMessage to ProcessMessage
+// In spec it accepts SignedSSVMessage, but in the protocol it accepts DecodedSSVMessage
+// Without handling nil case in tests we get a panic in decodeSignedSSVMessage
+func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*queue.DecodedSSVMessage, error) {
+	var dmsg *queue.DecodedSSVMessage
+	var err error
+
+	if msg.SSVMessage == nil {
+		dmsg = &queue.DecodedSSVMessage{
+			SignedSSVMessage: msg,
+			SSVMessage:       &spectypes.SSVMessage{},
+		}
+		dmsg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+	} else {
+		dmsg, err = queue.DecodeSignedSSVMessage(msg)
+	}
+
+	return dmsg, err
 }
