@@ -16,10 +16,10 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -41,13 +41,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Create 20 fake validator public keys.
-	// validators := make([]string, validatorCount)
-	// for i := 0; i < validatorCount; i++ {
-	// 	var validator [48]byte
-	// 	cryptorand.Read(validator[:])
-	// 	validators[i] = hex.EncodeToString(validator[:])
-	// }
 	validators := make([]string, validatorCount)
 	validators[0] = "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.

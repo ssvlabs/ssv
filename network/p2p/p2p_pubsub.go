@@ -7,17 +7,16 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -85,17 +84,15 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	// TODO: check the logic here
 	var committeeID spectypes.CommitteeID
 
-	// if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-	// 	fmt.Printf("committeeID = spectypes.CommitteeID")
-	// 	committeeID = spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
-	// } else {
-	// 	fmt.Printf("n.nodeStorage.ValidatorStore().Validator")
-	// 	share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
-	// 	if share == nil {
-	// 		return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
-	// 	}
-	// 	committeeID = share.CommitteeID()
-	// }
+	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		committeeID = spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
+	} else {
+		share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if share == nil {
+			return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
+		}
+		committeeID = share.CommitteeID()
+	}
 
 	share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
 	if share == nil {
