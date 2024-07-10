@@ -91,25 +91,29 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	// TODO alan : lock per slot?
-	if _, exists := c.Runners[duty.Slot]; exists {
-		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
-	}
+	//if len(duty.BeaconDuties) == 0 {
+	//	return errors.New("no beacon duties")
+	//}
 
-	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
-	//Filter old duties based on highest attesting slot
-
-	duty, validatorToStopMap, highestAttestingSlotMap, err := FilterCommitteeDuty(logger, duty, c.HighestAttestingSlotMap)
-	if err != nil {
-		return errors.Wrap(err, "cannot filter committee duty")
-	}
-	c.HighestAttestingSlotMap = highestAttestingSlotMap
+	//
+	//var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
+	////Filter old duties based on highest attesting slot
+	//
+	//duty, validatorToStopMap, highestAttestingSlotMap, err := FilterCommitteeDuty(logger, duty, c.HighestAttestingSlotMap)
+	//if err != nil {
+	//	return errors.Wrap(err, "cannot filter committee duty")
+	//}
+	//c.HighestAttestingSlotMap = highestAttestingSlotMap
 	// Stop validators with old duties
-	c.stopDuties(logger, validatorToStopMap)
-	c.updateAttestingSlotMap(duty)
+	//c.stopDuties(logger, validatorToStopMap)
+	//c.updateAttestingSlotMap(duty)
 
 	if len(duty.BeaconDuties) == 0 {
 		logger.Debug("No beacon duties to run")
 		return nil
+	}
+	if _, exists := c.Runners[duty.Slot]; exists {
+		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
 	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))

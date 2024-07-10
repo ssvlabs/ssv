@@ -76,7 +76,13 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 }
 
 func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
+	err := cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
+	if err != nil {
+		return err
+	}
+	cr.submittedDuties[types.BNRoleAttester] = make(map[phase0.ValidatorIndex]struct{})
+	cr.submittedDuties[types.BNRoleSyncCommittee] = make(map[phase0.ValidatorIndex]struct{})
+	return nil
 }
 
 func (cr *CommitteeRunner) Encode() ([]byte, error) {
@@ -367,7 +373,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				continue
 			}
 
-			validator := validator
+			//validator := validator
 			// Reconstruct signature
 			share := cr.BaseRunner.Share[validator]
 			pubKey := share.ValidatorPubKey
@@ -517,8 +523,11 @@ func findValidators(
 	// look for the expectedRoot in committeeMap
 	for validator, root := range committeeMap {
 		if root == expectedRoot {
-			return types.BNRoleSyncCommittee, []phase0.ValidatorIndex{validator}, true
+			validators = append(validators, validator)
 		}
+	}
+	if len(validators) > 0 {
+		return types.BNRoleSyncCommittee, validators, true
 	}
 	return types.BNRoleUnknown, nil, false
 }
@@ -589,15 +598,10 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 			}
 			beaconObjects[beaconDuty.ValidatorIndex][root] = unSignedAtt
 		case types.BNRoleSyncCommittee:
-			// Block root
-			blockRoot := types.SSZBytes(beaconVote.BlockRoot[:])
-			blockRootSlice := [32]byte{}
-			copy(blockRootSlice[:], blockRoot)
-
 			// Sync committee beacon object
 			syncMsg := &altair.SyncCommitteeMessage{
 				Slot:            slot,
-				BeaconBlockRoot: phase0.Root(blockRootSlice),
+				BeaconBlockRoot: beaconVote.BlockRoot,
 				ValidatorIndex:  beaconDuty.ValidatorIndex,
 			}
 
@@ -606,6 +610,8 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 			if err != nil {
 				continue
 			}
+			// Eth root
+			blockRoot := types.SSZBytes(beaconVote.BlockRoot[:])
 			root, err := types.ComputeETHSigningRoot(blockRoot, domain)
 			if err != nil {
 				continue

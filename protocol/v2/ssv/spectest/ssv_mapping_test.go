@@ -68,9 +68,7 @@ func TestSSVMapping(t *testing.T) {
 		//	continue
 		//}
 		//if !strings.Contains(name, "mixed committees") { // broadcasted roots count not equal
-		//if !strings.Contains(name, "sequence") {
-		//	continue
-		//}
+
 		//fmt.Println(name)
 
 		// SKIP FOR NOW. WE DONT HAVE AN ERROR FOR THIS CASE AT ALL
@@ -669,7 +667,7 @@ var ignoreList = []string{
 	//"consensus valid msg",
 	//"consensus unordered expected roots",
 	//"consensus valid msg 7 operators",
-	"flow", // <<<
+	//"flow", // <<<
 	//"msg duty not finished",
 	//"decided duties",
 	//"beacon vote",
