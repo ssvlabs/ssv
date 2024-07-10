@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -20,6 +18,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
@@ -34,6 +34,7 @@ import (
 
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
+	domain         spectypes.DomainType
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         types.BeaconSigner
@@ -47,7 +48,8 @@ type CommitteeRunner struct {
 	postStarted   time.Time
 }
 
-func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
+func NewCommitteeRunner(
+	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
@@ -59,10 +61,11 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: types.RoleCommittee,
-			BeaconNetwork:  beaconNetwork,
+			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
 			Share:          share,
 			QBFTController: qbftController,
 		},
+		domain:            networkConfig.Domain,
 		beacon:            beacon,
 		network:           network,
 		signer:            signer,
@@ -189,9 +192,11 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 
 	ssvMsg := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
-		//TODO: The Domain will be updated after new Domain PR... Will be created after this PR is merged
-		MsgID: types.NewMsgID(types.GenesisMainnet, cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
-			cr.BaseRunner.RunnerRoleType),
+		MsgID: types.NewMsgID(
+			cr.domain,
+			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
+			cr.BaseRunner.RunnerRoleType,
+		),
 	}
 	ssvMsg.Data, err = postConsensusMsg.Encode()
 	if err != nil {

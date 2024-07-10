@@ -23,7 +23,7 @@ type NonCommitteeValidator struct {
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:                types.GetDefaultDomain(),
+		Domain:                opts.NetworkConfig.Domain,
 		Storage:               opts.Storage.Get(identifier.GetRoleType()),
 		Network:               opts.Network,
 		SignatureVerification: true,

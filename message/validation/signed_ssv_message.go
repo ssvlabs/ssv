@@ -5,29 +5,18 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"golang.org/x/exp/slices"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
+	// Rule: Pubsub.Message.Message.Data decoding
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
-		genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
-		if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
-			return nil, ErrGenesisSignedSSVMessage
-		}
-
-		genesisSSVMessage := &genesisspectypes.SSVMessage{}
-		if err := genesisSSVMessage.Decode(pMsg.GetData()); err == nil {
-			return nil, ErrGenesisSSVMessage
-		}
-
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
 		return nil, e
@@ -37,43 +26,23 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 }
 
 func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage) error {
+	// Rule: SignedSSVMessage cannot be nil
 	if signedSSVMessage == nil {
 		return ErrNilSignedSSVMessage
 	}
 
-	signers := signedSSVMessage.GetOperatorIDs()
-
-	if len(signers) == 0 {
+	// Rule: Must have at least one signer
+	if len(signedSSVMessage.GetOperatorIDs()) == 0 {
 		return ErrNoSigners
 	}
 
-	if !slices.IsSorted(signers) {
-		return ErrSignersNotSorted
-	}
-
-	var prevSigner spectypes.OperatorID
-	for _, signer := range signers {
-		if signer == 0 {
-			return ErrZeroSigner
-		}
-		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
-		if signer == prevSigner {
-			return ErrDuplicatedSigner
-		}
-		prevSigner = signer
-	}
-
-	signatures := signedSSVMessage.Signatures
-
-	if len(signatures) == 0 {
+	// Rule: Must have at least one signature
+	if len(signedSSVMessage.Signatures) == 0 {
 		return ErrNoSignatures
 	}
 
-	for _, signature := range signatures {
-		if len(signature) == 0 {
-			return ErrEmptySignature
-		}
-
+	// Rule: Signature size
+	for _, signature := range signedSSVMessage.Signatures {
 		if len(signature) != rsaSignatureSize {
 			e := ErrWrongRSASignatureSize
 			e.got = len(signature)
@@ -81,12 +50,34 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		}
 	}
 
-	if len(signers) != len(signatures) {
-		e := ErrSignatureOperatorIDLengthMismatch
-		e.got = fmt.Sprintf("%d/%d", len(signers), len(signatures))
+	// Rule: Signers must be sorted
+	if !slices.IsSorted(signedSSVMessage.GetOperatorIDs()) {
+		return ErrSignersNotSorted
+	}
+
+	var prevSigner spectypes.OperatorID
+	for _, signer := range signedSSVMessage.GetOperatorIDs() {
+		// Rule: Signer can't be zero
+		if signer == 0 {
+			return ErrZeroSigner
+		}
+
+		// Rule: Signers must be unique
+		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
+		if signer == prevSigner {
+			return ErrDuplicatedSigner
+		}
+		prevSigner = signer
+	}
+
+	// Rule: Len(Signers) must be equal to Len(Signatures)
+	if len(signedSSVMessage.GetOperatorIDs()) != len(signedSSVMessage.Signatures) {
+		e := ErrSignersAndSignaturesWithDifferentLength
+		e.got = fmt.Sprintf("%d/%d", len(signedSSVMessage.GetOperatorIDs()), len(signedSSVMessage.Signatures))
 		return e
 	}
 
+	// Rule: SSVMessage cannot be nil
 	ssvMessage := signedSSVMessage.SSVMessage
 	if ssvMessage == nil {
 		return ErrNilSSVMessage
@@ -95,48 +86,49 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 	return nil
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, topic string) error {
+func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage) error {
 	mv.metrics.SSVMessageType(ssvMessage.MsgType)
 
+	// Rule: SSVMessage.Data must not be empty
 	if len(ssvMessage.Data) == 0 {
 		return ErrEmptyData
+	}
+
+	// SSVMessage.Data must respect the size limit
+	if len(ssvMessage.Data) > maxPayloadDataSize {
+		err := ErrSSVDataTooBig
+		err.got = len(ssvMessage.Data)
+		err.want = maxPayloadDataSize
+		return err
 	}
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType:
 		break
 	case ssvmessage.SSVEventMsgType:
+		// Rule: Event message
 		return ErrEventMessage
 	case spectypes.DKGMsgType:
+		// Rule: DKG message
 		return ErrDKGMessage
 	default:
+		// Unknown message type
 		e := ErrUnknownSSVMessageType
 		e.got = ssvMessage.MsgType
 		return e
 	}
 
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
+	// Rule: If domain is different then self domain
+	if !bytes.Equal(ssvMessage.GetID().GetDomain(), mv.netCfg.Domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
 		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
 		return err
 	}
 
+	// Rule: If role is invalid
 	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
 		return ErrInvalidRole
-	}
-
-	if !mv.topicMatches(ssvMessage, topic) {
-		e := ErrIncorrectTopic
-		e.got = topic
-		return e
-	}
-
-	if len(ssvMessage.Data) > maxPayloadSize {
-		err := ErrSSVDataTooBig
-		err.got = len(ssvMessage.Data)
-		err.want = maxPayloadSize
-		return err
 	}
 
 	return nil
@@ -169,6 +161,7 @@ func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic
 }
 
 func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorID, committee []spectypes.OperatorID) error {
+	// Rule: Signers must belong to validator committee or CommitteeID
 	for _, signer := range operatorIDs {
 		if !slices.Contains(committee, signer) {
 			e := ErrSignerNotInCommittee

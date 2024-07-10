@@ -52,9 +52,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	validators[0] = "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
-		acceptedRole = spectypes.BNRoleProposer
-		ignoredRole  = spectypes.BNRoleAttester
-		rejectedRole = spectypes.BNRoleSyncCommittee
+		acceptedRole = spectypes.RoleProposer
+		ignoredRole  = spectypes.RoleAggregator
+		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
 	var mtx sync.Mutex
@@ -70,14 +70,14 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			signedSSVMsg := &spectypes.SignedSSVMessage{}
 			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
 
-			decodedMsg, err := queue.DecodeSSVMessage(signedSSVMsg.SSVMessage)
+			decodedMsg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg
 			mtx.Lock()
 			// Validation according to role.
 			var validation pubsub.ValidationResult
 			switch signedSSVMsg.SSVMessage.MsgID.GetRoleType() {
-			case spectypes.RunnerRole(acceptedRole):
+			case acceptedRole:
 				messageValidators[i].Accepted[peer.Index]++
 				messageValidators[i].TotalAccepted++
 				validation = pubsub.ValidationAccept
@@ -116,9 +116,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Prepare a pool of broadcasters.
 	mu := sync.Mutex{}
 	height := atomic.Int64{}
-	roleBroadcasts := map[spectypes.BeaconRole]int{}
+	roleBroadcasts := map[spectypes.RunnerRole]int{}
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
-	broadcaster := func(node *VirtualNode, roles ...spectypes.BeaconRole) {
+	broadcaster := func(node *VirtualNode, roles ...spectypes.RunnerRole) {
 		broadcasters.Go(func(ctx context.Context) error {
 			for i := 0; i < 50; i++ {
 				role := roles[i%len(roles)]
@@ -266,15 +266,11 @@ type MockMessageValidator struct {
 }
 
 func (v *MockMessageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return v.ValidatePubsubMessage
-}
-
-func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return v.ValidateFunc(ctx, p, pmsg)
+	return v.Validate
 }
 
 func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	panic("not implemented") // TODO: Implement
+	return v.ValidateFunc(ctx, p, pmsg)
 }
 
 type NodeIndex int

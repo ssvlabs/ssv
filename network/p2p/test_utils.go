@@ -140,7 +140,27 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, ssv_testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+
+	hash, err := keys.OperatorKey.StorageHash()
+	if err != nil {
+		panic(err)
+	}
+
+	// TODO: (Alan) decide if the code in this comment is needed, else remove
+	//db, err := kv.NewInMemory(logger, basedb.Options{})
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	//nodeStorage, err := storage.NewNodeStorage(logger, db)
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	//dutyStore := dutystore.New()
+	//signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+
+	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	db, err := kv.NewInMemory(logger, basedb.Options{})
@@ -156,10 +176,13 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 
 	cfg.NodeStorage = ns
 	cfg.Metrics = nil
-
-	ctrl := gomock.NewController(t)
-	cfg.MessageValidator = newMockMessageValidator(ctrl, networkconfig.TestNetwork, ks, shares)
-
+	// TODO: (Alan) decide if the code in this comment is needed, else remove
+	cfg.MessageValidator = nil //validation.New(
+	//networkconfig.TestNetwork,
+	//nodeStorage.ValidatorStore(),
+	//dutyStore,
+	//signatureVerifier,
+	//)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -179,7 +202,14 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
-		cfg.MessageValidator = nil //validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
+		// TODO: (Alan) decide if the code in this comment is needed, else remove
+		cfg.MessageValidator = nil //validation.New(
+		//networkconfig.TestNetwork,
+		//nodeStorage.ValidatorStore(),
+		//dutyStore,
+		//signatureVerifier,
+		//validation.WithSelfAccept(selfPeerID, true),
+		//)
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {

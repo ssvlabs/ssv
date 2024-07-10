@@ -11,9 +11,9 @@ import (
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -190,7 +190,7 @@ func allPeersFilter(id peer.ID) bool {
 func waitSubsetOfPeers(
 	logger *zap.Logger,
 	getSubsetOfPeers func(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error),
-	vpk spectypes.ValidatorPK,
+	senderID []byte,
 	minPeers, maxPeers int,
 	timeout time.Duration,
 	filter func(peer.ID) bool,
@@ -208,7 +208,7 @@ func waitSubsetOfPeers(
 	// Wait for minPeers with a deadline.
 	deadline := time.Now().Add(timeout)
 	for {
-		peers, err := getSubsetOfPeers(logger, vpk[:], maxPeers, filter)
+		peers, err := getSubsetOfPeers(logger, senderID, maxPeers, filter)
 		if err != nil {
 			return nil, err
 		}

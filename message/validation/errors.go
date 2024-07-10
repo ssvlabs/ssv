@@ -52,31 +52,36 @@ func (e Error) Text() string {
 }
 
 var (
-	ErrGenesisSSVMessage                       = Error{text: "genesis ssv message"}
-	ErrGenesisSignedSSVMessage                 = Error{text: "genesis signed ssv message"}
-	ErrEmptyData                               = Error{text: "empty data"}
 	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
-	ErrEarlyMessage                            = Error{text: "early message"}
-	ErrLateMessage                             = Error{text: "late message"}
-	ErrTooManySameTypeMessagesPerRound         = Error{text: "too many messages of same type per round"}
-	ErrRoundTooHigh                            = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
+	ErrEarlySlotMessage                        = Error{text: "message was sent before slot starts"}
+	ErrLateSlotMessage                         = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
+	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
+	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
+	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers"}
+	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big"}
+	ErrIncorrectTopic                          = Error{text: "incorrect topic"}
+	ErrNonExistentCommitteeID                  = Error{text: "committee ID doesn't exist"}
+	ErrRoundTooHigh                            = Error{text: "round is too high for this role"}
+	ErrValidatorIndexMismatch                  = Error{text: "partial signature validator index not found"}
+	ErrTooManyDutiesPerEpoch                   = Error{text: "too many duties per epoch"}
+	ErrNoDuty                                  = Error{text: "no duty for this epoch"}
+	ErrEstimatedRoundNotInAllowedSpread        = Error{text: "message round is too far from estimated"}
+	ErrEmptyData                               = Error{text: "empty data", reject: true}
+	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
 	ErrPubSubMessageHasNoData                  = Error{text: "pub-sub message has no data", reject: true}
-	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed", reject: true}
 	ErrNilSignedSSVMessage                     = Error{text: "signed ssv message is nil", reject: true}
 	ErrNilSSVMessage                           = Error{text: "ssv message is nil", reject: true}
-	ErrIncorrectTopic                          = Error{text: "incorrect topic", reject: true}
 	ErrSSVDataTooBig                           = Error{text: "ssv message data too big", reject: true}
 	ErrInvalidRole                             = Error{text: "invalid role", reject: true}
 	ErrUnexpectedConsensusMessage              = Error{text: "unexpected consensus message for this role", reject: true}
 	ErrNoSigners                               = Error{text: "no signers", reject: true}
 	ErrWrongRSASignatureSize                   = Error{text: "wrong RSA signature size", reject: true}
-	ErrEmptySignature                          = Error{text: "empty signature", reject: true}
 	ErrZeroSigner                              = Error{text: "zero signer ID", reject: true}
 	ErrSignerNotInCommittee                    = Error{text: "signer is not in committee", reject: true}
 	ErrDuplicatedSigner                        = Error{text: "signer is duplicated", reject: true}
@@ -85,7 +90,6 @@ var (
 	ErrInconsistentSigners                     = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                             = Error{text: "root doesn't match full data hash", reject: true}
 	ErrFullDataHash                            = Error{text: "couldn't hash root", reject: true}
-	ErrEstimatedRoundTooFar                    = Error{text: "message round is too far from estimated"}
 	ErrUndecodableMessageData                  = Error{text: "message data could not be decoded", reject: true}
 	ErrEventMessage                            = Error{text: "unexpected event message", reject: true}
 	ErrDKGMessage                              = Error{text: "unexpected DKG message", reject: true}
@@ -100,23 +104,20 @@ var (
 	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications      = Error{text: "malformed round change justifications", reject: true}
 	ErrUnexpectedRoundChangeJustifications     = Error{text: "round change justifications unexpected for this message type", reject: true}
-	ErrTooManyDutiesPerEpoch                   = Error{text: "too many duties per epoch", reject: true}
-	ErrNoDuty                                  = Error{text: "no duty for this epoch", reject: true}
 	ErrDeserializePublicKey                    = Error{text: "deserialize public key", reject: true}
 	ErrNoPartialSignatureMessages              = Error{text: "no partial signature messages", reject: true}
-	ErrNonExistentCommitteeID                  = Error{text: "committee ID doesn't exist", reject: true}
 	ErrNoValidators                            = Error{text: "no validators for this committee ID", reject: true}
-	ErrValidatorIndexMismatch                  = Error{text: "partial signature validator index not found", reject: true}
 	ErrNoSignatures                            = Error{text: "no signatures", reject: true}
-	ErrSignatureOperatorIDLengthMismatch       = Error{text: "signature and operator ID length mismatch", reject: true}
+	ErrSignersAndSignaturesWithDifferentLength = Error{text: "signature and operator ID length mismatch", reject: true}
 	ErrPartialSigOneSigner                     = Error{text: "partial signature message must have only one signer", reject: true}
 	ErrPrepareOrCommitWithFullData             = Error{text: "prepare or commit with full data", reject: true}
-	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
-	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
-	ErrInvalidRound                            = Error{text: "invalid round", reject: true}
-	ErrDecidedWithSameNumberOfSigners          = Error{text: "decided with same number of signers", reject: true}
+	ErrZeroRound                               = Error{text: "zero round", reject: true}
+	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
+	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
+	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
+	ErrEncodeOperators                         = Error{text: "encode operators", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.DecodedSSVMessage, err error) pubsub.ValidationResult {
