@@ -822,7 +822,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						require.NoError(t, err)
 
 						pk := shares.active.ValidatorPubKey[:]
-						if role == spectypes.RoleCommittee {
+						if validator.committeeRole(role) {
 							pk = encodedCommitteeID
 						}
 						ssvMessage := &spectypes.SSVMessage{
