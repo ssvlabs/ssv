@@ -14,16 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/network"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -76,7 +76,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		msgID1, msg1 := dummyMsgCommittee(t, pks[0], 1)
-		msgID2, msg2 := dummyMsgCommittee(t, pks[1], 2)
+		msgID2, msg2 := dummyMsgCommittee(t, pks[0], 2)
 		msgID3, msg3 := dummyMsgCommittee(t, pks[0], 3)
 		require.NoError(t, err)
 		time.Sleep(time.Millisecond * 10)
