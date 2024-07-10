@@ -54,23 +54,6 @@ func TestSSVMapping(t *testing.T) {
 	for name, test := range untypedTests {
 		name, test := name, test
 
-		if stringInSlice(name, ignoreList) {
-			continue
-		}
-		//if !strings.Contains(name, "wrong beacon vote") { // PROBLEM WITH MARSHALING OF COMMITTEE STRUCTURE TO CALCULATE THE STATE ROOT HASH
-		//	continue
-		//}
-
-		//if !strings.Contains(name, "new duty valid") { // Nil pointer panic. QBFTController is nil.
-		//	continue
-		//}
-
-		//fmt.Println(name)
-
-		// SKIP FOR NOW. WE DONT HAVE AN ERROR FOR THIS CASE AT ALL
-		if strings.Contains(name, "empty committee duty") {
-			continue
-		}
 		if strings.Contains(name, "decide on slashable attestation") { // NO ERROR IS TRIGGERED. SKIP FOR NOW
 			continue
 		}
@@ -81,9 +64,6 @@ func TestSSVMapping(t *testing.T) {
 				t.Parallel()
 				r.test(t)
 			})
-			//if t.Failed() {
-			//	t.Skip("Skip Test failed")
-			//}
 		}
 
 	}

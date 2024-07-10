@@ -90,27 +90,9 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	c.logger.Debug("Starting committee duty runner", zap.Uint64("slot", uint64(duty.Slot)))
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	// TODO alan : lock per slot?
-	//if len(duty.BeaconDuties) == 0 {
-	//	return errors.New("no beacon duties")
-	//}
-
-	//
-	//var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
-	////Filter old duties based on highest attesting slot
-	//
-	//duty, validatorToStopMap, highestAttestingSlotMap, err := FilterCommitteeDuty(logger, duty, c.HighestAttestingSlotMap)
-	//if err != nil {
-	//	return errors.Wrap(err, "cannot filter committee duty")
-	//}
-	//c.HighestAttestingSlotMap = highestAttestingSlotMap
-	// Stop validators with old duties
-	//c.stopDuties(logger, validatorToStopMap)
-	//c.updateAttestingSlotMap(duty)
 
 	if len(duty.BeaconDuties) == 0 {
-		logger.Debug("No beacon duties to run")
-		return nil
+		return errors.New("no beacon duties")
 	}
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
@@ -144,20 +126,6 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
-}
-
-// NOT threadsafe
-func (c *Committee) stopDuties(logger *zap.Logger, validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
-	for slot, validator := range validatorToStopMap {
-		r, exists := c.Runners[slot]
-		if exists {
-			logger.Debug("stopping duty for validator",
-				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-				zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
-			)
-			r.StopDuty(validator)
-		}
-	}
 }
 
 // NOT threadsafe
@@ -201,40 +169,6 @@ func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) ([]*spectyp
 	}
 
 	return result, nil
-}
-
-// FilterCommitteeDuty filters the committee duties by the slots given per validator.
-// It returns the filtered duties, the validators to stop and updated slot map.
-// NOT threadsafe
-func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slotMap map[spectypes.ValidatorPK]phase0.Slot) (
-	*spectypes.CommitteeDuty,
-	map[phase0.Slot]spectypes.ValidatorPK,
-	map[spectypes.ValidatorPK]phase0.Slot,
-	error,
-) {
-	validatorsToStop := make(map[phase0.Slot]spectypes.ValidatorPK)
-	indicesToRemove := make([]int, 0)
-	for i, beaconDuty := range duty.BeaconDuties {
-		validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
-		slot, exists := slotMap[validatorPK]
-		if exists {
-			if slot < beaconDuty.Slot {
-				validatorsToStop[beaconDuty.Slot] = validatorPK
-				slotMap[validatorPK] = beaconDuty.Slot
-			} else { // else don't run duty with old slot
-				// remove the duty
-				logger.Debug("removing beacon duty from committeeduty", zap.Uint64("slot", uint64(beaconDuty.Slot)), zap.String("validator", hex.EncodeToString(beaconDuty.PubKey[:])))
-				indicesToRemove = append(indicesToRemove, i)
-			}
-		}
-	}
-
-	filteredDuties, err := removeIndices(duty.BeaconDuties, indicesToRemove)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "cannot remove indices")
-	}
-	duty.BeaconDuties = filteredDuties
-	return duty, validatorsToStop, slotMap, err
 }
 
 // ProcessMessage processes Network Message of all types
