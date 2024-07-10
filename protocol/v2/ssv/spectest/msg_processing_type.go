@@ -12,6 +12,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
@@ -89,6 +90,12 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			err = c.ProcessMessage(logger, dmsg)
 			if err != nil {
 				lastErr = err
+			}
+			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
+				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableDataRoot(validatorShare.
+						SharePubKey, spectestingutils.TestingAttestationDataRoot[:])
+				}
 			}
 		}
 
@@ -354,4 +361,17 @@ func (t *MsgProcessingSpecTest) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+// IsQBFTProposalMessage checks if the message is a QBFT proposal message
+func IsQBFTProposalMessage(msg *spectypes.SignedSSVMessage) bool {
+	if msg.SSVMessage.MsgType == spectypes.SSVConsensusMsgType {
+		qbftMsg := specqbft.Message{}
+		err := qbftMsg.Decode(msg.SSVMessage.Data)
+		if err != nil {
+			panic("could not decode message")
+		}
+		return qbftMsg.MsgType == specqbft.ProposalMsgType
+	}
+	return false
 }

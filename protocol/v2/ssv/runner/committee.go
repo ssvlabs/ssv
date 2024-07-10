@@ -225,7 +225,11 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 		switch duty.Type {
 		case types.BNRoleAttester:
 			attestationData := constructAttestationData(beaconVote, duty)
-
+			err = cr.GetSigner().IsAttestationSlashable(cr.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey,
+				attestationData)
+			if err != nil {
+				return errors.Wrap(err, "attempting to sign slashable attestation data")
+			}
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				types.DomainAttester)
 			if err != nil {
