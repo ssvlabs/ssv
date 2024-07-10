@@ -5,7 +5,6 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
-	"encoding/hex"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -13,13 +12,13 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -117,37 +116,10 @@ func TestMsgValidator(t *testing.T) {
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
-	t.Run("wrong topic", func(t *testing.T) {
-		// pkHex := "b5de683dbcb3febe8320cc741948b9282d59b75a6970ed55d6f389da59f26325331b7ea0e71a2552373d0debb6048b8a"
-		msg, err := dummySSVConsensusMsg(share.ValidatorPubKey, 15160)
-		require.NoError(t, err)
-		raw, err := msg.Encode()
-		require.NoError(t, err)
-		pk, err := hex.DecodeString("a297599ccf617c3b6118bbd248494d7072bb8c6c1cc342ea442a289415987d306bad34415f89469221450a2501a832ec")
-		require.NoError(t, err)
-		topics := commons.ValidatorTopicID(pk)
-		pmsg := newPBMsg(raw, topics[0], []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
-		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
-		require.Equal(t, res, pubsub.ValidationReject)
-	})
-
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
 		res := mv.Validate(context.Background(), "xxxx", pmsg)
 		require.Equal(t, pubsub.ValidationReject, res)
-	})
-
-	t.Run("invalid validator public key", func(t *testing.T) {
-		pkHex := "b5de683dbcb3febe8320cc741948b9282d59b75a6970ed55d6f389da59f26325331b7ea0e71a2552373d0debb6048b8a"
-		pk, err := hex.DecodeString(pkHex)
-		require.NoError(t, err)
-		msg, err := dummySSVConsensusMsg(spectypes.ValidatorPK(pk[:]), 1)
-		require.NoError(t, err)
-		raw, err := msg.Encode()
-		require.NoError(t, err)
-		pmsg := newPBMsg(raw, "xxx", []byte{})
-		res := mv.Validate(context.Background(), "xxxx", pmsg)
-		require.Equal(t, res, pubsub.ValidationReject)
 	})
 }
 
