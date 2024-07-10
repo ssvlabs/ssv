@@ -255,7 +255,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
-		DomainTypeProvider:  n.cfg.Network.DomainType,
+		DomainTypeProvider:  n.cfg.Network,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {

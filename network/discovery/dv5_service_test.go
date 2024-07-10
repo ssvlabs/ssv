@@ -8,16 +8,24 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/utils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
+type TestDomainType struct {
+	TestDomain spectypes.DomainType
+}
+
+func (td *TestDomainType) DomainType() spectypes.DomainType {
+	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+}
 func TestCheckPeer(t *testing.T) {
 	var (
 		ctx          = context.Background()
@@ -107,7 +115,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx:        ctx,
 		conns:      &mock.MockConnectionIndex{LimitValue: true},
 		subnetsIdx: subnetIndex,
-		domainType: myDomainType,
+		domainType: &TestDomainType{},
 		subnets:    mySubnets,
 	}
 
