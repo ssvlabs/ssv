@@ -269,7 +269,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 		_, err = validator.handlePubsubMessage(pmsg, receivedAt)
 
-		require.ErrorContains(t, err, ErrGenesisSignedSSVMessage.Error())
+		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 	})
 
 	// Send a message with incorrect data (unable to decode incorrect message type)

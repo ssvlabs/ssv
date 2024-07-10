@@ -19,7 +19,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -105,7 +104,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	role := spectypes.RoleCommittee
 	pk := sks[1].GetPublicKey()
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
+		id := spectypes.NewMsgID(spectypes.DomainType{1, 2, 3, 4}, pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,

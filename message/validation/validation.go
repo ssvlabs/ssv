@@ -215,7 +215,6 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
-
 		// Rule: Cluster does not exist
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole duty executor ID
 		if committee == nil {

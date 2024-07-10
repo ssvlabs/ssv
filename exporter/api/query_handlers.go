@@ -48,7 +48,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 	//	return
 	//}
 	//
-	//msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
+	//msgID := spectypes.NewMsgID(spectypes.DomainType{1, 2, 3, 4}, pkRaw, beaconRole)
 	//from := specqbft.Height(nm.Msg.Filter.From)
 	//to := specqbft.Height(nm.Msg.Filter.To)
 	//instances, err := roleStorage.GetInstancesInRange(msgID[:], from, to)

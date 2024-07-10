@@ -9,6 +9,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
+	return role == spectypes.RoleCommittee
+}
+
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
 	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance {
 		e := ErrEarlySlotMessage
