@@ -68,6 +68,7 @@ func TestSSVMapping(t *testing.T) {
 		//	continue
 		//}
 		//if !strings.Contains(name, "mixed committees") { // broadcasted roots count not equal
+		//if !strings.Contains(name, "sequence") {
 		//	continue
 		//}
 		//fmt.Println(name)
@@ -682,7 +683,7 @@ var ignoreList = []string{
 	//"with consensus data",
 	//"duty post decided",
 	//"consensus inconsistent beacon signer",
-	"on slashable attestation", /// <<<
+	//"on slashable attestation", /// <<<
 	//"future duty slot",
 	//"blinded decide regular",
 	//"valid decided 7 operators",
@@ -735,7 +736,7 @@ var ignoreList = []string{
 	//"duty not finished",
 	//"consensus post finish",
 	//"consensus unknown signer",
-	"committees",
+	"committees", // <<<
 	//"consensus inconsistent beacon signer",
 	//"consensus invalid then quorum",
 	//"consensus invalid msg slot",
