@@ -249,6 +249,10 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if err := c.SignatureVerifier.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
+
+		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
+			return errors.Wrap(err, "Message invalid")
+		}
 	}
 
 	switch msg.GetType() {
@@ -371,4 +375,16 @@ func (c *Committee) updateAttestingSlotMap(duty *spectypes.CommitteeDuty) {
 			}
 		}
 	}
+}
+
+func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
+	if !(c.Operator.CommitteeID.MessageIDBelongs(msg.GetID())) {
+		return errors.New("msg ID doesn't match committee ID")
+	}
+
+	if len(msg.GetData()) == 0 {
+		return errors.New("msg data is invalid")
+	}
+
+	return nil
 }

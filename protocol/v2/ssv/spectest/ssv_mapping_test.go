@@ -64,9 +64,6 @@ func TestSSVMapping(t *testing.T) {
 		//if !strings.Contains(name, "new duty valid") { // Nil pointer panic. QBFTController is nil.
 		//	continue
 		//}
-		if !strings.Contains(name, "new duty post decided") {
-			continue
-		}
 
 		//fmt.Println(name)
 
@@ -738,7 +735,7 @@ var ignoreList = []string{
 	//"consensus invalid then quorum",
 	//"consensus invalid msg slot",
 	//"consensus too few roots",
-	"message ID", /// <<<<
+	//"message ID", /// <<<<
 	//"duty finished",/// <<<<
 	//"committee aggregator none is aggregator",/// <<<<
 	//"consensus too few roots",/// <<<<
