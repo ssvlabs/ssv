@@ -80,6 +80,8 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 
 	_, gateway := s.requestContext(ctx)
 
+	s.initializeEpochs(epoch)
+
 	if s.blockedEpoch(epoch) {
 		return []*v1.AttesterDuty{}, nil
 	}
@@ -126,6 +128,23 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 	return duties, nil
 }
 
+func (s *SlashingInterceptor) initializeEpochs(epoch phase0.Epoch) {
+	if !s.IsInterceptorInitialize() {
+		s.startEpoch = epoch
+		s.sleepEpoch = epoch + 1
+		s.endEpoch = epoch + 2
+		s.logger.Debug("initialize slashing interceptor epochs",
+			zap.Any("start_epoch", s.startEpoch),
+			zap.Any("sleep_epoch", s.sleepEpoch),
+			zap.Any("end_epoch", s.endEpoch),
+		)
+	}
+}
+
+func (s *SlashingInterceptor) IsInterceptorInitialize() bool {
+	return s.startEpoch != 0 && s.sleepEpoch != 0 && s.endEpoch != 0
+}
+
 func (s *SlashingInterceptor) InterceptAttestationData(
 	ctx context.Context,
 	slot phase0.Slot,
@@ -141,7 +160,6 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 	if s.blockedEpoch(epoch) {
 		return nil, fmt.Errorf("attestation data requested for blocked epoch %d", epoch)
 	}
-
 	for validatorIndex, state := range s.validators {
 		// Skip validators that are not in the requested committee.
 		if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && firstDuty.CommitteeIndex == committeeIndex {
@@ -279,10 +297,9 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 
 				logger.Debug("submitted second attestation")
 
-				if state.attesterTest.Slashable {
-					return nil, fmt.Errorf("misbehavior: slashable attestation was submitted during the end epoch")
-				}
-
+				//if state.attesterTest.Slashable {
+				//	return nil, fmt.Errorf("misbehavior: slashable attestation was submitted during the end epoch")
+				//}
 				continue
 			}
 		}

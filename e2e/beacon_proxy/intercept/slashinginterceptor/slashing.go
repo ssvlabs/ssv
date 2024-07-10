@@ -58,17 +58,17 @@ type SlashingInterceptor struct {
 func New(
 	logger *zap.Logger,
 	network beacon.Network,
-	startEpoch phase0.Epoch,
+	//startEpoch phase0.Epoch,
 	fakeProposerDuties bool,
 	validators []*v1.Validator,
 ) *SlashingInterceptor {
 	s := &SlashingInterceptor{
 		logger:     logger,
 		network:    network,
-		startEpoch: startEpoch,
-		sleepEpoch: startEpoch + 1,
+		startEpoch: 0,
+		sleepEpoch: 0,
 		// sleepEpoch:         math.MaxUint64, // TODO: replace with startEpoch + 1 after debugging is done
-		endEpoch:           startEpoch + 2,
+		endEpoch:           0,
 		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
 	}
@@ -77,11 +77,7 @@ func New(
 		panic(">32 validators not supported yet")
 	}
 
-	logger.Debug("creating slashing interceptor",
-		zap.Any("start_epoch", s.startEpoch),
-		zap.Any("end_epoch", s.endEpoch),
-		zap.Any("sleep_epoch", s.sleepEpoch),
-	)
+	logger.Debug("creating slashing interceptor")
 	a := 0
 	p := 0
 	for _, validator := range validators {
@@ -250,7 +246,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 }
 
 func (s *SlashingInterceptor) blockedEpoch(epoch phase0.Epoch) bool {
-	return epoch < s.startEpoch || epoch == s.sleepEpoch || epoch > s.endEpoch
+	return epoch < s.startEpoch || epoch == s.sleepEpoch || epoch > s.endEpoch || !s.IsInterceptorInitialize()
 }
 
 func (s *SlashingInterceptor) requestContext(ctx context.Context) (*zap.Logger, beaconproxy.Gateway) {

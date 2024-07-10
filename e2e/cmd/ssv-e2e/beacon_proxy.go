@@ -124,11 +124,30 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 
 	networkCfg := networkconfig.HoleskyE2E
 
-	const startEpochDelay = 2 // TODO: change to 2 after debugging is done
-	startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
+	//const startEpochDelay = 2 // TODO: change to 2 after debugging is done
+	//startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
 
-	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, maps.Values(validatorsData))
-	go interceptor.WatchSubmissions()
+	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), true, maps.Values(validatorsData))
+
+	ctxSubmissions, cancelSubmissions := context.WithCancel(context.Background())
+	defer cancelSubmissions()
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if interceptor.IsInterceptorInitialize() {
+					go interceptor.WatchSubmissions()
+					cancelSubmissions() // Stop the ticker and exit the goroutine
+				}
+			case <-ctxSubmissions.Done():
+				return
+			}
+		}
+	}()
 
 	for i, gw := range cmd.Gateways {
 		gateways[i] = beaconproxy.Gateway{
