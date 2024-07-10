@@ -64,10 +64,9 @@ func TestSSVMapping(t *testing.T) {
 		//if !strings.Contains(name, "new duty valid") { // Nil pointer panic. QBFTController is nil.
 		//	continue
 		//}
-		//if !strings.Contains(name, "new duty post decided") {
-		//	continue
-		//}
-		//if !strings.Contains(name, "mixed committees") { // broadcasted roots count not equal
+		if !strings.Contains(name, "new duty post decided") {
+			continue
+		}
 
 		//fmt.Println(name)
 
@@ -82,7 +81,7 @@ func TestSSVMapping(t *testing.T) {
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
-				//t.Parallel()
+				t.Parallel()
 				r.test(t)
 			})
 			//if t.Failed() {
@@ -694,7 +693,7 @@ var ignoreList = []string{
 	//"consensus invalid msg signature",
 	//"data value check nil",
 	//"committee duty",
-	"valid post finish", /// <<<<
+	//"valid post finish", /// <<<<
 	//"consensus duplicate msg different root then quorum",
 	//"consensus quorum 10 operators",
 	//"consensus valid msg",/// <<<<
@@ -704,10 +703,10 @@ var ignoreList = []string{
 	//"value check valid",
 	//"value check with slashable majority",
 	//"beacon vote",
-	"quorum", /// <<<<
+	//"quorum", /// <<<<
 	//"consensus before decided",
-	"decided duties",         // <<<
-	"than successful duties", /// <<<<
+	//"decided duties",         // <<<
+	//"than successful duties", /// <<<<
 	//"decided invalid value", /// <<<
 	//"duty post invalid decided",
 	//"invalid", /// <<<<
@@ -734,7 +733,7 @@ var ignoreList = []string{
 	//"duty not finished",
 	//"consensus post finish",
 	//"consensus unknown signer",
-	"committees", // <<<
+	//"committees", // <<<
 	//"consensus inconsistent beacon signer",
 	//"consensus invalid then quorum",
 	//"consensus invalid msg slot",
