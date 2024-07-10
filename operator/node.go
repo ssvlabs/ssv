@@ -82,18 +82,17 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
-			Ctx:                  opts.Context,
-			BeaconNode:           opts.BeaconNode,
-			ExecutionClient:      opts.ExecutionClient,
-			Network:              opts.Network,
-			ValidatorProvider:    opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
-			ValidatorController:  opts.ValidatorController,
-			IndicesChg:           opts.ValidatorController.IndicesChangeChan(),
-			ValidatorExitCh:      opts.ValidatorController.ValidatorExitChan(),
-			ExecuteDuty:          opts.ValidatorController.ExecuteDuty,
-			ExecuteCommitteeDuty: opts.ValidatorController.ExecuteCommitteeDuty,
-			DutyStore:            opts.DutyStore,
-			SlotTickerProvider:   slotTickerProvider,
+			Ctx:                 opts.Context,
+			BeaconNode:          opts.BeaconNode,
+			ExecutionClient:     opts.ExecutionClient,
+			Network:             opts.Network,
+			ValidatorProvider:   opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
+			ValidatorController: opts.ValidatorController,
+			DutyExecutor:        opts.ValidatorController,
+			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
+			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
+			DutyStore:           opts.DutyStore,
+			SlotTickerProvider:  slotTickerProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,
@@ -178,7 +177,7 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleParticipantsQuery(logger, n.qbftStorage, nm)
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.Domain)
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
 	default:

@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -29,8 +30,9 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.ValidatorDutyRunners
-	Network     specqbft.Network
+	NetworkConfig networkconfig.NetworkConfig
+	DutyRunners   runner.ValidatorDutyRunners
+	Network       specqbft.Network
 
 	Operator          *spectypes.CommitteeMember
 	Share             *types.SSVShare
@@ -61,6 +63,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		mtx:               &sync.RWMutex{},
 		ctx:               pctx,
 		cancel:            cancel,
+		NetworkConfig:     options.NetworkConfig,
 		DutyRunners:       options.DutyRunners,
 		Network:           options.Network,
 		Storage:           options.Storage,

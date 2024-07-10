@@ -35,9 +35,9 @@ func (s *SignerState) ResetSlot(slot phase0.Slot, round specqbft.Round, newEpoch
 	}
 }
 
-// ResetRound resets the state's round, message counts, and proposal data to the given values.
+// Reset resets the state's round, message counts, and proposal data to the given values.
 // It also updates the start time to the current time.
-func (s *SignerState) ResetRound(round specqbft.Round) {
+func (s *SignerState) Reset(round specqbft.Round) {
 	s.Start = time.Now()
 	s.Round = round
 	s.MessageCounts = MessageCounts{}

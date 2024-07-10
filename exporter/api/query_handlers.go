@@ -8,7 +8,6 @@ import (
 	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -47,7 +46,7 @@ func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 }
 
 // HandleParticipantsQuery handles TypeParticipants queries.
-func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage) {
+func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage, domain spectypes.DomainType) {
 	logger.Debug("handles query request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -81,7 +80,7 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		return
 	}
 
-	msgID := exporter_message.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
+	msgID := exporter_message.NewMsgID(domain, pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)

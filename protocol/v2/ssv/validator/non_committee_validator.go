@@ -10,6 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -39,6 +40,7 @@ type NonCommitteeOptions struct {
 	Network           specqbft.Network
 	Storage           *storage.QBFTStores
 	Operator          *spectypes.CommitteeMember
+	NetworkConfig     networkconfig.NetworkConfig
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
 }
@@ -46,9 +48,8 @@ type NonCommitteeOptions struct {
 func NewNonCommitteeValidator(identifier exporter_message.MessageID, opts NonCommitteeOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:  types.GetDefaultDomain(),
-		Storage: opts.Storage.Get(identifier.GetRoleType()),
-
+		Domain:                opts.NetworkConfig.Domain,
+		Storage:               opts.Storage.Get(identifier.GetRoleType()),
 		Network:               opts.Network,
 		SignatureVerification: true,
 	}
@@ -85,11 +86,6 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		return
 	}
 
-	if msg.MsgID.GetRoleType() == spectypes.RoleSyncCommitteeContribution {
-		println("<<<<<<<<<<<<<<<<<<<<<<<<works>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-		logger.Fatal("works!!!")
-	}
-
 	slot := partialSigMessages.Slot
 	logger = logger.With(fields.Slot(slot))
 
@@ -110,8 +106,11 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 
 	for key, quorum := range quorums {
 		role := ncv.getRole(msg, key.Root)
+		println("<<<<<<<<<<<<<<<<<<<<<<<<works>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+		println(role.String())
+		println("<<<<<<<<<<<<<<<<<<<<<<<<works>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 		validator := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
-		MsgID := exporter_message.NewMsgID(types.GetDefaultDomain(), validator.ValidatorPubKey[:], role)
+		MsgID := exporter_message.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
 		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return
