@@ -94,12 +94,6 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		committeeID = share.CommitteeID()
 	}
 
-	share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
-	if share == nil {
-		return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
-	}
-	committeeID = share.CommitteeID()
-
 	topics := commons.CommitteeTopicID(committeeID)
 
 	for _, topic := range topics {
