@@ -44,11 +44,17 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 		Timer:          roundtimer.NewTestingTimer(),
 	}
 
+	identifier := make([]byte, 56)
+	identifier[0] = 1
+	identifier[1] = 2
+	identifier[2] = 3
+	identifier[3] = 4
+
 	share := spectestingutils.TestingCommitteeMember(keySet)
 	inst := instance.NewInstance(
 		testConfig,
 		share,
-		[]byte{1, 2, 3, 4},
+		identifier,
 		specqbft.FirstHeight,
 	)
 
