@@ -320,3 +320,16 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	}
 	return n.cfg.TopicMaxPeers
 }
+
+// UpdateDomainAtFork updates Domain Type at ENR node record after fork epoch.
+func (n *p2pNetwork) UpdateDomainTypeAtFork(logger *zap.Logger) error {
+	if err := n.disc.UpdateDomainTypeAtFork(logger); err != nil {
+		logger.Warn("could not update ENR at fork epoch", zap.Error(err))
+		return err
+	}
+	logger.Debug("updated fork domain at epoch ",
+		fields.Domain(n.cfg.Network.DomainType()),
+		fields.Epoch(n.cfg.Network.Beacon.EstimatedCurrentEpoch()),
+	)
+	return nil
+}

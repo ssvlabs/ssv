@@ -37,6 +37,8 @@ type P2PNetwork interface {
 	SubscribeAll(logger *zap.Logger) error
 	// SubscribeRandoms subscribes to random subnets
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	// UpdateDomainTypeAtFork switches domain type at ENR when we reach fork epoch
+	UpdateDomainTypeAtFork(logger *zap.Logger) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:

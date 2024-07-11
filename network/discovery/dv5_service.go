@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -40,6 +39,11 @@ type NodeProvider interface {
 // NodeFilter can be used for nodes filtering during discovery
 type NodeFilter func(*enode.Node) bool
 
+// DomainTypeProvider interface used to get current domain type based on fork epoch
+type DomainTypeProvider interface {
+	DomainType() spectypes.DomainType
+}
+
 // DiscV5Service wraps discover.UDPv5 with additional functionality
 // it implements go-libp2p/core/discovery.Discovery
 // currently using ENR entry (subnets) to facilitate subnets discovery
@@ -57,7 +61,7 @@ type DiscV5Service struct {
 	publishState int32
 	conn         *net.UDPConn
 
-	domainType spectypes.DomainType
+	domainType DomainTypeProvider
 	subnets    []byte
 }
 
@@ -152,7 +156,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
 	if err != nil {
 		// TODO: skip missing domain type (likely old node).
-	} else if nodeDomainType != dvs.domainType {
+	} else if nodeDomainType != dvs.domainType.DomainType() {
 		// TODO: skip different domain type.
 	}
 
@@ -206,7 +210,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType))
+		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType.DomainType()))
 
 	return nil
 }
@@ -332,14 +336,14 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
-		DecorateWithDomainType(dvs.domainType),
+		DecorateWithDomainType(dvs.domainType.DomainType()),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType), fields.Subnets(opts.Subnets))
+	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType.DomainType()), fields.Subnets(opts.Subnets))
 
 	return localNode, nil
 }
@@ -355,4 +359,16 @@ func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, erro
 		return nil, errors.Wrap(err, "could not listen to UDP")
 	}
 	return conn, nil
+}
+
+func (dvs *DiscV5Service) UpdateDomainTypeAtFork(logger *zap.Logger) error {
+	updated, err := records.UpdateENRDomainType(dvs.dv5Listener.LocalNode(), dvs.domainType.DomainType())
+	if err != nil {
+		return errors.Wrap(err, "could not update ENR")
+	}
+	if updated != nil {
+		logger.Debug("updated domain", fields.Domain(dvs.domainType.DomainType()), fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
+		go dvs.publishENR(logger)
+	}
+	return nil
 }
