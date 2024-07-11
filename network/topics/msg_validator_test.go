@@ -12,13 +12,13 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -103,7 +103,7 @@ func TestMsgValidator(t *testing.T) {
 		encPackedPubSubMsgPayload, err := packedPubSubMsgPayload.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetDutyExecutorID())
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(ssvMsg.GetID().GetDutyExecutorID()[16:]))
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -134,7 +134,7 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(pk spectypes.ValidatorPK, height qbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk[:], spectypes.RunnerRole(spectypes.BNRoleAttester))
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk[:], spectypes.RoleCommittee)
 	ks := spectestingutils.Testing4SharesSet()
 
 	validSignedMessage := spectestingutils.TestingRoundChangeMessageWithHeightAndIdentifier(ks.OperatorKeys[1], 1, height, id[:])
