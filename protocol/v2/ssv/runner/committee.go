@@ -12,11 +12,11 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -65,7 +65,7 @@ func NewCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		domain:            networkConfig.Domain,
+		domain:            networkConfig.DomainType(),
 		beacon:            beacon,
 		network:           network,
 		signer:            signer,

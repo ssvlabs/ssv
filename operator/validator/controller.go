@@ -8,21 +8,20 @@ import (
 	"sync"
 	"time"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -709,7 +708,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	copy(pk, duty.PubKey[:])
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.Domain)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.DomainType())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
 			return
@@ -733,7 +732,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 	logger = logger.With(fields.Slot(duty.Slot), fields.Role(duty.RunnerRole()))
 
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
-		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.Domain)
+		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
 			return
@@ -1179,7 +1178,7 @@ func SetupCommitteeRunners(
 			OperatorSigner:    options.OperatorSigner,
 			SigningPK:         options.SSVShare.ValidatorPubKey[:], // TODO right val?
 			SignatureVerifier: options.SignatureVerifier,
-			Domain:            options.NetworkConfig.Domain,
+			Domain:            options.NetworkConfig.DomainType(),
 			ValueCheckF:       nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
@@ -1193,7 +1192,7 @@ func SetupCommitteeRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.Domain, options.Operator.CommitteeID[:], role)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType(), options.Operator.CommitteeID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
@@ -1242,7 +1241,7 @@ func SetupRunners(
 			BeaconSigner:      options.Signer,
 			OperatorSigner:    options.OperatorSigner,
 			SigningPK:         options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:            options.NetworkConfig.Domain,
+			Domain:            options.NetworkConfig.DomainType(),
 			SignatureVerifier: options.SignatureVerifier,
 			ValueCheckF:       nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
@@ -1257,7 +1256,7 @@ func SetupRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.Domain, options.SSVShare.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType(), options.SSVShare.Share.ValidatorPubKey[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
