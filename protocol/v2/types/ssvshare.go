@@ -101,8 +101,8 @@ func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 }
 
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
-	f := (committeeSize - 1) / 3
-	return uint64(f*2 + 1), uint64(f + 1)
+	f := ComputeF(committeeSize)
+	return f*2 + 1, f + 1
 }
 
 func ComputeF(committeeSize int) uint64 {
@@ -110,7 +110,7 @@ func ComputeF(committeeSize int) uint64 {
 }
 
 func ValidCommitteeSize(committeeSize int) bool {
-	f := (committeeSize - 1) / 3
+	f := ComputeF(committeeSize)
 	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
 }
 
