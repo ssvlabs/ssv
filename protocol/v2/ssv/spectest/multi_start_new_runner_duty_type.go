@@ -2,14 +2,12 @@ package spectest
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -101,30 +99,10 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
 
-	a, err := json.Marshal(test.Runner)
-	require.NoError(t, err)
-	b, err := json.Marshal(test.PostDutyRunnerState)
-	require.NoError(t, err)
-	diff :=
-		cmp.Diff(a, b,
-			cmp.FilterValues(func(x, y []byte) bool {
-				return json.Valid(x) && json.Valid(y)
-			}, cmp.Transformer("ParseJSON", func(in []byte) (out interface{}) {
-				if err := json.Unmarshal(in, &out); err != nil {
-					panic(err) // should never occur given previous filter to ensure valid JSON
-				}
-				return out
-			}),
-			),
-		)
-	if len(diff) > 0 {
-		logJSON(t, "test_SHOULDBE_PostDutyRunnerState_"+test.Name, test.PostDutyRunnerState)
-		logJSON(t, "test_HAVE_Runner"+test.Name, test.Runner)
-	}
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 
 	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
-		diff := typescomparable.PrintDiff(test.Runner, test.PostDutyRunnerState)
+		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
 		require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]), fmt.Sprintf("post runner state not equal\n%s\n", diff))
 	}
 }

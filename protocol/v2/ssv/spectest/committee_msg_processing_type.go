@@ -2,16 +2,12 @@ package spectest
 
 import (
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -74,21 +70,9 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	require.NoError(t, err)
 
 	if test.PostDutyCommitteeRoot != hex.EncodeToString(postRoot[:]) {
-		diff := cmp.Diff(test.Committee, test.PostDutyCommittee, cmp.Exporter(func(p reflect.Type) bool { return true }))
-		//// DEBUG
-		//logJSON(t, "test_committee#"+test.Name+"#", test.Committee)
-		//logJSON(t, "test_post_duty_committee#"+test.Name+"#", test.PostDutyCommittee)
-		//
-		t.Errorf("post runner state not equal: %v", diff)
+		diff := dumpState(t, test.Name, test.Committee, test.PostDutyCommittee)
+		t.Errorf("post runner state not equal %s", diff)
 	}
-}
-
-// TODO: REMOVE when tests alignment is finished
-func logJSON(t *testing.T, name string, value interface{}) {
-	bytes, err := json.Marshal(value)
-	require.NoError(t, err)
-	err = os.WriteFile(fmt.Sprintf("%s_test_serialized.json", name), bytes, 0644)
-	require.NoError(t, err)
 }
 
 // Run as an individual test
@@ -197,13 +181,9 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.Operator = &specCommittee.CommitteeMember
-
-	//// DEBUG
-	//bytes, err := committee.MarshalJSON()
-	//require.NoError(t, err)
-	//err = os.WriteFile("test_serialized.json", bytes, 0644)
-	//require.NoError(t, err)
-	////
+	//for _, r := range committee.Runners {
+	//	r.BaseRunner.BeaconNetwork = spectypes.BeaconTestNetwork
+	//}
 
 	root, err := committee.GetRoot()
 	require.NoError(t, err)

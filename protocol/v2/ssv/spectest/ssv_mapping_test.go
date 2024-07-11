@@ -48,6 +48,12 @@ func TestSSVMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
+	// Set true if you need to check the post run states of actual and expected committees / runners
+	if DebugDumpState {
+		_ = os.RemoveAll(dumpDir)
+		os.Mkdir(dumpDir, 0755)
+	}
+
 	for name, test := range untypedTests {
 		name, test := name, test
 		r := prepareTest(t, logger, name, test)

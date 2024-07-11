@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -165,7 +164,8 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	require.NoError(t, err)
 
 	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
-		logger.Error("post runner state not equal", zap.String("state", cmp.Diff(test.Runner, test.PostDutyRunnerState, cmp.Exporter(func(p reflect.Type) bool { return true }))))
+		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
+		logger.Error("post runner state not equal", zap.String("state", diff))
 	}
 }
 
