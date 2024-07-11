@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -74,4 +74,15 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+}
+
+// DomainType returns current domain type based on fork epoch
+func (n NetworkConfig) DomainType() spectypes.DomainType {
+	if n.AlanForked(n.Beacon.EstimatedCurrentSlot()) {
+		forkDomain := make([]byte, 4)
+		copy(forkDomain, n.Domain[:2])
+		copy(forkDomain[2:3], []byte{0x1})
+		return spectypes.DomainType(forkDomain)
+	}
+	return n.Domain
 }
