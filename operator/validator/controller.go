@@ -92,6 +92,7 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
+	NetworkConfig              networkconfig.NetworkConfig
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -1176,7 +1177,7 @@ func TempBeaconVoteValueCheckF(
 		}
 
 		if bv.Source.Epoch >= bv.Target.Epoch {
-			return errors.New("attestation data source > target")
+			return errors.New("attestation data source >= target")
 		}
 
 		// attestationData := &phase0.AttestationData{

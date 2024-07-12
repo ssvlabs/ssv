@@ -23,6 +23,7 @@ type StartNewRunnerDutySpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
 	Duty                    spectypes.Duty
+	Threshold               uint64
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages          []*spectypes.PartialSignatureMessages
@@ -97,10 +98,11 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 	// post root
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
+
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 
 	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
-		diff := typescomparable.PrintDiff(test.Runner, test.PostDutyRunnerState)
+		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
 		require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]), fmt.Sprintf("post runner state not equal\n%s\n", diff))
 	}
 }
@@ -173,6 +175,6 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	err := test.Runner.StartNewDuty(logger, test.Duty)
+	err := test.Runner.StartNewDuty(logger, test.Duty, test.Threshold)
 	return err
 }

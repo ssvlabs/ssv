@@ -32,6 +32,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 				Share: *spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex),
 			},
 			Signer:            spectestingutils.NewTestingKeyManager(),
+			Operator:          spectestingutils.TestingCommitteeMember(keySet),
 			OperatorSigner:    spectestingutils.NewTestingOperatorSigner(keySet, 1),
 			SignatureVerifier: spectestingutils.NewTestingVerifier(),
 			DutyRunners: map[spectypes.RunnerRole]runner.Runner{

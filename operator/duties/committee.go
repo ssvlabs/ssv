@@ -62,45 +62,10 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			}
 
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
+			h.processExecution(period, epoch, slot)
 
-			if h.network.AlanFork() {
-				h.processExecution(period, epoch, slot)
-
-				// cleanups
-				slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
-				// last slot of epoch
-				if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-					h.attDuties.ResetEpoch(epoch)
-				}
-
-				// last slot of period
-				if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-					h.syncDuties.Reset(period - 1)
-				}
-			}
-
-		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
-
-			//// reset current epoch duties
-			//if reorgEvent.Previous {
-			//	h.duties.ResetEpoch(currentEpoch)
-			//	h.fetchFirst = true
-			//	h.fetchCurrentEpoch = true
-			//	if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-			//		h.duties.ResetEpoch(currentEpoch + 1)
-			//		h.fetchNextEpoch = true
-			//	}
-			//} else if reorgEvent.Current {
-			//	// reset & re-fetch next epoch duties if in appropriate slot range,
-			//	// otherwise they will be fetched by the appropriate slot tick.
-			//	if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-			//		h.duties.ResetEpoch(currentEpoch + 1)
-			//		h.fetchNextEpoch = true
-			//	}
-			//}
+		case <-h.reorg:
+			// do nothing
 
 		case <-h.indicesChange:
 			// do nothing
