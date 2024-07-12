@@ -138,13 +138,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != types.RoleCommittee { // Rule only for validator runners
-		var maxSlot phase0.Slot
-		// TODO: store max slot to avoid iterating all values
-		for _, s := range signerStateBySlot {
-			if s != nil && s.Slot > maxSlot {
-				maxSlot = s.Slot
-			}
-		}
+		maxSlot := signerStateBySlot.MaxSlot()
 		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
 			e.got = partialSignatureMessages.Slot
@@ -157,7 +151,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	if signerState := signerStateBySlot[messageSlot%mv.maxSlotsInState()]; signerState != nil && signerState.Slot == messageSlot {
+	if signerState := signerStateBySlot.Get(messageSlot); signerState != nil && signerState.Slot == messageSlot {
 		// Rule: peer must send only:
 		// - 1 PostConsensusPartialSig, for Committee duty
 		// - 1 RandaoPartialSig and 1 PostConsensusPartialSig for Proposer
@@ -228,11 +222,12 @@ func (mv *messageValidator) updatePartialSignatureState(
 ) {
 	stateBySlot := state.GetOrCreate(signer)
 	messageSlot := partialSignatureMessages.Slot
+	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
 
-	signerState := stateBySlot[messageSlot%mv.maxSlotsInState()]
+	signerState := stateBySlot.Get(messageSlot)
 	if signerState == nil || signerState.Slot != messageSlot {
 		signerState = NewSignerState(messageSlot, specqbft.FirstRound)
-		stateBySlot[messageSlot%mv.maxSlotsInState()] = signerState
+		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 
 	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)

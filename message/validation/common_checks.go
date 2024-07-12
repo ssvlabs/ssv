@@ -55,19 +55,9 @@ func (mv *messageValidator) validateDutyCount(
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
 	validatorIndices []phase0.ValidatorIndex,
-	signerStateBySlot []*SignerState,
+	signerStateBySlot *OperatorState,
 ) error {
-	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
-	dutyCount := 0
-	for _, state := range signerStateBySlot {
-		if state != nil && mv.netCfg.Beacon.EstimatedEpochAtSlot(state.Slot) == msgEpoch {
-			dutyCount++
-		}
-	}
-
-	if state := signerStateBySlot[msgSlot%mv.maxSlotsInState()]; state == nil || state.Slot != msgSlot {
-		dutyCount++
-	}
+	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot))
 
 	dutyLimit, exists := mv.dutyLimit(msgID, validatorIndices)
 	if !exists {

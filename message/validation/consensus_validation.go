@@ -168,8 +168,8 @@ func (mv *messageValidator) validateQBFTLogic(
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerStateBySlot := state.GetOrCreate(signer)
-		signerState := signerStateBySlot[msgSlot%mv.maxSlotsInState()]
-		if signerState == nil || signerState.Slot != msgSlot {
+		signerState := signerStateBySlot.Get(msgSlot)
+		if signerState == nil {
 			continue
 		}
 
@@ -232,14 +232,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.GetOperatorIDs() {
 			signerStateBySlot := state.GetOrCreate(signer)
-			var maxSlot phase0.Slot
-			// TODO: store max slot to avoid iterating all values
-			for _, s := range signerStateBySlot {
-				if s != nil && s.Slot > maxSlot {
-					maxSlot = s.Slot
-				}
-			}
-			if maxSlot != 0 && maxSlot > phase0.Slot(consensusMessage.Height) {
+			if maxSlot := signerStateBySlot.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
 				e := ErrSlotAlreadyAdvanced
 				e.got = consensusMessage.Height
 				e.want = maxSlot
@@ -295,13 +288,14 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 
 func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, consensusState *consensusState) error {
 	msgSlot := phase0.Slot(consensusMessage.Height)
+	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		stateBySlot := consensusState.GetOrCreate(signer)
-		signerState := stateBySlot[msgSlot%mv.maxSlotsInState()]
-		if signerState == nil || signerState.Slot != msgSlot {
+		signerState := stateBySlot.Get(msgSlot)
+		if signerState == nil {
 			signerState = NewSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
-			stateBySlot[msgSlot%mv.maxSlotsInState()] = signerState
+			stateBySlot.Set(msgSlot, msgEpoch, signerState)
 		} else {
 			if consensusMessage.Round > signerState.Round {
 				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
