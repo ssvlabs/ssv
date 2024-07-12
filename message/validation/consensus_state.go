@@ -47,7 +47,7 @@ func newOperatorState(size phase0.Slot) *OperatorState {
 
 func (os *OperatorState) Get(slot phase0.Slot) *SignerState {
 	s := os.state[int(slot)%len(os.state)]
-	if s.Slot != slot {
+	if s == nil || s.Slot != slot {
 		return nil
 	}
 
