@@ -98,12 +98,12 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
-	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
-	for k, v := range c.Shares {
-		sharesCopy[k] = v
+	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
+	for _, bd := range duty.BeaconDuties {
+		validatorShares[bd.ValidatorIndex] = c.Shares[bd.ValidatorIndex]
 	}
 
-	r := c.CreateRunnerFn(duty.Slot, sharesCopy)
+	r := c.CreateRunnerFn(duty.Slot, validatorShares)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
