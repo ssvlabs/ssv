@@ -53,7 +53,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 
-			if !h.network.AlanForked(slot) {
+			if !h.network.PastAlanForkAtEpoch(epoch) {
 				h.logger.Debug("🛠 ticker event",
 					zap.String("period_epoch_slot_pos", buildStr),
 					zap.String("status", "alan not forked yet"),

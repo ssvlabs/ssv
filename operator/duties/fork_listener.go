@@ -31,10 +31,13 @@ func (f *ForkListener) HandleDuties(ctx context.Context) {
 
 		case <-f.ticker.Next():
 			slot := f.ticker.Slot()
-			if f.network.AlanForked(slot) {
-				if err := f.p2pnet.UpdateDomainTypeAtFork(f.logger); err != nil {
+			epoch := f.network.Beacon.EstimatedEpochAtSlot(slot)
+			if f.network.PastAlanForkAtEpoch(epoch) {
+				if err := f.p2pnet.UpdateDomainType(f.logger, f.network.DomainTypeAtEpoch(epoch)); err != nil {
 					f.logger.Warn("could not update ENR at fork", zap.Error(err))
 				}
+				// TODO (Alan): find a more elegant solution to stop listening when no more forks.
+				return
 			}
 		}
 	}

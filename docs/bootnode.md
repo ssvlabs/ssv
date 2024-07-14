@@ -23,7 +23,7 @@ bootnode:
   PrivateKey: [Your Private Key]
   ExternalIP: [Your External IP]
   DbPath: ./data/bootnode
-  Network: jato-v2
+  Network: mainnet
 ```
 
 _Note: This is an example. Replace the placeholders as explained below._

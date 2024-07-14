@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 var (
@@ -39,11 +40,6 @@ type NodeProvider interface {
 // NodeFilter can be used for nodes filtering during discovery
 type NodeFilter func(*enode.Node) bool
 
-// DomainTypeProvider interface used to get current domain type based on fork epoch
-type DomainTypeProvider interface {
-	DomainType() spectypes.DomainType
-}
-
 // DiscV5Service wraps discover.UDPv5 with additional functionality
 // it implements go-libp2p/core/discovery.Discovery
 // currently using ENR entry (subnets) to facilitate subnets discovery
@@ -61,7 +57,7 @@ type DiscV5Service struct {
 	publishState int32
 	conn         *net.UDPConn
 
-	domainType DomainTypeProvider
+	domainType networkconfig.DomainTypeProvider
 	subnets    []byte
 }
 
@@ -361,14 +357,12 @@ func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, erro
 	return conn, nil
 }
 
-func (dvs *DiscV5Service) UpdateDomainTypeAtFork(logger *zap.Logger) error {
-	updated, err := records.UpdateENRDomainType(dvs.dv5Listener.LocalNode(), dvs.domainType.DomainType())
+func (dvs *DiscV5Service) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
+	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), domain)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
-	if updated != nil {
-		logger.Debug("updated domain", fields.Domain(dvs.domainType.DomainType()), fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
-		go dvs.publishENR(logger)
-	}
+	logger.Debug("updated domain type", fields.Domain(dvs.domainType.DomainType()), fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
+	go dvs.publishENR(logger)
 	return nil
 }

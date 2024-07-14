@@ -10,7 +10,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -41,7 +43,7 @@ type Options struct {
 	HostDNS     string
 
 	// DomainType is the SSV network domain of the node
-	DomainType DomainTypeProvider
+	DomainType networkconfig.DomainTypeProvider
 }
 
 // Service is the interface for discovery
@@ -51,7 +53,7 @@ type Service interface {
 	RegisterSubnets(logger *zap.Logger, subnets ...int) error
 	DeregisterSubnets(logger *zap.Logger, subnets ...int) error
 	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
-	UpdateDomainTypeAtFork(logger *zap.Logger) error
+	UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error
 }
 
 // NewService creates new discovery.Service

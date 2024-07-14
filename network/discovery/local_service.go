@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 )
 
@@ -122,7 +123,7 @@ func (md *localDiscovery) Close() error {
 	return nil
 }
 
-func (dvs *localDiscovery) UpdateDomainTypeAtFork(logger *zap.Logger) error {
+func (dvs *localDiscovery) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
 	// TODO
 	return nil
 }
