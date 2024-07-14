@@ -259,15 +259,3 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.DecodedSSVMessage) {
 	ncv.logger.Info("✅ Got proposal message", fields.CommitteeID(cid))
 	ncv.Roots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
 }
-
-//func (ncv *NonCommitteeValidator) onPostProposalMsg(msg *queue.DecodedSSVMessage) {
-//	role := ncvroots_to_roles[msg.root]
-//	if role == 'attester':
-//	att = Attestation(msg)
-//	attesters[att.index] = att
-//	elif role == 'sync':
-//	sync = Sync(msg)
-//	syncs[sync.index] = sync
-//	else:
-//	raise Exception('Unknown role')
-//}

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
@@ -90,19 +89,13 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
-	r.metrics.EndPreConsensus()
 
 	// create SignedVoluntaryExit using VoluntaryExit created on r.executeDuty() and reconstructed signature
 	signedVoluntaryExit := &phase0.SignedVoluntaryExit{
 		Message:   r.voluntaryExit,
 		Signature: specSig,
 	}
-	submissionTime := time.Now()
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
-		logger.Error("failed to submit voluntary exit",
-			fields.SubmissionTime(time.Since(submissionTime)),
-			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
-			zap.Error(err))
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
 
@@ -110,8 +103,6 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		fields.Epoch(r.voluntaryExit.Epoch),
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
-		fields.SubmissionTime(time.Since(submissionTime)),
-		fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 	)
 
 	r.GetState().Finished = true

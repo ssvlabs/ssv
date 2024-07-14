@@ -3,7 +3,6 @@ package runner
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -269,13 +268,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			}
 
 			submissionEnd := r.metrics.StartBeaconSubmission()
-			logger = logger.With(
-				zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-				fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
-				fields.ConsensusTime(r.metrics.GetConsensusTime()),
-				fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
-				zap.String("block_root", hex.EncodeToString(contribAndProof.Contribution.BeaconBlockRoot[:])),
-			)
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				r.metrics.RoleSubmissionFailed()
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
