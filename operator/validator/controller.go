@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"sync"
 	"time"
 
@@ -87,7 +87,6 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
-	UseNewExporterAPI          bool `yaml:"UseNewExporterAPI" env:"USE_NEW_EXPORTER_API" env-description:"Use new exporter API which is simpler and has no workarounds"`
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
 
@@ -378,7 +377,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 	var ncv *committeeObserver
 	item := c.getNonCommitteeValidators(msg.GetID())
 	if item == nil {
-		nonCommitteeOptions := validator.NonCommitteeOptions{
+		committeeObserverOptions := validator.CommitteeObserverOptions{
 			Logger:            c.logger,
 			NetworkConfig:     c.networkConfig,
 			ValidatorStore:    c.validatorStore,
@@ -389,7 +388,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
 		}
 		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewNonCommitteeValidator(exporter_message.MessageID(msg.MsgID), nonCommitteeOptions),
+			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(msg.MsgID), committeeObserverOptions),
 		}
 		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
 		c.committeesObservers.Set(
@@ -1216,7 +1215,7 @@ func SetupCommitteeRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(exporter_message.RunnerRole(role)),
+			Storage:               options.Storage.Get(message.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			SignatureVerification: true,
@@ -1279,7 +1278,7 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(exporter_message.RunnerRole(role)),
+			Storage:               options.Storage.Get(message.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			SignatureVerification: true,

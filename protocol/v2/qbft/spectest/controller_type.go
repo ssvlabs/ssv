@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -59,7 +58,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), exporter_message.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), message.RoleCommittee)
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
 		spectestingutils.TestingOperator(spectestingutils.Testing4SharesSet()),

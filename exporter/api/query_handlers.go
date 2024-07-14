@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"go.uber.org/zap"
@@ -71,16 +71,16 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		nm.Msg = res
 		return
 	}
-	runnerRole := exporter_message.RunnerRole(beaconRole)
+	runnerRole := convert.RunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(spectypes.RunnerRole(runnerRole)))
+		logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))
 		res.Data = []string{"internal error - role storage doesn't exist", beaconRole.String()}
 		nm.Msg = res
 		return
 	}
 
-	msgID := exporter_message.NewMsgID(domain, pkRaw, runnerRole)
+	msgID := convert.NewMsgID(domain, pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)

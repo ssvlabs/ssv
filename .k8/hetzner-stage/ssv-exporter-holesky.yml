@@ -118,8 +118,6 @@ spec:
               value: "16073"
             - name: ENABLE_PROFILE
               value: "true"
-            - name: USE_NEW_EXPORTER_API
-              value: "true"
             - name: UDP_PORT
               value: "12073"
             - name: TCP_PORT

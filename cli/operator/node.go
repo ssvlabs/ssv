@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"log"
 	"math/big"
 	"net/http"
@@ -273,20 +272,20 @@ var StartNodeCmd = &cobra.Command{
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws, cfg.SSVOptions.ValidatorOptions.UseNewExporterAPI)
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []exporter_message.RunnerRole{
-			exporter_message.RoleCommittee,
-			exporter_message.RoleAttester,
-			exporter_message.RoleProposer,
-			exporter_message.RoleSyncCommittee,
-			exporter_message.RoleAggregator,
-			exporter_message.RoleSyncCommitteeContribution,
-			exporter_message.RoleValidatorRegistration,
-			exporter_message.RoleVoluntaryExit,
+		storageRoles := []message.RunnerRole{
+			message.RoleCommittee,
+			message.RoleAttester,
+			message.RoleProposer,
+			message.RoleSyncCommittee,
+			message.RoleAggregator,
+			message.RoleSyncCommitteeContribution,
+			message.RoleValidatorRegistration,
+			message.RoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()

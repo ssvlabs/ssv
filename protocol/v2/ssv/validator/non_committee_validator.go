@@ -7,7 +7,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -34,7 +34,7 @@ type CommitteeObserver struct {
 	postConsensusContainer map[phase0.ValidatorIndex]*specssv.PartialSigContainer
 }
 
-type NonCommitteeOptions struct {
+type CommitteeObserverOptions struct {
 	FullNode          bool
 	Logger            *zap.Logger
 	Network           specqbft.Network
@@ -45,7 +45,7 @@ type NonCommitteeOptions struct {
 	ValidatorStore    registrystorage.ValidatorStore
 }
 
-func NewNonCommitteeValidator(identifier exporter_message.MessageID, opts NonCommitteeOptions) *CommitteeObserver {
+func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:                opts.NetworkConfig.Domain,
@@ -79,7 +79,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 
 	partialSigMessages := &spectypes.PartialSignatureMessages{}
 	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
-		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
+		logger.Error("❗ failed to get partial signature message from network message", zap.Error(err))
 		return
 	}
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
@@ -106,11 +106,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 
 	for key, quorum := range quorums {
 		role := ncv.getRole(msg, key.Root)
-		println("<<<<<<<<<<<<<<<<<<<<<<<<works>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-		println(role.String())
-		println("<<<<<<<<<<<<<<<<<<<<<<<<works>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 		validator := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
-		MsgID := exporter_message.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
+		MsgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
 		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, slot, quorum); err != nil {
 			logger.Error("❌ could not save participants", zap.Error(err))
 			return
@@ -136,15 +133,15 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	}
 }
 
-func (ncv *CommitteeObserver) getRole(msg *queue.DecodedSSVMessage, root [32]byte) exporter_message.RunnerRole {
+func (ncv *CommitteeObserver) getRole(msg *queue.DecodedSSVMessage, root [32]byte) convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		_, found := ncv.Roots[root]
 		if !found {
-			return exporter_message.RoleAttester
+			return convert.RoleAttester
 		}
-		return exporter_message.RoleSyncCommittee
+		return convert.RoleSyncCommittee
 	}
-	return exporter_message.RunnerRole(msg.MsgID.GetRoleType())
+	return convert.RunnerRole(msg.MsgID.GetRoleType())
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
@@ -168,9 +165,6 @@ func (ncv *CommitteeObserver) processMessage(
 
 	for _, msg := range signedMsg.Messages {
 		validator := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
-		if validator == nil {
-			panic("fuck my life")
-		}
 		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
 		if !ok {
 			container = specssv.NewPartialSigContainer(validator.Quorum())

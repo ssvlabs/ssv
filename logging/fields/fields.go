@@ -233,6 +233,9 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 func Role(val spectypes.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
+func ExporterRole(val message.RunnerRole) zap.Field {
+	return zap.Stringer(FieldRole, val)
+}
 
 func MessageID(val spectypes.MessageID) zap.Field {
 	return zap.Stringer(FieldMessageID, val)

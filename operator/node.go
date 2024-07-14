@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	storage2 "github.com/ssvlabs/ssv/registry/storage"
 
 	"github.com/ssvlabs/ssv/network"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
