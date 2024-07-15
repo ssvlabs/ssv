@@ -6,6 +6,7 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 const (
@@ -49,10 +50,6 @@ var (
 
 // NetworkOpts is the config struct for network configurations
 type NetworkOpts struct {
-	// CommitteeOperators is a map from a CommitteeID to its number of operators
-	CommitteeOperators map[string]int `json:"-"`
-	// CommitteeValidators is a map from a CommitteeID to its number of validators
-	CommitteeValidators map[string]int `json:"-"`
 	// ActiveValidators is the amount of validators in the network
 	ActiveValidators int
 	// Subnets is the number of subnets in the network
@@ -61,23 +58,6 @@ type NetworkOpts struct {
 	OneEpochDuration time.Duration
 	// TotalTopicsWeight is the weight of all the topics in the network
 	TotalTopicsWeight float64
-}
-
-// Returns the list of number of operators and validators for committees
-func (n *NetworkOpts) GetOperatorsAndValidatorsCountList() ([]int, []int, error) {
-	operators := make([]int, 0)
-	validators := make([]int, 0)
-	// Get the number of operators and validators for each committee, in order
-	for committee, numOperators := range n.CommitteeOperators {
-		numValidators, exists := n.CommitteeValidators[committee]
-		if !exists {
-			return nil, nil, ErrDifferentCommittees
-		}
-		operators = append(operators, numOperators)
-		validators = append(validators, numValidators)
-	}
-
-	return operators, validators, nil
 }
 
 // TopicOpts is the config struct for topic configurations
@@ -172,17 +152,6 @@ func (o *Options) validate() error {
 	if o.Network.ActiveValidators < minActiveValidators {
 		return ErrLowValidatorsCount
 	}
-
-	// Validate operators and validators map
-	if len(o.Network.CommitteeOperators) != len(o.Network.CommitteeValidators) {
-		return ErrOperatorsAndValidatorsWithDifferentLength
-	}
-	for committee := range o.Network.CommitteeOperators {
-		if _, exists := o.Network.CommitteeValidators[committee]; !exists {
-			return ErrDifferentCommittees
-		}
-	}
-
 	return nil
 }
 
@@ -192,41 +161,27 @@ func (o *Options) maxScore() float64 {
 }
 
 // NewOpts creates new TopicOpts instance
-func NewOpts(activeValidators, subnets int, committeeOperators map[string]int, committeeValidators map[string]int) *Options {
+func NewOpts(activeValidators, subnets int) *Options {
 	return &Options{
 		Network: NetworkOpts{
-			ActiveValidators:    activeValidators,
-			Subnets:             subnets,
-			CommitteeOperators:  committeeOperators,
-			CommitteeValidators: committeeValidators,
+			ActiveValidators: activeValidators,
+			Subnets:          subnets,
 		},
 		Topic: TopicOpts{},
 	}
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators, subnets int, committeeOperators map[string]int, committeeValidators map[string]int) (*Options, error) {
+func NewSubnetTopicOpts(activeValidators, subnets int, committees []*storage.Committee) (*Options, error) {
 	// Create options with default values
-	opts := NewOpts(activeValidators, subnets, committeeOperators, committeeValidators)
+	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()
-
-	// Validate options
-	if err := opts.validate(); err != nil {
-		return nil, err
-	}
 
 	// Set topic weight with equal weights
 	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
 
 	// Set the expected message rate for the topic
-	operators, validators, err := opts.Network.GetOperatorsAndValidatorsCountList()
-	if err != nil {
-		return nil, err
-	}
-	opts.Topic.ExpectedMsgRate, err = calculateMessageRateForTopic(operators, validators)
-	if err != nil {
-		return nil, err
-	}
+	opts.Topic.ExpectedMsgRate = calculateMessageRateForTopic(committees)
 
 	return opts, nil
 }

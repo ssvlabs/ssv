@@ -3,7 +3,7 @@ package params
 import (
 	"math"
 
-	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // Ethereum parameters
@@ -109,29 +109,27 @@ func expectedSingleSCCommitteeDutiesPerEpochCached(numValidators int) float64 {
 }
 
 // Calculates the message rate for a topic given its committees' configurations (number of operators and number of validators)
-func calculateMessageRateForTopic(committeeSizes []int, validatorCounts []int) (float64, error) {
-	if committeeSizes == nil || validatorCounts == nil {
-		return 0, errors.New("no committee sizes or validators were provided")
-	}
-	if len(committeeSizes) != len(validatorCounts) {
-		return 0, errors.New("committee sizes and validator counts have different length")
+func calculateMessageRateForTopic(committees []*storage.Committee) float64 {
+	if committees == nil || len(committees) == 0 {
+		return 0
 	}
 
 	totalMsgRate := 0.0
 
-	for i, count := range validatorCounts {
-		committeeSize := committeeSizes[i]
+	for _, committee := range committees {
+		committeeSize := len(committee.Operators)
+		numValidators := len(committee.Validators)
 
-		totalMsgRate += expectedNumberOfCommitteeDutiesPerEpochDueToAttestationCached(count) * float64(dutyWithoutPreConsensus(committeeSize))
-		totalMsgRate += expectedSingleSCCommitteeDutiesPerEpochCached(count) * float64(dutyWithoutPreConsensus(committeeSize))
-		totalMsgRate += float64(count) * AggregatorProbability * float64(dutyWithPreConsensus(committeeSize))
-		totalMsgRate += float64(count) * SlotsPerEpoch * ProposalProbability * float64(dutyWithPreConsensus(committeeSize))
-		totalMsgRate += float64(count) * SlotsPerEpoch * SyncCommitteeAggProb * float64(dutyWithPreConsensus(committeeSize))
+		totalMsgRate += expectedNumberOfCommitteeDutiesPerEpochDueToAttestationCached(numValidators) * float64(dutyWithoutPreConsensus(committeeSize))
+		totalMsgRate += expectedSingleSCCommitteeDutiesPerEpochCached(numValidators) * float64(dutyWithoutPreConsensus(committeeSize))
+		totalMsgRate += float64(numValidators) * AggregatorProbability * float64(dutyWithPreConsensus(committeeSize))
+		totalMsgRate += float64(numValidators) * SlotsPerEpoch * ProposalProbability * float64(dutyWithPreConsensus(committeeSize))
+		totalMsgRate += float64(numValidators) * SlotsPerEpoch * SyncCommitteeAggProb * float64(dutyWithPreConsensus(committeeSize))
 	}
 
 	// Convert rate to seconds
 	totalEpochSeconds := float64(SlotsPerEpoch * 12)
 	totalMsgRate = totalMsgRate / totalEpochSeconds
 
-	return totalMsgRate, nil
+	return totalMsgRate
 }
