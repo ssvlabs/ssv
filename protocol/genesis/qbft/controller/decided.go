@@ -4,8 +4,8 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
@@ -13,11 +13,11 @@ import (
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
-func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.SignedMessage) (*genesisspecqbft.SignedMessage, error) {
+func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if err := ValidateDecided(
 		c.config,
 		msg,
-		c.CommitteeMember,
+		c.Share,
 	); err != nil {
 		return nil, errors.Wrap(err, "invalid decided msg")
 	}
@@ -29,7 +29,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.Signed
 	save := true
 
 	if inst == nil {
-		i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, msg.Message.Height)
+		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = msg.FullData
@@ -81,10 +81,10 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.Signed
 
 func ValidateDecided(
 	config qbft.IConfig,
-	signedDecided *genesisspecqbft.SignedMessage,
-	committeeMemeber *spectypes.CommitteeMember,
+	signedDecided *specqbft.SignedMessage,
+	share *spectypes.Share,
 ) error {
-	if !IsDecidedMsg(committeeMemeber, signedDecided) {
+	if !IsDecidedMsg(share, signedDecided) {
 		return errors.New("not a decided msg")
 	}
 
@@ -92,7 +92,7 @@ func ValidateDecided(
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
-	if err := instance.BaseCommitValidation(config, signedDecided, signedDecided.Message.Height, committeeMemeber.Committee); err != nil {
+	if err := instance.BaseCommitValidation(config, signedDecided, signedDecided.Message.Height, share.Committee); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
@@ -100,7 +100,7 @@ func ValidateDecided(
 		return errors.Wrap(err, "invalid decided")
 	}
 
-	r, err := genesisspecqbft.HashDataRoot(signedDecided.FullData)
+	r, err := specqbft.HashDataRoot(signedDecided.FullData)
 	if err != nil {
 		return errors.Wrap(err, "could not hash input data")
 	}
@@ -112,6 +112,6 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(committeeMember *spectypes.CommitteeMember, signedDecided *genesisspecqbft.SignedMessage) bool {
-	return committeeMember.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == genesisspecqbft.CommitMsgType
+func IsDecidedMsg(share *spectypes.Share, signedDecided *specqbft.SignedMessage) bool {
+	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == specqbft.CommitMsgType
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
@@ -46,7 +46,7 @@ func VerifyByOperators(s genesisspectypes.Signature, data genesisspectypes.Messa
 		found := false
 		for _, n := range operators {
 			if id == n.OperatorID {
-				pk, err := DeserializeBLSPublicKey(n.SSVOperatorPubKey)
+				pk, err := DeserializeBLSPublicKey(n.GetPublicKey())
 				if err != nil {
 					return errors.Wrap(err, "failed to deserialize public key")
 				}

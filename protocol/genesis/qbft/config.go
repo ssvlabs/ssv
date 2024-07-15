@@ -1,54 +1,50 @@
 package qbft
 
 import (
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type signing interface {
 	// GetSigner returns a Signer instance
-	GetSigner() genesisspectypes.SSVSigner
+	GetSigner() spectypes.SSVSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
-	GetSignatureDomainType() genesisspectypes.DomainType
+	GetSignatureDomainType() spectypes.DomainType
 }
 
 type IConfig interface {
 	signing
 	// GetValueCheckF returns value check function
-	GetValueCheckF() genesisspecqbft.ProposedValueCheckF
+	GetValueCheckF() specqbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() func(state *types.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
+	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() genesisspecqbft.Network
+	GetNetwork() specqbft.Network
 	// GetStorage returns a storage instance
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
 	// VerifySignatures returns if signature is checked
 	VerifySignatures() bool
-	// GetOperatorID returns the operator ID
-	GetOperatorID() genesisspectypes.OperatorID
 }
 
 type Config struct {
-	Signer                genesisspectypes.SSVSigner
+	Signer                spectypes.SSVSigner
 	SigningPK             []byte
-	Domain                genesisspectypes.DomainType
-	ValueCheckF           genesisspecqbft.ProposedValueCheckF
-	ProposerF             func(state *types.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
+	Domain                spectypes.DomainType
+	ValueCheckF           specqbft.ProposedValueCheckF
+	ProposerF             specqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
-	Network               genesisspecqbft.Network
+	Network               specqbft.Network
 	Timer                 roundtimer.Timer
 	SignatureVerification bool
-	OperatorID            genesisspectypes.OperatorID
 }
 
 // GetSigner returns a Signer instance
-func (c *Config) GetSigner() genesisspectypes.SSVSigner {
+func (c *Config) GetSigner() spectypes.SSVSigner {
 	return c.Signer
 }
 
@@ -58,22 +54,22 @@ func (c *Config) GetSigningPubKey() []byte {
 }
 
 // GetSignatureDomainType returns the Domain type used for signatures
-func (c *Config) GetSignatureDomainType() genesisspectypes.DomainType {
+func (c *Config) GetSignatureDomainType() spectypes.DomainType {
 	return c.Domain
 }
 
 // GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() genesisspecqbft.ProposedValueCheckF {
+func (c *Config) GetValueCheckF() specqbft.ProposedValueCheckF {
 	return c.ValueCheckF
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() func(state *types.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+func (c *Config) GetProposerF() specqbft.ProposerF {
 	return c.ProposerF
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() genesisspecqbft.Network {
+func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
 }
 
@@ -89,8 +85,4 @@ func (c *Config) GetTimer() roundtimer.Timer {
 
 func (c *Config) VerifySignatures() bool {
 	return c.SignatureVerification
-}
-
-func (c *Config) GetOperatorID() genesisspectypes.OperatorID {
-	return c.OperatorID
 }

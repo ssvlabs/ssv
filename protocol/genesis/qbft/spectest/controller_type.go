@@ -15,7 +15,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -61,7 +60,7 @@ func generateController(logger *zap.Logger) *controller.Controller {
 	config := qbfttesting.TestingConfig(logger, genesisspectestingutils.Testing4SharesSet(), genesisspectypes.BNRoleAttester)
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
-		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
+		genesisspectestingutils.TestingShare(genesisspectestingutils.Testing4SharesSet()),
 		config,
 		false,
 	)

@@ -2,7 +2,7 @@ package controller
 
 import (
 	"github.com/pkg/errors"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
@@ -36,7 +36,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 
 	i := instance.NewInstance(
 		c.config,
-		highestInstance.State.CommitteeMember,
+		highestInstance.State.Share,
 		identifier,
 		highestInstance.State.Height,
 	)
@@ -45,7 +45,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 }
 
 // SaveInstance saves the given instance to the storage.
-func (c *Controller) SaveInstance(i *instance.Instance, msg *genesisspecqbft.SignedMessage) error {
+func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
 	storedInstance := &qbftstorage.StoredInstance{
 		State:          i.State,
 		DecidedMessage: msg,

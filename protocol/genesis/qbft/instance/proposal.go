@@ -4,21 +4,18 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 // uponProposal process proposal message
 // Assumes proposal message is valid!
-func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecqbft.SignedMessage, proposeMsgContainer *genesisspecqbft.MsgContainer) error {
+func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
 	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(signedProposal)
 	if err != nil {
 		return errors.Wrap(err, "could not add proposal msg to container")
@@ -28,7 +25,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 	}
 
 	logger.Debug("📬 got proposal message",
-		fields.Round(specqbft.Round(i.State.Round)),
+		fields.GenesisRound(i.State.Round),
 		zap.Any("proposal-signers", signedProposal.Signers))
 
 	newRound := signedProposal.Message.Round
@@ -43,7 +40,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 	i.metrics.EndStageProposal()
 
 	// value root
-	r, err := genesisspecqbft.HashDataRoot(signedProposal.FullData)
+	r, err := specqbft.HashDataRoot(signedProposal.FullData)
 	if err != nil {
 		return errors.Wrap(err, "could not hash input data")
 	}
@@ -54,7 +51,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 	}
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
-		fields.Round(specqbft.Round(i.State.Round)),
+		fields.GenesisRound(i.State.Round),
 		zap.Any("proposal-signers", signedProposal.Signers),
 		zap.Any("prepare-signers", prepare.Signers))
 
@@ -65,13 +62,13 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 }
 
 func isValidProposal(
-	state *types.State,
+	state *specqbft.State,
 	config qbft.IConfig,
-	signedProposal *genesisspecqbft.SignedMessage,
-	valCheck genesisspecqbft.ProposedValueCheckF,
+	signedProposal *specqbft.SignedMessage,
+	valCheck specqbft.ProposedValueCheckF,
 	operators []*spectypes.Operator,
 ) error {
-	if signedProposal.Message.MsgType != genesisspecqbft.ProposalMsgType {
+	if signedProposal.Message.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
 	if signedProposal.Message.Height != state.Height {
@@ -81,11 +78,11 @@ func isValidProposal(
 		return errors.New("msg allows 1 signer")
 	}
 	if config.VerifySignatures() {
-		if err := genesisssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
+		if err := ssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
-	if !signedProposal.MatchedSigners([]genesisspectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
+	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
 
@@ -94,7 +91,7 @@ func isValidProposal(
 	}
 
 	// verify full data integrity
-	r, err := genesisspecqbft.HashDataRoot(signedProposal.FullData)
+	r, err := specqbft.HashDataRoot(signedProposal.FullData)
 	if err != nil {
 		return errors.Wrap(err, "could not hash input data")
 	}
@@ -126,46 +123,47 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
-func IsProposalJustification(
-	config qbft.IConfig,
-	committeeMember *spectypes.CommitteeMember,
-	roundChangeMsgs []*genesisspecqbft.SignedMessage,
-	prepareMsgs []*genesisspecqbft.SignedMessage,
-	height genesisspecqbft.Height,
-	round genesisspecqbft.Round,
-	fullData []byte,
-) error {
-	return isProposalJustification(
-		&types.State{
-			CommitteeMember: committeeMember,
-			Height:          height,
-		},
-		config,
-		roundChangeMsgs,
-		prepareMsgs,
-		height,
-		round,
-		fullData,
-		func(data []byte) error { return nil },
-	)
-}
+//
+//func IsProposalJustification(
+//	config qbft.IConfig,
+//	share *ssvtypes.SSVShare,
+//	roundChangeMsgs []*specqbft.SignedMessage,
+//	prepareMsgs []*specqbft.SignedMessage,
+//	height specqbft.Height,
+//	round specqbft.Round,
+//	fullData []byte,
+//) error {
+//	return isProposalJustification(
+//		&specqbft.State{
+//			Share:  &share.Share,
+//			Height: height,
+//		},
+//		config,
+//		roundChangeMsgs,
+//		prepareMsgs,
+//		height,
+//		round,
+//		fullData,
+//		func(data []byte) error { return nil },
+//	)
+//}
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
-	state *types.State,
+	state *specqbft.State,
 	config qbft.IConfig,
-	roundChangeMsgs []*genesisspecqbft.SignedMessage,
-	prepareMsgs []*genesisspecqbft.SignedMessage,
-	height genesisspecqbft.Height,
-	round genesisspecqbft.Round,
+	roundChangeMsgs []*specqbft.SignedMessage,
+	prepareMsgs []*specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
 	fullData []byte,
-	valCheck genesisspecqbft.ProposedValueCheckF,
+	valCheck specqbft.ProposedValueCheckF,
 ) error {
 	if err := valCheck(fullData); err != nil {
 		return errors.Wrap(err, "proposal fullData invalid")
 	}
 
-	if round == genesisspecqbft.FirstRound {
+	if round == specqbft.FirstRound {
 		return nil
 	} else {
 		// check all round changes are valid for height and round
@@ -178,12 +176,12 @@ func isProposalJustification(
 		}
 
 		// check there is a quorum
-		if !HasQuorum(state.CommitteeMember, roundChangeMsgs) {
+		if !specqbft.HasQuorum(state.Share, roundChangeMsgs) {
 			return errors.New("change round has no quorum")
 		}
 
 		// previouslyPreparedF returns true if any on the round change messages have a prepared round and fullData
-		previouslyPrepared, err := func(rcMsgs []*genesisspecqbft.SignedMessage) (bool, error) {
+		previouslyPrepared, err := func(rcMsgs []*specqbft.SignedMessage) (bool, error) {
 			for _, rc := range rcMsgs {
 				if rc.Message.RoundChangePrepared() {
 					return true, nil
@@ -200,7 +198,7 @@ func isProposalJustification(
 		} else {
 
 			// check prepare quorum
-			if !HasQuorum(state.CommitteeMember, prepareMsgs) {
+			if !specqbft.HasQuorum(state.Share, prepareMsgs) {
 				return errors.New("prepares has no quorum")
 			}
 
@@ -214,7 +212,7 @@ func isProposalJustification(
 			}
 
 			// proposed fullData must equal highest prepared fullData
-			r, err := genesisspecqbft.HashDataRoot(fullData)
+			r, err := specqbft.HashDataRoot(fullData)
 			if err != nil {
 				return errors.Wrap(err, "could not hash input data")
 			}
@@ -230,7 +228,7 @@ func isProposalJustification(
 					height,
 					rcm.Message.DataRound,
 					rcm.Message.Root,
-					state.CommitteeMember.Committee,
+					state.Share.Committee,
 				); err != nil {
 					return errors.New("signed prepare not valid")
 				}
@@ -240,7 +238,7 @@ func isProposalJustification(
 	}
 }
 
-func proposer(state *types.State, config qbft.IConfig, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+func proposer(state *specqbft.State, config qbft.IConfig, round specqbft.Round) spectypes.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return config.GetProposerF()(state, round)
 }
@@ -258,23 +256,23 @@ func proposer(state *types.State, config qbft.IConfig, round genesisspecqbft.Rou
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *types.State, config qbft.IConfig, fullData []byte, roundChanges, prepares []*genesisspecqbft.SignedMessage) (*genesisspecqbft.SignedMessage, error) {
-	r, err := genesisspecqbft.HashDataRoot(fullData)
+func CreateProposal(state *specqbft.State, config qbft.IConfig, fullData []byte, roundChanges, prepares []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
 	}
 
-	roundChangesData, err := genesisspecqbft.MarshalJustifications(roundChanges)
+	roundChangesData, err := specqbft.MarshalJustifications(roundChanges)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not marshal justifications")
 	}
-	preparesData, err := genesisspecqbft.MarshalJustifications(prepares)
+	preparesData, err := specqbft.MarshalJustifications(prepares)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not marshal justifications")
 	}
 
-	msg := &genesisspecqbft.Message{
-		MsgType:    genesisspecqbft.ProposalMsgType,
+	msg := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
 		Height:     state.Height,
 		Round:      state.Round,
 		Identifier: state.ID,
@@ -283,14 +281,14 @@ func CreateProposal(state *types.State, config qbft.IConfig, fullData []byte, ro
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.CommitteeMember.SSVOperatorPubKey)
+	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing proposal msg")
 	}
 
-	signedMsg := &genesisspecqbft.SignedMessage{
+	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
+		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
 		Message:   *msg,
 
 		FullData: fullData,

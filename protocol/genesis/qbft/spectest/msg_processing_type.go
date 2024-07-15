@@ -18,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +29,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	preByts, _ := test.Pre.Encode()
 	msgId := genesisspecqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
+
 	pre := instance.NewInstance(
 		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
@@ -42,7 +42,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a simple hack to change the proposer func
 	if preInstance.State.Height == spectests.ChangeProposerFuncInstanceHeight {
-		preInstance.GetConfig().(*qbft.Config).ProposerF = func(state *genesisssvtypes.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+		preInstance.GetConfig().(*qbft.Config).ProposerF = func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 			return 1
 		}
 	}

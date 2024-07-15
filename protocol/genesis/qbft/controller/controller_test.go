@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -40,17 +38,17 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	testConfig := &qbft.Config{
-		Signer:  genesisspectestingutils.NewTestingKeyManager(),
-		Network: genesisspectestingutils.NewTestingNetwork(),
+		Signer:  spectestingutils.NewTestingKeyManager(),
+		Network: spectestingutils.NewTestingNetwork(),
 		Timer:   roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet())
+	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())
 	inst := instance.NewInstance(
 		testConfig,
 		share,
 		[]byte{1, 2, 3, 4},
-		genesisspecqbft.FirstHeight,
+		specqbft.FirstHeight,
 	)
 
 	// Initialize Controller
@@ -58,8 +56,8 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	// Initialize EventMsg for the test
 	timeoutData := types.TimeoutData{
-		Height: genesisspecqbft.FirstHeight,
-		Round:  genesisspecqbft.FirstRound,
+		Height: specqbft.FirstHeight,
+		Round:  specqbft.FirstRound,
 	}
 
 	data, err := json.Marshal(timeoutData)
@@ -71,7 +69,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	}
 
 	// Simulate a scenario where the instance is at a higher round
-	inst.State.Round = genesisspecqbft.Round(2)
+	inst.State.Round = specqbft.Round(2)
 	contr.StoredInstances.addNewInstance(inst)
 
 	// Call OnTimeout and capture the error
@@ -79,15 +77,15 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	// Assert that the error is nil and the round did not bump
 	require.NoError(t, err)
-	require.Equal(t, genesisspecqbft.Round(2), inst.State.Round, "Round should not bump")
+	require.Equal(t, specqbft.Round(2), inst.State.Round, "Round should not bump")
 
 	// Simulate a scenario where the instance is at the same or lower round
-	inst.State.Round = genesisspecqbft.FirstRound
+	inst.State.Round = specqbft.FirstRound
 
 	// Call OnTimeout and capture the error
 	err = contr.OnTimeout(logger, *msg)
 
 	// Assert that the error is nil and the round did bump
 	require.NoError(t, err)
-	require.Equal(t, genesisspecqbft.Round(2), inst.State.Round, "Round should bump")
+	require.Equal(t, specqbft.Round(2), inst.State.Round, "Round should bump")
 }

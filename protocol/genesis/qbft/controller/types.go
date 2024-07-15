@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 )
@@ -20,7 +20,7 @@ const (
 // InstanceContainer is a fixed-capacity container for instances.
 type InstanceContainer []*instance.Instance
 
-func (i InstanceContainer) FindInstance(height genesisspecqbft.Height) *instance.Instance {
+func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
 	for _, inst := range i {
 		if inst != nil {
 			if inst.GetHeight() == height {

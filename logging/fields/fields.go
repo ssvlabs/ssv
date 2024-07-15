@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -220,8 +221,14 @@ func OperatorIDStr(operatorId string) zap.Field {
 func Height(height specqbft.Height) zap.Field {
 	return zap.Uint64(FieldHeight, uint64(height))
 }
+func GenesisHeight(height genesisspecqbft.Height) zap.Field {
+	return zap.Uint64(FieldHeight, uint64(height))
+}
 
 func Round(round specqbft.Round) zap.Field {
+	return zap.Uint64(FieldRound, uint64(round))
+}
+func GenesisRound(round genesisspecqbft.Round) zap.Field {
 	return zap.Uint64(FieldRound, uint64(round))
 }
 
