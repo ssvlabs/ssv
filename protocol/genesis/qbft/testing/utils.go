@@ -33,7 +33,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			return nil
 		},
 		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) types.OperatorID {
-			return 1
+			return 2
 		},
 		Storage:               TestingStores(logger).Get(role),
 		Network:               testingutils.NewTestingNetwork(),
