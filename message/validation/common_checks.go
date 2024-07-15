@@ -54,12 +54,12 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 func (mv *messageValidator) validateDutyCount(
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
-	validatorIndices []phase0.ValidatorIndex,
+	validatorIndexCount int,
 	signerStateBySlot *OperatorState,
 ) error {
 	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot))
 
-	dutyLimit, exists := mv.dutyLimit(msgID, validatorIndices)
+	dutyLimit, exists := mv.dutyLimit(msgID, validatorIndexCount)
 	if !exists {
 		return nil
 	}
@@ -74,14 +74,14 @@ func (mv *messageValidator) validateDutyCount(
 	return nil
 }
 
-func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, validatorIndices []phase0.ValidatorIndex) (int, bool) {
+func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, validatorIndexCount int) (int, bool) {
 	switch msgID.GetRoleType() {
 	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		// TODO: better solution for RoleValidatorRegistration: https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667687976
 		return 2, true
 
 	case spectypes.RoleCommittee:
-		return 2 * len(validatorIndices), true
+		return 2 * validatorIndexCount, true
 
 	default:
 		return 0, false
