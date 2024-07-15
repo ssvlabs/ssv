@@ -1150,7 +1150,7 @@ func TempBeaconVoteValueCheckF(
 		}
 
 		if bv.Source.Epoch >= bv.Target.Epoch {
-			return errors.New("attestation data source > target")
+			return errors.New("attestation data source >= target")
 		}
 
 		// attestationData := &phase0.AttestationData{

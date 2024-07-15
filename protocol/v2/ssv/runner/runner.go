@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"encoding/json"
 	"sync"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -66,6 +67,39 @@ type BaseRunner struct {
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
+}
+
+func (b *BaseRunner) Encode() ([]byte, error) {
+	return json.Marshal(b)
+}
+
+func (b *BaseRunner) Decode(data []byte) error {
+	return json.Unmarshal(data, &b)
+}
+
+func (b *BaseRunner) MarshalJSON() ([]byte, error) {
+	type BaseRunnerAlias struct {
+		State              *State
+		Share              map[phase0.ValidatorIndex]*spectypes.Share
+		QBFTController     *controller.Controller
+		BeaconNetwork      spectypes.BeaconNetwork
+		RunnerRoleType     spectypes.RunnerRole
+		highestDecidedSlot phase0.Slot
+	}
+
+	// Create object and marshal
+	alias := &BaseRunnerAlias{
+		State:              b.State,
+		Share:              b.Share,
+		QBFTController:     b.QBFTController,
+		BeaconNetwork:      b.BeaconNetwork,
+		RunnerRoleType:     b.RunnerRoleType,
+		highestDecidedSlot: b.highestDecidedSlot,
+	}
+
+	byts, err := json.Marshal(alias)
+
+	return byts, err
 }
 
 // SetHighestDecidedSlot set highestDecidedSlot for base runner
