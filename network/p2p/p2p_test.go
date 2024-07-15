@@ -62,8 +62,8 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		msgID1, msg1 := dummyMsgCommittee(t, pks[0], 1)
-		msgID3, msg3 := dummyMsgCommittee(t, pks[0], 3)
+		msgID1, msg1 := dummyMsgCommittee(t, ks, pks[0], 1, spectypes.RoleCommittee)
+		msgID3, msg3 := dummyMsgCommittee(t, ks, pks[0], 3, spectypes.RoleCommittee)
 		require.NoError(t, node1.Broadcast(msgID1, msg1))
 		<-time.After(time.Millisecond * 10)
 		require.NoError(t, node2.Broadcast(msgID3, msg3))
@@ -75,9 +75,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		msgID1, msg1 := dummyMsgCommittee(t, pks[0], 1)
-		msgID2, msg2 := dummyMsgCommittee(t, pks[0], 2)
-		msgID3, msg3 := dummyMsgCommittee(t, pks[0], 3)
+		msgID1, msg1 := dummyMsgCommittee(t, ks, pks[0], 1, spectypes.RoleCommittee)
+		msgID2, msg2 := dummyMsgCommittee(t, ks, pks[0], 2, spectypes.RoleCommittee)
+		msgID3, msg3 := dummyMsgCommittee(t, ks, pks[0], 3, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		time.Sleep(time.Millisecond * 10)
 		require.NoError(t, node1.Broadcast(msgID2, msg2))
@@ -340,12 +340,22 @@ type dummyRouter struct {
 func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
 	atomic.AddUint64(&r.count, 1)
 }
-
-func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
+func dummyMsg(t *testing.T, ks *spectestingutils.TestKeySet, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
+	var ownerID []byte
+	if role == spectypes.RoleCommittee {
+		committee := make([]uint64, 0)
+		for _, op := range ks.Committee() {
+			committee = append(committee, op.Signer)
+		}
+		committeeID := spectypes.GetCommitteeID(committee)
+		ownerID = bytes.Clone(committeeID[:])
+	} else {
+		ownerID = pk[:]
+	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, role)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, ownerID, role)
 	qbftMsg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      2,
@@ -368,8 +378,8 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 	return id, signedSSVMsg
 }
 
-func dummyMsgCommittee(t *testing.T, pkHex string, height int) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
-	return dummyMsg(t, pkHex, height, spectypes.RoleCommittee)
+func dummyMsgCommittee(t *testing.T, ks *spectestingutils.TestKeySet, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
+	return dummyMsg(t, ks, pkHex, height, role)
 }
 
 func dummySignSSVMessage(msg *spectypes.SSVMessage) ([]byte, error) {

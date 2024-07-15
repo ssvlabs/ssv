@@ -120,7 +120,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				roleBroadcasts[role]++
 				mu.Unlock()
 
-				msgID, msg := dummyMsg(t, validators[rand.Intn(len(validators))], int(height.Add(1)), spectypes.RunnerRole(role))
+				msgID, msg := dummyMsg(t, ks, validators[rand.Intn(len(validators))], int(height.Add(1)), spectypes.RunnerRole(role))
 				err := node.Broadcast(msgID, msg)
 				if err != nil {
 					return err
