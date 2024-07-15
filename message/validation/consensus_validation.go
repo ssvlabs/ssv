@@ -272,7 +272,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - else, accept
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerStateBySlot := state.GetOrCreate(signer)
-		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, validatorIndices, signerStateBySlot); err != nil {
+		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, len(validatorIndices), signerStateBySlot); err != nil {
 			return err
 		}
 	}

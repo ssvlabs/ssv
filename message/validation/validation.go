@@ -224,20 +224,13 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, e
 		}
 
-		validatorIndices := make([]phase0.ValidatorIndex, 0)
-		for _, v := range committee.Validators {
-			if v.BeaconMetadata != nil {
-				validatorIndices = append(validatorIndices, v.BeaconMetadata.Index)
-			}
-		}
-
-		if len(validatorIndices) == 0 {
+		if len(committee.Indices) == 0 {
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
 		return CommitteeInfo{
 			operatorIDs: committee.Operators,
-			indices:     validatorIndices,
+			indices:     committee.Indices,
 			committeeID: committeeID,
 		}, nil
 	}
