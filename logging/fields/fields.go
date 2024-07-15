@@ -3,6 +3,7 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"net"
 	"net/url"
 	"strconv"
@@ -233,7 +234,7 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 func Role(val spectypes.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
-func ExporterRole(val message.RunnerRole) zap.Field {
+func ExporterRole(val convert.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 

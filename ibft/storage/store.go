@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -153,7 +154,7 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 	return nil
 }
 
-func (i *ibftStorage) SaveParticipants(identifier message.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
+func (i *ibftStorage) SaveParticipants(identifier convert.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
 	bytes, err := encodeOperators(operators)
 	if err != nil {
 		return err
@@ -165,7 +166,7 @@ func (i *ibftStorage) SaveParticipants(identifier message.MessageID, slot phase0
 	return nil
 }
 
-func (i *ibftStorage) GetParticipantsInRange(identifier message.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
@@ -188,7 +189,7 @@ func (i *ibftStorage) GetParticipantsInRange(identifier message.MessageID, from,
 	return participantsRange, nil
 }
 
-func (i *ibftStorage) GetParticipants(identifier message.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+func (i *ibftStorage) GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err
