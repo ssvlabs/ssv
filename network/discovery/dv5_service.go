@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -149,11 +148,13 @@ var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
 func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
 	// TODO: uncomment errors once there are sufficient nodes with domain type.
-	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
+	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {
-		// TODO: skip missing domain type (likely old node).
-	} else if nodeDomainType != dvs.domainType.DomainType() {
-		// TODO: skip different domain type.
+		return errors.Wrap(err, "could not get domain type")
+	}
+	if nodeDomainType != dvs.domainType.DomainType() &&
+		nodeDomainType != dvs.domainType.NextDomainType() {
+		return errors.New("domain type mismatch")
 	}
 
 	// Get the peer's subnets, skipping if it has none.
@@ -332,7 +333,8 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
-		DecorateWithDomainType(dvs.domainType.DomainType()),
+		DecorateWithDomainType(records.KeyDomainType, dvs.domainType.DomainType()),
+		DecorateWithDomainType(records.KeyNextDomainType, dvs.domainType.NextDomainType()),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
@@ -355,14 +357,4 @@ func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, erro
 		return nil, errors.Wrap(err, "could not listen to UDP")
 	}
 	return conn, nil
-}
-
-func (dvs *DiscV5Service) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
-	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), domain)
-	if err != nil {
-		return errors.Wrap(err, "could not update ENR")
-	}
-	logger.Debug("updated domain type", fields.Domain(dvs.domainType.DomainType()), fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
-	go dvs.publishENR(logger)
-	return nil
 }

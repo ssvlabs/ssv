@@ -31,6 +31,7 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 // DomainTypeProvider is an interface for getting the domain type based on the current or given epoch.
 type DomainTypeProvider interface {
 	DomainType() spectypes.DomainType
+	NextDomainType() spectypes.DomainType
 	DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType
 }
 
@@ -95,4 +96,8 @@ func (n NetworkConfig) DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainTyp
 		return n.AlanDomainType
 	}
 	return n.GenesisDomainType
+}
+
+func (n NetworkConfig) NextDomainType() spectypes.DomainType {
+	return n.AlanDomainType
 }

@@ -99,7 +99,7 @@ func TestCheckPeer(t *testing.T) {
 		require.NoError(t, err)
 
 		if test.domainType != nil {
-			err := records.SetDomainTypeEntry(localNode, *test.domainType)
+			err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
 			require.NoError(t, err)
 		}
 		if test.subnets != nil {

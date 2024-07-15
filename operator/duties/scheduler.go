@@ -152,7 +152,6 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
-			NewForkListener(opts.P2PNetwork),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
