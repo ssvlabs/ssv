@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_calcMsgRateForTopic(t *testing.T) {
+func TestCalculateMessageRateForTopic(t *testing.T) {
 	tenThousandCommittees := make([]int, 10000)
 	tenThousandValidators := make([]int, 10000)
 	for i := range tenThousandCommittees {
@@ -44,7 +44,9 @@ func Test_calcMsgRateForTopic(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			require.InDelta(t, tt.want, calcMsgRateForTopic(tt.args.committeeSizes, tt.args.validatorCounts), tt.want*0.001)
+			msgRate, err := calculateMessageRateForTopic(tt.args.committeeSizes, tt.args.validatorCounts)
+			require.NoError(t, err)
+			require.InDelta(t, tt.want, msgRate, tt.want*0.001)
 		})
 	}
 }

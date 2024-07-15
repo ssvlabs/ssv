@@ -183,7 +183,7 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 	// Set expected message rate based on stage metrics
 	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
 	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
-	//opts.Topic.ExpectedMsgRate = calcMsgRateForTopic(committeeSizes, validatorCounts) //TODO: pass those values
+	//opts.Topic.ExpectedMsgRate = calculateMessageRateForTopic(committeeSizes, validatorCounts) //TODO: pass those values
 
 	return opts
 }
