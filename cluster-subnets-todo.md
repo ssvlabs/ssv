@@ -1,9 +1,11 @@
 ### TODO
-- [ ] If you start the node in the presubscription phase we will not schedule unsubscribes on the fork epoch, thats because we schedule unsubscribes from the presubscription handling func
-- [ ] Remove UpdateScoreParams from presubscribe method, and instead call it every epoch or on fork in UpdateSubnets method.
+
+- [ ] UpdateScoreParams every slot or so validators were added.
+- [ ] Post-fork: don't connect nodes who didn't upgrade
 - [ ] Fix broken tests, ideally also add committee subnets to existing tests
 
 ### DONE
+
 - [x] Pre-subscribe to committee subnets before fork epoch
 - [x] Swap topic score params on fork epoch
 - [x] p2p subscribe 2 slots before fork
