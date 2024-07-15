@@ -168,7 +168,7 @@ func NewOpts(activeValidators, subnets int) *Options {
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators, subnets int, committees []*storage.Committee) (*Options, error) {
+func NewSubnetTopicOpts(activeValidators, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()
@@ -179,7 +179,7 @@ func NewSubnetTopicOpts(activeValidators, subnets int, committees []*storage.Com
 	// Set the expected message rate for the topic
 	opts.Topic.ExpectedMsgRate = calculateMessageRateForTopic(committees)
 
-	return opts, nil
+	return opts
 }
 
 // TopicParams creates pubsub.TopicScoreParams from the given TopicOpts

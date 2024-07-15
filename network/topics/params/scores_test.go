@@ -20,10 +20,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 1k validators",
 			func() *Options {
 				validators := 1000
-				opts, err := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
-				if err != nil {
-					panic(err)
-				}
+				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -32,10 +29,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 10k validators",
 			func() *Options {
 				validators := 10_000
-				opts, err := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
-				if err != nil {
-					panic(err)
-				}
+				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -44,10 +38,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 51k validators",
 			func() *Options {
 				validators := 51_000
-				opts, err := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
-				if err != nil {
-					panic(err)
-				}
+				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,

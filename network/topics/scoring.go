@@ -123,11 +123,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts, err := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), topicCommittees)
-		if err != nil {
-			logger.Debug("could not get subnet topic options", zap.Error(err))
-			return nil
-		}
+		opts := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), topicCommittees)
 
 		// Generate topic parameters
 		tp, err := params.TopicParams(opts)
