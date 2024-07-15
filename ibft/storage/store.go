@@ -154,7 +154,11 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 }
 
 func (i *ibftStorage) SaveParticipants(identifier message.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
-	if err := i.save(encodeOperators(operators), participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
+	bytes, err := encodeOperators(operators)
+	if err != nil {
+		return err
+	}
+	if err := i.save(bytes, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
 		return fmt.Errorf("could not save participants: %w", err)
 	}
 
@@ -236,13 +240,16 @@ func uInt64ToByteSlice(n uint64) []byte {
 	return b
 }
 
-func encodeOperators(operators []spectypes.OperatorID) []byte {
+func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+	if len(operators) != 4 && len(operators) != 7 && len(operators) != 13 {
+		return nil, fmt.Errorf("invalid operators list size: %d", len(operators))
+	}
 	encoded := make([]byte, len(operators)*8)
 	for i, v := range operators {
 		binary.BigEndian.PutUint64(encoded[i*8:], v)
 	}
 
-	return encoded
+	return encoded, nil
 }
 
 func decodeOperators(encoded []byte) []spectypes.OperatorID {
