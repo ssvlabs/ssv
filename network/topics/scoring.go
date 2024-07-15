@@ -155,12 +155,13 @@ func filterCommitteesForTopic(logger *zap.Logger, topic string, committees []*st
 		// Get topic
 		subnet := commons.CommitteeSubnet(committee.ID)
 		committeeTopic := commons.SubnetTopicID(subnet)
+		committeeTopicFullName := commons.GetTopicFullName(committeeTopic)
 
 		// If it belongs to the topic, add it
-		if topic == committeeTopic {
+		if topic == committeeTopicFullName {
 			topicCommittees = append(topicCommittees, committee)
 		} else {
-			logger.Debug(fmt.Sprintf("different topics: %v - %v", topic, committeeTopic))
+			logger.Debug(fmt.Sprintf("different topics: %v - %v", topic, committeeTopicFullName))
 		}
 	}
 	return topicCommittees
