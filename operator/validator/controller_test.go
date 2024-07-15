@@ -781,11 +781,12 @@ func TestGetValidatorStats(t *testing.T) {
 		sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
 
 		// Execute the function under test and validate results for this subtest
-		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
+		// allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
+		stats, err := ctr.GetValidatorStats()
 		require.NoError(t, err, "Failed to get validator stats")
-		require.Equal(t, len(sharesSlice), int(allShares), "Unexpected total shares count")
-		require.Equal(t, 1, int(activeShares), "Unexpected active shares count")
-		require.Equal(t, 1, int(operatorShares), "Unexpected operator shares count")
+		require.Equal(t, len(sharesSlice), int(stats.Total), "Unexpected total shares count")
+		require.Equal(t, 1, int(stats.Attesting), "Unexpected active shares count")
+		require.Equal(t, 1, int(stats.Mine), "Unexpected operator shares count")
 	})
 
 	t.Run("Test with single operator", func(t *testing.T) {
@@ -827,11 +828,11 @@ func TestGetValidatorStats(t *testing.T) {
 		ctr := setupController(logger, controllerOptions)
 
 		// Execute the function under test and validate results for this subtest
-		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
+		stats, err := ctr.GetValidatorStats()
 		require.NoError(t, err, "Failed to get validator stats")
-		require.Equal(t, len(sharesSlice), int(allShares), "Unexpected total shares count")
-		require.Equal(t, 1, int(activeShares), "Unexpected active shares count")
-		require.Equal(t, 1, int(operatorShares), "Unexpected operator shares count")
+		require.Equal(t, len(sharesSlice), int(stats.Total), "Unexpected total shares count")
+		require.Equal(t, 1, int(stats.Attesting), "Unexpected active shares count")
+		require.Equal(t, 1, int(stats.Mine), "Unexpected operator shares count")
 	})
 
 	t.Run("Test with no operators", func(t *testing.T) {
@@ -865,11 +866,11 @@ func TestGetValidatorStats(t *testing.T) {
 		ctr := setupController(logger, controllerOptions)
 
 		// Execute the function under test and validate results for this subtest
-		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
+		stats, err := ctr.GetValidatorStats()
 		require.NoError(t, err, "Failed to get validator stats")
-		require.Equal(t, len(sharesSlice), int(allShares), "Unexpected total shares count")
-		require.Equal(t, 1, int(activeShares), "Unexpected active shares count")
-		require.Equal(t, 0, int(operatorShares), "Unexpected operator shares count")
+		require.Equal(t, len(sharesSlice), int(stats.Total), "Unexpected total shares count")
+		require.Equal(t, 1, int(stats.Attesting), "Unexpected active shares count")
+		require.Equal(t, 0, int(stats.Mine), "Unexpected operator shares count")
 	})
 
 	t.Run("Test with varying statuses", func(t *testing.T) {
@@ -925,11 +926,11 @@ func TestGetValidatorStats(t *testing.T) {
 		ctr := setupController(logger, controllerOptions)
 
 		// Execute the function under test and validate results for this subtest
-		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
+		stats, err := ctr.GetValidatorStats()
 		require.NoError(t, err, "Failed to get validator stats")
-		require.Equal(t, len(sharesSlice), int(allShares), "Unexpected total shares count")
-		require.Equal(t, 1, int(activeShares), "Unexpected active shares count")
-		require.Equal(t, 2, int(operatorShares), "Unexpected operator shares count")
+		require.Equal(t, len(sharesSlice), int(stats.Total), "Unexpected total shares count")
+		require.Equal(t, 1, int(stats.Attesting), "Unexpected active shares count")
+		require.Equal(t, 2, int(stats.Mine), "Unexpected operator shares count")
 	})
 }
 
