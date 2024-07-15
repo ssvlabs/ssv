@@ -10,7 +10,7 @@ import (
 
 var TestNetwork = NetworkConfig{
 	Name:                 "testnet",
-	Beacon:               beacon.NewNetwork(spectypes.PraterNetwork),
+	Beacon:               beacon.NewNetwork(spectypes.BeaconTestNetwork),
 	Domain:               spectypes.JatoTestnet,
 	GenesisEpoch:         152834,
 	RegistrySyncOffset:   new(big.Int).SetInt64(9015219),

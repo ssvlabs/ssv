@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -128,7 +129,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid signed message")
+			return errors.Wrap(err, "invalid SignedSSVMessage")
 		}
 
 		// Verify SignedSSVMessage's signature
@@ -157,6 +158,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
+		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height))
 
 		// Check signer consistency
 		if !msg.SignedSSVMessage.CommonSigners([]spectypes.OperatorID{msg.SignedSSVMessage.OperatorIDs[0]}) { // todo: array check
@@ -173,6 +175,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
+		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), signedMsg.Slot)
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")
@@ -195,6 +198,14 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	default:
 		return errors.New("unknown msg")
 	}
+}
+
+func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole, slot phase0.Slot) *zap.Logger {
+	logger = logger.With(fields.Slot(slot))
+	if dutyID, ok := v.dutyIDs.Get(spectypes.RunnerRole(role)); ok {
+		return logger.With(fields.DutyID(dutyID))
+	}
+	return logger
 }
 
 func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {

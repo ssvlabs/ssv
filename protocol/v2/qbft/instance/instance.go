@@ -3,14 +3,14 @@ package instance
 import (
 	"encoding/base64"
 	"encoding/json"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
@@ -27,6 +27,7 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
+	started time.Time
 	metrics *metrics
 }
 
@@ -38,10 +39,11 @@ func NewInstance(
 ) *Instance {
 	var name = ""
 	if len(identifier) == 56 {
-		name = types.MessageID(identifier).GetRoleType().String()
+		name = spectypes.MessageID(identifier).GetRoleType().String()
 	} else {
 		name = base64.StdEncoding.EncodeToString(identifier)
 	}
+
 	return &Instance{
 		State: &specqbft.State{
 			CommitteeMember:      committeeMember,
@@ -60,6 +62,15 @@ func NewInstance(
 	}
 }
 
+// TODO remove
+func messageIDFromBytes(mid []byte) spectypes.MessageID {
+	if len(mid) < 56 {
+		return spectypes.MessageID{}
+	}
+
+	return spectypes.MessageID(mid)
+}
+
 func (i *Instance) ForceStop() {
 	i.forceStop = true
 }
@@ -71,7 +82,6 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
-
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
 		logger = logger.With(

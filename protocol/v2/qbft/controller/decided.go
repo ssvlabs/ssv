@@ -83,9 +83,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, signedMsg *spectypes.Signed
 		// bump height
 		c.Height = msg.Height
 	}
-	if c.NewDecidedHandler != nil {
-		c.NewDecidedHandler(signedMsg)
-	}
+
 	if !prevDecided {
 		return signedMsg, nil
 	}
