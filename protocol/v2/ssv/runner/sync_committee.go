@@ -1,6 +1,5 @@
 package runner
 
-//
 //import (
 //	"crypto/sha256"
 //	"encoding/hex"
