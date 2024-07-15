@@ -28,7 +28,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
@@ -109,11 +108,6 @@ type Controller interface {
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
-	// GetCommitteeMapsForTopic returns the following maps:
-	//   - Topic -> list of CommitteeIDs that belong to the topic
-	//   - CommitteeID -> number of operator in the committee
-	//   - CommitteeID -> number of validators in the committee
-	GetCommitteeMapsForTopic() (map[string][]string, map[string]int, map[string]int, error)
 
 	IndicesChangeChan() chan struct{}
 	ValidatorExitChan() <-chan duties.ExitDescriptor
@@ -330,50 +324,6 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		}
 	}
 	return uint64(len(allShares)), active, operatorShares, nil
-}
-
-func (c *controller) GetCommitteeMapsForTopic() (map[string][]string, map[string]int, map[string]int, error) {
-
-	// Return variables
-	topicCommittees := make(map[string][]string)
-	committeeOperators := make(map[string]int)
-	committeeValidators := make(map[string]int)
-
-	// Get all shares
-	allShares := c.sharesStorage.List(nil)
-
-	for _, share := range allShares {
-
-		// If validator is not participating, don't include it
-		if !share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
-			continue
-		}
-
-		// Get share's committee ID
-		committeeID := share.CommitteeID()
-		committeeIDStr := hex.EncodeToString(committeeID[:])
-
-		// Compute topic
-		subnet := commons.CommitteeSubnet(committeeID)
-		topic := commons.SubnetTopicID(subnet)
-
-		if _, exists := topicCommittees[topic]; !exists {
-			topicCommittees[topic] = make([]string, 0)
-		}
-		topicCommittees[topic] = append(topicCommittees[topic], committeeIDStr)
-
-		// Set number of operators
-		numOperators := len(share.Committee)
-		committeeOperators[committeeIDStr] = numOperators
-
-		// Increment committee's validators
-		if _, exists := committeeValidators[committeeIDStr]; !exists {
-			committeeValidators[committeeIDStr] = 0
-		}
-		committeeValidators[committeeIDStr] += 1
-	}
-
-	return topicCommittees, committeeOperators, committeeValidators, nil
 }
 
 func (c *controller) handleRouterMessages() {

@@ -44,9 +44,3 @@ type P2PNetwork interface {
 //   - the amount of active validators in the network (i.e. not slashed or existed)
 //   - the amount of validators assigned to this operator
 type GetValidatorStats func() (uint64, uint64, uint64, error)
-
-// GetCommitteeMapsForTopic returns the following maps:
-//   - Topic -> list of CommitteeIDs that belong to the topic
-//   - CommitteeID -> number of operator in the committee
-//   - CommitteeID -> number of validators in the committee
-type GetCommitteeMapsForTopic func() (map[string][]string, map[string]int, map[string]int, error)

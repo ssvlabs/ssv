@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -276,13 +277,12 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		MsgHandler:   n.handlePubsubMessages(logger),
 		ScoreIndex:   n.idx,
 		//Discovery: n.disc,
-		OutboundQueueSize:        n.cfg.PubsubOutQueueSize,
-		ValidationQueueSize:      n.cfg.PubsubValidationQueueSize,
-		ValidateThrottle:         n.cfg.PubsubValidateThrottle,
-		MsgIDCacheTTL:            n.cfg.PubsubMsgCacheTTL,
-		DisableIPRateLimit:       n.cfg.DisableIPRateLimit,
-		GetValidatorStats:        n.cfg.GetValidatorStats,
-		GetCommitteeMapsForTopic: n.cfg.GetCommitteeMapsForTopic,
+		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
+		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
+		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
+		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
+		DisableIPRateLimit:  n.cfg.DisableIPRateLimit,
+		GetValidatorStats:   n.cfg.GetValidatorStats,
 	}
 
 	if n.cfg.PeerScoreInspector != nil && n.cfg.PeerScoreInspectorInterval > 0 {
@@ -301,7 +301,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics)
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, func() []*storage.Committee { return n.nodeStorage.ValidatorStore().Committees() })
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

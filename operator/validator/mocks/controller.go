@@ -157,17 +157,6 @@ func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 	return ret0, ret1, ret2, ret3
 }
 
-// GetValidatorStats mocks base method.
-func (m *MockController) GetCommitteeMapsForTopic() (map[string][]string, map[string]int, map[string]int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCommitteeMapsForTopic")
-	ret0, _ := ret[0].(map[string][]string)
-	ret1, _ := ret[1].(map[string]int)
-	ret2, _ := ret[2].(map[string]int)
-	ret3, _ := ret[3].(error)
-	return ret0, ret1, ret2, ret3
-}
-
 // GetValidatorStats indicates an expected call of GetValidatorStats.
 func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()

@@ -346,9 +346,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
-		cfg.P2pNetworkConfig.GetCommitteeMapsForTopic = func() (map[string][]string, map[string]int, map[string]int, error) {
-			return validatorCtrl.GetCommitteeMapsForTopic()
-		}
 		if err := p2pNetwork.Setup(logger); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
 		}
