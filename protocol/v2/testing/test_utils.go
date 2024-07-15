@@ -1,8 +1,13 @@
 package testing
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -99,6 +104,37 @@ func CreateMultipleStoredInstances(
 // SignMsg handle MultiSignMsg error and return just specqbft.SignedMessage
 func SignMsg(t *testing.T, sks []*rsa.PrivateKey, signers []spectypes.OperatorID, msg *specqbft.Message) *spectypes.SignedSSVMessage {
 	return testingutils.MultiSignQBFTMsg(sks, signers, msg)
+}
+
+func GetSSVMappingSpecTestJSON(path string, module string) ([]byte, error) {
+	p, err := GetSpecDir(path, module)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get spec test dir")
+	}
+	gzPath := filepath.Join(p, "spectest", "generate", "tests.json.gz")
+	untypedTests := map[string]interface{}{}
+
+	file, err := os.Open(gzPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open gzip file")
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create gzip reader")
+	}
+	defer gzipReader.Close()
+
+	decompressedData, err := io.ReadAll(gzipReader)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read decompressed data")
+	}
+
+	if err := json.Unmarshal(decompressedData, &untypedTests); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal JSON")
+	}
+	return decompressedData, nil
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {
@@ -207,4 +243,58 @@ func getGoModFile(path string) (*modfile.File, error) {
 
 	// parse go.mod
 	return modfile.Parse("go.mod", buf, nil)
+}
+
+func ExtractTarGz(gzipStream io.Reader) {
+	uncompressedStream, err := gzip.NewReader(gzipStream)
+	if err != nil {
+		log.Fatal("ExtractTarGz: NewReader failed")
+	}
+
+	tarReader := tar.NewReader(uncompressedStream)
+
+	for true {
+		header, err := tarReader.Next()
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			log.Fatalf("ExtractTarGz: Next() failed: %s", err.Error())
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.Mkdir(header.Name, 0755); err != nil {
+				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
+			}
+		case tar.TypeReg:
+			outFile, err := os.Create(header.Name)
+			if err != nil {
+				log.Fatalf("ExtractTarGz: Create() failed: %s", err.Error())
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				log.Fatalf("ExtractTarGz: Copy() failed: %s", err.Error())
+			}
+			outFile.Close()
+
+		default:
+			log.Fatalf(
+				"ExtractTarGz: uknown type: %s in %s",
+				header.Typeflag,
+				header.Name)
+		}
+
+	}
+}
+
+func unpackTestsJson(path string) error {
+	r, err := os.Open(fmt.Sprintf("%s.gz", path))
+	if err != nil {
+		errors.Wrap(err, "could not open file")
+	}
+	ExtractTarGz(r)
+
+	return nil
 }

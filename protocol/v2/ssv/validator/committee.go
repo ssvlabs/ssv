@@ -2,16 +2,17 @@ package validator
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sync"
-
-	"github.com/ssvlabs/ssv/logging/fields"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -51,21 +52,22 @@ func NewCommittee(
 	operator *spectypes.CommitteeMember,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
+	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
 ) *Committee {
 	return &Committee{
 		logger:        logger,
 		BeaconNetwork: beaconNetwork,
 		ctx:           ctx,
 		// TODO alan: drain maps
-		Queues:                  make(map[phase0.Slot]queueContainer),
-		Runners:                 make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:                  make(map[phase0.ValidatorIndex]*spectypes.Share),
+		Queues:  make(map[phase0.Slot]queueContainer),
+		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:  make(map[phase0.ValidatorIndex]*spectypes.Share),
+		//Shares:                  share,
 		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
 		Operator:                operator,
 		SignatureVerifier:       verifier,
 		CreateRunnerFn:          createRunnerFn,
 	}
-
 }
 
 func (c *Committee) AddShare(share *spectypes.Share) {
@@ -88,26 +90,12 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	c.logger.Debug("Starting committee duty runner", zap.Uint64("slot", uint64(duty.Slot)))
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	// TODO alan : lock per slot?
-	if _, exists := c.Runners[duty.Slot]; exists {
-		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
-	}
-
-	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
-	//Filter old duties based on highest attesting slot
-
-	duty, validatorToStopMap, highestAttestingSlotMap, err := FilterCommitteeDuty(logger, duty, c.HighestAttestingSlotMap)
-	if err != nil {
-		return errors.Wrap(err, "cannot filter committee duty")
-	}
-	c.HighestAttestingSlotMap = highestAttestingSlotMap
-	// Stop validators with old duties
-	c.stopDuties(logger, validatorToStopMap)
-	c.updateAttestingSlotMap(duty)
 
 	if len(duty.BeaconDuties) == 0 {
-		logger.Debug("No beacon duties to run")
-		return nil
+		return errors.New("no beacon duties")
+	}
+	if _, exists := c.Runners[duty.Slot]; exists {
+		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
 	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
@@ -138,20 +126,6 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
-}
-
-// NOT threadsafe
-func (c *Committee) stopDuties(logger *zap.Logger, validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
-	for slot, validator := range validatorToStopMap {
-		r, exists := c.Runners[slot]
-		if exists {
-			logger.Debug("stopping duty for validator",
-				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-				zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
-			)
-			r.StopDuty(validator)
-		}
-	}
 }
 
 // NOT threadsafe
@@ -197,51 +171,21 @@ func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) ([]*spectyp
 	return result, nil
 }
 
-// FilterCommitteeDuty filters the committee duties by the slots given per validator.
-// It returns the filtered duties, the validators to stop and updated slot map.
-// NOT threadsafe
-func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slotMap map[spectypes.ValidatorPK]phase0.Slot) (
-	*spectypes.CommitteeDuty,
-	map[phase0.Slot]spectypes.ValidatorPK,
-	map[spectypes.ValidatorPK]phase0.Slot,
-	error,
-) {
-	validatorsToStop := make(map[phase0.Slot]spectypes.ValidatorPK)
-	indicesToRemove := make([]int, 0)
-	for i, beaconDuty := range duty.BeaconDuties {
-		validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
-		slot, exists := slotMap[validatorPK]
-		if exists {
-			if slot < beaconDuty.Slot {
-				validatorsToStop[beaconDuty.Slot] = validatorPK
-				slotMap[validatorPK] = beaconDuty.Slot
-			} else { // else don't run duty with old slot
-				// remove the duty
-				logger.Debug("removing beacon duty from committeeduty", zap.Uint64("slot", uint64(beaconDuty.Slot)), zap.String("validator", hex.EncodeToString(beaconDuty.PubKey[:])))
-				indicesToRemove = append(indicesToRemove, i)
-			}
-		}
-	}
-
-	filteredDuties, err := removeIndices(duty.BeaconDuties, indicesToRemove)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "cannot remove indices")
-	}
-	duty.BeaconDuties = filteredDuties
-	return duty, validatorsToStop, slotMap, err
-}
-
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
 	// Validate message
 	if msg.GetType() != message.SSVEventMsgType {
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid signed message")
+			return errors.Wrap(err, "invalid SignedSSVMessage")
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := c.SignatureVerifier.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+		}
+
+		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
+			return errors.Wrap(err, "Message invalid")
 		}
 	}
 
@@ -294,6 +238,64 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 
 }
 
+func (c *Committee) Encode() ([]byte, error) {
+	return json.Marshal(c)
+}
+
+func (c *Committee) Decode(data []byte) error {
+	return json.Unmarshal(data, &c)
+}
+
+// GetRoot returns the state's deterministic root
+func (c *Committee) GetRoot() ([32]byte, error) {
+	marshaledRoot, err := c.Encode()
+	if err != nil {
+		return [32]byte{}, errors.Wrap(err, "could not encode state")
+	}
+	ret := sha256.Sum256(marshaledRoot)
+	return ret, nil
+}
+
+func (c *Committee) MarshalJSON() ([]byte, error) {
+	type CommitteeAlias struct {
+		Runners         map[phase0.Slot]*runner.CommitteeRunner
+		CommitteeMember *spectypes.CommitteeMember
+		Share           map[phase0.ValidatorIndex]*spectypes.Share
+	}
+
+	// Create object and marshal
+	alias := &CommitteeAlias{
+		Runners:         c.Runners,
+		CommitteeMember: c.Operator,
+		Share:           c.Shares,
+	}
+
+	byts, err := json.Marshal(alias)
+
+	return byts, err
+}
+
+func (c *Committee) UnmarshalJSON(data []byte) error {
+	type CommitteeAlias struct {
+		Runners  map[phase0.Slot]*runner.CommitteeRunner
+		Operator *spectypes.CommitteeMember
+		Shares   map[phase0.ValidatorIndex]*spectypes.Share
+	}
+
+	// Unmarshal the JSON data into the auxiliary struct
+	aux := &CommitteeAlias{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Assign fields
+	c.Runners = aux.Runners
+	c.Operator = aux.Operator
+	c.Shares = aux.Shares
+
+	return nil
+}
+
 // updateAttestingSlotMap updates the highest attesting slot map from beacon duties
 func (c *Committee) updateAttestingSlotMap(duty *spectypes.CommitteeDuty) {
 	for _, beaconDuty := range duty.BeaconDuties {
@@ -307,4 +309,16 @@ func (c *Committee) updateAttestingSlotMap(duty *spectypes.CommitteeDuty) {
 			}
 		}
 	}
+}
+
+func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
+	if !(c.Operator.CommitteeID.MessageIDBelongs(msg.GetID())) {
+		return errors.New("msg ID doesn't match committee ID")
+	}
+
+	if len(msg.GetData()) == 0 {
+		return errors.New("msg data is invalid")
+	}
+
+	return nil
 }

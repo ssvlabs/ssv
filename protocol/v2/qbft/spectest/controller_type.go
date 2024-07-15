@@ -58,7 +58,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.RunnerRole(spectypes.RoleCommittee))
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.RoleCommittee)
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
 		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),

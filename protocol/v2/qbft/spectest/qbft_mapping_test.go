@@ -7,18 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/logging"
-	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -30,8 +28,6 @@ func TestQBFTMapping(t *testing.T) {
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
-
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	for name, test := range untypedTests {
 		name, test := name, test
@@ -100,12 +96,10 @@ func TestQBFTMapping(t *testing.T) {
 
 			// a little trick we do to instantiate all the internal instance params
 
-			identifier := spectypes.MessageID{}
-			copy(identifier[:], typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), identifier.GetRoleType()),
+				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), spectypes.RoleCommittee),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
