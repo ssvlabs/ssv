@@ -297,9 +297,9 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 
 				logger.Debug("submitted second attestation")
 
-				//if state.attesterTest.Slashable {
-				//	return nil, fmt.Errorf("misbehavior: slashable attestation was submitted during the end epoch")
-				//}
+				if state.attesterTest.Slashable {
+					return nil, fmt.Errorf("misbehavior: slashable attestation was submitted during the end epoch")
+				}
 				continue
 			}
 		}

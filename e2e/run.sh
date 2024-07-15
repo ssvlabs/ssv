@@ -49,8 +49,8 @@ save_logs() {
   fi
 }
 
-export BEACON_NODE_URL=http://bn-h-3.stage.bloxinfra.com:5056/
-export EXECUTION_NODE_URL=ws://bn-h-3.stage.bloxinfra.com:8549/ws
+export BEACON_NODE_URL=http://prod-standalone-holesky.bloxinfra.com:5052
+export EXECUTION_NODE_URL=ws://prod-standalone-holesky.bloxinfra.com:8548/ws
 
 # Step 1: Start the beacon_proxy and ssv-node services
 docker compose up -d --build beacon_proxy ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
