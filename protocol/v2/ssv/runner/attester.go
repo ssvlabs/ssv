@@ -99,7 +99,7 @@ package runner
 //
 //	ssvMsg := &spectypes.SSVMessage{
 //		MsgType: spectypes.SSVPartialSignatureMsgType,
-//		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+//		MsgID:   spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 //		Data:    data,
 //	}
 //

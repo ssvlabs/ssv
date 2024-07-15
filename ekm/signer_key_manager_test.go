@@ -48,8 +48,9 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, nil),
-			Domain: networkconfig.TestNetwork.DomainType(),
+			Beacon:            utils.SetupMockBeaconNetwork(t, nil),
+			GenesisDomainType: networkconfig.TestNetwork.DomainType(),
+			AlanDomainType:    networkconfig.TestNetwork.DomainType(),
 		}
 	}
 

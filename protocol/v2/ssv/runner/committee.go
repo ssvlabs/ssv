@@ -34,7 +34,6 @@ import (
 
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
-	domain         spectypes.DomainType
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         types.BeaconSigner
@@ -60,12 +59,12 @@ func NewCommitteeRunner(
 ) Runner {
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: types.RoleCommittee,
-			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
-			Share:          share,
-			QBFTController: qbftController,
+			RunnerRoleType:     types.RoleCommittee,
+			DomainTypeProvider: networkConfig,
+			BeaconNetwork:      networkConfig.Beacon.GetBeaconNetwork(),
+			Share:              share,
+			QBFTController:     qbftController,
 		},
-		domain:            networkConfig.DomainType(),
 		beacon:            beacon,
 		network:           network,
 		signer:            signer,
@@ -193,7 +192,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 	ssvMsg := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
 		MsgID: types.NewMsgID(
-			cr.domain,
+			cr.BaseRunner.DomainTypeProvider.DomainType(),
 			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
