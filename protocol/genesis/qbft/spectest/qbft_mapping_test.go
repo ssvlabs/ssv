@@ -7,18 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
-	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
-	testing2 "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
+	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -30,8 +29,6 @@ func TestQBFTMapping(t *testing.T) {
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
-
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	for name, test := range untypedTests {
 		name, test := name, test
@@ -99,7 +96,7 @@ func TestQBFTMapping(t *testing.T) {
 
 			// a little trick we do to instantiate all the internal instance params
 
-			identifier := genesisspectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
+			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
