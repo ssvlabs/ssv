@@ -9,6 +9,7 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -228,18 +229,17 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		if msg == nil {
 			return nil
 		}
-		// TODO: check the logic
 
-		// var decodedMsg *queue.DecodedSSVMessage
-		// if msg.ValidatorData != nil {
-		// 	m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
-		// 	if ok {
-		// 		decodedMsg = m
-		// 	}
-		// }
-		// if decodedMsg == nil {
-		// 	return errors.New("message was not decoded")
-		// }
+		var decodedMsg *queue.DecodedSSVMessage
+		if msg.ValidatorData != nil {
+			m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
+			if ok {
+				decodedMsg = m
+			}
+		}
+		if decodedMsg == nil {
+			return errors.New("message was not decoded")
+		}
 
 		signedSSVMessage := &spectypes.SignedSSVMessage{}
 		if err := signedSSVMessage.Decode(msg.GetData()); err != nil {
