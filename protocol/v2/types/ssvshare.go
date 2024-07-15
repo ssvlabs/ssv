@@ -58,31 +58,6 @@ func (s *SSVShare) Decode(data []byte) error {
 	return nil
 }
 
-// Encode encodes SSVShare using gob.
-func (s *SSVShare) Encode() ([]byte, error) {
-	var b bytes.Buffer
-	e := gob.NewEncoder(&b)
-	if err := e.Encode(s); err != nil {
-		return nil, fmt.Errorf("encode SSVShare: %w", err)
-	}
-
-	return b.Bytes(), nil
-}
-
-// Decode decodes SSVShare using gob.
-func (s *SSVShare) Decode(data []byte) error {
-	if len(data) > MaxAllowedShareSize {
-		return fmt.Errorf("share size is too big, got %v, max allowed %v", len(data), MaxAllowedShareSize)
-	}
-
-	d := gob.NewDecoder(bytes.NewReader(data))
-	if err := d.Decode(s); err != nil {
-		return fmt.Errorf("decode SSVShare: %w", err)
-	}
-	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(len(s.Committee))
-	return nil
-}
-
 // BelongsToOperator checks whether the share belongs to operator.
 func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 	return operatorID != 0 && s.OperatorID == operatorID
