@@ -89,7 +89,7 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role genesisspectype
 // - For rounds greater than quickThreshold, the additional timeout is 'slow' seconds.
 //
 // SIP Reference:
-// For more details, see SIP at https://github.com/bloxapp/SIPs/pull/22
+// For more details, see SIP at https://github.com/ssvlabs/SIPs/pull/22
 //
 // TODO: Update SIP for Deterministic Round Timeout
 // TODO: Decide if to make the proposer timeout deterministic
