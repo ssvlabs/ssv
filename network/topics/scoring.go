@@ -1,7 +1,6 @@
 package topics
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -110,24 +109,18 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
 		logger.Debug("got validator stats for score params")
 
-		// Get committee maps
-		logger.Debug("Debug1 - getting committees")
+		// Get committees
 		committees := getCommittees()
-		logger.Debug("Debug2 - got committees")
+		topicCommittees := filterCommitteesForTopic(t, committees)
 
-		logger = logger.With(zap.Int("num. committees", len(committees)))
-		logger.Debug("got committees")
-
-		logger.Debug("Debug3 - already did log got committees")
-
-		topicCommittees := filterCommitteesForTopic(logger, t, committees)
-
-		numValidatorsInTopic := 0
+		// Log
+		validatorsInTopic := 0
 		for _, committee := range topicCommittees {
-			numValidatorsInTopic += len(committee.Validators)
+			validatorsInTopic += len(committee.Validators)
 		}
-		logger = logger.With(zap.Int("committees in topic", len(topicCommittees)), zap.Int("validators in topic", numValidatorsInTopic))
-		logger.Debug("filtered committees for score params")
+		committeesInTopic := len(topicCommittees)
+		logger = logger.With(zap.Int("committees in topic", committeesInTopic), zap.Int("validators in topic", validatorsInTopic))
+		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
 		opts, err := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), topicCommittees)
@@ -147,7 +140,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 }
 
 // Returns a new committee list with only the committees that belong to the given topic
-func filterCommitteesForTopic(logger *zap.Logger, topic string, committees []*storage.Committee) []*storage.Committee {
+func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
 
 	topicCommittees := make([]*storage.Committee, 0)
 
@@ -160,8 +153,6 @@ func filterCommitteesForTopic(logger *zap.Logger, topic string, committees []*st
 		// If it belongs to the topic, add it
 		if topic == committeeTopicFullName {
 			topicCommittees = append(topicCommittees, committee)
-		} else {
-			logger.Debug(fmt.Sprintf("different topics: %v - %v", topic, committeeTopicFullName))
 		}
 	}
 	return topicCommittees
