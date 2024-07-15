@@ -5,9 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"sync"
 	"time"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
@@ -399,16 +400,18 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 	} else {
 		ncv = item
 	}
-	if err := c.handleConsensusMessages(msg, ncv); err != nil {
+	if err := c.handleNonCommitteeMessages(msg, ncv); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
+func (c *controller) handleNonCommitteeMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
+
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
+		// Process proposal messages for committee consensus only to get the roots
 		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
 			return nil
 		}
@@ -417,14 +420,15 @@ func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *
 		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
 			return nil
 		}
-		ncv.OnProposalMsg(msg)
+
+		return ncv.OnProposalMsg(msg)
 	} else if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return err
 		}
 
-		ncv.ProcessMessage(msg)
+		return ncv.ProcessMessage(msg)
 	}
 	return nil
 }
