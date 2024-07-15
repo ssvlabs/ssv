@@ -23,10 +23,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > MaxPartialSignatureMsgSize {
+	if len(ssvMessage.Data) > maxPartialSignatureMsgsSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = MaxPartialSignatureMsgSize
+		e.want = maxPartialSignatureMsgsSize
 		return nil, e
 	}
 
