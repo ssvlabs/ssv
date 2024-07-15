@@ -100,7 +100,7 @@ type MessageFilter struct {
 	To uint64 `json:"to"`
 	// Role is the duty type, optional as it's relevant for IBFT data
 	Role string `json:"role,omitempty"`
-	// PublicKeys is optional, used for fetching decided messages or information about specific validator/operator
+	// PublicKey is optional, used for fetching decided messages or information about specific validator/operator
 	PublicKey string `json:"publicKey,omitempty"`
 }
 
