@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -28,10 +29,11 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.ValidatorDutyRunners
-	Network     specqbft.Network
+	NetworkConfig networkconfig.NetworkConfig
+	DutyRunners   runner.ValidatorDutyRunners
+	Network       specqbft.Network
 
-	Operator          *spectypes.Operator
+	Operator          *spectypes.CommitteeMember
 	Share             *types.SSVShare
 	Signer            spectypes.BeaconSigner
 	OperatorSigner    spectypes.OperatorSigner
@@ -60,6 +62,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		mtx:               &sync.RWMutex{},
 		ctx:               pctx,
 		cancel:            cancel,
+		NetworkConfig:     options.NetworkConfig,
 		DutyRunners:       options.DutyRunners,
 		Network:           options.Network,
 		Storage:           options.Storage,
@@ -117,7 +120,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
 	logger.Info("ℹ️ starting duty processing")
 
-	return dutyRunner.StartNewDuty(logger, duty)
+	return dutyRunner.StartNewDuty(logger, duty, v.Operator.GetQuorum())
 }
 
 // ProcessMessage processes Network Message of all types
@@ -125,7 +128,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid signed message")
+			return errors.Wrap(err, "invalid SignedSSVMessage")
 		}
 
 		// Verify SignedSSVMessage's signature

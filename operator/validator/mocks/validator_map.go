@@ -7,10 +7,10 @@ package mocks
 import (
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
 	types "github.com/ssvlabs/ssv-spec/types"
 	queue "github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
+	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 )
 

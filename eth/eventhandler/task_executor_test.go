@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"go.uber.org/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"

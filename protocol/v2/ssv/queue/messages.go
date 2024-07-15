@@ -261,7 +261,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 	// Higher height.
 	if relativeHeight == 1 {
 		switch {
-		case isDecidedMesssage(state, m):
+		case isDecidedMessage(state, m):
 			return 4
 		case isPreConsensusMessage:
 			return 3
@@ -275,7 +275,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 
 	// Lower height.
 	switch {
-	case isDecidedMesssage(state, m):
+	case isDecidedMessage(state, m):
 		return 2
 	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
 		return 1
@@ -283,9 +283,9 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 	return 0
 }
 
-// scoreConsensusType returns an integer score for the type of a consensus message.
+// scoreConsensusType returns an integer score for the type of consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
-func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
+func scoreConsensusType(m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		switch qbftMsg.MsgType {
 		case specqbft.ProposalMsgType:
@@ -301,11 +301,91 @@ func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
 	return 0
 }
 
-func isDecidedMesssage(s *State, m *DecodedSSVMessage) bool {
+func isDecidedMessage(s *State, m *DecodedSSVMessage) bool {
 	consensusMessage, isConsensusMessage := m.Body.(*specqbft.Message)
 	if !isConsensusMessage {
 		return false
 	}
 	return consensusMessage.MsgType == specqbft.CommitMsgType &&
 		len(m.SignedSSVMessage.OperatorIDs) > int(s.Quorum)
+}
+
+// scoreCommitteeMessageSubtype returns an integer score for the message's type.
+func scoreCommitteeMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
+	_, isConsensusMessage := m.Body.(*specqbft.Message)
+
+	var (
+		isPreConsensusMessage  = false
+		isPostConsensusMessage = false
+	)
+	if mm, ok := m.Body.(*spectypes.PartialSignatureMessages); ok {
+		isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
+		isPreConsensusMessage = !isPostConsensusMessage
+	}
+
+	// Current height.
+	if relativeHeight == 0 {
+		if state.HasRunningInstance {
+			switch {
+			case isPostConsensusMessage:
+				return 4
+			case isConsensusMessage:
+				return 3
+			case isPreConsensusMessage:
+				return 2
+			}
+			return 0
+		}
+		switch {
+		case isPostConsensusMessage:
+			return 3
+		case isPreConsensusMessage:
+			return 2
+		case isConsensusMessage:
+			return 1
+		}
+		return 0
+	}
+
+	// Higher height.
+	if relativeHeight == 1 {
+		switch {
+		case isPostConsensusMessage:
+			return 4
+		case isDecidedMessage(state, m):
+			return 3
+		case isPreConsensusMessage:
+			return 2
+		case isConsensusMessage:
+			return 1
+		}
+		return 0
+	}
+
+	// Lower height.
+	switch {
+	case isDecidedMessage(state, m):
+		return 2
+	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
+		return 1
+	}
+	return 0
+}
+
+// scoreCommitteeConsensusType returns an integer score for the type of committee consensus message.
+// When given a non-consensus message, scoreConsensusType returns 0.
+func scoreCommitteeConsensusType(m *DecodedSSVMessage) int {
+	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
+		switch qbftMsg.MsgType {
+		case specqbft.CommitMsgType:
+			return 4
+		case specqbft.RoundChangeMsgType:
+			return 3
+		case specqbft.ProposalMsgType:
+			return 2
+		case specqbft.PrepareMsgType:
+			return 1
+		}
+	}
+	return 0
 }

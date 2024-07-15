@@ -16,7 +16,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -629,7 +629,7 @@ func TestSetupValidators(t *testing.T) {
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorOptions: validator.Options{
-					BeaconNetwork: networkconfig.TestNetwork.Beacon,
+					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
 				},
 				metadataLastUpdated: metadataLastMap,

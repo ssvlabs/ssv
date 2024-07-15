@@ -20,7 +20,7 @@ func NewSignatureVerifier() *SignatureVerifier {
 	}
 }
 
-func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []*spectypes.CommitteeMember) error {
+func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []*spectypes.Operator) error {
 	// Find operator that matches ID with the signer and verify signature
 
 	encodedMsg, err := msg.SSVMessage.Encode()
@@ -43,7 +43,7 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 	return nil
 }
 
-func (s *SignatureVerifier) VerifySignatureForSigner(root []byte, signature []byte, signer spectypes.OperatorID, operators []*spectypes.CommitteeMember) error {
+func (s *SignatureVerifier) VerifySignatureForSigner(root []byte, signature []byte, signer spectypes.OperatorID, operators []*spectypes.Operator) error {
 
 	for _, op := range operators {
 		// Find signer

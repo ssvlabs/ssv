@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"fmt"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -22,6 +24,9 @@ func (b *BaseRunner) signBeaconObject(
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get beacon domain")
+	}
+	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
+		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
 	}
 	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey, domainType)
 	if err != nil {

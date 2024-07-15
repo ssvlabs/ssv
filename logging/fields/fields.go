@@ -15,11 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
 	"github.com/ssvlabs/ssv/network/records"
@@ -49,6 +49,7 @@ const (
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
 	FieldDuties              = "duties"
+	FieldDutyExecutorID      = "duty_executor_id"
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldEpoch               = "epoch"
@@ -73,7 +74,6 @@ const (
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
-	FieldSenderID            = "sender_id"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubmissionTime      = "submission_time"
@@ -122,8 +122,8 @@ func Validator(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
 }
 
-func SenderID(senderID []byte) zapcore.Field {
-	return zap.Stringer(FieldSenderID, stringer.HexStringer{Val: senderID})
+func DutyExecutorID(senderID []byte) zapcore.Field {
+	return zap.Stringer(FieldDutyExecutorID, stringer.HexStringer{Val: senderID})
 }
 
 func AddressURL(val url.URL) zapcore.Field {
@@ -326,7 +326,7 @@ func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 
-func FormatCommittee(operators []*spectypes.CommitteeMember) string {
+func FormatCommittee(operators []*spectypes.Operator) string {
 	var opids []string
 	for _, op := range operators {
 		opids = append(opids, fmt.Sprint(op.OperatorID))
@@ -334,7 +334,7 @@ func FormatCommittee(operators []*spectypes.CommitteeMember) string {
 	return strings.Join(opids, "_")
 }
 
-func FormatCommitteeDutyID(operators []*spectypes.CommitteeMember, epoch phase0.Epoch, slot phase0.Slot) string {
+func FormatCommitteeDutyID(operators []*spectypes.Operator, epoch phase0.Epoch, slot phase0.Slot) string {
 	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
 }
 
@@ -362,7 +362,7 @@ func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
 }
 
 func CommitteeID(val spectypes.CommitteeID) zap.Field {
-	return zap.String(FieldCommitteeID, string(val[:]))
+	return zap.String(FieldCommitteeID, hex.EncodeToString(val[:]))
 }
 
 func Owner(addr common.Address) zap.Field {

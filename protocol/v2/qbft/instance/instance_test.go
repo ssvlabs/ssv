@@ -23,7 +23,7 @@ func TestInstance_Marshaling(t *testing.T) {
 	}()
 	i := &specqbft.Instance{
 		State: &specqbft.State{
-			Share:                           testingutils.TestingOperator(TestingSK),
+			CommitteeMember:                 testingutils.TestingCommitteeMember(TestingSK),
 			ID:                              []byte{1, 2, 3, 4},
 			Round:                           1,
 			Height:                          1,

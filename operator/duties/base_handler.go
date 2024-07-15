@@ -5,40 +5,44 @@ import (
 
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 //go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
-// ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
-type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
-
-// ExecuteCommitteeDutiesFunc is a non-blocking function which executes the given committee duties.
-type ExecuteCommitteeDutiesFunc func(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty)
-
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorProvider, ExecuteDutiesFunc, ExecuteCommitteeDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
+	Setup(
+		name string,
+		logger *zap.Logger,
+		beaconNode BeaconNode,
+		executionClient ExecutionClient,
+		network networkconfig.NetworkConfig,
+		validatorProvider ValidatorProvider,
+		validatorController ValidatorController,
+		dutiesExecutor DutiesExecutor,
+		slotTickerProvider slotticker.Provider,
+		reorgEvents chan ReorgEvent,
+		indicesChange chan struct{},
+	)
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
 }
 
 type baseHandler struct {
-	logger                 *zap.Logger
-	beaconNode             BeaconNode
-	executionClient        ExecutionClient
-	network                networkconfig.NetworkConfig
-	validatorProvider      ValidatorProvider
-	executeDuties          ExecuteDutiesFunc
-	executeCommitteeDuties ExecuteCommitteeDutiesFunc
-	ticker                 slotticker.SlotTicker
+	logger              *zap.Logger
+	beaconNode          BeaconNode
+	executionClient     ExecutionClient
+	network             networkconfig.NetworkConfig
+	validatorProvider   ValidatorProvider
+	validatorController ValidatorController
+	dutiesExecutor      DutiesExecutor
+	ticker              slotticker.SlotTicker
 
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
 
-	fetchFirst     bool
 	indicesChanged bool
 }
 
@@ -49,8 +53,8 @@ func (h *baseHandler) Setup(
 	executionClient ExecutionClient,
 	network networkconfig.NetworkConfig,
 	validatorProvider ValidatorProvider,
-	executeDuties ExecuteDutiesFunc,
-	executeCommitteeDuties ExecuteCommitteeDutiesFunc,
+	validatorController ValidatorController,
+	dutiesExecutor DutiesExecutor,
 	slotTickerProvider slotticker.Provider,
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
@@ -60,8 +64,8 @@ func (h *baseHandler) Setup(
 	h.executionClient = executionClient
 	h.network = network
 	h.validatorProvider = validatorProvider
-	h.executeDuties = executeDuties
-	h.executeCommitteeDuties = executeCommitteeDuties
+	h.validatorController = validatorController
+	h.dutiesExecutor = dutiesExecutor
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
