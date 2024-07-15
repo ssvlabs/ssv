@@ -42,10 +42,6 @@ var (
 	// ErrLowValidatorsCount is returned in case the amount of validators is not sufficient
 	// for calculating score params
 	ErrLowValidatorsCount = errors.New("low validators count")
-	// ErrOperatorsAndValidatorsWithDifferentLength is returned in case the length of the operators and validators map are different
-	ErrOperatorsAndValidatorsWithDifferentLength = errors.New("operators and validators map with different length")
-	// ErrDifferentCommittees is returned in case the operators and validators map have different committees as keys
-	ErrDifferentCommittees = errors.New("operators and validators with different committees")
 )
 
 // NetworkOpts is the config struct for network configurations
