@@ -138,10 +138,10 @@ func (b *BeaconProxy) handleSubmitAttestations(w http.ResponseWriter, r *http.Re
 	}
 
 	// Submit.
-	if err := b.client.(eth2client.AttestationsSubmitter).SubmitAttestations(r.Context(), attestations); err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to submit attestation: %w", err))
-		return
-	}
+	//if err := b.client.(eth2client.AttestationsSubmitter).SubmitAttestations(r.Context(), attestations); err != nil {
+	//	b.error(r, w, 500, fmt.Errorf("failed to submit attestation: %w", err))
+	//	return
+	//}
 
 	// Respond.
 	if err := b.respond(r, w, nil); err != nil {
