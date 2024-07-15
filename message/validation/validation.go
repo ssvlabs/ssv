@@ -352,10 +352,19 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	// Check if the message was sent on the right topic.
 	currentTopic := pMsg.GetTopic()
 	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
-	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
+	var expectedTopics []string
+	if mv.netCfg.CommitteeSubnetsFork() {
+		share := mv.nodeStorage.Shares().Get(nil, msg.GetID().GetPubKey())
+		if share == nil {
+			return nil, Descriptor{}, ErrUnknownValidator
+		}
+		expectedTopics = commons.CommitteeTopicID(share.CommitteeID())
+	} else {
+		expectedTopics = commons.ValidatorTopicID(msg.GetID().GetPubKey())
+	}
 
 	topicFound := false
-	for _, tp := range topics {
+	for _, tp := range expectedTopics {
 		if tp == currentTopicBaseName {
 			topicFound = true
 			break

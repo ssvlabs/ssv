@@ -94,9 +94,9 @@ func (n *p2pNetwork) initCfg() error {
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
-		n.subnets = subnets
+		n.fixedSubnets = subnets
 	} else {
-		n.subnets = make(records.Subnets, p2pcommons.Subnets())
+		n.fixedSubnets = make(records.Subnets, p2pcommons.Subnets())
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
@@ -174,7 +174,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     records.Subnets(n.subnets).String(),
+		Subnets:     records.Subnets(n.fixedSubnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
@@ -195,7 +195,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	subnetsProvider := func() records.Subnets {
-		return n.subnets
+		return n.activeSubnets
 	}
 
 	filters := func() []connections.HandshakeFilter {
@@ -251,8 +251,9 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if len(n.subnets) > 0 {
-			discV5Opts.Subnets = n.subnets
+		if len(n.fixedSubnets) > 0 {
+			discV5Opts.Subnets = n.fixedSubnets
+			logger = logger.With(zap.String("subnets", records.Subnets(n.fixedSubnets).String()))
 		}
 		logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {

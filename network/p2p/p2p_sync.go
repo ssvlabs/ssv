@@ -85,7 +85,10 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
-	topics := commons.ValidatorTopicID(vpk)
+	topics, err := n.validatorTopics(vpk)
+	if err != nil {
+		return nil, fmt.Errorf("could not get validator topics: %w", err)
+	}
 	for _, topic := range topics {
 		ps, err = n.topicsCtrl.Peers(topic)
 		if err != nil {

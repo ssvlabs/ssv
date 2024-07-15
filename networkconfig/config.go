@@ -40,6 +40,8 @@ type NetworkConfig struct {
 	Bootnodes                     []string
 	WhitelistedOperatorKeys       []string
 	PermissionlessActivationEpoch spec.Epoch
+
+	CommitteeSubnetForkEpoch spec.Epoch
 }
 
 func (n NetworkConfig) String() string {
@@ -69,4 +71,8 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+}
+
+func (n NetworkConfig) CommitteeSubnetsFork() bool {
+	return n.Beacon.EstimatedCurrentEpoch() >= n.CommitteeSubnetForkEpoch
 }

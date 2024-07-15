@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
@@ -23,10 +24,38 @@ const (
 	MaxAllowedShareSize  = MaxPossibleShareSize * 8 // Leaving some room for protocol updates and calculation mistakes.
 )
 
+type CommitteeID [32]byte
+
 // SSVShare is a combination of spectypes.Share and its Metadata.
 type SSVShare struct {
 	spectypes.Share
 	Metadata
+	committeeID *CommitteeID
+}
+
+// Encode encodes SSVShare using gob.
+func (s *SSVShare) Encode() ([]byte, error) {
+	var b bytes.Buffer
+	e := gob.NewEncoder(&b)
+	if err := e.Encode(s); err != nil {
+		return nil, fmt.Errorf("encode SSVShare: %w", err)
+	}
+
+	return b.Bytes(), nil
+}
+
+// Decode decodes SSVShare using gob.
+func (s *SSVShare) Decode(data []byte) error {
+	if len(data) > MaxAllowedShareSize {
+		return fmt.Errorf("share size is too big, got %v, max allowed %v", len(data), MaxAllowedShareSize)
+	}
+
+	d := gob.NewDecoder(bytes.NewReader(data))
+	if err := d.Decode(s); err != nil {
+		return fmt.Errorf("decode SSVShare: %w", err)
+	}
+	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(len(s.Committee))
+	return nil
 }
 
 // Encode encodes SSVShare using gob.
@@ -71,6 +100,19 @@ func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipientAddress = feeRecipient
+}
+
+func (s *SSVShare) CommitteeID() CommitteeID {
+	if s.committeeID != nil {
+		return *s.committeeID
+	}
+	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
+	for i, v := range s.Share.Committee {
+		ids[i] = v.OperatorID
+	}
+	id := ComputeCommitteeID(ids)
+	s.committeeID = &id
+	return id
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
@@ -119,4 +161,19 @@ func (m *Metadata) MetadataLastUpdated() time.Time {
 
 func (m *Metadata) SetMetadataLastUpdated(t time.Time) {
 	m.lastUpdated = t
+}
+
+// Return a 32 bytes ID for the committee of operators
+func ComputeCommitteeID(committee []spectypes.OperatorID) CommitteeID {
+	// sort
+	sort.Slice(committee, func(i, j int) bool {
+		return committee[i] < committee[j]
+	})
+	// Convert to bytes
+	bytes := make([]byte, len(committee)*4)
+	for i, v := range committee {
+		binary.LittleEndian.PutUint32(bytes[i*4:], uint32(v))
+	}
+	// Hash
+	return CommitteeID(sha256.Sum256(bytes))
 }

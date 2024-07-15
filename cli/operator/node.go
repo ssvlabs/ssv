@@ -241,7 +241,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
+		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
@@ -326,7 +326,7 @@ var StartNodeCmd = &cobra.Command{
 		)
 		nodeProber.AddNode("event syncer", eventSyncer)
 
-		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+		cfg.P2pNetworkConfig.GetValidatorStats = func() (network.ValidatorStats, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
 		if err := p2pNetwork.Setup(logger); err != nil {

@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/network/commons"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -39,8 +40,16 @@ type P2PNetwork interface {
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 }
 
-// GetValidatorStats returns stats of validators, including the following:
-//   - the amount of validators in the network
-//   - the amount of active validators in the network (i.e. not slashed or existed)
-//   - the amount of validators assigned to this operator
-type GetValidatorStats func() (uint64, uint64, uint64, error)
+type ValidatorCounts struct {
+	Total     uint32
+	Attesting uint32
+	Mine      uint32
+}
+
+type ValidatorStats struct {
+	ValidatorCounts
+	Subnets [commons.SubnetsCount]ValidatorCounts
+}
+
+// GetValidatorStats returns stats of committees & validators.
+type GetValidatorStats func() (ValidatorStats, error)
