@@ -18,6 +18,7 @@ func (vc *ValidatorContainer) Start(logger *zap.Logger) (started bool, err error
 		return
 	}
 	started, err = vc.GenesisValidator.Start(logger)
+	return
 }
 
 func (vc *ValidatorContainer) Stop() {

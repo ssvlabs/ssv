@@ -24,6 +24,7 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
+	genesisstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -104,9 +105,11 @@ type ControllerOptions struct {
 }
 
 type GenesisControllerOptions struct {
-	Network          genesisspecqbft.Network
-	BuilderProposals bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
-	KeyManager       genesisspectypes.KeyManager
+	Network           genesisspecqbft.Network
+	BuilderProposals  bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
+	KeyManager        genesisspectypes.KeyManager
+	StorageMap        *genesisstorage.QBFTStores
+	NewDecidedHandler genesisqbftcontroller.NewDecidedHandler
 }
 
 // Controller represent the validators controller,
@@ -115,7 +118,7 @@ type Controller interface {
 	StartValidators()
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
+	GetValidator(pubKey spectypes.ValidatorPK) (*validators.ValidatorContainer, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
@@ -251,16 +254,16 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	//TODO
 	genesisValidatorOptions := genesisvalidator.Options{
-		NetworkConfig:    options.NetworkConfig,
 		Network:          options.GenesisControllerOptions.Network,
 		BuilderProposals: options.BuilderProposals,
 		Beacon:           options.Beacon,
-		Storage:          options.StorageMap,
+		BeaconNetwork:    options.NetworkConfig.Beacon,
+		Storage:          options.GenesisControllerOptions.StorageMap,
 		//Share:   nil,  // set per validator
 		Signer: options.GenesisControllerOptions.KeyManager,
 		//Mode: validator.ModeRW // set per validator
 		DutyRunners:       nil, // set per validator
-		NewDecidedHandler: options.NewDecidedHandler,
+		NewDecidedHandler: options.GenesisControllerOptions.NewDecidedHandler,
 		FullNode:          options.FullNode,
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
@@ -767,10 +770,16 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		if c.networkConfig.AlanForked(duty.Slot) {
+			if pushed := v.Validator.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+				logger.Warn("dropping ExecuteDuty message because the queue is full")
+			}
+		} else {
+			if pushed := v.GenesisValidator.Queues[genesisspectypes.BeaconRole(duty.Type)].Q.TryPush(dec); !pushed {
+				logger.Warn("dropping ExecuteDuty message because the queue is full")
+			}
 		}
+
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
 		logger.Warn("could not find validator")

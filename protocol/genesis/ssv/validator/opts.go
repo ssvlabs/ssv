@@ -2,8 +2,8 @@ package validator
 
 import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
@@ -21,7 +21,7 @@ const (
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           genesisspecqbft.Network
-	Beacon            genesisspecssv.BeaconNode
+	Beacon            specssv.BeaconNode
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *genesisstorage.QBFTStores
 	SSVShare          *types.SSVShare
