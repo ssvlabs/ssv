@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -116,7 +117,8 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 			return nil
 		}
 
-		logger.Debug("got committees", zap.Int("list length", len(committees)))
+		logger = logger.With(zap.Any("committees", committees))
+		logger.Debug("got committees")
 
 		topicCommittees := filterCommitteesForTopic(logger, t, committees)
 
@@ -125,7 +127,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 			numValidatorsInTopic += len(committee.Validators)
 		}
 		logger = logger.With(zap.Int("committees in topic", len(topicCommittees)), zap.Int("validators in topic", numValidatorsInTopic))
-		logger.Debug("got committees for score params")
+		logger.Debug("filtered committees for score params")
 
 		// Create topic options
 		opts, err := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), topicCommittees)
@@ -158,7 +160,7 @@ func filterCommitteesForTopic(logger *zap.Logger, topic string, committees []*st
 		if topic == committeeTopic {
 			topicCommittees = append(topicCommittees, committee)
 		} else {
-			logger.Debug("different topcis", zap.String("main topic", topic), zap.String("committee topic", committeeTopic))
+			logger.Debug(fmt.Sprintf("different topcis: %v - %v", topic, committeeTopic))
 		}
 	}
 	return topicCommittees
