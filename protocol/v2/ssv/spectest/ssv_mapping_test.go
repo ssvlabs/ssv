@@ -2,6 +2,7 @@ package spectest
 
 import (
 	"encoding/json"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"os"
 	"reflect"
 	"strings"
@@ -355,7 +356,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 }
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
-	config := qbfttesting.TestingConfig(logger, ks, message.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, ks, convert.RoleCommittee)
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,

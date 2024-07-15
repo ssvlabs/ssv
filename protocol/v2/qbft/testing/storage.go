@@ -2,6 +2,7 @@ package testing
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"sync"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -26,13 +27,13 @@ func getDB(logger *zap.Logger) basedb.Database {
 	return db
 }
 
-var allRoles = []message.RunnerRole{
-	message.RoleCommittee,
-	message.RoleProposer,
-	message.RoleAggregator,
-	message.RoleSyncCommitteeContribution,
-	message.RoleValidatorRegistration,
-	message.RoleVoluntaryExit,
+var allRoles = []convert.RunnerRole{
+	convert.RoleCommittee,
+	convert.RoleProposer,
+	convert.RoleAggregator,
+	convert.RoleSyncCommitteeContribution,
+	convert.RoleValidatorRegistration,
+	convert.RoleVoluntaryExit,
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {

@@ -402,45 +402,30 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 	if err := c.handleConsensusMessages(msg, ncv); err != nil {
 		return err
 	}
-	if err := c.handlePostConsensusMessages(msg, ncv); err != nil {
-		return err
-	}
 	return nil
 }
 
 func (c *controller) handleConsensusMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
-	if msg.MsgType != spectypes.SSVConsensusMsgType {
-		return nil
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
+		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+			return nil
+		}
+
+		subMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+			return nil
+		}
+		ncv.OnProposalMsg(msg)
+	} else if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
+		pSigMessages := &spectypes.PartialSignatureMessages{}
+		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+			return err
+		}
+
+		ncv.ProcessMessage(msg)
 	}
-
-	if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
-		return nil
-	}
-
-	subMsg, ok := msg.Body.(*specqbft.Message)
-	if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
-		return nil
-	}
-	ncv.OnProposalMsg(msg)
-	return nil
-}
-
-func (c *controller) handlePostConsensusMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
-	if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
-		return nil
-	}
-
-	c.committeesObserversMutex.Lock()
-	defer c.committeesObserversMutex.Unlock()
-
-	pSigMessages := &spectypes.PartialSignatureMessages{}
-	if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-		return err
-	}
-
-	ncv.ProcessMessage(msg)
 	return nil
 }
 
@@ -1215,7 +1200,7 @@ func SetupCommitteeRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(message.RunnerRole(role)),
+			Storage:               options.Storage.Get(convert.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			SignatureVerification: true,
@@ -1278,7 +1263,7 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(message.RunnerRole(role)),
+			Storage:               options.Storage.Get(convert.RunnerRole(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			SignatureVerification: true,
