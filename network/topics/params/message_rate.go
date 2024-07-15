@@ -108,8 +108,11 @@ func expectedSingleSCCommitteeDutiesPerEpochCached(numValidators int) float64 {
 	return generatedExpectedSingleSCCommitteeDutiesPerEpoch[numValidators]
 }
 
-// Calculates the message rate per epoch for a topic given its committees' configurations (number of operators and number of validators)
+// Calculates the message rate for a topic given its committees' configurations (number of operators and number of validators)
 func calculateMessageRateForTopic(committeeSizes []int, validatorCounts []int) (float64, error) {
+	if committeeSizes == nil || validatorCounts == nil {
+		return 0, errors.New("no committee sizes or validators were provided")
+	}
 	if len(committeeSizes) != len(validatorCounts) {
 		return 0, errors.New("committee sizes and validator counts have different length")
 	}
@@ -125,6 +128,10 @@ func calculateMessageRateForTopic(committeeSizes []int, validatorCounts []int) (
 		totalMsgRate += float64(count) * SlotsPerEpoch * ProposalProbability * float64(dutyWithPreConsensus(committeeSize))
 		totalMsgRate += float64(count) * SlotsPerEpoch * SyncCommitteeAggProb * float64(dutyWithPreConsensus(committeeSize))
 	}
+
+	// Convert rate to seconds
+	totalEpochSeconds := float64(SlotsPerEpoch * 12)
+	totalMsgRate = totalMsgRate / totalEpochSeconds
 
 	return totalMsgRate, nil
 }
