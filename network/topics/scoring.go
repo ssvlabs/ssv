@@ -111,14 +111,14 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 		logger.Debug("got validator stats for score params")
 
 		// Get committee maps
+		logger.Debug("Debug1 - getting committees")
 		committees := getCommittees()
-		if err != nil {
-			logger.Debug("could not get committees", zap.Error(err))
-			return nil
-		}
+		logger.Debug("Debug2 - got committees")
 
-		logger = logger.With(zap.Any("committees", committees))
+		logger = logger.With(zap.Int("num. committees", len(committees)))
 		logger.Debug("got committees")
+
+		logger.Debug("Debug3 - already did log got committees")
 
 		topicCommittees := filterCommitteesForTopic(logger, t, committees)
 
