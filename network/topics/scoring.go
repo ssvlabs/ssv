@@ -160,7 +160,7 @@ func filterCommitteesForTopic(logger *zap.Logger, topic string, committees []*st
 		if topic == committeeTopic {
 			topicCommittees = append(topicCommittees, committee)
 		} else {
-			logger.Debug(fmt.Sprintf("different topcis: %v - %v", topic, committeeTopic))
+			logger.Debug(fmt.Sprintf("different topics: %v - %v", topic, committeeTopic))
 		}
 	}
 	return topicCommittees
