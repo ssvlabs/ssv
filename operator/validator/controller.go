@@ -343,6 +343,12 @@ func (c *controller) GetCommitteeMapsForTopic() (map[string][]string, map[string
 	allShares := c.sharesStorage.List(nil)
 
 	for _, share := range allShares {
+
+		// If validator is not participating, don't include it
+		if !share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+			continue
+		}
+
 		// Get share's committee ID
 		committeeID := share.CommitteeID()
 		committeeIDStr := hex.EncodeToString(committeeID[:])
