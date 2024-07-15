@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"log"
 	"math/big"
 	"net/http"
@@ -279,13 +280,15 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.RunnerRole{
-			spectypes.RoleCommittee,
-			spectypes.RoleProposer,
-			spectypes.RoleAggregator,
-			spectypes.RoleSyncCommitteeContribution,
-			spectypes.RoleValidatorRegistration,
-			spectypes.RoleVoluntaryExit,
+		storageRoles := []convert.RunnerRole{
+			convert.RoleCommittee,
+			convert.RoleAttester,
+			convert.RoleProposer,
+			convert.RoleSyncCommittee,
+			convert.RoleAggregator,
+			convert.RoleSyncCommitteeContribution,
+			convert.RoleValidatorRegistration,
+			convert.RoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -296,6 +299,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
@@ -303,7 +307,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -378,7 +382,6 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}

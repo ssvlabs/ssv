@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ssvlabs/ssv/exporter/convert"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dgraph-io/ristretto"
@@ -34,20 +36,21 @@ const (
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
 	FieldBeaconRole          = "beacon_role"
-	FieldBeaconDataTime      = "beacon_data_time"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
-	FieldBlockRootTime       = "block_root_time"
-	FieldBlockTime           = "block_time"
 	FieldBlockVersion        = "block_version"
-	FieldBroadcastTime       = "broadcast_time"
 	FieldClusterIndex        = "cluster_index"
 	FieldCommitteeID         = "committee_id"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
+	FieldPostConsensusTime   = "post_consensus_time"
+	FieldBlockTime           = "block_time"
+	FieldBeaconDataTime      = "beacon_data_time"
+	FieldBlockRootTime       = "block_root_time"
+	FieldBroadcastTime       = "broadcast_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
 	FieldDecidedTime         = "decided_time"
@@ -75,7 +78,6 @@ const (
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
 	FieldPeerScore           = "peer_score"
-	FieldPostConsensusTime   = "post_consensus_time"
 	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
@@ -231,6 +233,9 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 }
 
 func Role(val spectypes.RunnerRole) zap.Field {
+	return zap.Stringer(FieldRole, val)
+}
+func ExporterRole(val convert.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 
