@@ -21,7 +21,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
@@ -31,7 +30,6 @@ import (
 	ssv_testing "github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -186,7 +184,7 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 	//validation.WithSelfAccept(selfPeerID, true),
 	//)
 	ctrl := gomock.NewController(t)
-	cfg.MessageValidator = newMockMessageValidator(ctrl, networkconfig.TestNetwork, ks, shares)
+	newMockValidatorStore(ctrl, networkconfig.TestNetwork, ks, shares)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -299,8 +297,7 @@ func NewNetConfig(keys ssv_testing.NodeKeys, operatorPubKeyHash string, bn *disc
 	}
 }
 
-func newMockMessageValidator(ctrl *gomock.Controller, netCfg networkconfig.NetworkConfig, ks *spectestingutils.TestKeySet, shares shareSet) validation.MessageValidator {
-	dutyStore := dutystore.New()
+func newMockValidatorStore(ctrl *gomock.Controller, netCfg networkconfig.NetworkConfig, ks *spectestingutils.TestKeySet, shares shareSet) {
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
 	committee := maps.Keys(ks.Shares)
 	slices.Sort(committee)
@@ -352,8 +349,6 @@ func newMockMessageValidator(ctrl *gomock.Controller, netCfg networkconfig.Netwo
 		}
 		return nil
 	}).AnyTimes()
-	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
-	return validation.New(netCfg, validatorStore, dutyStore, signatureVerifier)
 }
 
 type shareSet struct {
