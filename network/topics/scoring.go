@@ -117,11 +117,11 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsu
 
 		committeeOperators, committeeValidators := filterCommitteeMapsForTopic(t, TopicCommitteeIDsMap, CommitteeIDToOperatorsMap, CommitteeIDToValidatorsMap)
 
-		validatorsInTopic := 0
+		numValidatorsInTopic := 0
 		for _, validators := range committeeValidators {
-			validatorsInTopic += validators
+			numValidatorsInTopic += validators
 		}
-		logger = logger.With(zap.Int("committees in topic", len(committeeOperators)), zap.Int("validators in topic", validatorsInTopic))
+		logger = logger.With(zap.Int("committees in topic", len(committeeOperators)), zap.Int("validators in topic", numValidatorsInTopic))
 		logger.Debug("got committee maps for score params")
 
 		// Create topic options
