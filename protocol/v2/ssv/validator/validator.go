@@ -129,7 +129,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid signed message")
+			return errors.Wrap(err, "invalid SignedSSVMessage")
 		}
 
 		// Verify SignedSSVMessage's signature

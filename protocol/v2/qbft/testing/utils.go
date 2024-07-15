@@ -39,6 +39,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,
 		SignatureVerifier:     testingutils.NewTestingVerifier(),
+		CutOffRound:           testingutils.TestingCutOffRound,
 	}
 }
 

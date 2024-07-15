@@ -3,15 +3,14 @@ package instance
 import (
 	"encoding/base64"
 	"encoding/json"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
@@ -40,10 +39,11 @@ func NewInstance(
 ) *Instance {
 	var name = ""
 	if len(identifier) == 56 {
-		name = types.MessageID(identifier).GetRoleType().String()
+		name = spectypes.MessageID(identifier).GetRoleType().String()
 	} else {
 		name = base64.StdEncoding.EncodeToString(identifier)
 	}
+
 	return &Instance{
 		State: &specqbft.State{
 			CommitteeMember:      committeeMember,
@@ -60,6 +60,15 @@ func NewInstance(
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(name),
 	}
+}
+
+// TODO remove
+func messageIDFromBytes(mid []byte) spectypes.MessageID {
+	if len(mid) < 56 {
+		return spectypes.MessageID{}
+	}
+
+	return spectypes.MessageID(mid)
 }
 
 func (i *Instance) ForceStop() {
