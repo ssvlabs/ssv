@@ -2,26 +2,25 @@ package spectest
 
 import (
 	"encoding/hex"
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/genesis/ssv/testing"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 )
 
 type MsgProcessingSpecTest struct {
@@ -32,7 +31,7 @@ type MsgProcessingSpecTest struct {
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
-	OutputMessages         []*spectypes.SignedSSVMessage
+	OutputMessages         []*spectypes.SignedPartialSignatureMessage
 	BeaconBroadcastedRoots []string
 	DontStartDuty          bool // if set to true will not start a duty for the runner
 	ExpectedError          string
@@ -49,18 +48,13 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 }
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
-	var lastErr error
-	var share *spectypes.Share
-	for _, validatorShare := range test.Runner.GetBaseRunner().Share {
-		share = validatorShare
-		break
-	}
-	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
-	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
+	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
+	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork().(specqbft.Network) // TODO need to align
 
+	var lastErr error
 	if !test.DontStartDuty {
-		lastErr = v.StartDuty(logger, *test.Duty)
+		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSSVMessage(msg)
@@ -93,7 +87,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 }
 
 func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
+	broadcastedRoots := test.Runner.GetBeaconNode().(*spectestingutils.TestingBeaconNode).BroadcastedRoots
 	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
 	for _, r1 := range test.BeaconBroadcastedRoots {
 		found := false

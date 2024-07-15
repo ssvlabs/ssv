@@ -10,18 +10,18 @@ import (
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 var (
-	specModule   = "github.com/ssvlabs/ssv-spec"
+	specModule   = "github.com/ssvlabs/ssv-spec-pre-cc"
 	specTestPath = "spectest/generate/tests.json"
 )
 
@@ -153,7 +153,7 @@ func GetSpecTestJSON(path string, module string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(filepath.Clean(p), filepath.Clean(specTestPath)))
 }
 
-// GetSpecDir returns the path to the ssv-spec module.
+// GetSpecDir returns the path to the ssv-spec-pre-cc module.
 func GetSpecDir(path, module string) (string, error) {
 	if path == "" {
 		var err error

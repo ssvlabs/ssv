@@ -1,12 +1,12 @@
-package genesisrunner
+package runner
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
@@ -16,7 +16,7 @@ func (b *BaseRunner) signBeaconObject(
 	obj ssz.HashRoot,
 	slot spec.Slot,
 	domainType spec.DomainType,
-) (*genesisspectypes.PartialSignatureMessage, error) {
+) (*spectypes.PartialSignatureMessage, error) {
 	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
 	if err != nil {
@@ -27,29 +27,29 @@ func (b *BaseRunner) signBeaconObject(
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}
 
-	return &genesisspectypes.PartialSignatureMessage{
+	return &spectypes.PartialSignatureMessage{
 		PartialSignature: sig,
 		SigningRoot:      r,
-		Signer:           runner.GetOperatorID(),
+		Signer:           runner.GetBaseRunner().Share.OperatorID,
 	}, nil
 }
 
-func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *genesisspectypes.PartialSignatureMessages) (*genesisspectypes.SignedPartialSignatureMessage, error) {
-	signature, err := runner.GetSigner().SignRoot(msg, genesisspectypes.PartialSignatureType, b.Share.SharePubKey)
+func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
+	signature, err := runner.GetSigner().SignRoot(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
 	}
 
-	return &genesisspectypes.SignedPartialSignatureMessage{
+	return &spectypes.SignedPartialSignatureMessage{
 		Message:   *msg,
 		Signature: signature,
-		Signer:    runner.GetOperatorID(),
+		Signer:    b.Share.OperatorID,
 	}, nil
 }
 
 // Validate message content without verifying signatures
 func (b *BaseRunner) validatePartialSigMsgForSlot(
-	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
+	signedMsg *spectypes.SignedPartialSignatureMessage,
 	slot spec.Slot,
 ) error {
 	if err := signedMsg.Validate(); err != nil {
@@ -63,7 +63,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	// Check if signer is in committee
 	signerInCommittee := false
 	for _, operator := range b.Share.Committee {
-		if operator.Signer == signedMsg.Signer {
+		if operator.OperatorID == signedMsg.Signer {
 			signerInCommittee = true
 			break
 		}
@@ -75,12 +75,12 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	return nil
 }
 
-func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature genesisspectypes.Signature, root [32]byte) error {
+func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte) error {
 	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	for _, n := range b.Share.Committee {
-		if n.Signer == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey[:])
+		if n.GetID() == signer {
+			pk, err := types.DeserializeBLSPublicKey(n.GetPublicKey())
 			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}
@@ -100,7 +100,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature genes
 }
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
-func (b *BaseRunner) resolveDuplicateSignature(container *genesisspecssv.PartialSigContainer, msg *genesisspectypes.PartialSignatureMessage) {
+func (b *BaseRunner) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
 
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.Signer, msg.SigningRoot)

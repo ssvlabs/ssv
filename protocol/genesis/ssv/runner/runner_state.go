@@ -1,12 +1,12 @@
-package genesisrunner
+package runner
 
 import (
 	"crypto/sha256"
 	"encoding/json"
 
 	"github.com/pkg/errors"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
@@ -14,20 +14,20 @@ import (
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	PreConsensusContainer  *genesisspecssv.PartialSigContainer
-	PostConsensusContainer *genesisspecssv.PartialSigContainer
+	PreConsensusContainer  *specssv.PartialSigContainer
+	PostConsensusContainer *specssv.PartialSigContainer
 	RunningInstance        *instance.Instance
-	DecidedValue           *genesisspectypes.ConsensusData
+	DecidedValue           *spectypes.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
-	StartingDuty *genesisspectypes.Duty
+	StartingDuty *spectypes.Duty
 	// flags
 	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
 }
 
-func NewRunnerState(quorum uint64, duty *genesisspectypes.Duty) *State {
+func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
 	return &State{
-		PreConsensusContainer:  genesisspecssv.NewPartialSigContainer(quorum),
-		PostConsensusContainer: genesisspecssv.NewPartialSigContainer(quorum),
+		PreConsensusContainer:  specssv.NewPartialSigContainer(quorum),
+		PostConsensusContainer: specssv.NewPartialSigContainer(quorum),
 
 		StartingDuty: duty,
 		Finished:     false,
@@ -35,7 +35,7 @@ func NewRunnerState(quorum uint64, duty *genesisspectypes.Duty) *State {
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container *genesisspecssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
 	// Reconstruct signatures
 	signature, err := types.ReconstructSignature(container, root, validatorPubKey)
 	if err != nil {

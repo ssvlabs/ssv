@@ -19,13 +19,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/genesis/ssv/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -39,8 +38,6 @@ func TestSSVMapping(t *testing.T) {
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
-
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	for name, test := range untypedTests {
 		name, test := name, test

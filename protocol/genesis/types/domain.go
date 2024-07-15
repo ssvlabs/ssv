@@ -20,6 +20,6 @@ func GetDefaultDomain() oldspectypes.DomainType {
 // SetDefaultDomain updates the global domain used across the system
 // allows injecting domain for testnets
 // DEPRECATED: use networkconfig.NetworkConfig.Domain instead
-//func SetDefaultDomain(d oldspectypes.DomainType) {
-//	domain = spectypes.DomainType(d)
+//func SetDefaultDomain(d spectypes.DomainType) {
+//	domain = d
 //}

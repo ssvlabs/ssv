@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -236,6 +237,10 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldBeaconRole, val)
 }
 
+func GenesisBeaconRole(val genesisspectypes.BeaconRole) zap.Field {
+	return zap.Stringer(FieldBeaconRole, val)
+}
+
 func Role(val spectypes.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
@@ -369,6 +374,9 @@ func FeeRecipient(pubKey []byte) zap.Field {
 }
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+func GenesisFormatDutyID(epoch phase0.Epoch, duty *genesisspectypes.Duty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 

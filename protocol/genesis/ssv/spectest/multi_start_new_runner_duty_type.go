@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 )
 
 type StartNewRunnerDutySpecTest struct {

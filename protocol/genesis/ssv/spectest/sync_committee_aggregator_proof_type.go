@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/ssv/testing"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/genesis/ssv/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {

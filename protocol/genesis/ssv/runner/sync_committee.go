@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import (
 	"crypto/sha256"
@@ -9,62 +9,56 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type SyncCommitteeRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon     beacon.BeaconNode
-	network    genesisspecssv.Network
-	signer     genesisspectypes.KeyManager
-	valCheck   genesisspecqbft.ProposedValueCheckF
-	operatorId genesisspectypes.OperatorID
+	beacon   specssv.BeaconNode
+	network  specssv.Network
+	signer   spectypes.KeyManager
+	valCheck specqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
 }
 
 func NewSyncCommitteeRunner(
-	beaconNetwork genesisspectypes.BeaconNetwork,
+	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network genesisspecssv.Network,
-	signer genesisspectypes.KeyManager,
-	valCheck genesisspecqbft.ProposedValueCheckF,
+	beacon specssv.BeaconNode,
+	network specssv.Network,
+	signer spectypes.KeyManager,
+	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType:     genesisspectypes.BNRoleSyncCommittee,
+			BeaconRoleType:     spectypes.BNRoleSyncCommittee,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		valCheck:   valCheck,
-		operatorId: operatorId,
-		metrics:    metrics.NewConsensusMetrics(genesisspectypes.BNRoleSyncCommittee),
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommittee),
 	}
 }
 
-func (r *SyncCommitteeRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty, quorum)
+func (r *SyncCommitteeRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -72,11 +66,11 @@ func (r *SyncCommitteeRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *SyncCommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for sync committee role")
 }
 
-func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesisspecqbft.SignedMessage) error {
+func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -95,14 +89,14 @@ func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *ge
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee block root")
 	}
-	msg, err := r.BaseRunner.signBeaconObject(r, genesisspectypes.SSZBytes(root[:]), decidedValue.Duty.Slot, genesisspectypes.DomainSyncCommittee)
+	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZBytes(root[:]), decidedValue.Duty.Slot, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &genesisspectypes.PartialSignatureMessages{
-		Type:     genesisspectypes.PostConsensusPartialSig,
+	postConsensusMsg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
 		Slot:     decidedValue.Duty.Slot,
-		Messages: []*genesisspectypes.PartialSignatureMessage{msg},
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
@@ -115,11 +109,10 @@ func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *ge
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
 
-	msgToBroadcast := &genesisspectypes.SSVMessage{
-		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:][:], r.BaseRunner.BeaconRoleType),
-
-		Data: data,
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
 	}
 
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -128,7 +121,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *ge
 	return nil
 }
 
-func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -146,7 +139,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 	}
 
 	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
+		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
@@ -166,7 +159,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 
 		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
 
-		if err := r.GetBeaconNode().SubmitSyncMessages([]*altair.SyncCommitteeMessage{msg}); err != nil {
+		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
@@ -178,8 +171,8 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		logger.Info("✅ successfully submitted sync committee",
 			fields.Slot(msg.Slot),
 			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
-			fields.Height(specqbft.Height(r.BaseRunner.QBFTController.Height)),
-			fields.Round(specqbft.Round(r.GetState().RunningInstance.State.Round)))
+			fields.GenesisHeight(r.BaseRunner.QBFTController.Height),
+			fields.GenesisRound(r.GetState().RunningInstance.State.Round))
 	}
 	r.GetState().Finished = true
 
@@ -187,7 +180,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 }
 
 func (r *SyncCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{}, genesisspectypes.DomainError, errors.New("no expected pre consensus roots for sync committee")
+	return []ssz.HashRoot{}, spectypes.DomainError, errors.New("no expected pre consensus roots for sync committee")
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
@@ -197,7 +190,7 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get sync committee block root")
 	}
 
-	return []ssz.HashRoot{genesisspectypes.SSZBytes(root[:])}, genesisspectypes.DomainSyncCommittee, nil
+	return []ssz.HashRoot{spectypes.SSZBytes(root[:])}, spectypes.DomainSyncCommittee, nil
 }
 
 // executeDuty steps:
@@ -205,7 +198,7 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // 2) start consensus on duty + block root data
 // 3) Once consensus decides, sign partial block root and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
-func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
+func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	// TODO - waitOneThirdOrValidBlock
 
 	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
@@ -216,7 +209,7 @@ func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartConsensus()
 
-	input := &genesisspectypes.ConsensusData{
+	input := &spectypes.ConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: root[:],
@@ -232,11 +225,11 @@ func (r *SyncCommitteeRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *SyncCommitteeRunner) GetNetwork() genesisspecssv.Network {
+func (r *SyncCommitteeRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *SyncCommitteeRunner) GetBeaconNode() beacon.BeaconNode {
+func (r *SyncCommitteeRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 
@@ -248,11 +241,11 @@ func (r *SyncCommitteeRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *SyncCommitteeRunner) GetValCheckF() genesisspecqbft.ProposedValueCheckF {
+func (r *SyncCommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *SyncCommitteeRunner) GetSigner() genesisspectypes.KeyManager {
+func (r *SyncCommitteeRunner) GetSigner() spectypes.KeyManager {
 	return r.signer
 }
 
@@ -274,8 +267,4 @@ func (r *SyncCommitteeRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
-}
-
-func (r *SyncCommitteeRunner) GetOperatorID() genesisspectypes.OperatorID {
-	return r.operatorId
 }

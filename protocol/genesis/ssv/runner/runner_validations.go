@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import (
 	"bytes"
@@ -7,11 +7,11 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
-func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error {
+func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
@@ -29,7 +29,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *genesissp
 }
 
 // Verify each signature in container removing the invalid ones
-func (b *BaseRunner) FallBackAndVerifyEachSignature(container *genesisspecssv.PartialSigContainer, root [32]byte) {
+func (b *BaseRunner) FallBackAndVerifyEachSignature(container *specssv.PartialSigContainer, root [32]byte) {
 
 	signatures := container.GetSignatures(root)
 
@@ -40,12 +40,12 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *genesisspecssv.Pa
 	}
 }
 
-func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error {
+func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
 
-	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
+	// TODO https://github.com/ssvlabs/ssv-spec-pre-cc/issues/142 need to fix with this issue solution instead.
 	if b.State.DecidedValue == nil {
 		return errors.New("no decided value")
 	}
@@ -58,7 +58,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *genesiss
 		return errors.New("consensus instance not decided")
 	}
 
-	decidedValue := &genesisspectypes.ConsensusData{}
+	decidedValue := &spectypes.ConsensusData{}
 	if err := decidedValue.Decode(decidedValueByts); err != nil {
 		return errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
@@ -75,7 +75,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *genesiss
 	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
 }
 
-func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *genesisspectypes.ConsensusData) error {
+func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *spectypes.ConsensusData) error {
 	byts, err := val.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode decided value")
@@ -87,7 +87,7 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *genesisspe
 	return nil
 }
 
-func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *genesisspectypes.SignedPartialSignatureMessage, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
+func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
 	if len(expectedRootObjs) != len(signedMsg.Message.Messages) {
 		return errors.New("wrong expected roots count")
 	}
@@ -102,7 +102,7 @@ func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *genesisspectyp
 
 		ret := make([][32]byte, 0)
 		for _, rootI := range expectedRootObjs {
-			r, err := genesisspectypes.ComputeETHSigningRoot(rootI, d)
+			r, err := spectypes.ComputeETHSigningRoot(rootI, d)
 			if err != nil {
 				return nil, errors.Wrap(err, "could not compute ETH signing root")
 			}
@@ -118,7 +118,7 @@ func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *genesisspectyp
 		return err
 	}
 
-	sortedRoots := func(msgs genesisspectypes.PartialSignatureMessages) [][32]byte {
+	sortedRoots := func(msgs spectypes.PartialSignatureMessages) [][32]byte {
 		ret := make([][32]byte, 0)
 		for _, msg := range msgs.Messages {
 			ret = append(ret, msg.SigningRoot)
