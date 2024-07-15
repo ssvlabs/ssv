@@ -307,19 +307,16 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 
 	// Update byCommitteeID
 	for _, committee := range c.byCommitteeID {
-		foundPK, foundIndex := false, false
 		for i, validator := range committee.Validators {
 			if validator.ValidatorPubKey == share.ValidatorPubKey {
 				committee.Validators[i] = share
-				foundPK = true
+				break
 			}
+		}
 
-			if validator.ValidatorIndex == share.ValidatorIndex {
+		for i, index := range committee.Indices {
+			if index == share.ValidatorIndex {
 				committee.Indices[i] = share.ValidatorIndex
-				foundIndex = true
-			}
-
-			if foundPK && foundIndex {
 				break
 			}
 		}
