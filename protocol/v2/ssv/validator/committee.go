@@ -99,8 +99,24 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
-	for _, bd := range duty.BeaconDuties {
-		validatorShares[bd.ValidatorIndex] = c.Shares[bd.ValidatorIndex]
+	toRemove := make([]int, 0)
+	// Remove beacon duties that don't have a share
+	for i, bd := range duty.BeaconDuties {
+		share, ok := c.Shares[bd.ValidatorIndex]
+		if !ok {
+			toRemove = append(toRemove, i)
+			continue
+		}
+		validatorShares[bd.ValidatorIndex] = share
+	}
+	// Remove beacon duties that don't have a share
+	if len(toRemove) > 0 {
+		newDuties, err := removeIndices(duty.BeaconDuties, toRemove)
+		if err != nil {
+			logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
+		} else {
+			duty.BeaconDuties = newDuties
+		}
 	}
 
 	r := c.CreateRunnerFn(duty.Slot, validatorShares)
