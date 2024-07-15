@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -56,25 +55,16 @@ func (mv *messageValidator) validateDutyCount(
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
 	validatorIndexCount int,
-	signerStateBySlot *treemap.Map,
+	signerStateBySlot *OperatorState,
 ) error {
-	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
-	dutyCount := 0
-	signerStateBySlot.Each(func(slot any, state any) {
-		if mv.netCfg.Beacon.EstimatedEpochAtSlot(slot.(phase0.Slot)) == msgEpoch {
-			dutyCount++
-		}
-	})
-	if _, ok := signerStateBySlot.Get(msgSlot); !ok {
-		dutyCount++
-	}
+	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot))
 
 	dutyLimit, exists := mv.dutyLimit(msgID, validatorIndexCount)
 	if !exists {
 		return nil
 	}
 
-	if dutyCount > dutyLimit {
+	if dutyCount >= dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
 		err.want = fmt.Sprintf("less than %v", dutyLimit)
