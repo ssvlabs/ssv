@@ -43,7 +43,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	// a simple hack to change the proposer func
 	if preInstance.State.Height == spectests.ChangeProposerFuncInstanceHeight {
 		preInstance.GetConfig().(*qbft.Config).ProposerF = func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
-			return 1
+			return 2
 		}
 	}
 
