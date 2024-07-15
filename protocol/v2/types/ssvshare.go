@@ -109,10 +109,6 @@ func ComputeF(committeeSize int) uint64 {
 	return uint64(committeeSize-1) / 3
 }
 
-func ComputeF(committeeSize int) uint64 {
-	return uint64(committeeSize-1) / 3
-}
-
 func ValidCommitteeSize(committeeSize int) bool {
 	f := ComputeF(committeeSize)
 	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4

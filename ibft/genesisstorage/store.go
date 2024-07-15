@@ -22,7 +22,7 @@ const (
 
 var (
 	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_highest_decided",
+		Name: "genesis::ssv:validator:ibft_highest_decided",
 		Help: "The highest decided sequence number",
 	}, []string{"identifier", "pubKey"})
 )
