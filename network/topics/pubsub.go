@@ -61,10 +61,11 @@ type PubSubConfig struct {
 	OutboundQueueSize   int
 	MsgIDCacheTTL       time.Duration
 
-	DisableIPRateLimit     bool
-	GetValidatorStats      network.GetValidatorStats
-	ScoreInspector         pubsub.ExtendedPeerScoreInspectFn
-	ScoreInspectorInterval time.Duration
+	DisableIPRateLimit       bool
+	GetValidatorStats        network.GetValidatorStats
+	GetCommitteeMapsForTopic network.GetCommitteeMapsForTopic
+	ScoreInspector           pubsub.ExtendedPeerScoreInspectFn
+	ScoreInspectorInterval   time.Duration
 }
 
 // ScoringConfig is the configuration for peer scoring

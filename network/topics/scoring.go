@@ -97,6 +97,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 // topicScoreParams factory for creating scoring params for topics
 func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
+
+		// Get validator stats
 		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
 		if err != nil {
 			logger.Debug("could not read stats: active validators")
@@ -105,7 +107,24 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsu
 		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
 			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
 		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets())
+
+		// Get committee maps
+		TopicCommitteeIDsMap, CommitteeIDToOperatorsMap, CommitteeIDToValidatorsMap, err := cfg.GetCommitteeMapsForTopic()
+		if err != nil {
+			logger.Debug("could not read validators maps", zap.Error(err))
+			return nil
+		}
+		logger.Debug("got validator maps for score params")
+
+		// Create topic options
+		committeeOperators, committeeValidators := filterCommitteeMapsForTopic(t, TopicCommitteeIDsMap, CommitteeIDToOperatorsMap, CommitteeIDToValidatorsMap)
+		opts, err := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), committeeOperators, committeeValidators)
+		if err != nil {
+			logger.Debug("could not get subnet topic options", zap.Error(err))
+			return nil
+		}
+
+		// Generate topic parameters
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))
@@ -113,4 +132,31 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsu
 		}
 		return tp
 	}
+}
+
+// Filters the committeeOperators and committeeValidators maps only for the committees that belong to the given topic
+// according to the topicCommittees map
+func filterCommitteeMapsForTopic(topic string, topicCommittees map[string][]string, committeeOperators map[string]int, committeeValidators map[string]int) (map[string]int, map[string]int) {
+
+	filteredCommitteeOperators := make(map[string]int)
+	filteredCommitteeValidators := make(map[string]int)
+
+	committeesInTopic, exists := topicCommittees[topic]
+	if exists {
+		//  For each committee in the topic, set its operators and validators
+		for _, committeeID := range committeesInTopic {
+			operators, exists := committeeOperators[committeeID]
+			if !exists {
+				continue
+			}
+			validators, exists := committeeValidators[committeeID]
+			if !exists {
+				continue
+			}
+			filteredCommitteeOperators[committeeID] = operators
+			filteredCommitteeValidators[committeeID] = validators
+		}
+	}
+
+	return filteredCommitteeOperators, filteredCommitteeValidators
 }

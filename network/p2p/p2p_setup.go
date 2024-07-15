@@ -276,12 +276,13 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		MsgHandler:   n.handlePubsubMessages(logger),
 		ScoreIndex:   n.idx,
 		//Discovery: n.disc,
-		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
-		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
-		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
-		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
-		DisableIPRateLimit:  n.cfg.DisableIPRateLimit,
-		GetValidatorStats:   n.cfg.GetValidatorStats,
+		OutboundQueueSize:        n.cfg.PubsubOutQueueSize,
+		ValidationQueueSize:      n.cfg.PubsubValidationQueueSize,
+		ValidateThrottle:         n.cfg.PubsubValidateThrottle,
+		MsgIDCacheTTL:            n.cfg.PubsubMsgCacheTTL,
+		DisableIPRateLimit:       n.cfg.DisableIPRateLimit,
+		GetValidatorStats:        n.cfg.GetValidatorStats,
+		GetCommitteeMapsForTopic: n.cfg.GetCommitteeMapsForTopic,
 	}
 
 	if n.cfg.PeerScoreInspector != nil && n.cfg.PeerScoreInspectorInterval > 0 {
