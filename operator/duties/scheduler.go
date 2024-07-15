@@ -17,9 +17,8 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
@@ -149,7 +148,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
-			NewVoluntaryExitHandler(opts.ValidatorExitCh),
+			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 		},
 

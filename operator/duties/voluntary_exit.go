@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
@@ -21,13 +22,15 @@ type ExitDescriptor struct {
 
 type VoluntaryExitHandler struct {
 	baseHandler
+	duties          *dutystore.VoluntaryExitDuties
 	validatorExitCh <-chan ExitDescriptor
 	dutyQueue       []*spectypes.BeaconDuty
 	blockSlots      map[uint64]phase0.Slot
 }
 
-func NewVoluntaryExitHandler(validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
+func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
 	return &VoluntaryExitHandler{
+		duties:          duties,
 		validatorExitCh: validatorExitCh,
 		dutyQueue:       make([]*spectypes.BeaconDuty, 0),
 		blockSlots:      map[uint64]phase0.Slot{},
@@ -92,6 +95,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
+			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
 			h.dutyQueue = append(h.dutyQueue, duty)
 
 			h.logger.Debug("🛠 scheduled duty for execution",
