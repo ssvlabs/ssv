@@ -356,9 +356,7 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		for _, shareMember := range share.Committee {
 			seenOperators[shareMember.Signer] = struct{}{}
 		}
-		if share.BeaconMetadata != nil {
-			committee.Indices = append(committee.Indices, share.BeaconMetadata.Index)
-		}
+		committee.Indices = append(committee.Indices, share.ValidatorIndex)
 	}
 
 	committee.Operators = maps.Keys(seenOperators)
