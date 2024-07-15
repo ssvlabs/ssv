@@ -13,8 +13,9 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -57,10 +58,10 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), genesisspectypes.BNRoleAttester)
+	config := qbfttesting.TestingConfig(logger, genesisspectestingutils.Testing4SharesSet(), genesisspectypes.BNRoleAttester)
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
-		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
+		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
 		config,
 		false,
 	)
@@ -112,7 +113,7 @@ func testBroadcastedDecided(
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		broadcastedMsgs := config.GetNetwork().(*genesisspectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedMsgs), 0)
 		found := false
 		for _, msg := range broadcastedMsgs {

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
-	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	testing2 "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
@@ -100,7 +100,9 @@ func TestQBFTMapping(t *testing.T) {
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
+				testing2.TestingConfig(logger,
+					testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType(),
+				),
 				typedTest.Pre.State.Share,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

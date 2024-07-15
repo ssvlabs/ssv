@@ -6,8 +6,9 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -33,7 +34,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			}
 			return nil
 		},
-		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+		ProposerF: func(state *genesisssvtypes.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 			return 1
 		},
 		Storage:               TestingStores(logger).Get(role),
@@ -81,7 +82,7 @@ var baseInstance = func(share *genesisspectypes.Share, keySet *testingutils.Test
 
 func NewTestingQBFTController(
 	identifier []byte,
-	share *spectypes.Share,
+	share *spectypes.CommitteeMember,
 	config qbft.IConfig,
 	fullNode bool,
 ) *controller.Controller {

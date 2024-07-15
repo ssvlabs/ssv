@@ -9,15 +9,16 @@ import (
 	"time"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,8 +42,8 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a simple hack to change the proposer func
 	if preInstance.State.Height == spectests.ChangeProposerFuncInstanceHeight {
-		preInstance.GetConfig().(*qbft.Config).ProposerF = func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
-			return 2
+		preInstance.GetConfig().(*qbft.Config).ProposerF = func(state *genesisssvtypes.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+			return 1
 		}
 	}
 
