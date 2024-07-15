@@ -116,14 +116,16 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 			return nil
 		}
 
-		topicCommittees := filterCommitteesForTopic(t, committees)
+		logger.Debug("got committees", zap.Int("list length", len(committees)))
+
+		topicCommittees := filterCommitteesForTopic(logger, t, committees)
 
 		numValidatorsInTopic := 0
 		for _, committee := range topicCommittees {
 			numValidatorsInTopic += len(committee.Validators)
 		}
 		logger = logger.With(zap.Int("committees in topic", len(topicCommittees)), zap.Int("validators in topic", numValidatorsInTopic))
-		logger.Debug("got committee maps for score params")
+		logger.Debug("got committees for score params")
 
 		// Create topic options
 		opts, err := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), topicCommittees)
@@ -143,7 +145,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 }
 
 // Returns a new committee list with only the committees that belong to the given topic
-func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
+func filterCommitteesForTopic(logger *zap.Logger, topic string, committees []*storage.Committee) []*storage.Committee {
 
 	topicCommittees := make([]*storage.Committee, 0)
 
@@ -155,6 +157,8 @@ func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*
 		// If it belongs to the topic, add it
 		if topic == committeeTopic {
 			topicCommittees = append(topicCommittees, committee)
+		} else {
+			logger.Debug("different topcis", zap.String("main topic", topic), zap.String("committee topic", committeeTopic))
 		}
 	}
 	return topicCommittees
