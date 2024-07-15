@@ -653,8 +653,8 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	// TODO: why its in the map if not started?
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		//TODO: replace all metadata update occurrences with a function instead
-		v.Share.BeaconMetadata = metadata
-		v.Share.ValidatorIndex = share.ValidatorIndex
+		v.GetShare().BeaconMetadata = metadata
+		v.GetShare().ValidatorIndex = share.ValidatorIndex
 		_, err := c.startValidator(v)
 		if err != nil {
 			c.logger.Warn("could not start validator", zap.Error(err))
@@ -710,8 +710,8 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		// Start validator (if not already started).
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			v.Share.BeaconMetadata = share.BeaconMetadata
-			v.Share.ValidatorIndex = share.ValidatorIndex
+			v.GetShare().BeaconMetadata = share.BeaconMetadata
+			v.GetShare().ValidatorIndex = share.ValidatorIndex
 			_, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
@@ -880,10 +880,10 @@ func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconpro
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.Share.BeaconMetadata.Equals(meta) {
-			v.Share.BeaconMetadata.Status = meta.Status
-			v.Share.BeaconMetadata.Balance = meta.Balance
-			v.Share.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
+		if !v.GetShare().BeaconMetadata.Equals(meta) {
+			v.GetShare().BeaconMetadata.Status = meta.Status
+			v.GetShare().BeaconMetadata.Balance = meta.Balance
+			v.GetShare().BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
 			logger.Debug("metadata was updated")
 		}
 		_, err := c.startValidator(v)
