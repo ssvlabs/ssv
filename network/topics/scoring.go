@@ -114,10 +114,17 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsu
 			logger.Debug("could not read validators maps", zap.Error(err))
 			return nil
 		}
-		logger.Debug("got validator maps for score params")
+
+		committeeOperators, committeeValidators := filterCommitteeMapsForTopic(t, TopicCommitteeIDsMap, CommitteeIDToOperatorsMap, CommitteeIDToValidatorsMap)
+
+		validatorsInTopic := 0
+		for _, validators := range committeeValidators {
+			validatorsInTopic += validators
+		}
+		logger = logger.With(zap.Int("committees in topic", len(committeeOperators)), zap.Int("validators in topic", validatorsInTopic))
+		logger.Debug("got committee maps for score params")
 
 		// Create topic options
-		committeeOperators, committeeValidators := filterCommitteeMapsForTopic(t, TopicCommitteeIDsMap, CommitteeIDToOperatorsMap, CommitteeIDToValidatorsMap)
 		opts, err := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), committeeOperators, committeeValidators)
 		if err != nil {
 			logger.Debug("could not get subnet topic options", zap.Error(err))
