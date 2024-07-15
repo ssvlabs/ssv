@@ -2,6 +2,7 @@ package spectest
 
 import (
 	"encoding/hex"
+	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -31,7 +32,7 @@ type MsgProcessingSpecTest struct {
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
-	OutputMessages         []*spectypes.SignedPartialSignatureMessage
+	OutputMessages         []*spectypes.SignedSSVMessage
 	BeaconBroadcastedRoots []string
 	DontStartDuty          bool // if set to true will not start a duty for the runner
 	ExpectedError          string
@@ -48,13 +49,18 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 }
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
-	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
-	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
+	var lastErr error
+	var share *spectypes.Share
+	for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+		share = validatorShare
+		break
+	}
+	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
+	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork().(specqbft.Network) // TODO need to align
 
-	var lastErr error
 	if !test.DontStartDuty {
-		lastErr = v.StartDuty(logger, test.Duty)
+		lastErr = v.StartDuty(logger, *test.Duty)
 	}
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSSVMessage(msg)
@@ -87,7 +93,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 }
 
 func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-	broadcastedRoots := test.Runner.GetBeaconNode().(*spectestingutils.TestingBeaconNode).BroadcastedRoots
+	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
 	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
 	for _, r1 := range test.BeaconBroadcastedRoots {
 		found := false
