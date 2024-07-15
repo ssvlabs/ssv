@@ -88,7 +88,8 @@ type Config struct {
 
 	DisableIPRateLimit bool `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" default:"false" env-description:"Flag to turn on/off IP rate limiting"`
 
-	GetValidatorStats network.GetValidatorStats
+	GetValidatorStats        network.GetValidatorStats
+	GetCommitteeMapsForTopic network.GetCommitteeMapsForTopic
 
 	// PeerScoreInspector is called periodically to inspect the peer scores.
 	PeerScoreInspector func(peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
