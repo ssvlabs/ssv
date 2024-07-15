@@ -1,14 +1,49 @@
 package params
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"testing"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 )
+
+// Returns a list of CommitteeIDs for the given amount of validators
+func committeeIDsForValidators(validators int) []string {
+	committeeIDs := make([]string, 0)
+	for i := 0; i < validators; i++ {
+		firstOperator := uint64(4*i + 1)
+		operators := []uint64{firstOperator, firstOperator + 1, firstOperator + 2, firstOperator + 3}
+
+		committeeID := spectypes.GetCommitteeID(operators)
+		committeeIDs = append(committeeIDs, hex.EncodeToString(committeeID[:]))
+	}
+	return committeeIDs
+}
+
+// Returns a map from CommitteeIDs to a default number of 4 operators per committee
+func committeeOperatorMap(committeeIDs []string) map[string]int {
+	operatorsPerCommittee := 4
+	committeeOperators := make(map[string]int)
+	for _, committeeID := range committeeIDs {
+		committeeOperators[committeeID] = operatorsPerCommittee
+	}
+	return committeeOperators
+}
+
+// Returns a map from CommitteeIDs to a default number of 1 validator per committee
+func committeeValidatorsMap(committeeIDs []string) map[string]int {
+	validatorsPerCommittee := 1
+	committeeValidators := make(map[string]int)
+	for _, committeeID := range committeeIDs {
+		committeeValidators[committeeID] = validatorsPerCommittee
+	}
+	return committeeValidators
+}
 
 func TestTopicScoreParams(t *testing.T) {
 	tests := []struct {
@@ -19,24 +54,39 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 1k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(1000, 128)
-				return &opts
+				validators := 1000
+				committeeIDs := committeeIDsForValidators(validators)
+				opts, err := NewSubnetTopicOpts(validators, 128, committeeOperatorMap(committeeIDs), committeeValidatorsMap(committeeIDs))
+				if err != nil {
+					panic(err)
+				}
+				return opts
 			},
 			nil,
 		},
 		{
 			"subnet topic 10k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(10000, 128)
-				return &opts
+				validators := 10_000
+				committeeIDs := committeeIDsForValidators(validators)
+				opts, err := NewSubnetTopicOpts(validators, 128, committeeOperatorMap(committeeIDs), committeeValidatorsMap(committeeIDs))
+				if err != nil {
+					panic(err)
+				}
+				return opts
 			},
 			nil,
 		},
 		{
 			"subnet topic 51k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(51000, 128)
-				return &opts
+				validators := 51_000
+				committeeIDs := committeeIDsForValidators(validators)
+				opts, err := NewSubnetTopicOpts(validators, 128, committeeOperatorMap(committeeIDs), committeeValidatorsMap(committeeIDs))
+				if err != nil {
+					panic(err)
+				}
+				return opts
 			},
 			nil,
 		},
@@ -50,7 +100,7 @@ func TestTopicScoreParams(t *testing.T) {
 			raw, err := json.Marshal(&opts)
 			require.NoError(t, err)
 			t.Logf("[%s] using opts:\n%s", test.name, string(raw))
-			topicScoreParams, err := TopicParams(*opts)
+			topicScoreParams, err := TopicParams(opts)
 			require.NoError(t, err)
 			require.NotNil(t, topicScoreParams)
 			// raw, err = json.MarshalIndent(topicScoreParams, "", "\t")
