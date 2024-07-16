@@ -111,25 +111,28 @@ func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
 	if ctrl.scoreParamsFactory == nil {
 		return fmt.Errorf("scoreParamsFactory is not set")
 	}
-	var errs error
+	errs := ""
 	topics := ctrl.ps.GetTopics()
 	for _, topicName := range topics {
 		topic := ctrl.container.Get(topicName)
 		if topic == nil {
-			errs = errors.Join(errs, fmt.Errorf("topic %s is not ready", topicName))
+			errs = errs + fmt.Sprintf("topic %s is not ready; ", topicName)
 			continue
 		}
 		p := ctrl.scoreParamsFactory(topicName)
 		if p == nil {
-			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil", topicName))
+			errs = errs + fmt.Sprintf("score params for topic %s is nil; ", topicName)
 			continue
 		}
 		if err := topic.SetScoreParams(p); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %w", topicName, err))
+			errs = errs + fmt.Sprintf("could not set score params for topic %s: %w; ", topicName, err)
 			continue
 		}
 	}
-	return errs
+	if len(errs) > 0 {
+		return fmt.Errorf(errs)
+	}
+	return nil
 }
 
 // Close implements io.Closer
