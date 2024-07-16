@@ -59,7 +59,7 @@ func NewAggregatorRunner(
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleAggregator),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleAggregator),
 	}
 }
 

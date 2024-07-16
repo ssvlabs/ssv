@@ -59,7 +59,7 @@ func NewSyncCommitteeAggregatorRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommitteeContribution),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleSyncCommitteeContribution),
 	}
 }
 

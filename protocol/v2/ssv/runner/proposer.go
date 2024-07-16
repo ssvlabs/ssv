@@ -64,7 +64,7 @@ func NewProposerRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleProposer),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleProposer),
 	}
 }
 
