@@ -525,6 +525,9 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		ValidatorIndex: share.BeaconMetadata.Index,
 		BlockNumber:    event.Raw.BlockNumber,
 	}
+	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
+		ed.OwnValidator = true
+	}
 
 	return ed, nil
 }
