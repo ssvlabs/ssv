@@ -22,22 +22,7 @@ import (
 const (
 	targetContainer = "ssv-node-1"
 
-	verifySignatureErr           = "failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature"
-	reconstructSignatureErr      = "could not reconstruct post consensus signature: could not reconstruct beacon sig: failed to verify reconstruct signature: could not reconstruct a valid signature"
-	pastRoundErr                 = "failed processing consensus message: could not process msg: invalid signed message: past round"
-	reconstructSignaturesSuccess = "reconstructed partial signatures"
-	submittedAttSuccess          = "✅ successfully submitted attestation"
-	gotDutiesSuccess             = "🗂 got duties"
-
-	msgHeightField        = "\"msg_height\":%d"
-	msgRoundField         = "\"msg_round\":%d"
-	msgTypeField          = "\"msg_type\":\"%s\""
-	consensusMsgTypeField = "\"consensus_msg_type\":%d"
-	signersField          = "\"signers\":[%d]"
-	errorField            = "\"error\":\"%s\""
-	dutyIDField           = "\"duty_id\":\"%s\""
-	roleField             = "\"role\":\"%s\""
-	slotField             = "\"slot\":%d"
+	verifySignatureErr = "failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature"
 )
 
 type logCondition struct {
@@ -78,7 +63,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 		{OperatorID: 3},
 		{OperatorID: 4},
 	}
-	leader := DetermineLeader(dutySlot, committee)
+	leader := DetermineLeader(dutySlot)
 	logger.Debug("Leader: ", zap.Uint64("leader", leader))
 
 	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
@@ -111,11 +96,8 @@ func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string
 	return dutyID, dutySlot, nil
 }
 
-func DetermineLeader(dutySlot phase0.Slot, committee []*types.CommitteeMember) types.OperatorID {
-	share := &types.Operator{
-		Committee: committee,
-	}
-	leader := qbft.RoundRobinProposer(&qbft.State{Height: qbft.Height(dutySlot), Share: share}, qbft.FirstRound)
+func DetermineLeader(dutySlot phase0.Slot) types.OperatorID {
+	leader := qbft.RoundRobinProposer(&qbft.State{Height: qbft.Height(dutySlot), Round: qbft.Round(dutySlot)}, qbft.FirstRound)
 
 	return leader
 }

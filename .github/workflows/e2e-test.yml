@@ -8,6 +8,7 @@ on:
         required: true
         description: "Image tag for the first group of nodes. Can be used for production, staging, or temporary environments. Example: v1.2.3-prod"
 
+
   pull_request:
     branches:
       - main
