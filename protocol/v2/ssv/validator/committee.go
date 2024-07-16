@@ -119,6 +119,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		}
 	}
 
+	if len(duty.BeaconDuties) == 0 {
+		return errors.New("CommitteeDuty has no valid beacon duties")
+	}
+
 	r := c.CreateRunnerFn(duty.Slot, validatorShares)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
