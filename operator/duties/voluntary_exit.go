@@ -15,6 +15,7 @@ import (
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
 type ExitDescriptor struct {
+	OwnValidator   bool
 	PubKey         phase0.BLSPubKey
 	ValidatorIndex phase0.ValidatorIndex
 	BlockNumber    uint64
@@ -96,8 +97,12 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
-			h.dutyQueue = append(h.dutyQueue, duty)
 			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
+			if !exitDescriptor.OwnValidator {
+				continue
+			}
+
+			h.dutyQueue = append(h.dutyQueue, duty)
 
 			h.logger.Debug("🛠 scheduled duty for execution",
 				zap.Uint64("block_slot", uint64(blockSlot)),

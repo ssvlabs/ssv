@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -511,10 +512,6 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if !share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		return nil, nil
-	}
-
 	if share.BeaconMetadata == nil {
 		return nil, nil
 	}
@@ -523,6 +520,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	copy(pk[:], share.ValidatorPubKey[:])
 
 	ed := &duties.ExitDescriptor{
+		OwnValidator:   false,
 		PubKey:         pk,
 		ValidatorIndex: share.BeaconMetadata.Index,
 		BlockNumber:    event.Raw.BlockNumber,
