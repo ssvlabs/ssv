@@ -10,6 +10,7 @@ import (
 // OnTimeout is trigger upon timeout for the given height
 func (c *Controller) OnTimeout(logger *zap.Logger, msg types.EventMsg) error {
 	// TODO add validation
+	return nil
 
 	timeoutData, err := msg.GetTimeoutData()
 	if err != nil {

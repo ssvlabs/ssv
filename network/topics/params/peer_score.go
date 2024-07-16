@@ -31,7 +31,7 @@ const (
 	ipColocationFactorWeight    = -topicScoreCap
 
 	// P7
-	behaviourPenaltyThreshold = 6
+	behaviourPenaltyThreshold = 60000 // TODO: revert
 )
 
 // PeerScoreThresholds returns the thresholds to use for peer scoring
