@@ -229,11 +229,17 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
 			// TODO: revert log
-			_, err = attestationData.HashTreeRoot()
+			adr, err := attestationData.HashTreeRoot()
 			if err != nil {
 				return errors.Wrap(err, "failed to hash attestation data")
 			}
-
+			logger.Debug("signed attestation data", zap.Int("validator_index", int(duty.ValidatorIndex)),
+				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
+				zap.Any("attestation_data", attestationData),
+				zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
+				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+			)
 		case types.BNRoleSyncCommittee:
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, types.SSZBytes(blockRoot[:]), duty.DutySlot(),
@@ -279,10 +285,19 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 	logger = logger.With(fields.Slot(signedMsg.Slot))
 
+	// TODO: (Alan) revert?
+	indices := make([]int, len(signedMsg.Messages))
 	signers := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
 		signers[i] = msg.Signer
+		indices[i] = int(msg.ValidatorIndex)
 	}
+	logger.Debug("got post consensus",
+		zap.Bool("quorum", quorum),
+		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+		zap.Int("signer", int(signedMsg.Messages[0].Signer)),
+		zap.Int("sigs", len(roots)),
+		zap.Ints("validators", indices))
 
 	logger.Debug("🧩 got partial signatures",
 		zap.Uint64s("signers", signers))
