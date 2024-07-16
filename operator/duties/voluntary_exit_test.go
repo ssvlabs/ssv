@@ -15,12 +15,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh := make(chan ExitDescriptor)
-	handler := NewVoluntaryExitHandler(exitCh)
+	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 
 	currentSlot := &SafeValue[phase0.Slot]{}
 	currentSlot.Set(0)
@@ -38,21 +39,25 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	const blockNumber = uint64(1)
 
 	normalExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    blockNumber,
 	}
 	sameBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{4, 5, 6},
 		ValidatorIndex: phase0.ValidatorIndex(2),
 		BlockNumber:    normalExit.BlockNumber,
 	}
 	newBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 1,
 	}
 	pastBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 4,

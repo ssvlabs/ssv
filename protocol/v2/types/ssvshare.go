@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"sort"
+	"time"
 
 	"golang.org/x/exp/slices"
 
@@ -119,6 +120,17 @@ type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
+
+	// lastUpdated is an internal field that can be used to track the last time the metadata was updated.
+	lastUpdated time.Time
+}
+
+func (m *Metadata) MetadataLastUpdated() time.Time {
+	return m.lastUpdated
+}
+
+func (m *Metadata) SetMetadataLastUpdated(t time.Time) {
+	m.lastUpdated = t
 }
 
 // Return a 32 bytes ID for the committee of operators

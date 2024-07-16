@@ -29,7 +29,7 @@ func TestQBFTMapping(t *testing.T) {
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
-	
+
 	for name, test := range untypedTests {
 		name, test := name, test
 		testName := strings.Split(name, "_")[1]

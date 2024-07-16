@@ -2,8 +2,8 @@ package testing
 
 import (
 	"bytes"
-
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"go.uber.org/zap"
 
@@ -14,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.RunnerRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role convert.RunnerRole) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner:   testingutils.NewTestingKeyManager(),
 		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
