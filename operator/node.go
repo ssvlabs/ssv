@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/network"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -13,6 +11,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
