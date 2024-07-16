@@ -3,6 +3,7 @@ module github.com/ssvlabs/ssv
 go 1.20
 
 require (
+	github.com/AKorpusenko/genesis-go-eth2-client v1.0.0
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.21.3
 	github.com/bloxapp/eth2-key-manager v1.4.0
@@ -59,7 +60,6 @@ require (
 )
 
 require (
-	github.com/AKorpusenko/genesis-go-eth2-client v1.0.0 // indirect
 	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
@@ -228,6 +228,8 @@ require (
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
+
+replace github.com/attestantio/go-eth2-client => github.com/moshe-blox/go-eth2-client v0.0.0-20240529101804-84ddfd928b95
 
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
