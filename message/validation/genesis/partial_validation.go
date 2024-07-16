@@ -21,33 +21,33 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	if !mv.validPartialSigMsgType(signedMsg.Message.Type) {
 		e := ErrUnknownPartialMessageType
 		e.got = signedMsg.Message.Type
-		return msgSlot, e
+		return phase0.Slot(msgSlot), e
 	}
 
 	role := msgID.GetRoleType()
 	if !mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role) {
-		return msgSlot, ErrPartialSignatureTypeRoleMismatch
+		return phase0.Slot(msgSlot), ErrPartialSignatureTypeRoleMismatch
 	}
 
 	if err := mv.validatePartialMessages(share, signedMsg); err != nil {
-		return msgSlot, err
+		return phase0.Slot(msgSlot), err
 	}
 
 	state := mv.consensusState(msgID)
 	signerState := state.GetSignerState(signedMsg.Signer)
 	if signerState != nil {
 		if err := mv.validateSignerBehaviorPartial(state, signedMsg.Signer, share, msgID, signedMsg); err != nil {
-			return msgSlot, err
+			return phase0.Slot(msgSlot), err
 		}
 	}
 
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
-		return msgSlot, err
+		return phase0.Slot(msgSlot), err
 	}
 
 	if signatureVerifier != nil {
 		if err := signatureVerifier(); err != nil {
-			return msgSlot, err
+			return phase0.Slot(msgSlot), err
 		}
 	}
 
@@ -55,14 +55,14 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		signerState = state.CreateSignerState(signedMsg.Signer)
 	}
 
-	if msgSlot > signerState.Slot {
-		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-		signerState.ResetSlot(msgSlot, genesisspecqbft.FirstRound, newEpoch)
+	if phase0.Slot(msgSlot) > signerState.Slot {
+		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(phase0.Slot(msgSlot)) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
+		signerState.ResetSlot(phase0.Slot(msgSlot), genesisspecqbft.FirstRound, newEpoch)
 	}
 
 	signerState.MessageCounts.RecordPartialSignatureMessage(signedMsg)
 
-	return msgSlot, nil
+	return phase0.Slot(msgSlot), nil
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType genesisspectypes.PartialSigMsgType) bool {
@@ -150,7 +150,7 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 
 	msgSlot := signedMsg.Message.Slot
 
-	if msgSlot < signerState.Slot {
+	if phase0.Slot(msgSlot) < signerState.Slot {
 		// Signers aren't allowed to decrease their slot.
 		// If they've sent a future message due to clock error,
 		// this should be caught by the earlyMessage check.
@@ -161,7 +161,7 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 	}
 
 	newDutyInSameEpoch := false
-	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
+	if phase0.Slot(msgSlot) > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(phase0.Slot(msgSlot)) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
 		newDutyInSameEpoch = true
 	}
 
@@ -169,7 +169,7 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 		return err
 	}
 
-	if msgSlot <= signerState.Slot {
+	if phase0.Slot(msgSlot) <= signerState.Slot {
 		limits := maxMessageCounts(len(share.Committee))
 		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(signedMsg, limits); err != nil {
 			return err
