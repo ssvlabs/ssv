@@ -163,6 +163,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}
 	go n.net.UpdateSubnets(logger)
+	go n.net.UpdateScoreParams(logger)
 	n.validatorsCtrl.StartValidators()
 	go n.reportOperators(logger)
 
