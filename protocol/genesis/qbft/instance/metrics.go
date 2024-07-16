@@ -12,12 +12,12 @@ import (
 
 var (
 	metricsStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_instance_stage_duration_seconds",
+		Name:    "ssv_validator_instance_stage_duration_seconds_genesis",
 		Help:    "Instance stage duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 5},
 	}, []string{"stage"})
 	metricsRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv_qbft_instance_round",
+		Name: "ssv_qbft_instance_round_genesis",
 		Help: "QBFT instance round",
 	}, []string{"roleType"})
 )
