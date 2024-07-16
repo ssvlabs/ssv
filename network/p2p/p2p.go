@@ -94,12 +94,12 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config, mr Metrics) (network.P2PNetwork, GenesisP2p) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	return &p2pNetwork{
+	net := p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
@@ -115,6 +115,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		operatorDataStore:       cfg.OperatorDataStore,
 		metrics:                 mr,
 	}
+	return &net, GenesisP2p{Network: net}
 }
 
 // Host implements HostProvider

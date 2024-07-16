@@ -9,7 +9,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/message/validation"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )

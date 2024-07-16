@@ -199,7 +199,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: spectypes.OperatorID(nodeIndex + 1)})
 
 	mr := metricsreporter.New()
-	p := New(logger, cfg, mr)
+	p, _ := New(logger, cfg, mr)
 	err = p.Setup(logger)
 	if err != nil {
 		return nil, err

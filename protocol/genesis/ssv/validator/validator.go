@@ -16,7 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
