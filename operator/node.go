@@ -6,7 +6,6 @@ import (
 
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -179,7 +178,7 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.Domain)
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.DomainType())
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
 	default:
