@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -32,6 +33,10 @@ type Shares interface {
 
 	// List returns a list of shares, filtered by the given filters (if any).
 	List(txn basedb.Reader, filters ...SharesFilter) []*types.SSVShare
+
+	// Range calls the given function over each share.
+	// If the function returns false, the iteration stops.
+	Range(txn basedb.Reader, fn func(*types.SSVShare) bool)
 
 	// Save saves the given shares.
 	Save(txn basedb.ReadWriter, shares ...*types.SSVShare) error
@@ -201,6 +206,17 @@ Shares:
 	return shares
 }
 
+func (s *sharesStorage) Range(_ basedb.Reader, fn func(*types.SSVShare) bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, share := range s.shares {
+		if !fn(share) {
+			break
+		}
+	}
+}
+
 func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	if len(shares) == 0 {
 		return nil
@@ -324,11 +340,16 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 
 // UpdateValidatorMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
+	if metadata == nil {
+		return nil
+	}
+
 	share := s.Get(nil, pk[:])
 	if share == nil {
 		return nil
 	}
 
+	share.SetMetadataLastUpdated(time.Now())
 	share.BeaconMetadata = metadata
 	share.Share.ValidatorIndex = metadata.Index
 
