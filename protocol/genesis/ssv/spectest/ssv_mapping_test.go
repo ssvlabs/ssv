@@ -40,10 +40,6 @@ func TestSSVMapping(t *testing.T) {
 	}
 
 	for name, test := range untypedTests {
-		// TODO remove
-		if !strings.Contains(name, "full happy flow") {
-			continue
-		}
 		name, test := name, test
 		r := prepareTest(t, logger, name, test)
 		if r != nil {

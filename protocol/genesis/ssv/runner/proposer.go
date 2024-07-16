@@ -424,13 +424,13 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		return summary, fmt.Errorf("block is nil")
 	}
 	switch b := block.(type) {
-	case *api.VersionedProposal:
-		if b.Blinded {
+	case *api.VersionedV3Proposal:
+		if b.ExecutionPayloadBlinded {
 			switch b.Version {
 			case spec.DataVersionCapella:
-				return summarizeBlock(b.CapellaBlinded)
+				return summarizeBlock(b.BlindedCapella)
 			case spec.DataVersionDeneb:
-				return summarizeBlock(b.DenebBlinded)
+				return summarizeBlock(b.BlindedDeneb)
 			default:
 				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 			}
