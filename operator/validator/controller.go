@@ -1359,7 +1359,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		config.ValueCheckF = valueCheckF
 
 		identifier := genesisspectypes.NewMsgID(genesisssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
-		qbftCtrl := genesisqbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
+		qbftCtrl := genesisqbftcontroller.NewController(identifier[:], options.SSVShare.Share, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.GenesisOptions.NewDecidedHandler
 		return qbftCtrl
 	}
