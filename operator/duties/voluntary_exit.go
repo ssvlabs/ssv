@@ -66,6 +66,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			}
 
 			h.dutyQueue = pendingDuties
+			h.duties.RemoveSlot(currentSlot - phase0.Slot(h.network.SlotsPerEpoch()))
 
 			if dutyCount := len(dutiesForExecution); dutyCount != 0 {
 				h.dutiesExecutor.ExecuteDuties(h.logger, dutiesForExecution)
@@ -95,8 +96,8 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
-			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
 			h.dutyQueue = append(h.dutyQueue, duty)
+			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
 
 			h.logger.Debug("🛠 scheduled duty for execution",
 				zap.Uint64("block_slot", uint64(blockSlot)),

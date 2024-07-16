@@ -17,11 +17,11 @@ func NewVoluntaryExit() *VoluntaryExitDuties {
 	}
 }
 
-func (ves *VoluntaryExitDuties) GetDutyCount(slot phase0.Slot, pk phase0.BLSPubKey) int {
-	ves.mu.RLock()
-	defer ves.mu.RUnlock()
+func (d *VoluntaryExitDuties) GetDutyCount(slot phase0.Slot, pk phase0.BLSPubKey) int {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 
-	v, ok := ves.m[slot]
+	v, ok := d.m[slot]
 	if !ok {
 		return 0
 	}
@@ -29,16 +29,23 @@ func (ves *VoluntaryExitDuties) GetDutyCount(slot phase0.Slot, pk phase0.BLSPubK
 	return v[pk]
 }
 
-func (ves *VoluntaryExitDuties) AddDuty(slot phase0.Slot, pk phase0.BLSPubKey) {
-	ves.mu.Lock()
-	defer ves.mu.Unlock()
+func (d *VoluntaryExitDuties) AddDuty(slot phase0.Slot, pk phase0.BLSPubKey) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
-	v, ok := ves.m[slot]
+	v, ok := d.m[slot]
 	if !ok {
-		ves.m[slot] = map[phase0.BLSPubKey]int{
+		d.m[slot] = map[phase0.BLSPubKey]int{
 			pk: 1,
 		}
 	} else {
 		v[pk]++
 	}
+}
+
+func (d *VoluntaryExitDuties) RemoveSlot(slot phase0.Slot) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	delete(d.m, slot)
 }
