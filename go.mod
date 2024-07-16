@@ -41,7 +41,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
 	github.com/ssvlabs/ssv-spec v0.3.10-0.20240624121006-7adef2ac3ea6
-	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240628184706-f15056ffda04
+	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240716115821-98c37ab8631f
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -59,6 +59,7 @@ require (
 )
 
 require (
+	github.com/AKorpusenko/genesis-go-eth2-client v1.0.0 // indirect
 	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
@@ -227,8 +228,6 @@ require (
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
-
-replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.0.0-20240702122821-2c345f4fc90f
 
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 

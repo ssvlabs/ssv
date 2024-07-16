@@ -5,8 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/AKorpusenko/genesis-go-eth2-client/spec/altair"
+	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -169,7 +170,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully submitted sync committee",
-			fields.Slot(msg.Slot),
+			fields.Slot(postforkphase0.Slot(msg.Slot)),
 			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
 			fields.GenesisHeight(r.BaseRunner.QBFTController.Height),
 			fields.GenesisRound(r.GetState().RunningInstance.State.Round))

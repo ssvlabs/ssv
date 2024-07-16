@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	genesisphase0 "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -266,10 +267,10 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
 	return &genesisspectypes.Duty{
 		Type:                    role,
-		PubKey:                  duty.PubKey,
-		Slot:                    duty.Slot,
-		ValidatorIndex:          duty.ValidatorIndex,
-		CommitteeIndex:          duty.CommitteeIndex,
+		PubKey:                  genesisphase0.BLSPubKey(duty.PubKey),
+		Slot:                    genesisphase0.Slot(duty.Slot),
+		ValidatorIndex:          genesisphase0.ValidatorIndex(duty.ValidatorIndex),
+		CommitteeIndex:          genesisphase0.CommitteeIndex(duty.CommitteeIndex),
 		CommitteeLength:         duty.CommitteeLength,
 		CommitteesAtSlot:        duty.CommitteesAtSlot,
 		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,

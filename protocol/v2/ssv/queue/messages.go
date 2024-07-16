@@ -49,7 +49,7 @@ func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
 	case *genesisspecqbft.SignedMessage: // TODO: remove post-fork
 		return phase0.Slot(m.Message.Height), nil
 	case *genesisspectypes.SignedPartialSignatureMessage: // TODO: remove post-fork
-		return m.Message.Slot, nil
+		return phase0.Slot(m.Message.Slot), nil
 	default:
 		return 0, ErrUnknownMessageType
 	}

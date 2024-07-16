@@ -4,7 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -90,7 +91,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 
 	logger.Debug("🧩 got partial signature quorum",
 		zap.Any("signer", signedMsg.Signer),
-		fields.Slot(duty.Slot),
+		fields.Slot(postforkphase0.Slot(duty.Slot)),
 	)
 
 	r.metrics.PauseDutyFullFlow()

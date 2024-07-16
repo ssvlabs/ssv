@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -177,7 +178,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 		psm := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		baseFields = []zap.Field{
 			zap.Int64("signer", int64(psm.Signer)),
-			fields.Slot(psm.Message.Slot),
+			fields.Slot(postforkphase0.Slot(psm.Message.Slot)),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)

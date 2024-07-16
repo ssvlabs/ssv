@@ -1346,11 +1346,11 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			SigningPK:   options.SSVShare.ValidatorPubKey[:],
 			Domain:      genesisssvtypes.GetDefaultDomain(),
 			ValueCheckF: nil, // sets per role type
-			ProposerF: func(state *genesisssvtypes.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+			ProposerF: genesisspecqbft.ProposerF(func(state *genesisssvtypes.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 				leader := genesisssvtypes.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
-			},
+			}),
 			Storage:               options.GenesisOptions.Storage.Get(role),
 			Network:               options.GenesisOptions.Network,
 			Timer:                 genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
