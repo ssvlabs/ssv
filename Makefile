@@ -69,13 +69,13 @@ all-spec-test-raceless:
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
 
 
-.PHONY: pre-fork-spec-test
-pre-fork-spec-test:
+.PHONY: pre-fork-spec-test-raceless
+pre-fork-spec-test-raceless:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/genesis/...
 
-.PHONY: post-fork-spec-test
-post-fork-spec-test:
+.PHONY: post-fork-spec-test-raceless
+post-fork-spec-test-raceless:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/v2/...
 

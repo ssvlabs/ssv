@@ -8,9 +8,9 @@ import (
 	reflect "reflect"
 	time "time"
 
-	phase0 "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
-	qbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	gomock "github.com/golang/mock/gomock"
+	qbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // MockTimer is a mock of Timer interface.
@@ -72,7 +72,7 @@ func (m *MockBeaconNetwork) EXPECT() *MockBeaconNetworkMockRecorder {
 }
 
 // GetSlotStartTime mocks base method.
-func (m *MockBeaconNetwork) GetSlotStartTime(slot phase0.Slot) time.Time {
+func (m *MockBeaconNetwork) GetSlotStartTime(slot postforkphase0.Slot) time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSlotStartTime", slot)
 	ret0, _ := ret[0].(time.Time)
