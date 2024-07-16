@@ -99,7 +99,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 	// Create a VirtualNet with 4 nodes.
 	ks := spectestingutils.Testing4SharesSet()
-	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
+	vNet, _ = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	}, ks)
 	defer func() {
@@ -290,7 +290,7 @@ func CreateVirtualNet(
 	validatorPubKeys []string,
 	messageValidatorProvider func(int) validation.MessageValidator,
 	ks *spectestingutils.TestKeySet,
-) *VirtualNet {
+) (*VirtualNet, []*dummyRouter) {
 	var doneSetup atomic.Bool
 	vn := &VirtualNet{}
 	ln, routers, err := createNetworkAndSubscribeFromKeySet(t, ctx, LocalNetOptions{
@@ -339,7 +339,7 @@ func CreateVirtualNet(
 	}
 	doneSetup.Store(true)
 
-	return vn
+	return vn, routers
 }
 
 func (vn *VirtualNet) NodeByPeerID(peerID peer.ID) *VirtualNode {

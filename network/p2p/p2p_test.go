@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -38,24 +40,71 @@ func TestGetMaxPeers(t *testing.T) {
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ks := spectestingutils.Testing4SharesSet()
+	var vNet *VirtualNet
 	pks := []string{"8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"}
-	ln, routers, err := createNetworkAndSubscribeFromKeySet(t, ctx, LocalNetOptions{
-		Nodes:        len(ks.OperatorKeys),
-		MinConnected: len(ks.OperatorKeys)/2 - 1,
-		UseDiscv5:    false,
-	}, ks, pks...)
-	require.NoError(t, err)
-	require.NotNil(t, routers)
-	require.NotNil(t, ln)
+	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
+	const (
+		acceptedRole = spectypes.RoleCommittee
+		ignoredRole  = spectypes.RoleAggregator
+		rejectedRole = spectypes.RoleSyncCommitteeContribution
+	)
+	messageValidators := make([]*MockMessageValidator, 4)
+	var mtx sync.Mutex
+	for i := 0; i < 4; i++ {
+		i := i
+		messageValidators[i] = &MockMessageValidator{
+			Accepted: make([]int, 4),
+			Ignored:  make([]int, 4),
+			Rejected: make([]int, 4),
+		}
+		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+			peer := vNet.NodeByPeerID(p)
+			signedSSVMsg := &spectypes.SignedSSVMessage{}
+			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
+
+			decodedMsg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
+			require.NoError(t, err)
+			pmsg.ValidatorData = decodedMsg
+			mtx.Lock()
+			// Validation according to role.
+			var validation pubsub.ValidationResult
+			switch signedSSVMsg.SSVMessage.MsgID.GetRoleType() {
+			case acceptedRole:
+				messageValidators[i].Accepted[peer.Index]++
+				messageValidators[i].TotalAccepted++
+				validation = pubsub.ValidationAccept
+			case spectypes.RunnerRole(ignoredRole):
+				messageValidators[i].Ignored[peer.Index]++
+				messageValidators[i].TotalIgnored++
+				validation = pubsub.ValidationIgnore
+			case spectypes.RunnerRole(rejectedRole):
+				messageValidators[i].Rejected[peer.Index]++
+				messageValidators[i].TotalRejected++
+				validation = pubsub.ValidationReject
+			default:
+				panic("unsupported role")
+			}
+			mtx.Unlock()
+
+			// Always accept messages from self to make libp2p propagate them,
+			// while still counting them by their role.
+			if p == vNet.Nodes[i].Network.Host().ID() {
+				return pubsub.ValidationAccept
+			}
+			return validation
+		}
+	}
+	// Create a VirtualNet with 4 nodes.
+	ks := spectestingutils.Testing4SharesSet()
+	vNet, routers := CreateVirtualNet(t, ctx, 4, pks, func(nodeIndex int) validation.MessageValidator {
+		return messageValidators[nodeIndex]
+	}, ks)
 
 	defer func() {
-		for _, node := range ln.Nodes {
-			require.NoError(t, node.(*p2pNetwork).Close())
-		}
+		require.NoError(t, vNet.Close())
 	}()
 
-	node1, node2 := ln.Nodes[1], ln.Nodes[2]
+	node1, node2 := vNet.Nodes[1], vNet.Nodes[2]
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -78,7 +127,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgID1, msg1 := dummyMsgCommittee(t, ks, pks[0], 1, spectypes.RoleCommittee)
 		msgID2, msg2 := dummyMsgCommittee(t, ks, pks[0], 2, spectypes.RoleCommittee)
 		msgID3, msg3 := dummyMsgCommittee(t, ks, pks[0], 3, spectypes.RoleCommittee)
-		require.NoError(t, err)
 		time.Sleep(time.Millisecond * 10)
 		require.NoError(t, node1.Broadcast(msgID2, msg2))
 		time.Sleep(time.Millisecond * 2)
