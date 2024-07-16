@@ -108,8 +108,12 @@ func (cfg *PubSubConfig) initScoring() {
 	}
 }
 
+type CommitteesProvider interface {
+	Committees() []*storage.Committee
+}
+
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, getCommittees func() []*storage.Committee) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, committeesProvider CommitteesProvider) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -165,7 +169,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 				return 100, 100, 10, nil
 			}
 		}
-		topicScoreFactory = topicScoreParams(logger, cfg, getCommittees)
+		topicScoreFactory = topicScoreParams(logger, cfg, committeesProvider)
 	}
 
 	if cfg.MsgIDHandler != nil {
