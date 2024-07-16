@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -55,7 +53,7 @@ func NewValidatorRegistrationRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(convert.RoleValidatorRegistration),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleValidatorRegistration),
 	}
 }
 

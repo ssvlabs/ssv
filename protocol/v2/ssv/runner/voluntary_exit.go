@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -54,7 +52,7 @@ func NewVoluntaryExitRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(convert.RoleVoluntaryExit),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleVoluntaryExit),
 	}
 }
 

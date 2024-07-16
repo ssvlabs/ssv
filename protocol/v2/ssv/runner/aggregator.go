@@ -3,7 +3,6 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -60,7 +59,7 @@ func NewAggregatorRunner(
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
 
-		metrics: metrics.NewConsensusMetrics(convert.RoleAggregator),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleAggregator),
 	}
 }
 

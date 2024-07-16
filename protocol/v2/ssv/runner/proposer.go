@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -65,7 +64,7 @@ func NewProposerRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(convert.RoleProposer),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleProposer),
 	}
 }
 

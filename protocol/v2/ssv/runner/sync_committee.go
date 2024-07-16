@@ -57,7 +57,7 @@ package runner
 //		valCheck:       valCheck,
 //		operatorSigner: operatorSigner,
 //
-//		metrics: metrics.NewConsensusMetrics(convert.RoleSyncCommittee),
+//		metrics: metrics.NewConsensusMetrics(spectypes.RoleSyncCommittee),
 //	}
 //}
 //

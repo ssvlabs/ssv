@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"github.com/ssvlabs/ssv/exporter/convert"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"log"
 	"time"
 
@@ -110,8 +110,8 @@ type ConsensusMetrics struct {
 	beaconDataDuration             time.Duration
 }
 
-func NewConsensusMetrics(role convert.RunnerRole) ConsensusMetrics {
-	values := []string{role.ToBeaconRole()}
+func NewConsensusMetrics(role spectypes.RunnerRole) ConsensusMetrics {
+	values := []string{role.String()}
 	return ConsensusMetrics{
 		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
 		consensus:               metricsConsensusDuration.WithLabelValues(values...),
