@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -55,26 +54,17 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 func (mv *messageValidator) validateDutyCount(
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
-	validatorIndices []phase0.ValidatorIndex,
-	signerStateBySlot *treemap.Map,
+	validatorIndexCount int,
+	signerStateBySlot *OperatorState,
 ) error {
-	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
-	dutyCount := 0
-	signerStateBySlot.Each(func(slot any, state any) {
-		if mv.netCfg.Beacon.EstimatedEpochAtSlot(slot.(phase0.Slot)) == msgEpoch {
-			dutyCount++
-		}
-	})
-	if _, ok := signerStateBySlot.Get(msgSlot); !ok {
-		dutyCount++
-	}
+	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot))
 
-	dutyLimit, exists := mv.dutyLimit(msgID, validatorIndices)
+	dutyLimit, exists := mv.dutyLimit(msgID, validatorIndexCount)
 	if !exists {
 		return nil
 	}
 
-	if dutyCount > dutyLimit {
+	if dutyCount >= dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
 		err.want = fmt.Sprintf("less than %v", dutyLimit)
@@ -84,14 +74,14 @@ func (mv *messageValidator) validateDutyCount(
 	return nil
 }
 
-func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, validatorIndices []phase0.ValidatorIndex) (int, bool) {
+func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, validatorIndexCount int) (int, bool) {
 	switch msgID.GetRoleType() {
 	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		// TODO: better solution for RoleValidatorRegistration: https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667687976
 		return 2, true
 
 	case spectypes.RoleCommittee:
-		return 2 * len(validatorIndices), true
+		return 2 * validatorIndexCount, true
 
 	default:
 		return 0, false

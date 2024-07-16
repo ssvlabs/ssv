@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -27,8 +26,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
-
-const MaxPartialSignatureMsgSize = 144020
 
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
@@ -223,20 +220,13 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, e
 		}
 
-		validatorIndices := make([]phase0.ValidatorIndex, 0)
-		for _, v := range committee.Validators {
-			if v.BeaconMetadata != nil {
-				validatorIndices = append(validatorIndices, v.BeaconMetadata.Index)
-			}
-		}
-
-		if len(validatorIndices) == 0 {
+		if len(committee.Indices) == 0 {
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
 		return CommitteeInfo{
 			operatorIDs: committee.Operators,
-			indices:     validatorIndices,
+			indices:     committee.Indices,
 			committeeID: committeeID,
 		}, nil
 	}
@@ -294,8 +284,8 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
-			state:    make(map[spectypes.OperatorID]*treemap.Map),
-			maxSlots: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance,
+			state:           make(map[spectypes.OperatorID]*OperatorState),
+			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

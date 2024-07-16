@@ -7,12 +7,12 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -81,7 +81,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(spectypes.DomainType{1, 2, 3, 4}, getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
+			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {

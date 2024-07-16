@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -26,6 +27,7 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
+	started time.Time
 	metrics *metrics
 }
 
@@ -80,7 +82,6 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
-
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
 		logger = logger.With(
