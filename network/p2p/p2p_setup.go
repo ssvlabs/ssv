@@ -28,7 +28,6 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
-	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -301,7 +300,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, func() []*storage.Committee { return n.nodeStorage.ValidatorStore().Committees() })
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore())
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

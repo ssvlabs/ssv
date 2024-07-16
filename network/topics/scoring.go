@@ -96,7 +96,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 }
 
 // topicScoreParams factory for creating scoring params for topics
-func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func() []*storage.Committee) func(string) *pubsub.TopicScoreParams {
+func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider CommitteesProvider) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
 
 		// Get validator stats
@@ -110,7 +110,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func(
 		logger.Debug("got validator stats for score params")
 
 		// Get committees
-		committees := getCommittees()
+		committees := committeesProvider.Committees()
 		topicCommittees := filterCommitteesForTopic(t, committees)
 
 		// Log
