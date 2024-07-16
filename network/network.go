@@ -40,6 +40,8 @@ type P2PNetwork interface {
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	// UpdateDomainType switches domain type at ENR when we reach fork epoch
 	UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error
+	// UpdateScoreParams will update the scoring parameters of GossipSub
+	UpdateScoreParams(logger *zap.Logger)
 }
 
 // GetValidatorStats returns stats of validators, including the following:

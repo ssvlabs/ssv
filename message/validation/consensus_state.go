@@ -4,8 +4,6 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/emirpasic/gods/maps/treemap"
-	"github.com/emirpasic/gods/utils"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -17,22 +15,82 @@ type consensusID struct {
 
 // consensusState keeps track of the signers for a given public key and role.
 type consensusState struct {
-	state    map[spectypes.OperatorID]*treemap.Map // TODO: use *treemap.Map[phase0.Slot, *SignerState] after updating to Go 1.21
-	maxSlots phase0.Slot
-	mu       sync.Mutex
+	state           map[spectypes.OperatorID]*OperatorState
+	storedSlotCount phase0.Slot
+	mu              sync.Mutex
 }
 
-func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) *treemap.Map {
+func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) *OperatorState {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
 	if _, ok := cs.state[signer]; !ok {
-		cs.state[signer] = treemap.NewWith(slotComparator)
+		cs.state[signer] = newOperatorState(cs.storedSlotCount)
 	}
 
 	return cs.state[signer]
 }
 
-func slotComparator(a, b interface{}) int {
-	return utils.UInt64Comparator(uint64(a.(phase0.Slot)), uint64(b.(phase0.Slot)))
+type OperatorState struct {
+	mu              sync.RWMutex
+	state           []*SignerState // the slice index is slot % storedSlotCount
+	maxSlot         phase0.Slot
+	maxEpoch        phase0.Epoch
+	lastEpochDuties int
+	prevEpochDuties int
+}
+
+func newOperatorState(size phase0.Slot) *OperatorState {
+	return &OperatorState{
+		state: make([]*SignerState, size),
+	}
+}
+
+func (os *OperatorState) Get(slot phase0.Slot) *SignerState {
+	os.mu.RLock()
+	defer os.mu.RUnlock()
+
+	s := os.state[int(slot)%len(os.state)]
+	if s == nil || s.Slot != slot {
+		return nil
+	}
+
+	return s
+}
+
+func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *SignerState) {
+	os.mu.Lock()
+	defer os.mu.Unlock()
+
+	os.state[int(slot)%len(os.state)] = state
+	if slot > os.maxSlot {
+		os.maxSlot = slot
+	}
+	if epoch > os.maxEpoch {
+		os.maxEpoch = epoch
+		os.prevEpochDuties = os.lastEpochDuties
+		os.lastEpochDuties = 1
+	} else {
+		os.lastEpochDuties++
+	}
+}
+
+func (os *OperatorState) MaxSlot() phase0.Slot {
+	os.mu.RLock()
+	defer os.mu.RUnlock()
+
+	return os.maxSlot
+}
+
+func (os *OperatorState) DutyCount(epoch phase0.Epoch) int {
+	os.mu.RLock()
+	defer os.mu.RUnlock()
+
+	if epoch == os.maxEpoch {
+		return os.lastEpochDuties
+	}
+	if epoch == os.maxEpoch-1 {
+		return os.prevEpochDuties
+	}
+	return 0 // unused because messages from too old epochs must be rejected in advance
 }

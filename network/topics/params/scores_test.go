@@ -19,24 +19,27 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 1k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(1000, 128)
-				return &opts
+				validators := 1000
+				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				return opts
 			},
 			nil,
 		},
 		{
 			"subnet topic 10k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(10000, 128)
-				return &opts
+				validators := 10_000
+				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				return opts
 			},
 			nil,
 		},
 		{
 			"subnet topic 51k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(51000, 128)
-				return &opts
+				validators := 51_000
+				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				return opts
 			},
 			nil,
 		},
@@ -50,7 +53,7 @@ func TestTopicScoreParams(t *testing.T) {
 			raw, err := json.Marshal(&opts)
 			require.NoError(t, err)
 			t.Logf("[%s] using opts:\n%s", test.name, string(raw))
-			topicScoreParams, err := TopicParams(*opts)
+			topicScoreParams, err := TopicParams(opts)
 			require.NoError(t, err)
 			require.NotNil(t, topicScoreParams)
 			// raw, err = json.MarshalIndent(topicScoreParams, "", "\t")

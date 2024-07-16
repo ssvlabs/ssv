@@ -316,6 +316,30 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	}
 }
 
+// UpdateScoreParams updates the scoring parameters once per epoch through the call of n.topicsCtrl.UpdateScoreParams
+func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
+	// TODO: this is a temporary solution to update the score parameters periodically.
+	// But, we should use an appropriate trigger for the UpdateScoreParams function that should be
+	// called once a validator is added or removed from the network
+
+	logger = logger.Named(logging.NameP2PNetwork)
+
+	// Create ticker
+	oneEpochDuration := n.cfg.Network.Beacon.SlotDurationSec() * time.Duration(n.cfg.Network.Beacon.SlotsPerEpoch())
+	ticker := time.NewTicker(oneEpochDuration)
+	defer ticker.Stop()
+
+	// Run immediately and then once every epoch
+	for ; true; <-ticker.C {
+		err := n.topicsCtrl.UpdateScoreParams(logger)
+		if err != nil {
+			logger.Debug("score parameters update failed", zap.Error(err))
+		} else {
+			logger.Debug("updated score parameters successfully")
+		}
+	}
+}
+
 // getMaxPeers returns max peers of the given topic.
 func (n *p2pNetwork) getMaxPeers(topic string) int {
 	if len(topic) == 0 {

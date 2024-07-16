@@ -57,7 +57,7 @@ func NewValidatorRegistrationRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleValidatorRegistration),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleValidatorRegistration),
 	}
 }
 

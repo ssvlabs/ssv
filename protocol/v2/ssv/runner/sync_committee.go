@@ -1,6 +1,5 @@
 package runner
 
-//
 //import (
 //	"crypto/sha256"
 //	"encoding/hex"
@@ -58,7 +57,7 @@ package runner
 //		valCheck:       valCheck,
 //		operatorSigner: operatorSigner,
 //
-//		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommittee),
+//		metrics: metrics.NewConsensusMetrics(spectypes.RoleSyncCommittee),
 //	}
 //}
 //
