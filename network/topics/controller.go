@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"time"
@@ -32,6 +33,8 @@ type Controller interface {
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+	// UpdateScoreParams refreshes the score params for every subscribed topic
+	UpdateScoreParams(logger *zap.Logger) error
 
 	io.Closer
 }
@@ -102,6 +105,31 @@ func (ctrl *topicsCtrl) onNewTopic(logger *zap.Logger) onTopicJoined {
 			}
 		}
 	}
+}
+
+func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
+	if ctrl.scoreParamsFactory == nil {
+		return fmt.Errorf("scoreParamsFactory is not set")
+	}
+	var errs error
+	topics := ctrl.ps.GetTopics()
+	for _, topicName := range topics {
+		topic := ctrl.container.Get(topicName)
+		if topic == nil {
+			errs = errors.Join(errs, fmt.Errorf("topic %s is not ready", topicName))
+			continue
+		}
+		p := ctrl.scoreParamsFactory(topicName)
+		if p == nil {
+			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil", topicName))
+			continue
+		}
+		if err := topic.SetScoreParams(p); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %w", topicName, err))
+			continue
+		}
+	}
+	return errs
 }
 
 // Close implements io.Closer
