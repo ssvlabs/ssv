@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
@@ -54,7 +55,7 @@ func NewValidatorRegistrationRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleValidatorRegistration),
+		metrics: metrics.NewConsensusMetrics(convert.RoleValidatorRegistration),
 	}
 }
 

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"log"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var (
@@ -110,8 +110,8 @@ type ConsensusMetrics struct {
 	beaconDataDuration             time.Duration
 }
 
-func NewConsensusMetrics(role spectypes.BeaconRole) ConsensusMetrics {
-	values := []string{role.String()}
+func NewConsensusMetrics(role convert.RunnerRole) ConsensusMetrics {
+	values := []string{role.ToBeaconRole()}
 	return ConsensusMetrics{
 		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
 		consensus:               metricsConsensusDuration.WithLabelValues(values...),

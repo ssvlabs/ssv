@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
@@ -53,7 +54,7 @@ func NewVoluntaryExitRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleVoluntaryExit),
+		metrics: metrics.NewConsensusMetrics(convert.RoleVoluntaryExit),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -59,7 +60,7 @@ func NewSyncCommitteeAggregatorRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommitteeContribution),
+		metrics: metrics.NewConsensusMetrics(convert.RoleSyncCommitteeContribution),
 	}
 }
 
