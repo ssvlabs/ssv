@@ -25,6 +25,17 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 	}
 }
 
+// CommitteeSubnetsFilter checks if the node supports committee subnets.
+func CommitteeSubnetsFilter() HandshakeFilter {
+	return func(sender peer.ID, ani records.AnyNodeInfo) error {
+		nm := ani.GetNodeInfo().Metadata
+		if !nm.CommitteeSubnets {
+			return errors.New("node does not support committee subnets")
+		}
+		return nil
+	}
+}
+
 func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some reason we're loosing 'me' value
 	return func(sender peer.ID, ani records.AnyNodeInfo) error {
 		sni, ok := ani.(*records.SignedNodeInfo)

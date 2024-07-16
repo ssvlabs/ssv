@@ -173,8 +173,9 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
-		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     records.Subnets(n.fixedSubnets).String(),
+		NodeVersion:      commons.GetNodeVersion(),
+		Subnets:          records.Subnets(n.fixedSubnets).String(),
+		CommitteeSubnets: true, // TODO: only set to true after the fork?
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
@@ -201,6 +202,11 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	filters := func() []connections.HandshakeFilter {
 		filters := []connections.HandshakeFilter{
 			connections.NetworkIDFilter(domain),
+		}
+
+		// Stop accepting connections from non-upgraded nodes post-fork.
+		if n.cfg.Network.CommitteeSubnetsFork() {
+			filters = append(filters, connections.CommitteeSubnetsFilter())
 		}
 
 		if n.cfg.Permissioned() {

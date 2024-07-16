@@ -54,6 +54,8 @@ const (
 
 type GetRecipientDataFunc func(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
 
+type UpdateTopicScoreParamsFunc func(*zap.Logger) error
+
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
@@ -81,6 +83,7 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
+	UpdateTopicScoreParams     UpdateTopicScoreParamsFunc
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -186,6 +189,8 @@ type controller struct {
 	validatorStatsEpoch    phase0.Epoch
 	validatorStatsMutex    sync.Mutex
 	validatorStatsPostFork bool
+
+	updateTopicScoreParams UpdateTopicScoreParamsFunc
 }
 
 // NewController creates a new validator controller instance
@@ -267,6 +272,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		committeeValidatorSetup: make(chan struct{}, 1),
 
 		messageValidator: options.MessageValidator,
+
+		updateTopicScoreParams: options.UpdateTopicScoreParams,
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
@@ -912,6 +919,7 @@ func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, 
 		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
+		c.updateTopicScoreParams(c.logger)
 	}
 	return nil
 }

@@ -14,6 +14,34 @@ import (
 
 var ErrEntryNotFound = errors.New("not found")
 
+// CommitteeSubnetsEntry represents the committee subnets supported by the node
+type CommitteeSubnetsEntry bool
+
+func (ce CommitteeSubnetsEntry) ENRKey() string { return "committee_subnets" }
+
+func (ce CommitteeSubnetsEntry) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, ce)
+}
+
+func (ce *CommitteeSubnetsEntry) DecodeRLP(s *rlp.Stream) error {
+	return s.Decode(&ce)
+}
+
+// SetCommitteeSubnetsEntry adds committee subnets entry to the node
+func SetCommitteeSubnetsEntry(node *enode.LocalNode, subnets bool) error {
+	node.Set(CommitteeSubnetsEntry(subnets))
+	return nil
+}
+
+// GetCommitteeSubnetsEntry extracts the value of committee subnets entry
+func GetCommitteeSubnetsEntry(record *enr.Record) (bool, error) {
+	ce := new(CommitteeSubnetsEntry)
+	if err := record.Load(ce); err != nil {
+		return false, err
+	}
+	return bool(*ce), nil
+}
+
 // DomainTypeEntry holds the domain type of the node
 type DomainTypeEntry spectypes.DomainType
 

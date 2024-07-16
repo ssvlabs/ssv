@@ -247,6 +247,12 @@ func (n *p2pNetwork) isReady() bool {
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
+	var (
+		topicScoreUpdateInterval = 32 * n.cfg.Network.SlotDurationSec()
+		topicScoreUpdateTicker   = time.NewTicker(topicScoreUpdateInterval)
+	)
+	defer topicScoreUpdateTicker.Stop()
+
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)

@@ -14,49 +14,19 @@ type NodeMetadata struct {
 	ConsensusNode string
 	// Subnets represents the subnets that our node is subscribed to
 	Subnets string
+	// CommitteeSubnets represents if the node supports committee subnets.
+	CommitteeSubnets bool
 }
 
 // Encode encodes the metadata into bytes
-// TODO: switch to SSZ
 func (nm *NodeMetadata) Encode() ([]byte, error) {
-	// ser := newSerializable(
-	//	nm.NodeVersion,
-	//	nm.ConsensusNode,
-	//	nm.ExecutionNode,
-	//)
-
 	return json.Marshal(nm)
 }
 
 // Decode decodes a raw payload into metadata
-// TODO: switch to SSZ
 func (nm *NodeMetadata) Decode(data []byte) error {
-	// var ser serializable
-
 	if err := json.Unmarshal(data, nm); err != nil {
 		return err
 	}
-
-	// nm.NodeVersion = ""
-	// nm.ConsensusNode = ""
-	// nm.ExecutionNode = ""
-	//
-	// if len(ser.Entries) < 1 {
-	//	return errors.New("not enough entries in node metadata, node version is required")
-	//}
-	// nm.NodeVersion = ser.Entries[0]
-	// if len(ser.Entries) < 2 {
-	//	return nil
-	//}
-	//nm.ConsensusNode = ser.Entries[1]
-	//if len(ser.Entries) < 3 {
-	//	return nil
-	//}
-	//nm.ExecutionNode = ser.Entries[2]
-	//if len(ser.Entries) < 4 {
-	//	return nil
-	//}
-	//nm.OperatorID = ser.Entries[3]
-
 	return nil
 }

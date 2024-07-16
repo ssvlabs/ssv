@@ -332,6 +332,7 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
+		DecorateWithCommitteeSubnets(true),
 		DecorateWithDomainType(dvs.domainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
@@ -339,7 +340,12 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType), fields.Subnets(opts.Subnets))
+	logger.Debug("node record is ready",
+		fields.ENRLocalNode(localNode),
+		zap.Bool("committee_subnets", true),
+		fields.Domain(dvs.domainType),
+		fields.Subnets(opts.Subnets),
+	)
 
 	return localNode, nil
 }

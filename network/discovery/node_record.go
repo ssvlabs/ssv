@@ -10,6 +10,12 @@ import (
 
 type NodeRecordDecoration func(*enode.LocalNode) error
 
+func DecorateWithCommitteeSubnets(subnets bool) NodeRecordDecoration {
+	return func(node *enode.LocalNode) error {
+		return records.SetCommitteeSubnetsEntry(node, subnets)
+	}
+}
+
 func DecorateWithDomainType(domainType spectypes.DomainType) NodeRecordDecoration {
 	return func(node *enode.LocalNode) error {
 		return records.SetDomainTypeEntry(node, domainType)
