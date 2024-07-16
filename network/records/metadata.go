@@ -37,26 +37,5 @@ func (nm *NodeMetadata) Decode(data []byte) error {
 		return err
 	}
 
-	// nm.NodeVersion = ""
-	// nm.ConsensusNode = ""
-	// nm.ExecutionNode = ""
-	//
-	// if len(ser.Entries) < 1 {
-	//	return errors.New("not enough entries in node metadata, node version is required")
-	//}
-	// nm.NodeVersion = ser.Entries[0]
-	// if len(ser.Entries) < 2 {
-	//	return nil
-	//}
-	//nm.ConsensusNode = ser.Entries[1]
-	//if len(ser.Entries) < 3 {
-	//	return nil
-	//}
-	//nm.ExecutionNode = ser.Entries[2]
-	//if len(ser.Entries) < 4 {
-	//	return nil
-	//}
-	//nm.OperatorID = ser.Entries[3]
-
 	return nil
 }

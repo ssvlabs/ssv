@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"net"
 	"sync/atomic"
 	"time"
@@ -14,6 +13,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
