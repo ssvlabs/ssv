@@ -12,32 +12,32 @@ import (
 )
 
 var (
-	metricsConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	metricsConsensusDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_consensus_duration_seconds_genesis",
 		Help:    "Consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsPreConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	metricsPreConsensusDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_pre_consensus_duration_seconds_genesis",
 		Help:    "Pre-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsPostConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	metricsPostConsensusDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_post_consensus_duration_seconds_genesis",
 		Help:    "Post-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsBeaconSubmissionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	metricsBeaconSubmissionDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_beacon_submission_duration_seconds_genesis",
 		Help:    "Submission to beacon node duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsDutyFullFlowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	metricsDutyFullFlowDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_duty_full_flow_duration_seconds_genesis",
 		Help:    "Duty full flow duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsDutyFullFlowFirstRoundDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	metricsDutyFullFlowFirstRoundDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name: "ssv_validator_duty_full_flow_first_round_duration_seconds_genesis",
 		Help: "Duty full flow at first round duration (seconds)",
 		Buckets: []float64{
@@ -48,19 +48,19 @@ var (
 			4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0,
 		},
 	}, []string{"role"})
-	metricsRolesSubmitted = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricsRolesSubmittedGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_validator_roles_submitted_genesis",
 		Help: "Submitted roles",
 	}, []string{"role"})
-	metricsRolesSubmissionFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricsRolesSubmissionFailuresGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_validator_roles_failed_genesis",
 		Help: "Submitted roles",
 	}, []string{"role"})
-	metricsInstancesStarted = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricsInstancesStartedGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_instances_started_genesis",
 		Help: "Number of started QBFT instances",
 	}, []string{"role"})
-	metricsInstancesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricsInstancesDecidedGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_instances_decided_genesis",
 		Help: "Number of decided QBFT instances",
 	}, []string{"role"})
@@ -68,13 +68,13 @@ var (
 
 func init() {
 	metricsList := []prometheus.Collector{
-		metricsConsensusDuration,
-		metricsPreConsensusDuration,
-		metricsPostConsensusDuration,
-		metricsBeaconSubmissionDuration,
-		metricsDutyFullFlowDuration,
-		metricsRolesSubmitted,
-		metricsRolesSubmissionFailures,
+		metricsConsensusDurationGenesis,
+		metricsPreConsensusDurationGenesis,
+		metricsPostConsensusDurationGenesis,
+		metricsBeaconSubmissionDurationGenesis,
+		metricsDutyFullFlowDurationGenesis,
+		metricsRolesSubmittedGenesis,
+		metricsRolesSubmissionFailuresGenesis,
 	}
 	logger := zap.L()
 	for _, metric := range metricsList {
@@ -106,16 +106,16 @@ type ConsensusMetrics struct {
 func NewConsensusMetrics(role genesisspectypes.BeaconRole) ConsensusMetrics {
 	values := []string{role.String()}
 	return ConsensusMetrics{
-		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
-		consensus:               metricsConsensusDuration.WithLabelValues(values...),
-		postConsensus:           metricsPostConsensusDuration.WithLabelValues(values...),
-		beaconSubmission:        metricsBeaconSubmissionDuration.WithLabelValues(values...),
-		dutyFullFlow:            metricsDutyFullFlowDuration.WithLabelValues(values...),
-		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
-		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
-		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
-		metricsInstancesStarted: metricsInstancesStarted.WithLabelValues(values...),
-		metricsInstancesDecided: metricsInstancesDecided.WithLabelValues(values...),
+		preConsensus:            metricsPreConsensusDurationGenesis.WithLabelValues(values...),
+		consensus:               metricsConsensusDurationGenesis.WithLabelValues(values...),
+		postConsensus:           metricsPostConsensusDurationGenesis.WithLabelValues(values...),
+		beaconSubmission:        metricsBeaconSubmissionDurationGenesis.WithLabelValues(values...),
+		dutyFullFlow:            metricsDutyFullFlowDurationGenesis.WithLabelValues(values...),
+		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDurationGenesis.WithLabelValues(values...),
+		rolesSubmitted:          metricsRolesSubmittedGenesis.WithLabelValues(values...),
+		rolesSubmissionFailures: metricsRolesSubmissionFailuresGenesis.WithLabelValues(values...),
+		metricsInstancesStarted: metricsInstancesStartedGenesis.WithLabelValues(values...),
+		metricsInstancesDecided: metricsInstancesDecidedGenesis.WithLabelValues(values...),
 	}
 }
 

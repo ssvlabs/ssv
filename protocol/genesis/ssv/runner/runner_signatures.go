@@ -76,7 +76,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 }
 
 func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature genesisspectypes.Signature, root [32]byte) error {
-	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
+	types.MetricsSignaturesVerificationsGenesis.WithLabelValues().Inc()
 
 	for _, n := range b.Share.Committee {
 		if n.Signer == signer {

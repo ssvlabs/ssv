@@ -21,15 +21,15 @@ const (
 )
 
 var (
-	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_highest_decided",
+	metricsHighestDecidedGenesis = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:genesis:ibft_highest_decided_genesis",
 		Help: "The highest decided sequence number",
 	}, []string{"identifier", "pubKey"})
 )
 
 func init() {
 	logger := zap.L()
-	if err := prometheus.Register(metricsHighestDecided); err != nil {
+	if err := prometheus.Register(metricsHighestDecidedGenesis); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }
