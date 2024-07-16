@@ -39,21 +39,25 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	const blockNumber = uint64(1)
 
 	normalExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    blockNumber,
 	}
 	sameBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{4, 5, 6},
 		ValidatorIndex: phase0.ValidatorIndex(2),
 		BlockNumber:    normalExit.BlockNumber,
 	}
 	newBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 1,
 	}
 	pastBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 4,
