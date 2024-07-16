@@ -6,6 +6,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/registry/storage"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -95,8 +96,10 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 }
 
 // topicScoreParams factory for creating scoring params for topics
-func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
+func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, getCommittees func() []*storage.Committee) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
+
+		// Get validator stats
 		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
 		if err != nil {
 			logger.Debug("could not read stats: active validators")
@@ -105,7 +108,24 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsu
 		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
 			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
 		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets())
+
+		// Get committees
+		committees := getCommittees()
+		topicCommittees := filterCommitteesForTopic(t, committees)
+
+		// Log
+		validatorsInTopic := 0
+		for _, committee := range topicCommittees {
+			validatorsInTopic += len(committee.Validators)
+		}
+		committeesInTopic := len(topicCommittees)
+		logger = logger.With(zap.Int("committees in topic", committeesInTopic), zap.Int("validators in topic", validatorsInTopic))
+		logger.Debug("got filtered committees for score params")
+
+		// Create topic options
+		opts := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), topicCommittees)
+
+		// Generate topic parameters
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))
@@ -113,4 +133,23 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsu
 		}
 		return tp
 	}
+}
+
+// Returns a new committee list with only the committees that belong to the given topic
+func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
+
+	topicCommittees := make([]*storage.Committee, 0)
+
+	for _, committee := range committees {
+		// Get topic
+		subnet := commons.CommitteeSubnet(committee.ID)
+		committeeTopic := commons.SubnetTopicID(subnet)
+		committeeTopicFullName := commons.GetTopicFullName(committeeTopic)
+
+		// If it belongs to the topic, add it
+		if topic == committeeTopicFullName {
+			topicCommittees = append(topicCommittees, committee)
+		}
+	}
+	return topicCommittees
 }
