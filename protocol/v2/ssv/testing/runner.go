@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
@@ -78,13 +79,13 @@ var baseRunner = func(
 	keySet *spectestingutils.TestKeySet,
 ) runner.Runner {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(role))
+	identifier := spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], role)
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewTestingOperatorSigner(keySet, 1)
 
-	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())
+	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
@@ -288,7 +289,7 @@ var baseRunnerWithShareMap = func(
 	committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)
 	opSigner := spectestingutils.NewTestingOperatorSigner(keySetInstance, committeeMember.OperatorID)
 
-	config := testing.TestingConfig(logger, keySetInstance, identifier.GetRoleType())
+	config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1

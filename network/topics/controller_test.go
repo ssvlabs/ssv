@@ -422,7 +422,7 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 		return nil, err
 	}
 
-	signedMessage := specqbft.SignedMessage{
+	signedMessage := specqbftSignedMessage{
 		Signature: signature,
 		Signers:   []spectypes.OperatorID{1, 3, 4},
 		Message: specqbft.Message{
