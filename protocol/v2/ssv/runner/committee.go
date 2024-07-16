@@ -292,15 +292,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		signers[i] = msg.Signer
 		indices[i] = int(msg.ValidatorIndex)
 	}
-	logger.Debug("got post consensus",
+
+	logger.Debug("🧩 got partial signatures",
 		zap.Bool("quorum", quorum),
 		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 		zap.Int("signer", int(signedMsg.Messages[0].Signer)),
 		zap.Int("sigs", len(roots)),
 		zap.Ints("validators", indices))
-
-	logger.Debug("🧩 got partial signatures",
-		zap.Uint64s("signers", signers))
 
 	if !quorum {
 		return nil
