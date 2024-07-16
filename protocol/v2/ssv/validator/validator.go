@@ -83,10 +83,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		state:             uint32(NotStarted),
 		dutyIDs:           hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator:  options.MessageValidator,
-
-		GenesisValidator: GenesisValidator{
-			DutyRunners: options.GenesisOptions.DutyRunners,
-		},
 	}
 
 	for _, dutyRunner := range options.DutyRunners {

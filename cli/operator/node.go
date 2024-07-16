@@ -308,7 +308,7 @@ var StartNodeCmd = &cobra.Command{
 		genesisStorageMap := genesisibftstorage.NewStores()
 
 		for _, storageRole := range genesisStorageRoles {
-			genesisStorageMap.Add(storageRole, genesisibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
+			genesisStorageMap.Add(storageRole, genesisibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, "genesis_"+storageRole.String()))
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap

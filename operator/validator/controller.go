@@ -250,10 +250,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Metrics:           options.Metrics,
 
 		GenesisOptions: validator.GenesisOptions{
-			Network:          options.GenesisControllerOptions.Network,
-			BuilderProposals: options.BuilderProposals,
-			Signer:           options.GenesisControllerOptions.KeyManager,
-			DutyRunners:      nil, // set per validator
+			Network:           options.GenesisControllerOptions.Network,
+			BuilderProposals:  options.BuilderProposals,
+			Signer:            options.GenesisControllerOptions.KeyManager,
+			Storage:           options.GenesisControllerOptions.StorageMap,
+			NewDecidedHandler: options.GenesisControllerOptions.NewDecidedHandler,
 		},
 	}
 
@@ -991,13 +992,13 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.SSVShare = share
 		opts.Operator = operator
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
-		opts.GenesisOptions.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 		v := validator.NewValidator(ctx, cancel, opts)
 
 		genesisOpts := c.genesisValidatorOptions
 		genesisOpts.SSVShare = share
 		genesisOpts.Operator = operator
 		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
+
 		gv := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
 
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, &validators.ValidatorContainer{Validator: v, GenesisValidator: gv})
