@@ -992,7 +992,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.SSVShare = share
 		opts.Operator = operator
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
-		v := validator.NewValidator(ctx, cancel, opts)
+		av := validator.NewValidator(ctx, cancel, opts)
 
 		genesisOpts := c.genesisValidatorOptions
 		genesisOpts.SSVShare = share
@@ -1001,7 +1001,8 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 		gv := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
 
-		c.validatorsMap.PutValidator(share.ValidatorPubKey, &validators.ValidatorContainer{Validator: v, GenesisValidator: gv})
+		v = &validators.ValidatorContainer{Validator: av, GenesisValidator: gv}
+		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
 
@@ -1033,7 +1034,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 	} else {
 		vc.AddShare(&share.Share)
-		c.printShare(v.GetShare(), "added share to committee")
+		c.printShare(share, "added share to committee")
 	}
 
 	return v, vc, nil
