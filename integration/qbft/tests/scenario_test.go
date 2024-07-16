@@ -2,12 +2,12 @@ package tests
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"testing"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	oldspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -86,7 +86,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
-				role := spectypes.RunnerRole(oldspectypes.MessageIDFromBytes(identifier[:]).GetRoleType())
+				role := convert.MessageIDFromBytes(identifier[:]).GetRoleType()
 				var err error
 				storedInstance, err = s.validators[id].Storage.Get(role).GetHighestInstance(identifier[:])
 				require.NoError(t, err)
@@ -161,17 +161,16 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 
 	storageMap := qbftstorage.NewStores()
 
-	roles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit,
+	roles := []convert.RunnerRole{
+		convert.RoleCommittee,
+		convert.RoleProposer,
+		convert.RoleAggregator,
+		convert.RoleSyncCommitteeContribution,
+		convert.RoleValidatorRegistration,
+		convert.RoleVoluntaryExit,
 	}
 	for _, role := range roles {
-		storageMap.Add(spectypes.MapDutyToRunnerRole(role), qbftstorage.New(db, role.String()))
+		storageMap.Add(role, qbftstorage.New(db, role.String()))
 	}
 
 	return storageMap

@@ -22,60 +22,60 @@ func (bn *TestingBeaconNodeWrapped) SetSyncCommitteeAggregatorRootHexes(roots ma
 }
 
 func (bn *TestingBeaconNodeWrapped) GetBroadcastedRoots() []phase0.Root {
-	return bn.bn.BroadcastedRoots
+	return bn.Bn.BroadcastedRoots
 }
 
 func (bn *TestingBeaconNodeWrapped) GetBeaconNode() *spectestingutils.TestingBeaconNode {
-	return bn.bn
+	return bn.Bn
 }
 
 func (bn *TestingBeaconNodeWrapped) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
-	return bn.bn.GetAttestationData(slot, committeeIndex)
+	return bn.Bn.GetAttestationData(slot, committeeIndex)
 }
 func (bn *TestingBeaconNodeWrapped) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	return bn.bn.DomainData(epoch, domain)
+	return bn.Bn.DomainData(epoch, domain)
 }
 func (bn *TestingBeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
-	return bn.bn.SyncCommitteeSubnetID(index)
+	return bn.Bn.SyncCommitteeSubnetID(index)
 }
 func (bn *TestingBeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
-	return bn.bn.IsSyncCommitteeAggregator(proof)
+	return bn.Bn.IsSyncCommitteeAggregator(proof)
 }
 func (bn *TestingBeaconNodeWrapped) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
-	return bn.bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)
+	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	return bn.bn.SubmitAggregateSelectionProof(slot, committeeIndex, committeeLength, index, slotSig)
+	return bn.Bn.SubmitAggregateSelectionProof(slot, committeeIndex, committeeLength, index, slotSig)
 }
 func (bn *TestingBeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return bn.bn.GetBeaconNetwork()
+	return bn.Bn.GetBeaconNetwork()
 }
 func (bn *TestingBeaconNodeWrapped) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	return bn.bn.GetBeaconBlock(slot, graffiti, randao)
+	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	return bn.bn.SubmitValidatorRegistration(pubkey, feeRecipient, sig)
+	return bn.Bn.SubmitValidatorRegistration(pubkey, feeRecipient, sig)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
-	return bn.bn.SubmitVoluntaryExit(voluntaryExit)
+	return bn.Bn.SubmitVoluntaryExit(voluntaryExit)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*phase0.Attestation) error {
-	return bn.bn.SubmitAttestations(attestations)
+	return bn.Bn.SubmitAttestations(attestations)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
-	return bn.bn.SubmitSyncMessages(msgs)
+	return bn.Bn.SubmitSyncMessages(msgs)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
-	return bn.bn.SubmitBlindedBeaconBlock(block, sig)
+	return bn.Bn.SubmitBlindedBeaconBlock(block, sig)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
-	return bn.bn.SubmitSignedContributionAndProof(contribution)
+	return bn.Bn.SubmitSignedContributionAndProof(contribution)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
-	return bn.bn.SubmitSignedAggregateSelectionProof(msg)
+	return bn.Bn.SubmitSignedAggregateSelectionProof(msg)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
-	return bn.bn.SubmitBeaconBlock(block, sig)
+	return bn.Bn.SubmitBeaconBlock(block, sig)
 }
 
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {
