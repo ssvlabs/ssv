@@ -19,12 +19,16 @@ type CommitteeHandler struct {
 
 	attDuties  *dutystore.Duties[eth2apiv1.AttesterDuty]
 	syncDuties *dutystore.SyncCommitteeDuties
+
+	validatorCommitteeIDs map[phase0.ValidatorIndex]spectypes.CommitteeID
 }
 
 func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], syncDuties *dutystore.SyncCommitteeDuties) *CommitteeHandler {
 	h := &CommitteeHandler{
 		attDuties:  attDuties,
 		syncDuties: syncDuties,
+
+		validatorCommitteeIDs: make(map[phase0.ValidatorIndex]spectypes.CommitteeID),
 	}
 
 	return h
@@ -38,18 +42,28 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
-			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
+			if !h.network.AlanForked(slot) {
+				h.logger.Debug("🛠 ticker event",
+					zap.String("period_epoch_slot_pos", buildStr),
+					zap.String("status", "alan not forked yet"),
+				)
+				continue
+			}
+
+			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 			h.processExecution(period, epoch, slot)
 
 		case <-h.reorg:
@@ -69,37 +83,37 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 	}
 
 	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
-	h.executeCommitteeDuties(h.logger, committeeMap)
+	h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeMap)
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
-	// TODO: tmp solution to get committee id fast
-	vcmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
+	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
+	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
-		vcmap[v.ValidatorIndex] = v.CommitteeID()
+		h.validatorCommitteeIDs[v.ValidatorIndex] = v.CommitteeID()
 	}
 	committeeMap := make(committeeDutiesMap)
 
 	for _, d := range attDuties {
 		if h.shouldExecuteAtt(d) {
 			specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
-			h.appendBeaconDuty(committeeMap, vcmap, specDuty)
+			h.appendBeaconDuty(committeeMap, specDuty)
 		}
 	}
 
 	for _, d := range syncDuties {
 		if h.shouldExecuteSync(d, slot) {
 			specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
-			h.appendBeaconDuty(committeeMap, vcmap, specDuty)
+			h.appendBeaconDuty(committeeMap, specDuty)
 		}
 	}
 
 	return committeeMap
 }
 
-func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, vcmap map[phase0.ValidatorIndex]spectypes.CommitteeID, beaconDuty *spectypes.BeaconDuty) {
-	committeeID, ok := vcmap[beaconDuty.ValidatorIndex]
+func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, beaconDuty *spectypes.BeaconDuty) {
+	committeeID, ok := h.validatorCommitteeIDs[beaconDuty.ValidatorIndex]
 	if !ok {
 		h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
 		return

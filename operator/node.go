@@ -3,11 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
-
-	storage2 "github.com/ssvlabs/ssv/registry/storage"
-
-	"github.com/ssvlabs/ssv/network"
 
 	"go.uber.org/zap"
 
@@ -16,6 +11,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -24,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -72,23 +69,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
-	storageMap := qbftstorage.NewStores()
-
-	roles := []exporter_message.RunnerRole{
-		exporter_message.RoleCommittee,
-		exporter_message.RoleAttester,
-		exporter_message.RoleAggregator,
-		exporter_message.RoleProposer,
-		exporter_message.RoleSyncCommittee,
-		exporter_message.RoleSyncCommitteeContribution,
-		exporter_message.RoleValidatorRegistration,
-		exporter_message.RoleVoluntaryExit,
-	}
-	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))
-	}
-
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
 	node := &operatorNode{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
@@ -98,20 +79,19 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		executionClient:  opts.ExecutionClient,
 		net:              opts.P2PNetwork,
 		storage:          opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:      storageMap,
+		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
-			Ctx:                  opts.Context,
-			BeaconNode:           opts.BeaconNode,
-			ExecutionClient:      opts.ExecutionClient,
-			Network:              opts.Network,
-			ValidatorProvider:    opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
-			ValidatorController:  opts.ValidatorController,
-			IndicesChg:           opts.ValidatorController.IndicesChangeChan(),
-			ValidatorExitCh:      opts.ValidatorController.ValidatorExitChan(),
-			ExecuteDuty:          opts.ValidatorController.ExecuteDuty,
-			ExecuteCommitteeDuty: opts.ValidatorController.ExecuteCommitteeDuty,
-			DutyStore:            opts.DutyStore,
-			SlotTickerProvider:   slotTickerProvider,
+			Ctx:                 opts.Context,
+			BeaconNode:          opts.BeaconNode,
+			ExecutionClient:     opts.ExecutionClient,
+			Network:             opts.Network,
+			ValidatorProvider:   opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
+			ValidatorController: opts.ValidatorController,
+			DutyExecutor:        opts.ValidatorController,
+			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
+			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
+			DutyStore:           opts.DutyStore,
+			SlotTickerProvider:  slotTickerProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,
@@ -166,6 +146,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}
 	go n.net.UpdateSubnets(logger)
+	go n.net.UpdateScoreParams(logger)
 	n.validatorsCtrl.StartValidators()
 	go n.reportOperators(logger)
 
@@ -196,7 +177,7 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleParticipantsQuery(logger, n.qbftStorage, nm)
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.Domain)
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
 	default:

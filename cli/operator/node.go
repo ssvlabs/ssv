@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
 	"log"
 	"math/big"
 	"net/http"
@@ -30,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -262,6 +262,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
+		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
@@ -272,20 +273,20 @@ var StartNodeCmd = &cobra.Command{
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws, cfg.SSVOptions.ValidatorOptions.UseNewExporterAPI)
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []exporter_message.RunnerRole{
-			exporter_message.RoleCommittee,
-			exporter_message.RoleAttester,
-			exporter_message.RoleProposer,
-			exporter_message.RoleSyncCommittee,
-			exporter_message.RoleAggregator,
-			exporter_message.RoleSyncCommitteeContribution,
-			exporter_message.RoleValidatorRegistration,
-			exporter_message.RoleVoluntaryExit,
+		storageRoles := []convert.RunnerRole{
+			convert.RoleCommittee,
+			convert.RoleAttester,
+			convert.RoleProposer,
+			convert.RoleSyncCommittee,
+			convert.RoleAggregator,
+			convert.RoleSyncCommitteeContribution,
+			convert.RoleValidatorRegistration,
+			convert.RoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -304,7 +305,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -558,8 +559,6 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	if err != nil {
 		return networkconfig.NetworkConfig{}, err
 	}
-
-	types.SetDefaultDomain(networkConfig.Domain)
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {

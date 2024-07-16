@@ -18,7 +18,6 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -30,8 +29,6 @@ func TestQBFTMapping(t *testing.T) {
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
-
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	for name, test := range untypedTests {
 		name, test := name, test
@@ -100,12 +97,11 @@ func TestQBFTMapping(t *testing.T) {
 
 			// a little trick we do to instantiate all the internal instance params
 
-			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForOperator(typedTest.Pre.State.Share), identifier.GetRoleType()),
-				typedTest.Pre.State.Share,
+				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), spectypes.RoleCommittee),
+				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
 			)

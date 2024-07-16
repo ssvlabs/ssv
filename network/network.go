@@ -37,6 +37,8 @@ type P2PNetwork interface {
 	SubscribeAll(logger *zap.Logger) error
 	// SubscribeRandoms subscribes to random subnets
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	// UpdateScoreParams will update the scoring parameters of GossipSub
+	UpdateScoreParams(logger *zap.Logger)
 }
 
 // GetValidatorStats returns stats of validators, including the following:

@@ -3,15 +3,15 @@ package api
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 const (
@@ -47,7 +47,7 @@ func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 }
 
 // HandleParticipantsQuery handles TypeParticipants queries.
-func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage) {
+func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage, domain spectypes.DomainType) {
 	logger.Debug("handles query request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -72,16 +72,16 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		nm.Msg = res
 		return
 	}
-	runnerRole := exporter_message.RunnerRole(beaconRole)
+	runnerRole := convert.RunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(spectypes.RunnerRole(runnerRole)))
+		logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))
 		res.Data = []string{"internal error - role storage doesn't exist", beaconRole.String()}
 		nm.Msg = res
 		return
 	}
 
-	msgID := exporter_message.NewMsgID(types.GetDefaultDomain(), pkRaw, runnerRole)
+	msgID := convert.NewMsgID(domain, pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
 	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)

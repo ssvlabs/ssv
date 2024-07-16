@@ -4,13 +4,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
-
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -155,15 +154,19 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 	return nil
 }
 
-func (i *ibftStorage) SaveParticipants(identifier exporter_message.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
-	if err := i.save(encodeOperators(operators), participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
+func (i *ibftStorage) SaveParticipants(identifier convert.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
+	bytes, err := encodeOperators(operators)
+	if err != nil {
+		return err
+	}
+	if err := i.save(bytes, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
 		return fmt.Errorf("could not save participants: %w", err)
 	}
 
 	return nil
 }
 
-func (i *ibftStorage) GetParticipantsInRange(identifier exporter_message.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
@@ -186,7 +189,7 @@ func (i *ibftStorage) GetParticipantsInRange(identifier exporter_message.Message
 	return participantsRange, nil
 }
 
-func (i *ibftStorage) GetParticipants(identifier exporter_message.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+func (i *ibftStorage) GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err
@@ -238,13 +241,16 @@ func uInt64ToByteSlice(n uint64) []byte {
 	return b
 }
 
-func encodeOperators(operators []spectypes.OperatorID) []byte {
+func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+	if len(operators) != 4 && len(operators) != 7 && len(operators) != 13 {
+		return nil, fmt.Errorf("invalid operators list size: %d", len(operators))
+	}
 	encoded := make([]byte, len(operators)*8)
 	for i, v := range operators {
 		binary.BigEndian.PutUint64(encoded[i*8:], v)
 	}
 
-	return encoded
+	return encoded, nil
 }
 
 func decodeOperators(encoded []byte) []spectypes.OperatorID {

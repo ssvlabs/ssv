@@ -2,10 +2,9 @@ package qbftstorage
 
 import (
 	"encoding/json"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -30,7 +29,7 @@ func (si *StoredInstance) Decode(data []byte) error {
 type ParticipantsRangeEntry struct {
 	Slot       phase0.Slot
 	Signers    []spectypes.OperatorID
-	Identifier exporter_message.MessageID
+	Identifier convert.MessageID
 }
 
 // InstanceStore manages instance data.
@@ -57,13 +56,13 @@ type InstanceStore interface {
 	CleanAllInstances(logger *zap.Logger, msgID []byte) error
 
 	// SaveParticipants save participants in quorum.
-	SaveParticipants(identifier exporter_message.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error
+	SaveParticipants(identifier convert.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
-	GetParticipantsInRange(identifier exporter_message.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
+	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipants returns participants in quorum for the given slot.
-	GetParticipants(identifier exporter_message.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
+	GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
 }
 
 // QBFTStore is the store used by QBFT components

@@ -40,24 +40,24 @@ type ParticipantsAPI struct {
 }
 
 // NewParticipantsAPIMsg creates a new message in a new format from the given message.
-func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
-	data, err := ParticipantsAPIData(msgs...)
+func NewParticipantsAPIMsg(msg qbftstorage.ParticipantsRangeEntry) Message {
+	data, err := ParticipantsAPIData(msg)
 	if err != nil {
 		return Message{
 			Type: TypeParticipants,
 			Data: []string{},
 		}
 	}
-	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
+	identifier := specqbft.ControllerIdToMessageID(msg.Identifier[:])
 	pkv := identifier.GetDutyExecutorID()
 
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
 			PublicKey: hex.EncodeToString(pkv),
-			From:      uint64(msgs[0].Slot),
-			To:        uint64(msgs[len(msgs)-1].Slot),
-			Role:      msgs[0].Identifier.GetRoleType().String(),
+			From:      uint64(msg.Slot),
+			To:        uint64(msg.Slot),
+			Role:      msg.Identifier.GetRoleType().String(),
 		},
 		Data: data,
 	}
@@ -100,7 +100,7 @@ type MessageFilter struct {
 	To uint64 `json:"to"`
 	// Role is the duty type, optional as it's relevant for IBFT data
 	Role string `json:"role,omitempty"`
-	// PublicKeys is optional, used for fetching decided messages or information about specific validator/operator
+	// PublicKey is optional, used for fetching decided messages or information about specific validator/operator
 	PublicKey string `json:"publicKey,omitempty"`
 }
 

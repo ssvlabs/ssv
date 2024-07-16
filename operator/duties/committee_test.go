@@ -10,10 +10,9 @@ import (
 	"github.com/cornelk/hashmap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -55,7 +54,7 @@ func setupCommitteeDutiesMock(
 		},
 	).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
@@ -64,7 +63,7 @@ func setupCommitteeDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+	s.beaconNode.(*MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
@@ -74,16 +73,16 @@ func setupCommitteeDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
-	s.validatorProvider.(*mocks.MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.validatorController.(*MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
 			return indicesFromShares(activeShares)
 		}).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.beaconNode.(*MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.beaconNode.(*MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
@@ -94,6 +93,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -116,7 +116,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 	})
 
 	currentSlot.Set(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -145,6 +145,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -166,7 +167,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 	})
 
 	currentSlot.Set(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -195,6 +196,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -223,7 +225,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	})
 
 	currentSlot.Set(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -253,6 +255,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -275,7 +278,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -309,6 +312,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -341,7 +345,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -406,6 +410,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -438,7 +443,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -503,6 +508,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -535,7 +541,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -591,6 +597,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -608,7 +615,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	)
 
 	currentSlot.Set(phase0.Slot(63))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -686,6 +693,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -711,7 +719,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	)
 
 	currentSlot.Set(phase0.Slot(63))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -798,6 +806,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -824,7 +833,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	currentSlot.Set(phase0.Slot(32))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -888,4 +897,88 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 
 func TestScheduler_Committee_Early_Block(t *testing.T) {
 	t.Skip("TODO")
+}
+
+func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
+	var (
+		dutyStore     = dutystore.New()
+		attHandler    = NewAttesterHandler(dutyStore.Attester)
+		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(2)
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		waitForDuties = &SafeValue[bool]{}
+		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares  = []*ssvtypes.SSVShare{{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 1,
+			},
+		}}
+	)
+	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(1),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(64),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+
+	currentSlot.Set(phase0.Slot(1))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
+	fetchAttesterDutiesCall, executeAttesterDutiesCall := setupAttesterGenesisDutiesMock(scheduler, attDuties, waitForDuties)
+	_, _ = setupSyncCommitteeDutiesMock(scheduler, activeShares, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	startFn()
+
+	aDuties, _ := attDuties.Get(0)
+	aExpected := expectedExecutedGenesisAttesterDuties(attHandler, aDuties)
+	setExecuteGenesisDutyFunc(scheduler, executeAttesterDutiesCall, len(aExpected))
+
+	startTime := time.Now()
+	ticker.Send(currentSlot.Get())
+	waitForGenesisDutiesExecution(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout, aExpected)
+
+	// validate the 1/3 of the slot waiting time
+	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+
+	// skip to the next epoch
+	currentSlot.Set(phase0.Slot(2))
+	for slot := currentSlot.Get(); slot < 47; slot++ {
+		ticker.Send(slot)
+		waitForNoActionGenesis(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
+		currentSlot.Set(slot + 1)
+	}
+
+	// wait for duties to be fetched for the next fork epoch
+	currentSlot.Set(phase0.Slot(47))
+	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
+	waitForGenesisDutiesFetch(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
+
+	currentSlot.Set(phase0.Slot(64))
+	aDuties, _ = attDuties.Get(2)
+	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 2, currentSlot.Get())
+	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+
+	startTime = time.Now()
+	ticker.Send(currentSlot.Get())
+	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
+
+	// validate the 1/3 of the slot waiting time
+	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+
+	// Stop scheduler & wait for graceful exit.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
 }

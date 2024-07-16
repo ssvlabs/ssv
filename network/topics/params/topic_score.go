@@ -6,6 +6,7 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 const (
@@ -35,11 +36,6 @@ const (
 	// P4
 	invalidMessageDecayEpochs = time.Duration(100)
 	maxInvalidMessagesAllowed = 20
-
-	// Message rate
-	clusterConsensusReductionFactor  = 0.15
-	messageRatePerValidatorPerSecond = 600.0 / 10000.0
-	msgsPerValidatorPerSecond        = messageRatePerValidatorPerSecond * clusterConsensusReductionFactor
 )
 
 var (
@@ -161,8 +157,8 @@ func (o *Options) maxScore() float64 {
 }
 
 // NewOpts creates new TopicOpts instance
-func NewOpts(activeValidators, subnets int) Options {
-	return Options{
+func NewOpts(activeValidators, subnets int) *Options {
+	return &Options{
 		Network: NetworkOpts{
 			ActiveValidators: activeValidators,
 			Subnets:          subnets,
@@ -172,8 +168,7 @@ func NewOpts(activeValidators, subnets int) Options {
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators, subnets int) Options {
-
+func NewSubnetTopicOpts(activeValidators, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()
@@ -181,9 +176,8 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 	// Set topic weight with equal weights
 	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
 
-	// Set expected message rate based on stage metrics
-	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
-	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
+	// Set the expected message rate for the topic
+	opts.Topic.ExpectedMsgRate = calculateMessageRateForTopic(committees)
 
 	return opts
 }
@@ -191,7 +185,7 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 // TopicParams creates pubsub.TopicScoreParams from the given TopicOpts
 // implementation is based on ETH2.0, with alignments to ssv:
 // https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c
-func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
+func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	// Validate options
 	if err := opts.validate(); err != nil {
 		return nil, err

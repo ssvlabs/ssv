@@ -19,6 +19,27 @@ import (
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 )
 
+const (
+	targetContainer = "ssv-node-1"
+
+	verifySignatureErr           = "failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature"
+	reconstructSignatureErr      = "could not reconstruct post consensus signature: could not reconstruct beacon sig: failed to verify reconstruct signature: could not reconstruct a valid signature"
+	pastRoundErr                 = "failed processing consensus message: could not process msg: invalid signed message: past round"
+	reconstructSignaturesSuccess = "reconstructed partial signatures"
+	submittedAttSuccess          = "✅ successfully submitted attestation"
+	gotDutiesSuccess             = "🗂 got duties"
+
+	msgHeightField        = "\"msg_height\":%d"
+	msgRoundField         = "\"msg_round\":%d"
+	msgTypeField          = "\"msg_type\":\"%s\""
+	consensusMsgTypeField = "\"consensus_msg_type\":%d"
+	signersField          = "\"signers\":[%d]"
+	errorField            = "\"error\":\"%s\""
+	dutyIDField           = "\"duty_id\":\"%s\""
+	roleField             = "\"role\":\"%s\""
+	slotField             = "\"slot\":%d"
+)
+
 type logCondition struct {
 	role             string
 	slot             phase0.Slot
@@ -40,7 +61,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	defer startc()
 
 	validatorIndex := fmt.Sprintf("v%d", share.ValidatorIndex)
-	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, ssvNodesContainers[0], cli)
+	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -60,7 +81,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	leader := DetermineLeader(dutySlot, committee)
 	logger.Debug("Leader: ", zap.Uint64("leader", leader))
 
-	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, ssvNodesContainers[0], cli)
+	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -91,7 +112,10 @@ func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string
 }
 
 func DetermineLeader(dutySlot phase0.Slot, committee []*types.CommitteeMember) types.OperatorID {
-	leader := qbft.RoundRobinProposer(&qbft.State{Height: qbft.Height(dutySlot), CommitteeMember: committee[0]}, qbft.FirstRound)
+	share := &types.Operator{
+		Committee: committee,
+	}
+	leader := qbft.RoundRobinProposer(&qbft.State{Height: qbft.Height(dutySlot), Share: share}, qbft.FirstRound)
 
 	return leader
 }
@@ -139,7 +163,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.ProposalMsgType,
 				signer:           corruptedOperator,
-				error:            failedVerifySigLog,
+				error:            verifySignatureErr,
 			},
 			{
 				role:             types.BNRoleAttester.String(),
@@ -157,7 +181,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.RoundChangeMsgType,
 				signer:           corruptedOperator,
-				error:            failedVerifySigLog,
+				error:            verifySignatureErr,
 			},
 			{
 				role:             types.BNRoleAttester.String(),
@@ -166,7 +190,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.PrepareMsgType,
 				signer:           corruptedOperator,
-				error:            failedVerifySigLog,
+				error:            verifySignatureErr,
 			},
 			// TODO: handle decided failed signature
 		}
@@ -179,7 +203,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.PrepareMsgType,
 				signer:           corruptedOperator,
-				error:            failedVerifySigLog,
+				error:            verifySignatureErr,
 			},
 			{
 				role:             types.BNRoleAttester.String(),
@@ -188,7 +212,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.CommitMsgType,
 				signer:           corruptedOperator,
-				error:            failedVerifySigLog,
+				error:            verifySignatureErr,
 			},
 			// TODO: handle decided failed signature
 		}
@@ -222,11 +246,10 @@ func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli Docker
 	}
 
 	filteredLogs := res.Grep(first)
-
 	logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", first))
 
 	if len(filteredLogs) != 1 {
-		return fmt.Errorf("found non matching messages on (1) %v, want %v got %v", target, 1, len(filteredLogs))
+		return fmt.Errorf("found non matching messages on %v, want %v got %v", target, 1, len(filteredLogs))
 	}
 
 	return nil
@@ -265,7 +288,7 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 		logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", fail))
 
 		if len(filteredLogs) != 1 {
-			return fmt.Errorf("found non matching messages on (3) %v, want %v got %v", target, 1, len(filteredLogs))
+			return fmt.Errorf("found non matching messages on %v, want %v got %v", target, 1, len(filteredLogs))
 		}
 	}
 

@@ -5,7 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/exporter_message"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -373,8 +374,8 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return emptyPK, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role exporter_message.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := exporter_message.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
+	removeDecidedMessages := func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
+		messageID := convert.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)
@@ -511,10 +512,6 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if !share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		return nil, nil
-	}
-
 	if share.BeaconMetadata == nil {
 		return nil, nil
 	}
@@ -523,9 +520,13 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	copy(pk[:], share.ValidatorPubKey[:])
 
 	ed := &duties.ExitDescriptor{
+		OwnValidator:   false,
 		PubKey:         pk,
 		ValidatorIndex: share.BeaconMetadata.Index,
 		BlockNumber:    event.Raw.BlockNumber,
+	}
+	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
+		ed.OwnValidator = true
 	}
 
 	return ed, nil

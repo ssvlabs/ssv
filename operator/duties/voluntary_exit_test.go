@@ -10,21 +10,23 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/operator/duties/mocks"
+
+	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh := make(chan ExitDescriptor)
-	handler := NewVoluntaryExitHandler(exitCh)
+	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 
 	currentSlot := &SafeValue[phase0.Slot]{}
 	currentSlot.Set(0)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	startFn()
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
@@ -37,21 +39,25 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	const blockNumber = uint64(1)
 
 	normalExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    blockNumber,
 	}
 	sameBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{4, 5, 6},
 		ValidatorIndex: phase0.ValidatorIndex(2),
 		BlockNumber:    normalExit.BlockNumber,
 	}
 	newBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 1,
 	}
 	pastBlockExit := ExitDescriptor{
+		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 4,
@@ -139,7 +145,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 	var blockByNumberCalls atomic.Uint64
 
-	scheduler.executionClient.(*mocks.MockExecutionClient).EXPECT().BlockByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
+	scheduler.executionClient.(*MockExecutionClient).EXPECT().BlockByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
 			blockByNumberCalls.Add(1)
 			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, nil, trie.NewStackTrie(nil))

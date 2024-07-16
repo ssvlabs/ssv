@@ -81,7 +81,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
+			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
@@ -189,7 +189,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	options := protocolvalidator.Options{
 		Storage:       newStores(logger),
 		Network:       node,
-		BeaconNetwork: networkconfig.TestNetwork.Beacon,
+		NetworkConfig: networkconfig.TestNetwork,
 		SSVShare: &types.SSVShare{
 			Share: *testingShare(keySet, id),
 			Metadata: types.Metadata{
