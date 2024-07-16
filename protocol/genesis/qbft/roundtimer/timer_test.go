@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	"github.com/golang/mock/gomock"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -57,7 +56,7 @@ func setupMockBeaconNetwork(t *testing.T) *mocks.MockBeaconNetwork {
 
 	mockBeaconNetwork.EXPECT().SlotDurationSec().Return(120 * time.Millisecond).AnyTimes()
 	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
+		func(slot interface{}) time.Time {
 			return time.Now()
 		},
 	).AnyTimes()
@@ -127,7 +126,7 @@ func testTimeoutForRoundMulti(t *testing.T, role genesisspectypes.BeaconRole, th
 	timeNow := time.Now()
 	mockBeaconNetwork.EXPECT().SlotDurationSec().Return(100 * time.Millisecond).AnyTimes()
 	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
+		func(slot interface{}) time.Time {
 			return timeNow
 		},
 	).AnyTimes()
