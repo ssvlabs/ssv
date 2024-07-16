@@ -919,7 +919,10 @@ func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, 
 		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
-		c.updateTopicScoreParams(c.logger)
+		err := c.updateTopicScoreParams(c.logger)
+		if err != nil {
+			c.logger.Warn("failed to update topic score params", zap.Error(err))
+		}
 	}
 	return nil
 }
