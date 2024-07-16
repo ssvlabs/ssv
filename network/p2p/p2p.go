@@ -255,6 +255,9 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	registeredSubnets := make([]byte, commons.Subnets())
 	defer ticker.Stop()
 
+	// Holds participating validators to detect changes and to trigger updates
+	pariticipatingValidators := make(map[int]struct{})
+
 	// Run immediately and then every second.
 	for ; true; <-ticker.C {
 		start := time.Now()
@@ -310,7 +313,38 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
 		)
+
+		// Update topics score parameters upon change
+		// TODO: use an appropriate trigger (outside this function) for the UpdateScoreParams function to called by the event of an addition or exit of a validator
+		newParticipatingValidators, changed := getUpdatedParticipatingValidators(n, pariticipatingValidators)
+		if changed {
+			n.topicsCtrl.UpdateScoreParams(logger)
+		}
+		pariticipatingValidators = newParticipatingValidators
 	}
+}
+
+// Returns the updated set of participating validators. Also, compares to a previous set and returns whether it changed or not.
+// If performance is an issue, the comparison could be done in a more efficient way with a high probability of detecting the change
+// (for example, by using a state with the list's XOR and checksum values)
+func getUpdatedParticipatingValidators(p2pnet *p2pNetwork, previousValidators map[int]struct{}) (map[int]struct{}, bool) {
+	// Gret updated list of shares
+	shares := p2pnet.nodeStorage.ValidatorStore().ParticipatingValidators(p2pnet.cfg.Network.Beacon.EstimatedCurrentEpoch())
+	// Create updated set
+	newValidators := make(map[int]struct{})
+	for _, share := range shares {
+		newValidators[int(share.ValidatorIndex)] = struct{}{}
+	}
+	// Compare it to the previous set
+	if len(previousValidators) != len(newValidators) {
+		return newValidators, true
+	}
+	for validatorIndex := range newValidators {
+		if _, exists := previousValidators[validatorIndex]; !exists {
+			return newValidators, true
+		}
+	}
+	return newValidators, false
 }
 
 // getMaxPeers returns max peers of the given topic.
