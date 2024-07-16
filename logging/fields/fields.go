@@ -3,6 +3,7 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"net"
 	"net/url"
 	"strconv"
@@ -43,12 +44,21 @@ const (
 	FieldCommitteeID         = "committee_id"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
+	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldConsensusTime       = "consensus_time"
+	FieldPostConsensusTime   = "post_consensus_time"
+	FieldQuorumTime          = "quorum_time"
+	FieldDecidedTime         = "decided_time"
+	FieldBlockTime           = "block_time"
+	FieldBeaconDataTime      = "beacon_data_time"
+	FieldBlockRootTime       = "block_root_time"
+	FieldBroadcastTime       = "broadcast_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
 	FieldDuties              = "duties"
+	FieldDutyExecutorID      = "duty_executor_id"
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldEpoch               = "epoch"
@@ -73,7 +83,6 @@ const (
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
-	FieldSenderID            = "sender_id"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubmissionTime      = "submission_time"
@@ -122,8 +131,8 @@ func Validator(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
 }
 
-func SenderID(senderID []byte) zapcore.Field {
-	return zap.Stringer(FieldSenderID, stringer.HexStringer{Val: senderID})
+func DutyExecutorID(senderID []byte) zapcore.Field {
+	return zap.Stringer(FieldDutyExecutorID, stringer.HexStringer{Val: senderID})
 }
 
 func AddressURL(val url.URL) zapcore.Field {
@@ -225,6 +234,9 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 func Role(val spectypes.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
+func ExporterRole(val convert.RunnerRole) zap.Field {
+	return zap.Stringer(FieldRole, val)
+}
 
 func MessageID(val spectypes.MessageID) zap.Field {
 	return zap.Stringer(FieldMessageID, val)
@@ -274,12 +286,45 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
+func PreConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPreConsensusTime, FormatDuration(val))
+}
+
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldConsensusTime, FormatDuration(val))
+}
+
+func PostConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPostConsensusTime, FormatDuration(val))
+}
+
+func QuorumTime(val time.Duration) zap.Field {
+	return zap.String(FieldQuorumTime, FormatDuration(val))
+}
+func DecidedTime(val time.Duration) zap.Field {
+	return zap.String(FieldDecidedTime, FormatDuration(val))
+}
+
+func BlockTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockTime, FormatDuration(val))
+}
+func BeaconDataTime(val time.Duration) zap.Field {
+	return zap.String(FieldBeaconDataTime, FormatDuration(val))
+}
+func BlockRootTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockRootTime, FormatDuration(val))
 }
 
 func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldSubmissionTime, FormatDuration(val))
+}
+
+func BroadcastTime(val time.Duration) zap.Field {
+	return zap.String(FieldBroadcastTime, FormatDuration(val))
+}
+
+func FormatDuration(val time.Duration) string {
+	return strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
 }
 
 func DutyID(val string) zap.Field {

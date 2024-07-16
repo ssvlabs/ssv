@@ -221,30 +221,27 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
-	// TODO ALAN: revert
-	return nil
+	if ec.isClosed() {
+		return ErrClosed
+	}
 
-	//if ec.isClosed() {
-	//	return ErrClosed
-	//}
-	//
-	//ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
-	//defer cancel()
-	//
-	//sp, err := ec.client.SyncProgress(ctx)
-	//if err != nil {
-	//	ec.metrics.ExecutionClientFailure()
-	//	return err
-	//}
-	//
-	//if sp != nil {
-	//	ec.metrics.ExecutionClientSyncing()
-	//	return fmt.Errorf("syncing")
-	//}
-	//
-	//ec.metrics.ExecutionClientReady()
-	//
-	//return nil
+	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
+	defer cancel()
+
+	sp, err := ec.client.SyncProgress(ctx)
+	if err != nil {
+		ec.metrics.ExecutionClientFailure()
+		return err
+	}
+
+	if sp != nil {
+		ec.metrics.ExecutionClientSyncing()
+		return fmt.Errorf("syncing")
+	}
+
+	ec.metrics.ExecutionClientReady()
+
+	return nil
 }
 
 func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {

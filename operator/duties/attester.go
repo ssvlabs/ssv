@@ -7,6 +7,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -27,8 +28,6 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty]) *Attes
 		duties: duties,
 	}
 	h.fetchCurrentEpoch = true
-	// TODO: (Alan) genesis support
-	//h.fetchFirst = true
 	return h
 }
 
@@ -67,13 +66,15 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 	h.fetchNextEpoch = true
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
@@ -82,19 +83,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			if h.indicesChanged {
 				h.duties.ResetEpoch(currentEpoch)
 				h.indicesChanged = false
-				// TODO: (Alan) genesis support
-				//h.processFetching(ctx, currentEpoch, slot)
-				//h.processExecution(currentEpoch, slot)
 			}
-			// TODO: (Alan) genesis support
-			//else {
-			//h.processExecution(currentEpoch, slot)
-			//if h.indicesChanged {
-			//	h.duties.ResetEpoch(currentEpoch)
-			//	h.indicesChanged = false
-			//}
-			//h.processFetching(ctx, currentEpoch, slot)
-			//}
 			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
@@ -118,15 +107,12 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			// reset current epoch duties
 			if reorgEvent.Previous {
 				h.duties.ResetEpoch(currentEpoch)
-				// TODO: (Alan) genesis support
-				//h.fetchFirst = true
 				h.fetchCurrentEpoch = true
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
 					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 
-				// TODO: (Alan) genesis support
 				h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
@@ -191,17 +177,27 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		return
 	}
 
-	// range over duties and execute
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
+	if !h.network.AlanForked(slot) {
+		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
+		for _, d := range duties {
+			if h.shouldExecute(d) {
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
+			}
+		}
+
+		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+		return
+	}
+
+	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			// TODO: (Alan) genesis support
-			//toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
 
-	h.executeDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
@@ -209,6 +205,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
 
 	if len(indices) == 0 {
+		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
@@ -251,6 +248,19 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
 	return &spectypes.BeaconDuty{
+		Type:                    role,
+		PubKey:                  duty.PubKey,
+		Slot:                    duty.Slot,
+		ValidatorIndex:          duty.ValidatorIndex,
+		CommitteeIndex:          duty.CommitteeIndex,
+		CommitteeLength:         duty.CommitteeLength,
+		CommitteesAtSlot:        duty.CommitteesAtSlot,
+		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
+	}
+}
+
+func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
+	return &genesisspectypes.Duty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,

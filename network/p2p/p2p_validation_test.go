@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
-
 	"os"
 	"sort"
 	"sync"
@@ -23,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/message/validation"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -54,9 +52,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
-		acceptedRole = spectypes.BNRoleProposer
-		ignoredRole  = spectypes.BNRoleAttester
-		rejectedRole = spectypes.BNRoleSyncCommittee
+		acceptedRole = spectypes.RoleProposer
+		ignoredRole  = spectypes.RoleAggregator
+		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
 	var mtx sync.Mutex
@@ -71,15 +69,14 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			peer := vNet.NodeByPeerID(p)
 			signedSSVMsg := &spectypes.SignedSSVMessage{}
 			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
-			msg := signedSSVMsg.SSVMessage
 
-			decodedMsg, err := queue.DecodeSSVMessage(msg)
+			decodedMsg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg
 			mtx.Lock()
 			// Validation according to role.
 			var validation pubsub.ValidationResult
-			switch msg.MsgID.GetRoleType() {
+			switch signedSSVMsg.SSVMessage.MsgID.GetRoleType() {
 			case acceptedRole:
 				messageValidators[i].Accepted[peer.Index]++
 				messageValidators[i].TotalAccepted++
@@ -118,9 +115,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Prepare a pool of broadcasters.
 	mu := sync.Mutex{}
 	height := atomic.Int64{}
-	roleBroadcasts := map[spectypes.BeaconRole]int{}
+	roleBroadcasts := map[spectypes.RunnerRole]int{}
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
-	broadcaster := func(node *VirtualNode, roles ...spectypes.BeaconRole) {
+	broadcaster := func(node *VirtualNode, roles ...spectypes.RunnerRole) {
 		broadcasters.Go(func(ctx context.Context) error {
 			for i := 0; i < 50; i++ {
 				role := roles[i%len(roles)]
@@ -268,15 +265,11 @@ type MockMessageValidator struct {
 }
 
 func (v *MockMessageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return v.ValidatePubsubMessage
+	return v.Validate
 }
 
-func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return v.ValidateFunc(ctx, p, pmsg)
-}
-
-func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, genesisvalidation.Descriptor, error) {
-	panic("not implemented") // TODO: Implement
 }
 
 type NodeIndex int

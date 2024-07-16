@@ -27,7 +27,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks, testingutils.TestingValidatorIndex)
 	logger := logging.TestLogger(t)
-	v := ssvtesting.BaseValidator(logger, keySetForShare(share))
+	v := ssvtesting.BaseValidator(logger, testingutils.KeySetForShare(share))
 	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
@@ -70,17 +70,4 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 	require.NoError(t, err)
 
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
-}
-
-func keySetForShare(share *spectypes.Share) *testingutils.TestKeySet {
-	if len(share.Committee) == 5 {
-		return testingutils.Testing7SharesSet()
-	}
-	if len(share.Committee) == 7 {
-		return testingutils.Testing10SharesSet()
-	}
-	if len(share.Committee) == 9 {
-		return testingutils.Testing13SharesSet()
-	}
-	return testingutils.Testing4SharesSet()
 }
