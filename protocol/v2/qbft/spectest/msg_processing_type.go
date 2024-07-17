@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/stretchr/testify/require"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -32,7 +31,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember), convert.RunnerRole(msgId.GetRoleType())),
+		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember), msgId.GetRoleType()),
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,

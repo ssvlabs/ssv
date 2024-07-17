@@ -11,7 +11,6 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -101,7 +100,7 @@ func TestQBFTMapping(t *testing.T) {
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), convert.RunnerRole(spectypes.RoleCommittee)),
+				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), spectypes.RoleCommittee),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

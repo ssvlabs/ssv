@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -85,7 +84,7 @@ var baseRunner = func(
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewTestingOperatorSigner(keySet, 1)
 
-	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
@@ -289,7 +288,7 @@ var baseRunnerWithShareMap = func(
 	committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)
 	opSigner := spectestingutils.NewTestingOperatorSigner(keySetInstance, committeeMember.OperatorID)
 
-	config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySetInstance, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
