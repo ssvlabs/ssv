@@ -260,8 +260,6 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		// TODO (Alan): Update Metadata.NetworkID to the new domain type after the fork (see Metadata.Subnets below for how to update).
-
 		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, commons.Subnets())
 		copy(newSubnets, n.subnets)
@@ -296,9 +294,10 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			continue
 		}
 
-		self := n.idx.Self()
-		self.Metadata.Subnets = records.Subnets(n.subnets).String()
-		n.idx.UpdateSelfRecord(self)
+		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
+			self.Metadata.Subnets = records.Subnets(n.subnets).String()
+			return self
+		})
 
 		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
 		if err != nil {
