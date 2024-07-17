@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"testing"
 
@@ -86,11 +87,11 @@ func TestMsgValidator(t *testing.T) {
 		signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
 		require.NoError(t, err)
 
-		sig := [256]byte{}
+		var sig []byte
 		copy(sig[:], signature)
 
-		packedPubSubMsgPayload := spectypes.EncodeSignedSSVMessage(encodedMsg, operatorId, sig)
-		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetPubKey())
+		packedPubSubMsgPayload := genesisspectypes.EncodeSignedSSVMessage(encodedMsg, operatorId, sig)
+		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetDutyExecutorID())
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -98,8 +99,7 @@ func TestMsgValidator(t *testing.T) {
 				Data:  packedPubSubMsgPayload,
 			},
 		}
-
-		res := mv.ValidatePubsubMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
@@ -120,7 +120,7 @@ func TestMsgValidator(t *testing.T) {
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
-		res := mv.ValidatePubsubMessage(context.Background(), "xxxx", pmsg)
+		res := mv.Validate(context.Background(), "xxxx", pmsg)
 		require.Equal(t, pubsub.ValidationReject, res)
 	})
 
@@ -147,7 +147,7 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(pk spectypes.ValidatorPK, height qbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk[:], spectypes.RoleCommittee)
 	ks := spectestingutils.Testing4SharesSet()
 	validSignedMessage := spectestingutils.TestingRoundChangeMessageWithHeightAndIdentifier(ks.OperatorKeys[1], 1, height, id[:])
 

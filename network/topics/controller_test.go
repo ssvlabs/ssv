@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -23,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -433,12 +433,12 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 		return nil, err
 	}
 
-	signedMessage := specqbftSignedMessage{
+	signedMessage := genesisspecqbft.SignedMessage{
 		Signature: signature,
 		Signers:   []spectypes.OperatorID{1, 3, 4},
-		Message: specqbft.Message{
-			MsgType:    specqbft.RoundChangeMsgType,
-			Height:     specqbft.Height(height),
+		Message: genesisspecqbft.Message{
+			MsgType:    genesisspecqbft.RoundChangeMsgType,
+			Height:     genesisspecqbft.Height(height),
 			Round:      2,
 			Identifier: id[:],
 			Root:       [32]byte{},
