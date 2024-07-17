@@ -14,8 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -60,10 +58,6 @@ type DiscV5Service struct {
 
 	domainType networkconfig.DomainTypeProvider
 	subnets    []byte
-}
-
-func (dvs *DiscV5Service) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
-	return records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, domain)
 }
 
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {

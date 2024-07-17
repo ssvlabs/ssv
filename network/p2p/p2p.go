@@ -325,9 +325,10 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			continue
 		}
 
-		self := n.idx.Self()
-		self.Metadata.Subnets = records.Subnets(n.activeSubnets).String()
-		n.idx.UpdateSelfRecord(self)
+		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
+			self.Metadata.Subnets = records.Subnets(n.activeSubnets).String()
+			return self
+		})
 
 		var errs error
 		if len(addedSubnets) > 0 {
@@ -399,14 +400,4 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
-}
-
-// UpdateDomainAtFork updates Domain Type at ENR node record after fork epoch.
-func (n *p2pNetwork) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
-	if err := n.disc.UpdateDomainType(logger, domain); err != nil {
-		logger.Error("could not update domain type", zap.Error(err))
-		return err
-	}
-	logger.Debug("updated and published ENR with domain type", fields.Domain(domain))
-	return nil
 }

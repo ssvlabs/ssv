@@ -17,25 +17,19 @@ type NodeMetadata struct {
 }
 
 // Encode encodes the metadata into bytes
-// TODO: switch to SSZ
 func (nm *NodeMetadata) Encode() ([]byte, error) {
-	// ser := newSerializable(
-	//	nm.NodeVersion,
-	//	nm.ConsensusNode,
-	//	nm.ExecutionNode,
-	//)
-
 	return json.Marshal(nm)
 }
 
 // Decode decodes a raw payload into metadata
-// TODO: switch to SSZ
 func (nm *NodeMetadata) Decode(data []byte) error {
-	// var ser serializable
-
 	if err := json.Unmarshal(data, nm); err != nil {
 		return err
 	}
-
 	return nil
+}
+
+func (nm *NodeMetadata) Clone() *NodeMetadata {
+	cpy := *nm
+	return &cpy
 }
