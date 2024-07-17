@@ -229,17 +229,17 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 			panic("cant unmarshal committee duty")
 		}
 		testDuty = committeeDuty
-	} else if _, ok := m["BeaconDuty"]; ok {
-		byts, err := json.Marshal(m["BeaconDuty"])
+	} else if _, ok := m["ValidatorDuty"]; ok {
+		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
 			panic("cant marshal beacon duty")
 		}
-		beaconDuty := &spectypes.ValidatorDuty{}
-		err = json.Unmarshal(byts, beaconDuty)
+		validatorDuty := &spectypes.ValidatorDuty{}
+		err = json.Unmarshal(byts, validatorDuty)
 		if err != nil {
 			panic("cant unmarshal beacon duty")
 		}
-		testDuty = beaconDuty
+		testDuty = validatorDuty
 	} else {
 		panic("no beacon or committee duty")
 	}
@@ -295,15 +295,15 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 			panic("cant unmarshal committee duty")
 		}
 		duty = committeeDuty
-	} else if _, ok := m["BeaconDuty"]; ok {
-		byts, err := json.Marshal(m["BeaconDuty"])
+	} else if _, ok := m["ValidatorDuty"]; ok {
+		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
-			panic("cant marshal beacon duty")
+			panic("cant marshal validator duty")
 		}
 		beaconDuty := &spectypes.ValidatorDuty{}
 		err = json.Unmarshal(byts, beaconDuty)
 		if err != nil {
-			panic("cant unmarshal beacon duty")
+			panic("cant unmarshal validator duty")
 		}
 		duty = beaconDuty
 	} else {
@@ -381,7 +381,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		if ret.GetBaseRunner().State != nil {
 			if ret.GetBaseRunner().State.RunningInstance != nil {
 				operator := spectestingutils.TestingCommitteeMember(ks)
-				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
+				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ks, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
 			}
 		}
 	}
@@ -396,6 +396,7 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 		contr.Identifier,
 		contr.CommitteeMember,
 		config,
+		spectestingutils.NewOperatorSigner(ks, 1),
 		false,
 	)
 	newContr.Height = contr.Height
@@ -406,17 +407,20 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 			continue
 		}
 		operator := spectestingutils.TestingCommitteeMember(ks)
-		newContr.StoredInstances[i] = fixInstanceForRun(t, inst, newContr, operator)
+		newContr.StoredInstances[i] = fixInstanceForRun(t, ks, inst, newContr, operator)
 	}
 	return newContr
 }
 
-func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
+func fixInstanceForRun(t *testing.T, ks *spectestingutils.TestKeySet, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
+	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	newInst := instance.NewInstance(
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
-		contr.Height)
+		contr.Height,
+		signer,
+	)
 
 	newInst.State.DecidedValue = inst.State.DecidedValue
 	newInst.State.Decided = inst.State.Decided
@@ -550,7 +554,6 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		logger,
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,
-		testingutils.NewTestingVerifier(),
 		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
 			return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
 		},

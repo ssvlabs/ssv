@@ -176,7 +176,7 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.ProcessingMessag
 
 func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	if err := msg.Validate(); err != nil {
-		return errors.Wrap(err, "invalid Message")
+		return err
 	}
 
 	if msg.QBFTMessage.Round < i.State.Round {
