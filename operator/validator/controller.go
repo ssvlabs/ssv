@@ -1185,7 +1185,7 @@ func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIn
 func SetupCommitteeRunners(
 	ctx context.Context,
 	options validator.Options,
-) func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+) validator.CommitteeRunnerFunc {
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner:      options.Signer,
@@ -1211,14 +1211,10 @@ func SetupCommitteeRunners(
 		return qbftCtrl
 	}
 
-	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		sharepbs := make([]spectypes.ShareValidatorPK, len(shares))
-		for i, s := range shares {
-			sharepbs[i] = s.SharePubKey
-		}
-		valCheck := specssv.BeaconVoteValueCheckF(options.Signer, slot, sharepbs, epoch)
+		valCheck := specssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
 		crunner := runner.NewCommitteeRunner(
 			options.NetworkConfig,
 			shares,
