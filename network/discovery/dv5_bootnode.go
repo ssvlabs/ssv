@@ -3,11 +3,11 @@ package discovery
 import (
 	"context"
 
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
-
 	"github.com/ssvlabs/ssv/utils"
-	"go.uber.org/zap"
 )
 
 // BootnodeOptions contains options to create the node

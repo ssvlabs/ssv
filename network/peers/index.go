@@ -62,7 +62,7 @@ type NodeInfoIndex interface {
 	Self() *records.NodeInfo
 
 	// UpdateSelfRecord updating current self with new one
-	UpdateSelfRecord(newInfo *records.NodeInfo)
+	UpdateSelfRecord(update func(self *records.NodeInfo) *records.NodeInfo)
 
 	// SetNodeInfo updates the given peer with the NodeInfo.
 	SetNodeInfo(id peer.ID, node *records.NodeInfo)
