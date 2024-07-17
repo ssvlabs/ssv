@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	defaultDiscoveryInterval = time.Second
+	defaultDiscoveryInterval = time.Millisecond * 100
 	publishENRTimeout        = time.Minute
 
 	publishStateReady   = int32(0)
@@ -215,7 +215,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 // by a random walking on the underlying DHT.
 //
 // handler will act upon new node.
-// interval enables to control the rate of new nodes that we find.
+// interval enables to control the rate of discovered nodes that we accept.
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
 func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
@@ -226,15 +226,10 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	// selfID is used to exclude current node
 	selfID := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
 
-	t := time.NewTimer(interval)
-	defer t.Stop()
-	wait := func() {
-		t.Reset(interval)
-		<-t.C
-	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
 	for ctx.Err() == nil {
-		wait()
 		exists := iterator.Next()
 		if !exists {
 			continue
@@ -252,6 +247,11 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 				AddrInfo: *ai,
 				Node:     n,
 			})
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }
