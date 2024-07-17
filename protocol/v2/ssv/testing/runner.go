@@ -116,7 +116,7 @@ var baseRunner = func(
 			km,
 			opSigner,
 			valCheck,
-		).(runner.Runner)
+		)
 	case spectypes.RoleAggregator:
 		return runner.NewAggregatorRunner(
 			spectypes.BeaconTestNetwork,
@@ -128,7 +128,7 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
-		).(runner.Runner)
+		)
 	case spectypes.RoleProposer:
 		return runner.NewProposerRunner(
 			spectypes.BeaconTestNetwork,
@@ -140,7 +140,7 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
-		).(runner.Runner)
+		)
 	case spectypes.RoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
 			spectypes.BeaconTestNetwork,
@@ -152,7 +152,7 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
-		).(runner.Runner)
+		)
 	case spectypes.RoleValidatorRegistration:
 		return runner.NewValidatorRegistrationRunner(
 			spectypes.BeaconTestNetwork,
@@ -162,7 +162,7 @@ var baseRunner = func(
 			net,
 			km,
 			opSigner,
-		).(runner.Runner)
+		)
 	case spectypes.RoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
 			spectypes.BeaconTestNetwork,
@@ -171,7 +171,7 @@ var baseRunner = func(
 			net,
 			km,
 			opSigner,
-		).(runner.Runner)
+		)
 	case spectestingutils.UnknownDutyType:
 		ret := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
@@ -184,7 +184,7 @@ var baseRunner = func(
 			valCheck,
 		)
 		ret.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
-		return ret.(runner.Runner)
+		return ret
 	default:
 		panic("unknown role type")
 	}

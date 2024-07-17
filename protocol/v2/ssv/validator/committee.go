@@ -142,7 +142,12 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	// TODO alan: stop queue
-	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, c.Runners[duty.Slot])
+	go func() {
+		err := c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, c.Runners[duty.Slot])
+		if err != nil {
+			logger.Warn("handles error message", zap.Error(err))
+		}
+	}()
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
@@ -314,21 +319,6 @@ func (c *Committee) UnmarshalJSON(data []byte) error {
 	c.Shares = aux.Shares
 
 	return nil
-}
-
-// updateAttestingSlotMap updates the highest attesting slot map from beacon duties
-func (c *Committee) updateAttestingSlotMap(duty *spectypes.CommitteeDuty) {
-	for _, beaconDuty := range duty.BeaconDuties {
-		if beaconDuty.Type == spectypes.BNRoleAttester {
-			validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
-			if _, ok := c.HighestAttestingSlotMap[validatorPK]; !ok {
-				c.HighestAttestingSlotMap[validatorPK] = beaconDuty.Slot
-			}
-			if c.HighestAttestingSlotMap[validatorPK] < beaconDuty.Slot {
-				c.HighestAttestingSlotMap[validatorPK] = beaconDuty.Slot
-			}
-		}
-	}
 }
 
 func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {

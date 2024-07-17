@@ -18,7 +18,7 @@ type TestingBeaconNodeWrapped struct {
 }
 
 func (bn *TestingBeaconNodeWrapped) SetSyncCommitteeAggregatorRootHexes(roots map[string]bool) {
-	bn.SetSyncCommitteeAggregatorRootHexes(roots)
+	bn.Bn.SetSyncCommitteeAggregatorRootHexes(roots)
 }
 
 func (bn *TestingBeaconNodeWrapped) GetBroadcastedRoots() []phase0.Root {
