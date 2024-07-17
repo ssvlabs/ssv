@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -12,15 +11,16 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 //type Broadcaster interface {
@@ -33,13 +33,14 @@ import (
 //}
 
 type CommitteeRunner struct {
-	BaseRunner        *BaseRunner
-	network           specqbft.Network
-	beacon            beacon.BeaconNode
-	signer            types.BeaconSigner
-	operatorSigner    types.OperatorSigner
-	domain            spectypes.DomainType
-	valCheck          specqbft.ProposedValueCheckF
+	BaseRunner     *BaseRunner
+	network        specqbft.Network
+	beacon         beacon.BeaconNode
+	signer         types.BeaconSigner
+	operatorSigner types.OperatorSigner
+	domain         spectypes.DomainType
+	valCheck       specqbft.ProposedValueCheckF
+
 	stoppedValidators map[spectypes.ValidatorPK]struct{}
 	submittedDuties   map[types.BeaconRole]map[phase0.ValidatorIndex]struct{}
 
@@ -59,12 +60,12 @@ func NewCommitteeRunner(
 ) Runner {
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: types.RoleCommittee,
-			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
-			Share:          share,
-			QBFTController: qbftController,
+			RunnerRoleType:     types.RoleCommittee,
+			DomainTypeProvider: networkConfig,
+			BeaconNetwork:      networkConfig.Beacon.GetBeaconNetwork(),
+			Share:              share,
+			QBFTController:     qbftController,
 		},
-		domain:            networkConfig.Domain,
 		beacon:            beacon,
 		network:           network,
 		signer:            signer,
@@ -254,7 +255,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 	ssvMsg := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
 		MsgID: types.NewMsgID(
-			cr.domain,
+			cr.BaseRunner.DomainTypeProvider.DomainType(),
 			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),

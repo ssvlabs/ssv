@@ -14,6 +14,7 @@ import (
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -293,9 +294,10 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			continue
 		}
 
-		self := n.idx.Self()
-		self.Metadata.Subnets = records.Subnets(n.subnets).String()
-		n.idx.UpdateSelfRecord(self)
+		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
+			self.Metadata.Subnets = records.Subnets(n.subnets).String()
+			return self
+		})
 
 		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
 		if err != nil {
@@ -343,4 +345,14 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+// UpdateDomainAtFork updates Domain Type at ENR node record after fork epoch.
+func (n *p2pNetwork) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
+	if err := n.disc.UpdateDomainType(logger, domain); err != nil {
+		logger.Error("could not update domain type", zap.Error(err))
+		return err
+	}
+	logger.Debug("updated and published ENR with domain type", fields.Domain(domain))
+	return nil
 }

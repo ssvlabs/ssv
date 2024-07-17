@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -32,6 +34,7 @@ type ValidatorRegistrationRunner struct {
 }
 
 func NewValidatorRegistrationRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -42,10 +45,11 @@ func NewValidatorRegistrationRunner(
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: spectypes.RoleValidatorRegistration,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
-			QBFTController: qbftController,
+			RunnerRoleType:     spectypes.RoleValidatorRegistration,
+			DomainTypeProvider: domainTypeProvider,
+			BeaconNetwork:      beaconNetwork,
+			Share:              share,
+			QBFTController:     qbftController,
 		},
 
 		beacon:         beacon,
@@ -151,7 +155,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spect
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
 	if err != nil {
 		return errors.Wrap(err, "could not sign pre-consensus partial signature message")
