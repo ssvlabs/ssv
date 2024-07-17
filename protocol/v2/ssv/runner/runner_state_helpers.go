@@ -24,7 +24,7 @@ func getPostConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID
 	case *spectypes.CommitteeDuty:
 		valIdx = state.StartingDuty.(*spectypes.CommitteeDuty).BeaconDuties[0].ValidatorIndex
 	default:
-		panic("unknown duty type")
+		return nil
 	}
 	sigs := state.PostConsensusContainer.Signatures[valIdx][hex.EncodeToString(root[:])]
 	var signers []spectypes.OperatorID
