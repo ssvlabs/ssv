@@ -9,6 +9,7 @@ import (
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -30,7 +31,7 @@ type SyncCommitteeAggregatorRunner struct {
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner *spectypes.OperatorSigner
+	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -43,7 +44,7 @@ func NewSyncCommitteeAggregatorRunner(
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner *spectypes.OperatorSigner,
+	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -459,7 +460,7 @@ func (r *SyncCommitteeAggregatorRunner) GetValCheckF() specqbft.ProposedValueChe
 func (r *SyncCommitteeAggregatorRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
-func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() *spectypes.OperatorSigner {
+func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 

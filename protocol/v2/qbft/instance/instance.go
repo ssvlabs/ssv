@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
@@ -20,7 +21,7 @@ import (
 type Instance struct {
 	State  *specqbft.State
 	config qbft.IConfig
-	signer *spectypes.OperatorSigner
+	signer ssvtypes.OperatorSigner
 
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
@@ -37,7 +38,7 @@ func NewInstance(
 	committeeMember *spectypes.CommitteeMember,
 	identifier []byte,
 	height specqbft.Height,
-	signer *spectypes.OperatorSigner,
+	signer ssvtypes.OperatorSigner,
 ) *Instance {
 	var name = ""
 	if len(identifier) == 56 {

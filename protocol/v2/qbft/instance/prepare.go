@@ -4,13 +4,13 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponPrepare process prepare message
@@ -172,7 +172,7 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, signer *spectypes.OperatorSigner, newRound specqbft.Round, root [32]byte) (*spectypes.SignedSSVMessage, error) {
+func CreatePrepare(state *specqbft.State, signer ssvtypes.OperatorSigner, newRound specqbft.Round, root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     state.Height,
@@ -182,5 +182,5 @@ func CreatePrepare(state *specqbft.State, signer *spectypes.OperatorSigner, newR
 		Root: root,
 	}
 
-	return specqbft.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	return ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
 }

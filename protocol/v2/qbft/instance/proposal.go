@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
@@ -271,7 +271,7 @@ func proposer(state *specqbft.State, config qbft.IConfig, round specqbft.Round) 
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *specqbft.State, signer *spectypes.OperatorSigner, fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
+func CreateProposal(state *specqbft.State, signer ssvtypes.OperatorSigner, fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
@@ -306,7 +306,7 @@ func CreateProposal(state *specqbft.State, signer *spectypes.OperatorSigner, ful
 		PrepareJustification:     preparesData,
 	}
 
-	signedMsg, err := specqbft.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	signedMsg, err := ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not wrap proposal message")
 	}

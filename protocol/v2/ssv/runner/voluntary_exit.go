@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -25,7 +26,7 @@ type VoluntaryExitRunner struct {
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner *spectypes.OperatorSigner
+	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
@@ -39,7 +40,7 @@ func NewVoluntaryExitRunner(
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner *spectypes.OperatorSigner,
+	operatorSigner ssvtypes.OperatorSigner,
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
@@ -224,7 +225,7 @@ func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 func (r *VoluntaryExitRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
-func (r *VoluntaryExitRunner) GetOperatorSigner() *spectypes.OperatorSigner {
+func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 

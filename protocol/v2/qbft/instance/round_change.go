@@ -4,13 +4,13 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -425,7 +425,7 @@ RoundChange(
            getRoundChangeJustification(current)
        )
 */
-func CreateRoundChange(state *specqbft.State, signer *spectypes.OperatorSigner, newRound specqbft.Round, instanceStartValue []byte) (*spectypes.SignedSSVMessage, error) {
+func CreateRoundChange(state *specqbft.State, signer ssvtypes.OperatorSigner, newRound specqbft.Round, instanceStartValue []byte) (*spectypes.SignedSSVMessage, error) {
 	round, root, fullData, justifications, err := getRoundChangeData(state)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")
@@ -451,7 +451,7 @@ func CreateRoundChange(state *specqbft.State, signer *spectypes.OperatorSigner, 
 		RoundChangeJustification: justificationsData,
 	}
 
-	signedMsg, err := specqbft.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	signedMsg, err := ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign round change message")
 	}

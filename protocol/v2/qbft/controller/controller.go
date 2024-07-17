@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -29,8 +30,8 @@ type Controller struct {
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
 	CommitteeMember   *spectypes.CommitteeMember
-	OperatorSigner    *spectypes.OperatorSigner `json:"-"`
-	NewDecidedHandler NewDecidedHandler         `json:"-"`
+	OperatorSigner    ssvtypes.OperatorSigner `json:"-"`
+	NewDecidedHandler NewDecidedHandler       `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
 }
@@ -39,7 +40,7 @@ func NewController(
 	identifier []byte,
 	committeeMember *spectypes.CommitteeMember,
 	config qbft.IConfig,
-	signer *spectypes.OperatorSigner,
+	signer ssvtypes.OperatorSigner,
 	fullNode bool,
 ) *Controller {
 	return &Controller{

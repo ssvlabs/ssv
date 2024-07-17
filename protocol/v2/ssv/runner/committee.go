@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 //type Broadcaster interface {
@@ -37,7 +38,7 @@ type CommitteeRunner struct {
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner *spectypes.OperatorSigner
+	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
 	stoppedValidators map[spectypes.ValidatorPK]struct{}
@@ -56,7 +57,7 @@ func NewCommitteeRunner(
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner *spectypes.OperatorSigner,
+	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
 	return &CommitteeRunner{
@@ -115,7 +116,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
 		signer         spectypes.BeaconSigner
-		operatorSigner *spectypes.OperatorSigner
+		operatorSigner ssvtypes.OperatorSigner
 		valCheck       specqbft.ProposedValueCheckF
 	}
 
@@ -140,7 +141,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
 		signer         spectypes.BeaconSigner
-		operatorSigner *spectypes.OperatorSigner
+		operatorSigner ssvtypes.OperatorSigner
 		valCheck       specqbft.ProposedValueCheckF
 		//
 		//stoppedValidators map[spectypes.ValidatorPK]struct{}
@@ -666,7 +667,7 @@ func (cr *CommitteeRunner) GetSigner() spectypes.BeaconSigner {
 	return cr.signer
 }
 
-func (cr *CommitteeRunner) GetOperatorSigner() *spectypes.OperatorSigner {
+func (cr *CommitteeRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return cr.operatorSigner
 }
 

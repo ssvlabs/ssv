@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -26,7 +27,7 @@ type ValidatorRegistrationRunner struct {
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner *spectypes.OperatorSigner
+	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -39,7 +40,7 @@ func NewValidatorRegistrationRunner(
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner *spectypes.OperatorSigner,
+	operatorSigner ssvtypes.OperatorSigner,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
@@ -234,7 +235,7 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheck
 func (r *ValidatorRegistrationRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
-func (r *ValidatorRegistrationRunner) GetOperatorSigner() *spectypes.OperatorSigner {
+func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 

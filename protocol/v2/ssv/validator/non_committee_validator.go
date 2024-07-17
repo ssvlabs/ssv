@@ -22,7 +22,7 @@ import (
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -42,7 +42,7 @@ type CommitteeObserverOptions struct {
 	Network           specqbft.Network
 	Storage           *storage.QBFTStores
 	Operator          *spectypes.CommitteeMember
-	OperatorSigner    *spectypes.OperatorSigner
+	OperatorSigner    ssvtypes.OperatorSigner
 	NetworkConfig     networkconfig.NetworkConfig
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
@@ -196,7 +196,7 @@ func (ncv *CommitteeObserver) processMessage(
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *types.SSVShare) {
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
@@ -218,12 +218,12 @@ func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.Parti
 }
 
 // copied from BaseRunner
-func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte, share *types.SSVShare) error {
-	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
+func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte, share *ssvtypes.SSVShare) error {
+	ssvtypes.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	for _, n := range share.Committee {
 		if n.Signer == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
+			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
 				return fmt.Errorf("could not deserialized pk: %w", err)
 			}

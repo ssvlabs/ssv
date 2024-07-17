@@ -7,6 +7,7 @@ import (
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -25,7 +26,7 @@ type Getters interface {
 	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
-	GetOperatorSigner() *spectypes.OperatorSigner
+	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
 }
 
@@ -61,7 +62,7 @@ type BaseRunner struct {
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
 	RunnerRoleType spectypes.RunnerRole
-	*spectypes.OperatorSigner
+	ssvtypes.OperatorSigner
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`

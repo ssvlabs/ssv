@@ -78,7 +78,7 @@ type ControllerOptions struct {
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BeaconSigner               spectypes.BeaconSigner
-	OperatorSigner             *spectypes.OperatorSigner
+	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
@@ -166,7 +166,7 @@ type controller struct {
 
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   spectypes.BeaconSigner
-	operatorSigner *spectypes.OperatorSigner
+	operatorSigner ssvtypes.OperatorSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore
 

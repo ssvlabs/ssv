@@ -5,14 +5,13 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
-
-	"go.uber.org/zap"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -122,7 +121,7 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *specqbft.State, signer *spectypes.OperatorSigner, root [32]byte) (*spectypes.SignedSSVMessage, error) {
+func CreateCommit(state *specqbft.State, signer ssvtypes.OperatorSigner, root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Height:     state.Height,
@@ -131,7 +130,7 @@ func CreateCommit(state *specqbft.State, signer *spectypes.OperatorSigner, root 
 
 		Root: root,
 	}
-	return specqbft.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	return ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
 }
 
 func baseCommitValidationIgnoreSignature(

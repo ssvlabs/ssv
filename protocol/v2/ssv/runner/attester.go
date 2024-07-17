@@ -7,7 +7,7 @@ package runner
 //	beacon         specssv.BeaconNode
 //	network        specqbft.Network
 //	signer         spectypes.BeaconSigner
-//	operatorSigner spectypes.OperatorSigner
+//	operatorSigner ssvtypes.OperatorSigner
 //	valCheck       specqbft.ProposedValueCheckF
 //
 //	started time.Time
@@ -21,7 +21,7 @@ package runner
 //	beacon specssv.BeaconNode,
 //	network specqbft.Network,
 //	signer spectypes.BeaconSigner,
-//	operatorSigner spectypes.OperatorSigner,
+//	operatorSigner ssvtypes.OperatorSigner,
 //	valCheck specqbft.ProposedValueCheckF,
 //	highestDecidedSlot phase0.Slot,
 //) Runner {

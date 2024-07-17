@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -20,7 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -36,9 +35,9 @@ type Validator struct {
 	Network       specqbft.Network
 
 	Operator       *spectypes.CommitteeMember
-	Share          *types.SSVShare
+	Share          *ssvtypes.SSVShare
 	Signer         spectypes.BeaconSigner
-	OperatorSigner *spectypes.OperatorSigner
+	OperatorSigner ssvtypes.OperatorSigner
 
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.RunnerRole]queueContainer

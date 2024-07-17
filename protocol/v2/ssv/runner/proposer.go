@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
@@ -33,7 +34,7 @@ type ProposerRunner struct {
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner *spectypes.OperatorSigner
+	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	metrics        metrics.ConsensusMetrics
 }
@@ -45,7 +46,7 @@ func NewProposerRunner(
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner *spectypes.OperatorSigner,
+	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -450,7 +451,7 @@ func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
 
-func (r *ProposerRunner) GetOperatorSigner() *spectypes.OperatorSigner {
+func (r *ProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 
