@@ -18,14 +18,14 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
-// Duty runner for validator voluntary exit duty
+// ValidatorDuty runner for validator voluntary exit duty
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner spectypes.OperatorSigner
+	operatorSigner *spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
@@ -39,7 +39,7 @@ func NewVoluntaryExitRunner(
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner spectypes.OperatorSigner,
+	operatorSigner *spectypes.OperatorSigner,
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
@@ -58,7 +58,7 @@ func NewVoluntaryExitRunner(
 }
 
 func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty, quorum)
+	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty.(*spectypes.ValidatorDuty), quorum)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -141,7 +141,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Dut
 	}
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.BeaconDuty), voluntaryExit, duty.DutySlot(), spectypes.DomainVoluntaryExit)
+	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), voluntaryExit, duty.DutySlot(), spectypes.DomainVoluntaryExit)
 	if err != nil {
 		return errors.Wrap(err, "could not sign VoluntaryExit object")
 	}
@@ -153,9 +153,26 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Dut
 	}
 
 	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
-	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
+	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not sign pre-consensus partial signature message")
+		return err
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return errors.Wrap(err, "could not sign SSVMessage")
+	}
+
+	msgToBroadcast := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
 	}
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
@@ -171,7 +188,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Dut
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
-	validatorIndex := r.GetState().StartingDuty.(*spectypes.BeaconDuty).ValidatorIndex
+	validatorIndex := r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
 		ValidatorIndex: validatorIndex,
@@ -207,7 +224,7 @@ func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 func (r *VoluntaryExitRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
-func (r *VoluntaryExitRunner) GetOperatorSigner() spectypes.OperatorSigner {
+func (r *VoluntaryExitRunner) GetOperatorSigner() *spectypes.OperatorSigner {
 	return r.operatorSigner
 }
 

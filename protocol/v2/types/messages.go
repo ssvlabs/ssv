@@ -38,7 +38,7 @@ type TimeoutData struct {
 }
 
 type ExecuteDutyData struct {
-	Duty *types.BeaconDuty
+	Duty *types.ValidatorDuty
 }
 
 type ExecuteCommitteeDutyData struct {

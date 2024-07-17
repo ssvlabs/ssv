@@ -2,24 +2,25 @@ package testing
 
 import (
 	"bytes"
+
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role convert.RunnerRole) *qbft.Config {
 	return &qbft.Config{
-		BeaconSigner:   testingutils.NewTestingKeyManager(),
-		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
-		SigningPK:      keySet.Shares[1].GetPublicKey().Serialize(),
-		Domain:         testingutils.TestingSSVDomainType,
+		BeaconSigner: testingutils.NewTestingKeyManager(),
+		Domain:       testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
 				return errors.New("invalid value")
@@ -38,7 +39,6 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,
-		SignatureVerifier:     testingutils.NewTestingVerifier(),
 		CutOffRound:           testingutils.TestingCutOffRound,
 	}
 }
@@ -62,12 +62,13 @@ var ThirteenOperatorsInstance = func() *specqbft.Instance {
 }
 
 var baseInstance = func(share *types.CommitteeMember, keySet *testingutils.TestKeySet, identifier []byte) *specqbft.Instance {
-	ret := specqbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, specqbft.FirstHeight)
+	ret := specqbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, specqbft.FirstHeight, testingutils.TestingOperatorSigner(keySet))
 	ret.StartValue = []byte{1, 2, 3, 4}
 	return ret
 }
 
 func NewTestingQBFTController(
+	keySet *testingutils.TestKeySet,
 	identifier []byte,
 	share *types.CommitteeMember,
 	config qbft.IConfig,
@@ -77,6 +78,7 @@ func NewTestingQBFTController(
 		identifier,
 		share,
 		config,
+		testingutils.TestingOperatorSigner(keySet),
 		fullNode,
 	)
 	ctrl.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)

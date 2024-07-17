@@ -92,7 +92,7 @@ func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(logger, committeeID, 
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.BeaconDuty) {
+func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.ValidatorDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
 }

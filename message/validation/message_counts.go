@@ -48,7 +48,7 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 			return err
 		}
 	case specqbft.CommitMsgType:
-		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+		if len(signedSSVMessage.OperatorIDs) == 1 {
 			if c.Commit >= limits.Commit {
 				err := ErrDuplicatedMessage
 				err.got = fmt.Sprintf("commit, having %v", c.String())
@@ -100,7 +100,7 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 	case specqbft.PrepareMsgType:
 		c.Prepare++
 	case specqbft.CommitMsgType:
-		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+		if len(signedSSVMessage.OperatorIDs) == 1 {
 			c.Commit++
 		}
 	case specqbft.RoundChangeMsgType:

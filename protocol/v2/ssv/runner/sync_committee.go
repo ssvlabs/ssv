@@ -218,7 +218,7 @@ package runner
 //	r.metrics.StartDutyFullFlow()
 //	r.metrics.StartConsensus()
 //
-//	input := &spectypes.ConsensusData{
+//	input := &spectypes.ValidatorConsensusData{
 //		Duty:    *duty,
 //		Version: ver,
 //		DataSSZ: root[:],

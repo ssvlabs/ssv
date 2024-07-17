@@ -48,7 +48,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 					fields.PubKey(identifier.GetDutyExecutorID()), // TODO: check if GetDutyExecutorID correct identifier
 					zap.Error(err))
 			} else if highestInstance != nil {
-				decidedValue := &spectypes.ConsensusData{}
+				decidedValue := &spectypes.ValidatorConsensusData{}
 				if err := decidedValue.Decode(highestInstance.State.DecidedValue); err != nil {
 					logger.Warn("❗failed to decode decided value", zap.Error(err))
 				} else {

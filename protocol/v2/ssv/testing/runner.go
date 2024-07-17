@@ -82,7 +82,7 @@ var baseRunner = func(
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
-	opSigner := spectestingutils.NewTestingOperatorSigner(keySet, 1)
+	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 
 	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
@@ -91,10 +91,9 @@ var baseRunner = func(
 	}
 	config.Network = net
 	config.BeaconSigner = km
-	config.OperatorSigner = opSigner
-	config.SignatureVerifier = spectestingutils.NewTestingVerifier()
 
 	contr := testing.NewTestingQBFTController(
+		spectestingutils.Testing4SharesSet(),
 		identifier[:],
 		operator,
 		config,
@@ -202,7 +201,7 @@ var baseRunner = func(
 //	return decideRunner(spectestingutils.TestConsensusUnkownDutyTypeData, specqbft.FirstHeight, keySet)
 //}
 //
-//var decideRunner = func(consensusInput *spectypes.ConsensusData, height specqbft.Height, keySet *spectestingutils.TestKeySet) runner.Runner {
+//var decideRunner = func(consensusInput *spectypes.ValidatorConsensusData, height specqbft.Height, keySet *spectestingutils.TestKeySet) runner.Runner {
 //	v := BaseValidator(keySet)
 //	consensusDataByts, _ := consensusInput.Encode()
 //	msgs := DecidingMsgsForHeight(consensusDataByts, []byte{1, 2, 3, 4}, height, keySet)
@@ -286,7 +285,7 @@ var baseRunnerWithShareMap = func(
 
 	km := spectestingutils.NewTestingKeyManager()
 	committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)
-	opSigner := spectestingutils.NewTestingOperatorSigner(keySetInstance, committeeMember.OperatorID)
+	opSigner := spectestingutils.NewOperatorSigner(keySetInstance, committeeMember.OperatorID)
 
 	config := testing.TestingConfig(logger, keySetInstance, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
@@ -294,10 +293,9 @@ var baseRunnerWithShareMap = func(
 		return 1
 	}
 	config.Network = net
-	config.OperatorSigner = opSigner
-	config.SignatureVerifier = spectestingutils.NewTestingVerifier()
 
 	contr := testing.NewTestingQBFTController(
+		spectestingutils.Testing4SharesSet(),
 		identifier[:],
 		committeeMember,
 		config,

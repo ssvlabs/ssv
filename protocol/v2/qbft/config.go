@@ -11,8 +11,6 @@ import (
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
 	GetShareSigner() spectypes.BeaconSigner
-	// GetOperatorSigner returns an operator signer instance
-	GetOperatorSigner() spectypes.OperatorSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() spectypes.DomainType
 }
@@ -31,16 +29,12 @@ type IConfig interface {
 	GetTimer() roundtimer.Timer
 	// VerifySignatures returns if signature is checked
 	VerifySignatures() bool
-	// GetSignatureVerifier returns the signature verifier for operator signatures
-	GetSignatureVerifier() spectypes.SignatureVerifier
 	// GetRoundCutOff returns the round cut off
 	GetCutOffRound() specqbft.Round
 }
 
 type Config struct {
 	BeaconSigner          spectypes.BeaconSigner
-	OperatorSigner        spectypes.OperatorSigner
-	SigningPK             []byte
 	Domain                spectypes.DomainType
 	ValueCheckF           specqbft.ProposedValueCheckF
 	ProposerF             specqbft.ProposerF
@@ -48,23 +42,12 @@ type Config struct {
 	Network               specqbft.Network
 	Timer                 roundtimer.Timer
 	SignatureVerification bool
-	SignatureVerifier     spectypes.SignatureVerifier
 	CutOffRound           specqbft.Round
 }
 
 // GetShareSigner returns a BeaconSigner instance
 func (c *Config) GetShareSigner() spectypes.BeaconSigner {
 	return c.BeaconSigner
-}
-
-// GetOperatorSigner returns a OperatorSigner instance
-func (c *Config) GetOperatorSigner() spectypes.OperatorSigner {
-	return c.OperatorSigner
-}
-
-// GetSigningPubKey returns the public key used to sign all QBFT messages
-func (c *Config) GetSigningPubKey() []byte {
-	return c.SigningPK
 }
 
 // GetSignatureDomainType returns the Domain type used for signatures
@@ -103,8 +86,4 @@ func (c *Config) GetCutOffRound() specqbft.Round {
 
 func (c *Config) VerifySignatures() bool {
 	return c.SignatureVerification
-}
-
-func (c *Config) GetSignatureVerifier() spectypes.SignatureVerifier {
-	return c.SignatureVerifier
 }

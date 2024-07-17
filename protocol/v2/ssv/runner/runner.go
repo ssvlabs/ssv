@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,8 +15,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
 type Getters interface {
@@ -22,7 +25,7 @@ type Getters interface {
 	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
-	GetOperatorSigner() spectypes.OperatorSigner
+	GetOperatorSigner() *spectypes.OperatorSigner
 	GetNetwork() specqbft.Network
 }
 
@@ -58,7 +61,7 @@ type BaseRunner struct {
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
 	RunnerRoleType spectypes.RunnerRole
-	spectypes.OperatorSigner
+	*spectypes.OperatorSigner
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
@@ -124,8 +127,7 @@ func NewBaseRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
 	beaconNetwork spectypes.BeaconNetwork,
-	beaconRoleType spectypes.RunnerRole,
-	operatorSigner spectypes.OperatorSigner,
+	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
 ) *BaseRunner {
 	return &BaseRunner{
@@ -133,8 +135,7 @@ func NewBaseRunner(
 		Share:              share,
 		QBFTController:     controller,
 		BeaconNetwork:      beaconNetwork,
-		RunnerRoleType:     beaconRoleType,
-		OperatorSigner:     operatorSigner,
+		RunnerRoleType:     runnerRoleType,
 		highestDecidedSlot: highestDecidedSlot,
 	}
 }
@@ -151,7 +152,7 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty sp
 }
 
 // baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
-func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
+func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty *spectypes.ValidatorDuty, quorum uint64) error {
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start non-beacon duty")
 	}
@@ -170,17 +171,10 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
-func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage) (decided bool, decidedValue spectypes.Encoder, err error) {
+func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
-	}
-
-	// TODO: revert after pre-consensus liveness is fixed
-	if false {
-		if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
-			return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
-		}
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
@@ -218,15 +212,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		}
 	}
 
-	// decode consensus data
-	switch runner.(type) {
-	case *CommitteeRunner:
-		decidedValue = &spectypes.BeaconVote{}
-	default:
-		decidedValue = &spectypes.ConsensusData{}
-	}
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
-		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
+		return true, nil, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
 	}
 
 	// update the highest decided slot
@@ -266,7 +253,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 		prevQuorum := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
 
 		// Check if it has two signatures for the same signer
-		if container.HasSigner(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
+		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			b.resolveDuplicateSignature(container, msg)
 		} else {
 			container.AddSignature(msg)
@@ -319,16 +306,20 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	return true, nil
 }
 
-func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot, input []byte) error {
+func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot, input types.Encoder) error {
+	byts, err := input.Encode()
+	if err != nil {
+		return errors.Wrap(err, "could not encode input data for consensus")
+	}
 
-	if err := runner.GetValCheckF()(input); err != nil {
+	if err := runner.GetValCheckF()(byts); err != nil {
 		return errors.Wrap(err, "input data invalid")
 
 	}
 
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
 		specqbft.Height(slot),
-		input,
+		byts,
 	); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}

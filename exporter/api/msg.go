@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/hex"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -26,7 +27,7 @@ type SignedMessageAPI struct {
 	Signers   []spectypes.OperatorID
 	Message   specqbft.Message
 
-	FullData *spectypes.ConsensusData
+	FullData *spectypes.ValidatorConsensusData
 }
 
 type ParticipantsAPI struct {
@@ -36,7 +37,7 @@ type ParticipantsAPI struct {
 	ValidatorPK string
 	Role        string
 	Message     specqbft.Message
-	FullData    *spectypes.ConsensusData
+	FullData    *spectypes.ValidatorConsensusData
 }
 
 // NewParticipantsAPIMsg creates a new message in a new format from the given message.
@@ -83,7 +84,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 				Identifier: msg.Identifier[:],
 				Round:      specqbft.FirstRound,
 			},
-			FullData: &spectypes.ConsensusData{Duty: spectypes.BeaconDuty{Slot: msg.Slot}},
+			FullData: &spectypes.ValidatorConsensusData{Duty: spectypes.ValidatorDuty{Slot: msg.Slot}},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)

@@ -48,7 +48,7 @@ var VoluntaryExitMsgID = func() []byte {
 	return ret[:]
 }()
 
-var EncodeConsensusDataTest = func(cd *spectypes.ConsensusData) []byte {
+var EncodeConsensusDataTest = func(cd *spectypes.ValidatorConsensusData) []byte {
 	encodedCD, _ := cd.Encode()
 	return encodedCD
 }
@@ -61,15 +61,15 @@ var TestBeaconVoteNextEpochByts, _ = spectestingutils.TestBeaconVoteNextEpoch.En
 
 // ConsensusData - Attester
 
-var TestAttesterConsensusData = &spectypes.ConsensusData{
-	Duty:    *spectestingutils.TestingAttesterDuty.BeaconDuties[0],
+var TestAttesterConsensusData = &spectypes.ValidatorConsensusData{
+	Duty:    *spectestingutils.TestingAttesterDuty.ValidatorDuties[0],
 	DataSSZ: spectestingutils.TestingAttestationDataBytes,
 	Version: spec.DataVersionPhase0,
 }
 var TestAttesterConsensusDataByts, _ = TestAttesterConsensusData.Encode()
 
-var TestAttesterNextEpochConsensusData = &spectypes.ConsensusData{
-	Duty:    *spectestingutils.TestingAttesterDutyNextEpoch.BeaconDuties[0],
+var TestAttesterNextEpochConsensusData = &spectypes.ValidatorConsensusData{
+	Duty:    *spectestingutils.TestingAttesterDutyNextEpoch.ValidatorDuties[0],
 	DataSSZ: spectestingutils.TestingAttestationNextEpochDataBytes,
 	Version: spec.DataVersionPhase0,
 }
@@ -78,34 +78,34 @@ var TestingAttesterNextEpochConsensusDataByts, _ = TestAttesterNextEpochConsensu
 
 // ConsensusData - Aggregator
 
-var TestAggregatorConsensusData = &spectypes.ConsensusData{
+var TestAggregatorConsensusData = &spectypes.ValidatorConsensusData{
 	Duty:    spectestingutils.TestingAggregatorDuty,
 	DataSSZ: spectestingutils.TestingAggregateAndProofBytes,
 	Version: spec.DataVersionPhase0,
 }
 var TestAggregatorConsensusDataByts, _ = TestAggregatorConsensusData.Encode()
 
-var TestAttesterWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ConsensusData {
+var TestAttesterWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ValidatorConsensusData {
 	justif := make([]*spectypes.PartialSignatureMessages, 0)
 	for i := uint64(1); i <= ks.Threshold; i++ {
 		justif = append(justif, PreConsensusRandaoMsg(ks.Shares[i], i))
 	}
 
-	return &spectypes.ConsensusData{
-		Duty:                       *spectestingutils.TestingAttesterDuty.BeaconDuties[0],
+	return &spectypes.ValidatorConsensusData{
+		Duty:                       *spectestingutils.TestingAttesterDuty.ValidatorDuties[0],
 		Version:                    spec.DataVersionDeneb,
 		PreConsensusJustifications: justif,
 		DataSSZ:                    spectestingutils.TestingAttestationDataBytes,
 	}
 }
 
-var TestAggregatorWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ConsensusData {
+var TestAggregatorWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ValidatorConsensusData {
 	justif := make([]*spectypes.PartialSignatureMessages, 0)
 	for i := uint64(1); i <= ks.Threshold; i++ {
 		justif = append(justif, PreConsensusSelectionProofMsg(ks.Shares[i], ks.Shares[i], i, i))
 	}
 
-	return &spectypes.ConsensusData{
+	return &spectypes.ValidatorConsensusData{
 		Duty:                       spectestingutils.TestingAggregatorDuty,
 		Version:                    spec.DataVersionBellatrix,
 		PreConsensusJustifications: justif,
@@ -117,29 +117,29 @@ var TestAggregatorWithJustificationsConsensusData = func(ks *spectestingutils.Te
 // ConsensusData - Sync Committee
 
 // TestSyncCommitteeWithJustificationsConsensusData is an invalid sync committee msg (doesn't have pre-consensus)
-var TestSyncCommitteeWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ConsensusData {
+var TestSyncCommitteeWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ValidatorConsensusData {
 	justif := make([]*spectypes.PartialSignatureMessages, 0)
 	for i := uint64(0); i <= ks.Threshold; i++ {
 		justif = append(justif, PreConsensusRandaoMsg(ks.Shares[i+1], i+1))
 	}
 
-	return &spectypes.ConsensusData{
-		Duty:                       *spectestingutils.TestingSyncCommitteeDuty.BeaconDuties[0],
+	return &spectypes.ValidatorConsensusData{
+		Duty:                       *spectestingutils.TestingSyncCommitteeDuty.ValidatorDuties[0],
 		Version:                    spec.DataVersionDeneb,
 		PreConsensusJustifications: justif,
 		DataSSZ:                    spectestingutils.TestingSyncCommitteeBlockRoot[:],
 	}
 }
 
-var TestSyncCommitteeConsensusData = &spectypes.ConsensusData{
-	Duty:    *spectestingutils.TestingSyncCommitteeDuty.BeaconDuties[0],
+var TestSyncCommitteeConsensusData = &spectypes.ValidatorConsensusData{
+	Duty:    *spectestingutils.TestingSyncCommitteeDuty.ValidatorDuties[0],
 	DataSSZ: spectestingutils.TestingSyncCommitteeBlockRoot[:],
 	Version: spec.DataVersionPhase0,
 }
 var TestSyncCommitteeConsensusDataByts, _ = TestSyncCommitteeConsensusData.Encode()
 
-var TestSyncCommitteeNextEpochConsensusData = &spectypes.ConsensusData{
-	Duty:    *spectestingutils.TestingSyncCommitteeDutyNextEpoch.BeaconDuties[0],
+var TestSyncCommitteeNextEpochConsensusData = &spectypes.ValidatorConsensusData{
+	Duty:    *spectestingutils.TestingSyncCommitteeDutyNextEpoch.ValidatorDuties[0],
 	DataSSZ: spectestingutils.TestingSyncCommitteeBlockRoot[:],
 	Version: spec.DataVersionPhase0,
 }
@@ -148,7 +148,7 @@ var TestSyncCommitteeNextEpochConsensusDataByts, _ = TestSyncCommitteeNextEpochC
 
 // ConsensusData - Sync Committee Contribution
 
-var TestSyncCommitteeContributionConsensusData = &spectypes.ConsensusData{
+var TestSyncCommitteeContributionConsensusData = &spectypes.ValidatorConsensusData{
 	Duty:    spectestingutils.TestingSyncCommitteeContributionDuty,
 	DataSSZ: spectestingutils.TestingContributionsDataBytes,
 	Version: spec.DataVersionPhase0,
@@ -158,14 +158,14 @@ var TestSyncCommitteeContributionConsensusDataRoot = func() [32]byte {
 	return sha256.Sum256(TestSyncCommitteeContributionConsensusDataByts)
 }()
 
-var TestConsensusUnkownDutyTypeData = &spectypes.ConsensusData{
+var TestConsensusUnkownDutyTypeData = &spectypes.ValidatorConsensusData{
 	Duty:    spectestingutils.TestingUnknownDutyType,
 	DataSSZ: spectestingutils.TestingAttestationDataBytes,
 	Version: spec.DataVersionPhase0,
 }
 var TestConsensusUnkownDutyTypeDataByts, _ = TestConsensusUnkownDutyTypeData.Encode()
 
-var TestConsensusWrongDutyPKData = &spectypes.ConsensusData{
+var TestConsensusWrongDutyPKData = &spectypes.ValidatorConsensusData{
 	Duty:    spectestingutils.TestingWrongDutyPK,
 	DataSSZ: spectestingutils.TestingAttestationDataBytes,
 	Version: spec.DataVersionPhase0,
@@ -460,13 +460,13 @@ var PreConsensusWrongMsgSlotSelectionProofMsg = func(msgSK, beaconSK *bls.Secret
 	return selectionProofMsg(msgSK, beaconSK, msgID, beaconID, spectestingutils.TestingDutySlot, spectestingutils.TestingDutySlot+1, 1, false)
 }
 
-var TestSelectionProofWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ConsensusData {
+var TestSelectionProofWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ValidatorConsensusData {
 	justif := make([]*spectypes.PartialSignatureMessages, 0)
 	for i := uint64(0); i <= ks.Threshold; i++ {
 		justif = append(justif, PreConsensusSelectionProofMsg(ks.Shares[i+1], ks.Shares[i+1], i+1, i+1))
 	}
 
-	return &spectypes.ConsensusData{
+	return &spectypes.ValidatorConsensusData{
 		Duty:                       spectestingutils.TestingAggregatorDuty,
 		Version:                    spec.DataVersionDeneb,
 		PreConsensusJustifications: justif,
@@ -833,13 +833,13 @@ var PreConsensusWrongMsgSlotContributionProofMsg = func(msgSK, beaconSK *bls.Sec
 var PreConsensusWrongOrderContributionProofMsg = func(msgSK, beaconSK *bls.SecretKey, msgID, beaconID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
 	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, spectestingutils.TestingDutySlot, spectestingutils.TestingDutySlot, true, false)
 }
-var TestContributionProofWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ConsensusData {
+var TestContributionProofWithJustificationsConsensusData = func(ks *spectestingutils.TestKeySet) *spectypes.ValidatorConsensusData {
 	justif := make([]*spectypes.PartialSignatureMessages, 0)
 	for i := uint64(0); i <= ks.Threshold; i++ {
 		justif = append(justif, PreConsensusContributionProofMsg(ks.Shares[i+1], ks.Shares[i+1], i+1, i+1))
 	}
 
-	return &spectypes.ConsensusData{
+	return &spectypes.ValidatorConsensusData{
 		Duty:                       spectestingutils.TestingSyncCommitteeContributionDuty,
 		Version:                    spec.DataVersionDeneb,
 		PreConsensusJustifications: justif,

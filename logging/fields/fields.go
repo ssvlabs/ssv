@@ -3,12 +3,13 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -367,7 +368,7 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.ValidatorDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 
@@ -383,7 +384,7 @@ func FormatCommitteeDutyID(operators []*spectypes.Operator, epoch phase0.Epoch, 
 	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
+func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {

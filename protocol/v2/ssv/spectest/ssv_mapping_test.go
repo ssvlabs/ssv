@@ -234,7 +234,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 		if err != nil {
 			panic("cant marshal beacon duty")
 		}
-		beaconDuty := &spectypes.BeaconDuty{}
+		beaconDuty := &spectypes.ValidatorDuty{}
 		err = json.Unmarshal(byts, beaconDuty)
 		if err != nil {
 			panic("cant unmarshal beacon duty")
@@ -300,7 +300,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 		if err != nil {
 			panic("cant marshal beacon duty")
 		}
-		beaconDuty := &spectypes.BeaconDuty{}
+		beaconDuty := &spectypes.ValidatorDuty{}
 		err = json.Unmarshal(byts, beaconDuty)
 		if err != nil {
 			panic("cant unmarshal beacon duty")
@@ -493,7 +493,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 			continue
 		}
 
-		beaconDuty := &spectypes.BeaconDuty{}
+		beaconDuty := &spectypes.ValidatorDuty{}
 		err = getDecoder().Decode(&beaconDuty)
 		if err == nil {
 			inputs = append(inputs, beaconDuty)

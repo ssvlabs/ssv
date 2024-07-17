@@ -26,7 +26,7 @@ type ValidatorRegistrationRunner struct {
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner spectypes.OperatorSigner
+	operatorSigner *spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -39,7 +39,7 @@ func NewValidatorRegistrationRunner(
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner spectypes.OperatorSigner,
+	operatorSigner *spectypes.OperatorSigner,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
@@ -59,7 +59,7 @@ func NewValidatorRegistrationRunner(
 }
 
 func (r *ValidatorRegistrationRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty, quorum)
+	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty.(*spectypes.ValidatorDuty), quorum)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -94,10 +94,9 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	var share *spectypes.Share
-	for _, shareInstance := range r.BaseRunner.Share {
-		share = shareInstance
-		break
+	share := r.GetShare()
+	if share == nil {
+		return errors.New("no share to get validator public key")
 	}
 
 	if err := r.beacon.SubmitValidatorRegistration(share.ValidatorPubKey[:],
@@ -141,7 +140,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spect
 	}
 
 	// sign partial randao
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.BeaconDuty), vr, duty.DutySlot(),
+	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), vr, duty.DutySlot(),
 		spectypes.DomainApplicationBuilder)
 	if err != nil {
 		return errors.Wrap(err, "could not sign validator registration")
@@ -153,9 +152,25 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spect
 	}
 
 	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
-	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
+	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not sign pre-consensus partial signature message")
+		return err
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return errors.Wrap(err, "could not sign SSVMessage")
+	}
+	msgToBroadcast := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
 	}
 
 	logger.Debug(
@@ -171,13 +186,9 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spect
 }
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {
-	if len(r.BaseRunner.Share) == 0 {
+	share := r.GetShare()
+	if share == nil {
 		return nil, errors.New("no share to get validator public key")
-	}
-	var share *spectypes.Share
-	for _, shareInstance := range r.BaseRunner.Share {
-		share = shareInstance
-		break
 	}
 
 	pk := phase0.BLSPubKey{}
@@ -223,7 +234,7 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheck
 func (r *ValidatorRegistrationRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
-func (r *ValidatorRegistrationRunner) GetOperatorSigner() spectypes.OperatorSigner {
+func (r *ValidatorRegistrationRunner) GetOperatorSigner() *spectypes.OperatorSigner {
 	return r.operatorSigner
 }
 

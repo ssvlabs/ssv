@@ -41,7 +41,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		return nil, e
 	}
 
-	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.GetOperatorIDs()))
+	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.OperatorIDs))
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.operatorIDs); err != nil {
 		return consensusMessage, err
@@ -58,7 +58,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	}
 
 	for i := range signedSSVMessage.Signatures {
-		operatorID := signedSSVMessage.GetOperatorIDs()[i]
+		operatorID := signedSSVMessage.OperatorIDs[i]
 		signature := signedSSVMessage.Signatures[i]
 
 		if err := mv.signatureVerifier.VerifySignature(operatorID, ssvMessage, signature); err != nil {
@@ -80,7 +80,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	consensusMessage *specqbft.Message,
 	committee []spectypes.OperatorID,
 ) error {
-	signers := signedSSVMessage.GetOperatorIDs()
+	signers := signedSSVMessage.OperatorIDs
 	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
 	msgType := consensusMessage.MsgType
 
@@ -157,23 +157,23 @@ func (mv *messageValidator) validateQBFTLogic(
 	if consensusMessage.MsgType == specqbft.ProposalMsgType {
 		// Rule: Signer must be the leader
 		leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committee)
-		if signedSSVMessage.GetOperatorIDs()[0] != leader {
+		if signedSSVMessage.OperatorIDs[0] != leader {
 			err := ErrSignerNotLeader
-			err.got = signedSSVMessage.GetOperatorIDs()[0]
+			err.got = signedSSVMessage.OperatorIDs[0]
 			err.want = leader
 			return err
 		}
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	for _, signer := range signedSSVMessage.GetOperatorIDs() {
+	for _, signer := range signedSSVMessage.OperatorIDs {
 		signerStateBySlot := state.GetOrCreate(signer)
 		signerState := signerStateBySlot.Get(msgSlot)
 		if signerState == nil {
 			continue
 		}
 
-		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+		if len(signedSSVMessage.OperatorIDs) == 1 {
 			// Rule: Ignore if peer already advanced to a later round. Only for non-decided messages
 			if consensusMessage.Round < signerState.Round {
 				// Signers aren't allowed to decrease their round.
@@ -197,9 +197,9 @@ func (mv *messageValidator) validateQBFTLogic(
 					return err
 				}
 			}
-		} else if len(signedSSVMessage.GetOperatorIDs()) > 1 {
+		} else if len(signedSSVMessage.OperatorIDs) > 1 {
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
-			encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
+			encodedOperators, err := encodeOperators(signedSSVMessage.OperatorIDs)
 			if err != nil {
 				return err
 			}
@@ -211,7 +211,7 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 	}
 
-	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+	if len(signedSSVMessage.OperatorIDs) == 1 {
 		// Rule: Round must not be smaller than current peer's round -1 or +1. Only for non-decided messages
 		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
 			return err
@@ -230,7 +230,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 ) error {
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
-		for _, signer := range signedSSVMessage.GetOperatorIDs() {
+		for _, signer := range signedSSVMessage.OperatorIDs {
 			signerStateBySlot := state.GetOrCreate(signer)
 			if maxSlot := signerStateBySlot.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
 				e := ErrSlotAlreadyAdvanced
@@ -266,7 +266,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
-	for _, signer := range signedSSVMessage.GetOperatorIDs() {
+	for _, signer := range signedSSVMessage.OperatorIDs {
 		signerStateBySlot := state.GetOrCreate(signer)
 		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, len(validatorIndices), signerStateBySlot); err != nil {
 			return err
@@ -290,7 +290,7 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
 
-	for _, signer := range signedSSVMessage.GetOperatorIDs() {
+	for _, signer := range signedSSVMessage.OperatorIDs {
 		stateBySlot := consensusState.GetOrCreate(signer)
 		signerState := stateBySlot.Get(msgSlot)
 		if signerState == nil {
@@ -315,9 +315,9 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 		signerState.ProposalData = signedSSVMessage.FullData
 	}
 
-	signerCount := len(signedSSVMessage.GetOperatorIDs())
+	signerCount := len(signedSSVMessage.OperatorIDs)
 	if signerCount > 1 {
-		encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
+		encodedOperators, err := encodeOperators(signedSSVMessage.OperatorIDs)
 		if err != nil {
 			// encodeOperators must never re
 			return ErrEncodeOperators

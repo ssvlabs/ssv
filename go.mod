@@ -11,7 +11,6 @@ require (
 	github.com/cornelk/hashmap v1.0.8
 	github.com/dgraph-io/badger/v4 v4.1.0
 	github.com/dgraph-io/ristretto v0.1.1
-	github.com/emirpasic/gods v1.18.1
 	github.com/ethereum/go-ethereum v1.13.14
 	github.com/ferranbt/fastssz v0.1.3
 	github.com/go-chi/chi/v5 v5.0.8
@@ -39,7 +38,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
-	github.com/ssvlabs/ssv-spec v0.3.10-0.20240624121006-7adef2ac3ea6
+	github.com/ssvlabs/ssv-spec v0.3.10-0.20240714102935-0cbc8252c0fe
 	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240502072846-bba633c4ed61
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4

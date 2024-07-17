@@ -10,6 +10,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -21,8 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 )
 
 type CommitteeObserver struct {
@@ -41,6 +42,7 @@ type CommitteeObserverOptions struct {
 	Network           specqbft.Network
 	Storage           *storage.QBFTStores
 	Operator          *spectypes.CommitteeMember
+	OperatorSigner    *spectypes.OperatorSigner
 	NetworkConfig     networkconfig.NetworkConfig
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
@@ -57,7 +59,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 
 	// TODO: does the specific operator matters?
 
-	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.FullNode)
+	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		opts.Logger.Debug("❗ failed to load highest instance", zap.Error(err))
@@ -169,7 +171,7 @@ func (ncv *CommitteeObserver) processMessage(
 			container = specssv.NewPartialSigContainer(validator.Quorum())
 			ncv.postConsensusContainer[msg.ValidatorIndex] = container
 		}
-		if container.HasSigner(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
+		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			ncv.resolveDuplicateSignature(container, msg, validator)
 		} else {
 			container.AddSignature(msg)

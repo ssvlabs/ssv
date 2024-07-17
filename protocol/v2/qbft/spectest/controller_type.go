@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
@@ -61,6 +62,7 @@ func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
 	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), convert.RoleCommittee)
 	return qbfttesting.NewTestingQBFTController(
+		spectestingutils.Testing4SharesSet(),
 		identifier[:],
 		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
 		config,

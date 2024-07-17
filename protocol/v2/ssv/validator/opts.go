@@ -26,8 +26,7 @@ type Options struct {
 	SSVShare          *types.SSVShare
 	Operator          *spectypes.CommitteeMember
 	Signer            spectypes.BeaconSigner
-	OperatorSigner    spectypes.OperatorSigner
-	SignatureVerifier spectypes.SignatureVerifier
+	OperatorSigner    *spectypes.OperatorSigner
 	DutyRunners       runner.ValidatorDutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool

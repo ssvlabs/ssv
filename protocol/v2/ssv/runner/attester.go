@@ -223,7 +223,7 @@ package runner
 //		return errors.Wrap(err, "could not marshal attestation data")
 //	}
 //
-//	input := &spectypes.ConsensusData{
+//	input := &spectypes.ValidatorConsensusData{
 //		Duty:    *duty,
 //		Version: ver,
 //		DataSSZ: attDataByts,
