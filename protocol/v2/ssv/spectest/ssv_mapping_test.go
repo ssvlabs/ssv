@@ -554,7 +554,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		logger,
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 			return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
 		},
 	)
