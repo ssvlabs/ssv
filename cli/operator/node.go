@@ -76,6 +76,7 @@ type config struct {
 	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
 	KeyStore                   KeyStore                         `yaml:"KeyStore"`
 	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for proposal block" env-default:"ssv-network" `
 	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
@@ -187,7 +188,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
-		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
+		cfg.ConsensusClient.Graffiti = []byte(cfg.Graffiti)
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
@@ -621,6 +622,7 @@ func setupEventHandling(
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 		eventhandler.WithMetrics(metricsReporter),
+		eventhandler.WithGraffiti([]byte(cfg.Graffiti)),
 	)
 	if err != nil {
 		logger.Fatal("failed to setup event data handler", zap.Error(err))

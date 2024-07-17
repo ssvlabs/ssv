@@ -70,6 +70,7 @@ type EventHandler struct {
 	fullNode bool
 	logger   *zap.Logger
 	metrics  metrics
+	graffiti []byte
 }
 
 func New(
