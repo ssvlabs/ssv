@@ -104,6 +104,12 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	}
 
 	for _, message := range partialSignatureMessages.Messages {
+		// MSGVALIDATIONREVIEW: add signature size check as below:
+		// Rule: Partial signature must have expected length
+		if len(message.PartialSignature) != PartialSignatureSize {
+			return ErrWrongBLSSignatureSize
+		}
+
 		// Rule: Partial signature signer must be consistent
 		if message.Signer != signer {
 			err := ErrInconsistentSigners
@@ -112,6 +118,8 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 			return err
 		}
 
+		// MSGVALIDATIONREVIEW: since we don't expect operators to be synced on the committees' validators set,
+		// should we still keep this rule?
 		// Rule: Validator index must match with validatorPK or one of CommitteeID's validators
 		if !slices.Contains(validatorIndices, message.ValidatorIndex) {
 			e := ErrValidatorIndexMismatch

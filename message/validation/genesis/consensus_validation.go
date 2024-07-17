@@ -131,6 +131,8 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.Reset(msgRound)
 		}
 
+		// MSGVALIDATIONREVIEW: I think we should add a condition here that the msg is a proposal msg.
+		// Notice that a RC message also has FullData and would set the signer's state ProposalData
 		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
 			signerState.ProposalData = signedMsg.FullData
 		}
@@ -203,6 +205,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 ) error {
 	signerState := state.GetSignerState(signer)
 
+	// MSGVALIDATIONREVIEW: validateJustifications is also called in the ending of this function.
 	if signerState == nil {
 		return mv.validateJustifications(share, signedMsg)
 	}

@@ -50,6 +50,11 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 			return err
 		}
 	case specqbft.CommitMsgType:
+		// MSGVALIDATIONREVIEW: we should use "else if len(msg.Signers) > 1" and then "else {panic()}" or "else {return Error...}" to cover
+		// the case where len(msg.Signers) == 0.
+		// Ofc that this should be checked in previous rules. However, it may be better to be independent in that sense
+		// and, if we have problems in this other rule, this bad message would pass unnoticed through the check here
+		// e.g. below, in RecordConsensusMessage, there is a similar check
 		if len(msg.Signers) == 1 {
 			if c.Commit >= limits.Commit {
 				err := ErrTooManySameTypeMessagesPerRound
@@ -77,6 +82,7 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 	return nil
 }
 
+// MSGVALIDATIONREVIEW: below checks should use >= (and not >)
 // ValidatePartialSignatureMessage checks if the provided partial signature message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
 func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedPartialSignatureMessage, limits MessageCounts) error {
