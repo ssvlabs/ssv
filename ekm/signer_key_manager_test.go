@@ -17,18 +17,17 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
-
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -49,8 +48,9 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, nil),
-			Domain: networkconfig.TestNetwork.Domain,
+			Beacon:            utils.SetupMockBeaconNetwork(t, nil),
+			GenesisDomainType: networkconfig.TestNetwork.DomainType(),
+			AlanDomainType:    networkconfig.TestNetwork.DomainType(),
 		}
 	}
 
@@ -715,7 +715,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.Domain),
+			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)
@@ -747,7 +747,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.Domain),
+			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)

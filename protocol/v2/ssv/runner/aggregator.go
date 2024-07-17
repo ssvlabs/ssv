@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
@@ -34,6 +35,7 @@ type AggregatorRunner struct {
 var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -47,6 +49,7 @@ func NewAggregatorRunner(
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleAggregator,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -59,7 +62,7 @@ func NewAggregatorRunner(
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleAggregator),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleAggregator),
 	}
 }
 
@@ -157,7 +160,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spect
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -288,7 +291,7 @@ func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) 
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return err

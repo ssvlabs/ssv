@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -21,11 +19,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/attestantio/go-eth2-client/spec"
-
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerRunner struct {
@@ -40,6 +39,7 @@ type ProposerRunner struct {
 }
 
 func NewProposerRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -53,6 +53,7 @@ func NewProposerRunner(
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -65,7 +66,7 @@ func NewProposerRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleProposer),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleProposer),
 	}
 }
 
@@ -194,7 +195,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
 		return err
@@ -387,7 +388,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return err

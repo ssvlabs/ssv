@@ -28,7 +28,7 @@ func (m NodeInfoIndex) Self() *records.NodeInfo {
 	panic("implement me")
 }
 
-func (m NodeInfoIndex) UpdateSelfRecord(newInfo *records.NodeInfo) {
+func (m NodeInfoIndex) UpdateSelfRecord(update func(self *records.NodeInfo) *records.NodeInfo) {
 	//TODO implement me
 	panic("implement me")
 }

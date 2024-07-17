@@ -6,11 +6,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -20,9 +15,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type SyncCommitteeAggregatorRunner struct {
@@ -38,6 +35,7 @@ type SyncCommitteeAggregatorRunner struct {
 }
 
 func NewSyncCommitteeAggregatorRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -51,6 +49,7 @@ func NewSyncCommitteeAggregatorRunner(
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleSyncCommitteeContribution,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -63,7 +62,7 @@ func NewSyncCommitteeAggregatorRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommitteeContribution),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleSyncCommitteeContribution),
 	}
 }
 
@@ -200,7 +199,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 		Messages: msgs,
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -400,7 +399,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty spe
 		msgs.Messages = append(msgs.Messages, msg)
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return err

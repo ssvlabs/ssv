@@ -66,13 +66,15 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 	h.fetchNextEpoch = true
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
@@ -175,7 +177,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		return
 	}
 
-	if !h.network.AlanForked(slot) {
+	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
 		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
 		for _, d := range duties {
 			if h.shouldExecute(d) {
@@ -203,6 +205,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
 
 	if len(indices) == 0 {
+		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 

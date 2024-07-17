@@ -1,6 +1,19 @@
 package runner
 
 //
+//import (
+//	"encoding/hex"
+//	"github.com/attestantio/go-eth2-client/spec/phase0"
+//	"github.com/prysmaticlabs/go-bitfield"
+//	specssv "github.com/ssvlabs/ssv-spec/ssv"
+//	spectypes "github.com/ssvlabs/ssv-spec/types"
+//	"github.com/ssvlabs/ssv/logging/fields"
+//	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+//	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
+//	"go.uber.org/zap"
+//	"time"
+//)
+//
 //type AttesterRunner struct {
 //	BaseRunner *BaseRunner
 //
@@ -40,7 +53,7 @@ package runner
 //		operatorSigner: operatorSigner,
 //		valCheck:       valCheck,
 //
-//		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleAttester),
+//		metrics: metrics.NewConsensusMetrics(spectypes.RoleAttester),
 //	}
 //}
 //
@@ -99,7 +112,7 @@ package runner
 //
 //	ssvMsg := &spectypes.SSVMessage{
 //		MsgType: spectypes.SSVPartialSignatureMsgType,
-//		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+//		MsgID:   spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 //		Data:    data,
 //	}
 //

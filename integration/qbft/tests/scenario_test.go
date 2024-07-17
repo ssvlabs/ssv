@@ -70,7 +70,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.ValidatorDuty), pk[:], networkconfig.TestNetwork.Domain)
+				ssvMsg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.ValidatorDuty), pk[:], networkconfig.TestNetwork.DomainType())
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(ssvMsg)
 				require.NoError(t, err)

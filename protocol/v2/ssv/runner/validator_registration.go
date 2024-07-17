@@ -5,9 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -17,8 +14,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -34,6 +34,7 @@ type ValidatorRegistrationRunner struct {
 }
 
 func NewValidatorRegistrationRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -44,10 +45,11 @@ func NewValidatorRegistrationRunner(
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: spectypes.RoleValidatorRegistration,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
-			QBFTController: qbftController,
+			RunnerRoleType:     spectypes.RoleValidatorRegistration,
+			DomainTypeProvider: domainTypeProvider,
+			BeaconNetwork:      beaconNetwork,
+			Share:              share,
+			QBFTController:     qbftController,
 		},
 
 		beacon:         beacon,
@@ -55,7 +57,7 @@ func NewValidatorRegistrationRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleValidatorRegistration),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleValidatorRegistration),
 	}
 }
 
@@ -152,7 +154,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spect
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return err

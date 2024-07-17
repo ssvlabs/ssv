@@ -4,21 +4,18 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type Getters interface {
@@ -56,12 +53,13 @@ type Runner interface {
 var _ Runner = new(CommitteeRunner)
 
 type BaseRunner struct {
-	mtx            sync.RWMutex
-	State          *State
-	Share          map[phase0.ValidatorIndex]*spectypes.Share
-	QBFTController *controller.Controller
-	BeaconNetwork  spectypes.BeaconNetwork
-	RunnerRoleType spectypes.RunnerRole
+	mtx                sync.RWMutex
+	State              *State
+	Share              map[phase0.ValidatorIndex]*spectypes.Share
+	QBFTController     *controller.Controller
+	DomainTypeProvider networkconfig.DomainTypeProvider
+	BeaconNetwork      spectypes.BeaconNetwork
+	RunnerRoleType     spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
 	// implementation vars
@@ -127,6 +125,7 @@ func NewBaseRunner(
 	state *State,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
@@ -136,6 +135,7 @@ func NewBaseRunner(
 		Share:              share,
 		QBFTController:     controller,
 		BeaconNetwork:      beaconNetwork,
+		DomainTypeProvider: domainTypeProvider,
 		RunnerRoleType:     runnerRoleType,
 		highestDecidedSlot: highestDecidedSlot,
 	}
