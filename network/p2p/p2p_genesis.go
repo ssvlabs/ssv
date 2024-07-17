@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
@@ -58,4 +59,9 @@ func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {
 		}
 	}
 	return nil
+}
+
+// Subscribe subscribes to validator subnet
+func (n *GenesisP2p) Subscribe(pk genesisspectypes.ValidatorPK) error {
+	return n.Network.Subscribe(spectypes.ValidatorPK(pk[:]))
 }
