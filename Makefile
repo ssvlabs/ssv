@@ -36,9 +36,10 @@ lint-prepare:
 .PHONY: lint
 lint:
 	./bin/golangci-lint run -v ./...
-	@UNFORMATTED=$(shell gofmt -s -l .); \
+	@UNFORMATTED=$$(gofmt -s -l .); \
 	if [ ! -z "$$UNFORMATTED" ]; then \
 		echo "Some files require formatting, please run 'go fmt ./...'"; \
+		echo "$$UNFORMATTED"; \
 		exit 1; \
 	fi
 
