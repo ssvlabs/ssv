@@ -803,7 +803,17 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
-	
+	// Count number of non-liquidated validators without metadata, and if its more than 30k then return immediately.
+	nonLiquidatedValidators := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
+	withMetadata := 0
+	for _, share := range nonLiquidatedValidators {
+		if share.HasBeaconMetadata() {
+			withMetadata++
+		}
+	}
+	if withMetadata > 30000 {
+		return
+	}
 
 	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec() * 2
 
