@@ -98,32 +98,35 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
-	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
-	toRemove := make([]int, 0)
-	// Remove beacon duties that don't have a share
-	for i, bd := range duty.BeaconDuties {
-		share, ok := c.Shares[bd.ValidatorIndex]
-		if !ok {
-			toRemove = append(toRemove, i)
-			continue
-		}
-		validatorShares[bd.ValidatorIndex] = share
+	//validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
+	//toRemove := make([]int, 0)
+	//// Remove beacon duties that don't have a share
+	//for i, bd := range duty.BeaconDuties {
+	//	share, ok := c.Shares[bd.ValidatorIndex]
+	//	if !ok {
+	//		toRemove = append(toRemove, i)
+	//		continue
+	//	}
+	//	validatorShares[bd.ValidatorIndex] = share
+	//}
+	//// Remove beacon duties that don't have a share
+	//if len(toRemove) > 0 {
+	//	newDuties, err := removeIndices(duty.BeaconDuties, toRemove)
+	//	if err != nil {
+	//		logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
+	//	} else {
+	//		duty.BeaconDuties = newDuties
+	//	}
+	//}
+	//
+	//if len(duty.BeaconDuties) == 0 {
+	//	return errors.New("CommitteeDuty has no valid beacon duties")
+	//}
+	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
+	for k, v := range c.Shares {
+		sharesCopy[k] = v
 	}
-	// Remove beacon duties that don't have a share
-	if len(toRemove) > 0 {
-		newDuties, err := removeIndices(duty.BeaconDuties, toRemove)
-		if err != nil {
-			logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
-		} else {
-			duty.BeaconDuties = newDuties
-		}
-	}
-
-	if len(duty.BeaconDuties) == 0 {
-		return errors.New("CommitteeDuty has no valid beacon duties")
-	}
-
-	r := c.CreateRunnerFn(duty.Slot, validatorShares)
+	r := c.CreateRunnerFn(duty.Slot, sharesCopy)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
