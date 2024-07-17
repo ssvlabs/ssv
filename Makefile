@@ -26,6 +26,7 @@ COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
 	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
+UNFORMATTED=$(shell gofmt -l .)
 
 #Lint
 .PHONY: lint-prepare
@@ -36,10 +37,8 @@ lint-prepare:
 .PHONY: lint
 lint:
 	./bin/golangci-lint run -v ./...
-	@UNFORMATTED=$$(gofmt -s -l .); \
-	if [ ! -z "$$UNFORMATTED" ]; then \
-		echo "Some files require formatting, please run 'go fmt ./...'"; \
-		echo "$$UNFORMATTED"; \
+	@if [ ! -z "${UNFORMATTED}" ]; then \
+		echo "Some files requires formatting, please run 'go fmt ./...'"; \
 		exit 1; \
 	fi
 
