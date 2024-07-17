@@ -224,8 +224,7 @@ var baseCommitteeWithRunnerSample = func(
 	for valIdx, ks := range keySetMap {
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
-
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 		return runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
