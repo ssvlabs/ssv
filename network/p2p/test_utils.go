@@ -140,11 +140,6 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 		return nil, err
 	}
 
-	// hash, err := keys.OperatorKey.StorageHash()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, err
@@ -170,14 +165,7 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 
 	cfg.NodeStorage = ns
 	cfg.Metrics = nil
-	// TODO: (Alan) decide if the code in this comment is needed, else remove
-	// cfg.MessageValidator = nil //validation.New(
-	//networkconfig.TestNetwork,
-	//nodeStorage.ValidatorStore(),
-	//dutyStore,
-	//signatureVerifier,
-	//validation.WithSelfAccept(selfPeerID, true),
-	//)
+
 	ctrl := gomock.NewController(t)
 	newMockValidatorStore(ctrl, networkconfig.TestNetwork, ks, shares)
 	cfg.Network = networkconfig.TestNetwork
