@@ -161,9 +161,6 @@ func (ln *LocalNet) NewTestP2pNetworkFromKeySet(t *testing.T, ctx context.Contex
 	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, ssv_testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
-	if err != nil {
-		return nil, err
-	}
 	ns, err := storage.NewNodeStorage(logger, db)
 	if err != nil {
 		return nil, err
