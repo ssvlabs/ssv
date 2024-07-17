@@ -803,7 +803,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
-	return // TODO: revert disabling of metadata update
+	
 
 	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec() * 2
 
