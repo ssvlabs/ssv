@@ -1182,42 +1182,6 @@ func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIn
 	return false
 }
 
-// TODO alan: use spec when they fix bugs
-func TempBeaconVoteValueCheckF(
-	signer spectypes.BeaconSigner,
-	slot phase0.Slot,
-	sharePublicKey []byte,
-	estimatedCurrentEpoch phase0.Epoch,
-) specqbft.ProposedValueCheckF {
-	return func(data []byte) error {
-		bv := spectypes.BeaconVote{}
-		if err := bv.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding beacon vote")
-		}
-
-		if bv.Target.Epoch > estimatedCurrentEpoch+1 {
-			return errors.New("attestation data target epoch is into far future")
-		}
-
-		if bv.Source.Epoch >= bv.Target.Epoch {
-			return errors.New("attestation data source >= target")
-		}
-
-		// attestationData := &phase0.AttestationData{
-		// 	Slot: slot,
-		// 	// CommitteeIndex doesn't matter for slashing checks
-		// 	Index:           0,
-		// 	BeaconBlockRoot: bv.BlockRoot,
-		// 	Source:          bv.Source,
-		// 	Target:          bv.Target,
-		// }
-
-		// TODO: (Alan) REVERT SLASHING CHECK
-		// return signer.IsAttestationSlashable(sharePublicKey, attestationData)
-		return nil
-	}
-}
-
 func SetupCommitteeRunners(
 	ctx context.Context,
 	options validator.Options,
@@ -1250,7 +1214,11 @@ func SetupCommitteeRunners(
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch) // TODO: (Alan) fix slashing check (committee is not 1 pubkey)
+		sharepbs := make([]spectypes.ShareValidatorPK, len(shares))
+		for i, s := range shares {
+			sharepbs[i] = s.SharePubKey
+		}
+		valCheck := specssv.BeaconVoteValueCheckF(options.Signer, slot, sharepbs, epoch)
 		crunner := runner.NewCommitteeRunner(
 			options.NetworkConfig,
 			shares,
