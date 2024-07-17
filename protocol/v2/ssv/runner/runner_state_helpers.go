@@ -3,7 +3,6 @@ package runner
 import (
 	"encoding/hex"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -16,20 +15,35 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 	return signers
 }
 
-func getPostConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	var valIdx phase0.ValidatorIndex
-	switch state.StartingDuty.(type) {
-	case *spectypes.BeaconDuty:
-		valIdx = state.StartingDuty.(*spectypes.BeaconDuty).ValidatorIndex
-	case *spectypes.CommitteeDuty:
-		valIdx = state.StartingDuty.(*spectypes.CommitteeDuty).BeaconDuties[0].ValidatorIndex
-	default:
-		return nil
-	}
-	sigs := state.PostConsensusContainer.Signatures[valIdx][hex.EncodeToString(root[:])]
+func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
+
+	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).BeaconDuties {
+		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][hex.EncodeToString(root[:])]
+		for op := range sigs {
+			signers = append(signers, op)
+		}
+	}
+
+	have := make(map[spectypes.OperatorID]struct{})
+	var signersUnique []spectypes.OperatorID
+	for _, opId := range signers {
+		if _, ok := have[opId]; !ok {
+			have[opId] = struct{}{}
+			signersUnique = append(signersUnique, opId)
+		}
+	}
+
+	return signersUnique
+}
+
+func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
+	var signers []spectypes.OperatorID
+	valIdx := state.StartingDuty.(*spectypes.BeaconDuty).ValidatorIndex
+	sigs := state.PostConsensusContainer.Signatures[valIdx][hex.EncodeToString(root[:])]
 	for op := range sigs {
 		signers = append(signers, op)
 	}
+
 	return signers
 }

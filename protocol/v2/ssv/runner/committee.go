@@ -4,8 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	"time"
+
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -386,8 +387,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
-			vlogger.Debug("🧩 reconstructed partial signatures",
-				zap.Uint64s("signers", getPostConsensusSigners(cr.BaseRunner.State, root)))
+			vlogger.Debug("🧩 reconstructed partial signatures committee",
+				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
 			if _, exists := beaconObjects[validator]; !exists {
 				anyErr = errors.Wrap(err, "could not find beacon object for validator")
