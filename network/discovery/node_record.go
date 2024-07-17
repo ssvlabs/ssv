@@ -10,9 +10,9 @@ import (
 
 type NodeRecordDecoration func(*enode.LocalNode) error
 
-func DecorateWithDomainType(domainType spectypes.DomainType) NodeRecordDecoration {
+func DecorateWithDomainType(key records.ENRKey, domainType spectypes.DomainType) NodeRecordDecoration {
 	return func(node *enode.LocalNode) error {
-		return records.SetDomainTypeEntry(node, domainType)
+		return records.SetDomainTypeEntry(node, key, domainType)
 	}
 }
 
