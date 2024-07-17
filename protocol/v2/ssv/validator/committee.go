@@ -97,7 +97,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
-	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.BeaconDuties))
+	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
 	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
 	toRemove := make([]int, 0)
 	// Remove beacon duties that don't have a share

@@ -350,7 +350,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return nil, types.DomainError, errors.Wrap(err, "could not create consensus data")
+		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
 	}
 	contributions, err := validatorConsensusData.GetSyncCommitteeContributions()
 	if err != nil {

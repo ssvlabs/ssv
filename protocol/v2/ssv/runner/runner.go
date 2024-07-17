@@ -307,7 +307,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	return true, nil
 }
 
-func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot, input types.Encoder) error {
+func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
 	byts, err := input.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode input data for consensus")
