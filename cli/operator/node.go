@@ -221,6 +221,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorStore := nodeStorage.ValidatorStore()
 		// validatorStore = newValidatorStore(...) // TODO
 
+		// New msg validation that should be dynamically switched
 		// messageValidator := validation.New(
 		// 	networkConfig,
 		// 	validatorStore,
