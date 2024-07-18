@@ -31,10 +31,10 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	preByts, _ := test.Pre.Encode()
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
-	ks := spectestingutils.Testing4SharesSet()
+	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember), convert.RunnerRole(msgId.GetRoleType())),
+		qbfttesting.TestingConfig(logger, ks, convert.RunnerRole(msgId.GetRoleType())),
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
