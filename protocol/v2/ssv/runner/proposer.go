@@ -234,8 +234,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
-		logger.Debug("🧩 reconstructed partial post consensus signatures",
-			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
+			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()))
 		endSubmission := r.metrics.StartBeaconSubmission()
 

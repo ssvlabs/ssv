@@ -30,12 +30,14 @@ func getDB(logger *zap.Logger) basedb.Database {
 }
 
 var allRoles = []convert.RunnerRole{
-	convert.RoleCommittee,
-	convert.RoleProposer,
+	convert.RoleAttester,
 	convert.RoleAggregator,
+	convert.RoleProposer,
 	convert.RoleSyncCommitteeContribution,
+	convert.RoleSyncCommittee,
 	convert.RoleValidatorRegistration,
 	convert.RoleVoluntaryExit,
+	convert.RoleCommittee,
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {
