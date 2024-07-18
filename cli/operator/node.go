@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"log"
 	"math/big"
 	"net/http"
@@ -91,6 +93,26 @@ var cfg config
 var globalArgs global_config.Args
 
 var operatorNode operator.Node
+
+type ForkingMessageValidation struct {
+	networkConfig networkconfig.NetworkConfig
+	genesis       genesisvalidation.MessageValidator
+	alan          validation.MessageValidator
+}
+
+func (f *ForkingMessageValidation) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if f.networkConfig.PastAlanFork() {
+		return f.alan.Validate(ctx, p, pmsg)
+	}
+	return f.genesis.Validate(ctx, p, pmsg)
+}
+
+func (f *ForkingMessageValidation) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if f.networkConfig.PastAlanFork() {
+		return f.alan.ValidatorForTopic(topic)
+	}
+	return f.genesis.ValidatorForTopic(topic)
+}
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -218,23 +240,21 @@ var StartNodeCmd = &cobra.Command{
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 		validatorStore := nodeStorage.ValidatorStore()
-		// validatorStore = newValidatorStore(...) // TODO
 
-		var messageValidator validation.MessageValidator
+		messageValidator := &ForkingMessageValidation{
+			networkConfig: networkConfig,
+		}
 
-		alanFork := true
-
-		if alanFork {
-			messageValidator = validation.New(
-				networkConfig,
-				validatorStore,
-				dutyStore,
-				signatureVerifier,
-				validation.WithLogger(logger),
-				validation.WithMetrics(metricsReporter),
-			)
-		} else {
-			messageValidator = genesisvalidation.New(
+		messageValidator.alan = validation.New(
+			networkConfig,
+			validatorStore,
+			dutyStore,
+			signatureVerifier,
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
+		)
+		if !networkConfig.PastAlanFork() {
+			messageValidator.genesis = genesisvalidation.New(
 				networkConfig,
 				genesisvalidation.WithNodeStorage(nodeStorage),
 				genesisvalidation.WithLogger(logger),

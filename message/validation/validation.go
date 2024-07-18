@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/pkg/errors"
 	"sync"
 	"time"
 
@@ -96,6 +97,12 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
+		if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
+			fullErr, ok := err.(Error)
+			if ok && errors.Is(fullErr.innerErr, ErrMalformedPubSubMessage) {
+				return pubsub.ValidationIgnore
+			}
+		}
 		return mv.handleValidationError(peerID, decodedMessage, err)
 	}
 
