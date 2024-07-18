@@ -45,6 +45,8 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusDescriptor, msgSlot, e
 	}
 
+	// MSGVALIDATIONREVIEW: it seems that we are missing the "invalid identifier" check. I.e., the SSVMessage.Identifier should be equal to the qbftMessage.Identifier
+
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}

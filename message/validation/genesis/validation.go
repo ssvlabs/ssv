@@ -380,6 +380,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
+	// MSGVALIDATIONREVIEW: I see that msg.SSVMessage is of type alanspectypes.SSVMessage. Shouldn't it be of genesis type?
 	ssvMessage := msg.SSVMessage
 
 	if len(ssvMessage.Data) == 0 {

@@ -33,6 +33,8 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return msgSlot, err
 	}
 
+	// MSGVALIDATIONREVIEW: It seems to me that we are not doing here the "validateSlotTime" check (that the message isn't sent before the duty start time or after its final slot + 3 slots)
+
 	state := mv.consensusState(msgID)
 	signerState := state.GetSignerState(signedMsg.Signer)
 	if signerState != nil {
@@ -164,6 +166,10 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
 		newDutyInSameEpoch = true
 	}
+
+	// MSGVALIDATIONREVIEW: It seems to me that we check duty count for attestation, aggregation, validator registration and sync committee
+	// but we don't check the beacon duty for the proposer, sync committee and sync committee contribution case.
+	// I think we should add a check validateBeaconDuty here, no?
 
 	if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
 		return err
