@@ -36,7 +36,8 @@ type ProposerRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
-	metrics metrics.ConsensusMetrics
+	metrics  metrics.ConsensusMetrics
+	graffiti []byte
 }
 
 func NewProposerRunner(
@@ -48,6 +49,7 @@ func NewProposerRunner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	graffiti []byte,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
@@ -63,6 +65,7 @@ func NewProposerRunner(
 		signer:   signer,
 		valCheck: valCheck,
 		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleProposer),
+		graffiti: graffiti,
 	}
 }
 
@@ -111,13 +114,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	var start = time.Now()
 	if r.ProducesBlindedBlocks {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
 	} else {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get beacon block")
 		}

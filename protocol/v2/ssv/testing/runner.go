@@ -116,6 +116,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			km,
 			valCheck,
 			TestingHighestDecidedSlot,
+			[]byte("graffiti"),
 		)
 	case spectypes.BNRoleSyncCommittee:
 		return runner.NewSyncCommitteeRunner(
