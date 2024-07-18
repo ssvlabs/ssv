@@ -40,7 +40,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 // Peers registers a message router to handle incoming messages
 func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
-	topics, err := n.validatorTopics(pk)
+	topics, err := n.broadcastTopics(pk)
 	if err != nil {
 		return nil, fmt.Errorf("could not get validator topics: %w", err)
 	}
@@ -78,7 +78,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
 	}
 
-	topics, err := n.validatorTopics(msg.GetID().GetPubKey())
+	topics, err := n.broadcastTopics(msg.GetID().GetPubKey())
 	if err != nil {
 		return fmt.Errorf("could not get validator topics: %w", err)
 	}
@@ -270,7 +270,7 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) validatorTopics(pk spectypes.ValidatorPK) ([]string, error) {
+func (n *p2pNetwork) broadcastTopics(pk spectypes.ValidatorPK) ([]string, error) {
 	if n.cfg.Network.CommitteeSubnetsFork() {
 		share := n.nodeStorage.Shares().Get(nil, pk)
 		if share == nil {
