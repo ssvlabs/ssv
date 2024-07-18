@@ -22,8 +22,12 @@ func (vc *ValidatorContainer) Start(logger *zap.Logger) (started bool, err error
 }
 
 func (vc *ValidatorContainer) Stop() {
-	vc.Validator.Stop()
-	vc.GenesisValidator.Stop()
+	if vc.Validator != nil {
+		vc.Validator.Stop()
+	}
+	if vc.GenesisValidator != nil {
+		vc.GenesisValidator.Stop()
+	}
 }
 
 func (vc *ValidatorContainer) GetShare() *types.SSVShare {
