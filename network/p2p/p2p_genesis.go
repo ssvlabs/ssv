@@ -13,7 +13,7 @@ import (
 )
 
 type GenesisP2p struct {
-	Network p2pNetwork
+	Network *p2pNetwork
 }
 
 func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {

@@ -100,7 +100,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (network.P2PNetwork, Genes
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	net := p2pNetwork{
+	net := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
@@ -116,7 +116,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (network.P2PNetwork, Genes
 		operatorDataStore:       cfg.OperatorDataStore,
 		metrics:                 mr,
 	}
-	return &net, GenesisP2p{Network: net}
+	return net, GenesisP2p{Network: net}
 }
 
 // Host implements HostProvider
