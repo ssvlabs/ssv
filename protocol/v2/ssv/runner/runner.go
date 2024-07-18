@@ -221,7 +221,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
 	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
-		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")
+		return true, nil, errors.Wrap(err, "decided ValidatorConsensusData invalid")
 	}
 
 	runner.GetBaseRunner().State.DecidedValue, err = decidedValue.Encode()
