@@ -360,19 +360,30 @@ func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	// Create ticker
-	oneEpochDuration := n.cfg.Network.Beacon.SlotDurationSec() * time.Duration(n.cfg.Network.Beacon.SlotsPerEpoch())
-	ticker := time.NewTicker(oneEpochDuration)
-	defer ticker.Stop()
+	// function to get the starting time of the next epoch
+	nextEpochStartingTime := func() time.Time {
+		currEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+		nextEpoch := currEpoch + 1
+		return n.cfg.Network.Beacon.EpochStartTime(nextEpoch)
+	}
+
+	// Create timer that triggers on the beginning of the next epoch
+	timer := time.NewTimer(time.Until(nextEpochStartingTime()))
+	defer timer.Stop()
 
 	// Run immediately and then once every epoch
-	for ; true; <-ticker.C {
+	for ; true; <-timer.C {
+
+		// Update score parameters
 		err := n.topicsCtrl.UpdateScoreParams(logger)
 		if err != nil {
 			logger.Debug("score parameters update failed", zap.Error(err))
 		} else {
 			logger.Debug("updated score parameters successfully")
 		}
+
+		// Reset to trigger on the beginning of the next epoch
+		timer.Reset(time.Until(nextEpochStartingTime()))
 	}
 }
 
