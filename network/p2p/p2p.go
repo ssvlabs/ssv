@@ -14,6 +14,7 @@ import (
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -294,9 +295,10 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			continue
 		}
 
-		self := n.idx.Self()
-		self.Metadata.Subnets = records.Subnets(n.subnets).String()
-		n.idx.UpdateSelfRecord(self)
+		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
+			self.Metadata.Subnets = records.Subnets(n.subnets).String()
+			return self
+		})
 
 		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
 		if err != nil {
@@ -314,10 +316,44 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	}
 }
 
+// UpdateScoreParams updates the scoring parameters once per epoch through the call of n.topicsCtrl.UpdateScoreParams
+func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
+	// TODO: this is a temporary solution to update the score parameters periodically.
+	// But, we should use an appropriate trigger for the UpdateScoreParams function that should be
+	// called once a validator is added or removed from the network
+
+	logger = logger.Named(logging.NameP2PNetwork)
+
+	// Create ticker
+	oneEpochDuration := n.cfg.Network.Beacon.SlotDurationSec() * time.Duration(n.cfg.Network.Beacon.SlotsPerEpoch())
+	ticker := time.NewTicker(oneEpochDuration)
+	defer ticker.Stop()
+
+	// Run immediately and then once every epoch
+	for ; true; <-ticker.C {
+		err := n.topicsCtrl.UpdateScoreParams(logger)
+		if err != nil {
+			logger.Debug("score parameters update failed", zap.Error(err))
+		} else {
+			logger.Debug("updated score parameters successfully")
+		}
+	}
+}
+
 // getMaxPeers returns max peers of the given topic.
 func (n *p2pNetwork) getMaxPeers(topic string) int {
 	if len(topic) == 0 {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+// UpdateDomainAtFork updates Domain Type at ENR node record after fork epoch.
+func (n *p2pNetwork) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
+	if err := n.disc.UpdateDomainType(logger, domain); err != nil {
+		logger.Error("could not update domain type", zap.Error(err))
+		return err
+	}
+	logger.Debug("updated and published ENR with domain type", fields.Domain(domain))
+	return nil
 }

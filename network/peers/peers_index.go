@@ -94,28 +94,27 @@ func (pi *peersIndex) AtLimit(dir libp2pnetwork.Direction) bool {
 	return len(peers) > maxPeers
 }
 
-func (pi *peersIndex) UpdateSelfRecord(newSelf *records.NodeInfo) {
+func (pi *peersIndex) UpdateSelfRecord(update func(self *records.NodeInfo) *records.NodeInfo) {
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
 
-	pi.self = newSelf
+	pi.self = update(pi.self.Clone())
 }
 
 func (pi *peersIndex) Self() *records.NodeInfo {
-	return pi.self
+	pi.selfLock.RLock()
+	defer pi.selfLock.RUnlock()
+
+	return pi.self.Clone()
 }
 
 func (pi *peersIndex) SelfSealed() ([]byte, error) {
-	pi.selfLock.Lock()
-	defer pi.selfLock.Unlock()
-
-	sealed, err := pi.self.Seal(pi.netKeyProvider())
+	sealed, err := pi.Self().Seal(pi.netKeyProvider())
 	if err != nil {
 		return nil, err
 	}
 
 	return sealed, nil
-
 }
 
 func (pi *peersIndex) SetNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) {
@@ -148,7 +147,7 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
 
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
-	mySubnets, err := records.Subnets{}.FromString(pi.self.Metadata.Subnets)
+	mySubnets, err := records.Subnets{}.FromString(pi.Self().Metadata.Subnets)
 	if err != nil {
 		mySubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
 	}

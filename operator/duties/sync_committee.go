@@ -68,13 +68,15 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		h.fetchNextPeriod = true
 	}
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
@@ -171,7 +173,7 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 		return
 	}
 
-	if !h.network.AlanForked(slot) {
+	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
 		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
 		for _, d := range duties {
 			if h.shouldExecute(d, slot) {
@@ -205,6 +207,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 
 	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
 	if len(allActiveIndices) == 0 {
+		h.logger.Debug("no active validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
 		return nil
 	}
 

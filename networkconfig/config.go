@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -16,8 +16,6 @@ var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
 	Holesky.Name:      Holesky,
 	HoleskyStage.Name: HoleskyStage,
-	JatoV2Stage.Name:  JatoV2Stage,
-	JatoV2.Name:       JatoV2,
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
 }
@@ -30,10 +28,18 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	return NetworkConfig{}, fmt.Errorf("network not supported: %v", name)
 }
 
+// DomainTypeProvider is an interface for getting the domain type based on the current or given epoch.
+type DomainTypeProvider interface {
+	DomainType() spectypes.DomainType
+	NextDomainType() spectypes.DomainType
+	DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType
+}
+
 type NetworkConfig struct {
 	Name                 string
 	Beacon               beacon.BeaconNetwork
-	Domain               spectypes.DomainType
+	GenesisDomainType    spectypes.DomainType
+	AlanDomainType       spectypes.DomainType
 	GenesisEpoch         phase0.Epoch
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address
@@ -51,8 +57,11 @@ func (n NetworkConfig) String() string {
 	return string(b)
 }
 
-func (n NetworkConfig) AlanForked(slot phase0.Slot) bool {
-	epoch := n.Beacon.EstimatedEpochAtSlot(slot)
+func (n NetworkConfig) PastAlanFork() bool {
+	return n.Beacon.EstimatedCurrentEpoch() >= n.AlanForkEpoch
+}
+
+func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
 	return epoch >= n.AlanForkEpoch
 }
 
@@ -79,4 +88,21 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 func (n NetworkConfig) AlanFork() bool {
 	// TODO: implement
 	return true
+}
+
+// DomainType returns current domain type based on the current fork.
+func (n NetworkConfig) DomainType() spectypes.DomainType {
+	return n.DomainTypeAtEpoch(n.Beacon.EstimatedCurrentEpoch())
+}
+
+// DomainTypeAtEpoch returns domain type based on the fork at the given epoch.
+func (n NetworkConfig) DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType {
+	if n.PastAlanForkAtEpoch(epoch) {
+		return n.AlanDomainType
+	}
+	return n.GenesisDomainType
+}
+
+func (n NetworkConfig) NextDomainType() spectypes.DomainType {
+	return n.AlanDomainType
 }

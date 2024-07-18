@@ -169,8 +169,8 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-
-	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
+	d := n.cfg.Network.DomainType()
+	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
@@ -255,7 +255,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
-		DomainType:  n.cfg.Network.Domain,
+		DomainType:  n.cfg.Network,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
@@ -300,7 +300,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics)
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore())
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

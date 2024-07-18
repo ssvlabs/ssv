@@ -21,6 +21,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
+type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner
+
 type Committee struct {
 	logger *zap.Logger
 	ctx    context.Context
@@ -40,7 +42,7 @@ type Committee struct {
 	Operator *spectypes.CommitteeMember
 
 	SignatureVerifier       spectypes.SignatureVerifier
-	CreateRunnerFn          func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner
+	CreateRunnerFn          CommitteeRunnerFunc
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
 }
 
@@ -51,7 +53,7 @@ func NewCommittee(
 	beaconNetwork spectypes.BeaconNetwork,
 	operator *spectypes.CommitteeMember,
 	verifier spectypes.SignatureVerifier,
-	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
+	createRunnerFn CommitteeRunnerFunc,
 	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
 ) *Committee {
 	return &Committee{
@@ -98,12 +100,36 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
-	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
-	for k, v := range c.Shares {
-		sharesCopy[k] = v
+	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.BeaconDuties))
+	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
+	toRemove := make([]int, 0)
+	// Remove beacon duties that don't have a share
+	for i, bd := range duty.BeaconDuties {
+		share, ok := c.Shares[bd.ValidatorIndex]
+		if !ok {
+			toRemove = append(toRemove, i)
+			continue
+		}
+		if bd.Type == spectypes.BNRoleAttester {
+			slashableValidators = append(slashableValidators, share.SharePubKey)
+		}
+		validatorShares[bd.ValidatorIndex] = share
+	}
+	// Remove beacon duties that don't have a share
+	if len(toRemove) > 0 {
+		newDuties, err := removeIndices(duty.BeaconDuties, toRemove)
+		if err != nil {
+			logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
+		} else {
+			duty.BeaconDuties = newDuties
+		}
 	}
 
-	r := c.CreateRunnerFn(duty.Slot, sharesCopy)
+	if len(duty.BeaconDuties) == 0 {
+		return errors.New("CommitteeDuty has no valid beacon duties")
+	}
+
+	r := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r

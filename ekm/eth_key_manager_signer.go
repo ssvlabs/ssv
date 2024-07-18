@@ -22,8 +22,9 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -104,7 +105,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            network.Domain,
+		domain:            network.DomainType(),
 		slashingProtector: slashingProtector,
 	}, nil
 }

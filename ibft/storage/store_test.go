@@ -11,9 +11,10 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -21,7 +22,7 @@ import (
 func TestCleanInstances(t *testing.T) {
 	ks := testingutils.Testing4SharesSet()
 	logger := logging.TestLogger(t)
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.RoleCommittee)
+	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.RoleCommittee)
 	storage, err := newTestIbftStorage(logger, "test")
 	require.NoError(t, err)
 
@@ -56,7 +57,7 @@ func TestCleanInstances(t *testing.T) {
 	require.NoError(t, storage.SaveHighestInstance(generateInstance(msgID, specqbft.Height(msgsCount))))
 
 	// add different msgID
-	differMsgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("differ_pk"), spectypes.RoleCommittee)
+	differMsgID := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("differ_pk"), spectypes.RoleCommittee)
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
 	require.NoError(t, storage.SaveHighestInstance(generateInstance(differMsgID, specqbft.Height(msgsCount))))
 	require.NoError(t, storage.SaveHighestAndHistoricalInstance(generateInstance(differMsgID, specqbft.Height(1))))
@@ -91,7 +92,7 @@ func TestCleanInstances(t *testing.T) {
 }
 
 func TestSaveAndFetchLastState(t *testing.T) {
-	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.RoleCommittee)
+	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.RoleCommittee)
 
 	instance := &qbftstorage.StoredInstance{
 		State: &specqbft.State{
@@ -129,7 +130,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 }
 
 func TestSaveAndFetchState(t *testing.T) {
-	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.RoleCommittee)
+	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.RoleCommittee)
 
 	instance := &qbftstorage.StoredInstance{
 		State: &specqbft.State{

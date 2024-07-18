@@ -31,6 +31,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
+// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
+
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
 	NodeKeys []testing.NodeKeys

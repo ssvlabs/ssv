@@ -5,16 +5,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -334,7 +334,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		})
 	}
 
-	validatorShare.DomainType = eh.networkConfig.Domain
+	validatorShare.DomainType = eh.networkConfig.DomainType()
 	validatorShare.Committee = shareMembers
 	validatorShare.Graffiti = []byte("ssv.network")
 
@@ -374,7 +374,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	}
 
 	removeDecidedMessages := func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := convert.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
+		messageID := convert.NewMsgID(eh.networkConfig.DomainType(), share.ValidatorPubKey[:], role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)
@@ -511,10 +511,6 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if !share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		return nil, nil
-	}
-
 	if share.BeaconMetadata == nil {
 		return nil, nil
 	}
@@ -523,9 +519,13 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	copy(pk[:], share.ValidatorPubKey[:])
 
 	ed := &duties.ExitDescriptor{
+		OwnValidator:   false,
 		PubKey:         pk,
 		ValidatorIndex: share.BeaconMetadata.Index,
 		BlockNumber:    event.Raw.BlockNumber,
+	}
+	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
+		ed.OwnValidator = true
 	}
 
 	return ed, nil

@@ -10,16 +10,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -32,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
@@ -586,7 +585,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.Domain),
+		fields.Domain(networkConfig.DomainType()),
 		zap.String("nodeType", nodeType),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
