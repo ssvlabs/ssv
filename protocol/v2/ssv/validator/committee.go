@@ -102,21 +102,22 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.BeaconDuties))
 
+	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
+	toRemove := make([]int, 0)
+	// Remove beacon duties that don't have a share
+	for i, bd := range duty.BeaconDuties {
+		share, ok := c.Shares[bd.ValidatorIndex]
+		if !ok {
+			toRemove = append(toRemove, i)
+			continue
+		}
+		if bd.Type == spectypes.BNRoleAttester {
+			slashableValidators = append(slashableValidators, share.SharePubKey)
+		}
+		validatorShares[bd.ValidatorIndex] = share
+	}
+
 	// TODO bring this back when https://github.com/ssvlabs/ssv-spec/pull/467 is merged and spec is aligned
-	//validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
-	//toRemove := make([]int, 0)
-	//// Remove beacon duties that don't have a share
-	//for _, bd := range duty.BeaconDuties {
-	//	share, ok := c.Shares[bd.ValidatorIndex]
-	//	if !ok {
-	//		toRemove = append(toRemove, i)
-	//		continue
-	//	}
-	//	if bd.Type == spectypes.BNRoleAttester {
-	//		slashableValidators = append(slashableValidators, share.SharePubKey)
-	//	}
-	//	validatorShares[bd.ValidatorIndex] = share
-	//}
 	//// Remove beacon duties that don't have a share
 	//if len(toRemove) > 0 {
 	//	newDuties, err := removeIndices(duty.BeaconDuties, toRemove)
