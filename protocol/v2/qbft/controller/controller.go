@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 
 	"github.com/pkg/errors"

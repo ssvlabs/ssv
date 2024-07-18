@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -14,7 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role convert.RunnerRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.RunnerRole) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner:   testingutils.NewTestingKeyManager(),
 		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
@@ -34,7 +35,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage:               TestingStores(logger).Get(role),
+		Storage:               TestingStores(logger).Get(convert.RunnerRole(role)),
 		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,
