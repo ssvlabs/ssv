@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -258,12 +257,6 @@ func (n *p2pNetwork) isReady() bool {
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
-	var (
-		topicScoreUpdateInterval = 32 * n.cfg.Network.SlotDurationSec()
-		topicScoreUpdateTicker   = time.NewTicker(topicScoreUpdateInterval)
-	)
-	defer topicScoreUpdateTicker.Stop()
-
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(time.Second)
 	registeredSubnets := make([]byte, commons.Subnets())
@@ -285,18 +278,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 
 		if !n.cfg.Network.PastAlanFork() {
 			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-				// TODO: alan - fork support
-				pbBytes, err := hex.DecodeString(pkHex)
-				if err != nil {
-					return false
-				}
-				// TODO: alan - optimization to get active committees only
-				share := n.nodeStorage.Shares().Get(nil, pbBytes)
-				if share == nil {
-					return false
-				}
-				cid := share.CommitteeID()
-				subnet := commons.CommitteeSubnet(cid)
+				subnet := commons.ValidatorSubnet(pkHex)
 				updatedSubnets[subnet] = byte(1)
 				return true
 			})
