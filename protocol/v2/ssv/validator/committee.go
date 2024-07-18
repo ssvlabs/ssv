@@ -131,16 +131,16 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	//if len(duty.BeaconDuties) == 0 {
 	//	return errors.New("CommitteeDuty has no valid beacon duties")
 	//}
-	//
-	//r := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
 
-	// TODO REMOVE this after https://github.com/ssvlabs/ssv-spec/pull/467 is merged and we are aligned to the spec -->
+	// TODO REMOVE this after https://github.com/ssvlabs/ssv-spec/pull/467 is merged and we are aligned to the spec
+	// 			   and pas validatorShares instead of sharesCopy the runner
+	// -->
 	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
 	for k, v := range c.Shares {
 		sharesCopy[k] = v
 	}
-	r := c.CreateRunnerFn(duty.Slot, sharesCopy, slashableValidators)
 	// <--
+	r := c.CreateRunnerFn(duty.Slot, sharesCopy, slashableValidators)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
