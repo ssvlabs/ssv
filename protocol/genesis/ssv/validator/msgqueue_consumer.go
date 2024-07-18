@@ -35,9 +35,9 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
+	logger.Debug("📬 handling SSV message",
+		zap.Uint64("type", uint64(msg.MsgType)),
+		fields.Role(msg.MsgID.GetRoleType()))
 
 	if q, ok := v.Queues[((*genesisspectypes.MessageID)(msg.MsgID[:])).GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {

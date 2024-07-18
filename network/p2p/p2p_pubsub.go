@@ -238,12 +238,12 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return errors.New("message was not decoded")
 		}
 
-		//p2pID := decodedMsg.GetID().String()
+		// p2pID := decodedMsg.GetID().String()
 
-		//	logger.With(
-		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
-		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
-		// 	).Debug("handlePubsubMessages")
+		logger.With(
+			zap.String("pubKey", hex.EncodeToString(decodedMsg.SSVMessage.MsgID.GetDutyExecutorID())),
+			zap.String("role", decodedMsg.SSVMessage.MsgID.GetRoleType().String()),
+		).Debug("handlePubsubMessages")
 
 		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
