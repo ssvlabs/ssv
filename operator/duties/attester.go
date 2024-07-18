@@ -79,9 +79,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			if !h.network.AlanFork() {
-				h.processExecution(currentEpoch, slot)
-			}
+			h.processExecution(currentEpoch, slot)
 			if h.indicesChanged {
 				h.duties.ResetEpoch(currentEpoch)
 				h.indicesChanged = false
@@ -96,11 +94,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextEpoch = true
 			}
 
-			if !h.network.AlanFork() {
-				// last slot of epoch
-				if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-					h.duties.ResetEpoch(currentEpoch)
-				}
+			// last slot of epoch
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+				h.duties.ResetEpoch(currentEpoch - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -197,9 +193,6 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			if !h.network.AlanFork() {
-				toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
-			}
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
