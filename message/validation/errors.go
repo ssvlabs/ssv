@@ -63,6 +63,7 @@ var (
 	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
 	ErrEmptyPubSubMessage                  = Error{text: "pub-sub message is empty", reject: true}
 	ErrTopicNotFound                       = Error{text: "topic not found", reject: true}
+	ErrOutdatedTopic                       = Error{text: "outdated topic"}
 	ErrSSVDataTooBig                       = Error{text: "ssv message data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
 	ErrUnexpectedConsensusMessage          = Error{text: "unexpected consensus message for this role", reject: true}

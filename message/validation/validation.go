@@ -43,6 +43,10 @@ const (
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
 	clockErrorTolerance = time.Millisecond * 50
 
+	// previousForkTolerance is the maximum number of slots after a fork
+	// in which a pre-fork message would not be rejected.
+	previousForkTolerance = 1
+
 	maxMessageSize             = maxConsensusMsgSize
 	maxConsensusMsgSize        = 8388608
 	maxPartialSignatureMsgSize = 1952
@@ -371,6 +375,17 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		}
 	}
 	if !topicFound {
+		// If we've just recently forked and the message is from the old topic, we'll only
+		// ignore rather than reject it.
+		toleranceDeadline := mv.netCfg.Beacon.GetSlotStartTime(
+			mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.CommitteeSubnetForkEpoch) +
+				previousForkTolerance,
+		)
+		if mv.netCfg.CommitteeSubnetsFork() &&
+			receivedAt.Before(toleranceDeadline) {
+			return nil, Descriptor{}, ErrOutdatedTopic
+		}
+
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
 
