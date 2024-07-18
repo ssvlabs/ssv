@@ -308,7 +308,7 @@ type MsgProcessingSpecTestAlias struct {
 	BeaconBroadcastedRoots  []string
 	DontStartDuty           bool // if set to true will not start a duty for the runner
 	ExpectedError           string
-	BeaconDuty              *spectypes.ValidatorDuty `json:"BeaconDuty,omitempty"`
+	BeaconDuty              *spectypes.ValidatorDuty `json:"ValidatorDuty,omitempty"`
 	CommitteeDuty           *spectypes.CommitteeDuty `json:"CommitteeDuty,omitempty"`
 }
 
@@ -332,7 +332,7 @@ func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
 		} else if committeeDuty, ok := t.Duty.(*spectypes.CommitteeDuty); ok {
 			alias.CommitteeDuty = committeeDuty
 		} else {
-			return nil, errors.New("can't marshal StartNewRunnerDutySpecTest because t.Duty isn't BeaconDuty or CommitteeDuty")
+			return nil, errors.New("can't marshal StartNewRunnerDutySpecTest because t.Duty isn't ValidatorDuty or CommitteeDuty")
 		}
 	}
 	byts, err := json.Marshal(alias)

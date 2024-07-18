@@ -2,13 +2,15 @@ package testing
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"sync"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
+
+	"go.uber.org/zap"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"go.uber.org/zap"
 )
 
 var db basedb.Database
@@ -34,6 +36,8 @@ var allRoles = []convert.RunnerRole{
 	convert.RoleSyncCommitteeContribution,
 	convert.RoleValidatorRegistration,
 	convert.RoleVoluntaryExit,
+	convert.RoleAttester,      // TODO: check if using RoleAttester is correct
+	convert.RoleSyncCommittee, // TODO: check if using RoleSyncCommittee is correct
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {

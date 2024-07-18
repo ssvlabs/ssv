@@ -86,6 +86,7 @@ var baseRunner = func(
 	}
 	config.Network = net
 	config.BeaconSigner = km
+	config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
@@ -293,6 +294,7 @@ var baseRunnerWithShareMap = func(
 		return 1
 	}
 	config.Network = net
+	config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),

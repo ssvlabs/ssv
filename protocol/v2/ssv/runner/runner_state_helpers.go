@@ -24,3 +24,13 @@ func getPostConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID
 	}
 	return signers
 }
+
+func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
+	// TODO: check if ValidatorDuties[0] is correct
+	sigs := state.PostConsensusContainer.Signatures[state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties[0].ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
+	var signers []spectypes.OperatorID
+	for op := range sigs {
+		signers = append(signers, op)
+	}
+	return signers
+}

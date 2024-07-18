@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/convert"
 	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
@@ -371,6 +372,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
+	base.DomainTypeProvider = networkconfig.TestNetwork
 
 	logger := logging.TestLogger(t)
 
