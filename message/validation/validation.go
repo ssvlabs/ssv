@@ -87,21 +87,21 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	if mv.selfAccept && peerID == mv.selfPID {
-		return mv.validateSelf(pmsg)
-	}
+	//if mv.selfAccept && peerID == mv.selfPID {
+	return mv.validateSelf(pmsg)
+	//}
 
-	reportDone := mv.reportPubSubMetrics(pmsg)
-	defer reportDone()
-
-	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
-	if err != nil {
-		return mv.handleValidationError(peerID, decodedMessage, err)
-	}
-
-	pmsg.ValidatorData = decodedMessage
-
-	return mv.handleValidationSuccess(decodedMessage)
+	//reportDone := mv.reportPubSubMetrics(pmsg)
+	//defer reportDone()
+	//
+	//decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
+	//if err != nil {
+	//	return mv.handleValidationError(peerID, decodedMessage, err)
+	//}
+	//
+	//pmsg.ValidatorData = decodedMessage
+	//
+	//return mv.handleValidationSuccess(decodedMessage)
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
