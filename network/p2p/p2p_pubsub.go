@@ -290,20 +290,3 @@ func (n *p2pNetwork) broadcastTopics(pk spectypes.ValidatorPK) ([]string, error)
 	}
 	return commons.ValidatorTopicID(pkBytes), nil
 }
-
-func (n *p2pNetwork) subscriptionTopics(pk spectypes.ValidatorPK) ([]string, error) {
-	pkBytes := pk[:]
-	var topics []string
-
-	if !n.cfg.Network.PastAlanFork() {
-		topics = commons.ValidatorTopicID(pkBytes)
-	}
-
-	share := n.nodeStorage.ValidatorStore().Validator(pkBytes)
-	if share == nil {
-		return nil, fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pkBytes))
-	}
-	cid := share.CommitteeID()
-	topics = append(topics, commons.CommitteeTopicID(cid)...)
-	return topics, nil
-}
