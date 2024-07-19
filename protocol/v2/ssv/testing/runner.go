@@ -20,11 +20,11 @@ import (
 var TestingHighestDecidedSlot = phase0.Slot(0)
 
 var CommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), keySet)
+	return baseRunner(logger, spectypes.RoleCommittee, keySet)
 }
 
 var CommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.ValidatorIndex]*spectypes.Share) runner.Runner {
-	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), shareMap)
+	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, shareMap)
 }
 
 //var AttesterRunner7Operators = func(keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -32,44 +32,33 @@ var CommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.V
 //}
 
 var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(
-		logger,
-		spectypes.RoleProposer,
-		specssv.ProposerValueCheckF(
-			spectestingutils.NewTestingKeyManager(),
-			spectypes.BeaconTestNetwork,
-			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey[:]),
-			spectestingutils.TestingValidatorIndex,
-			nil,
-		),
-		keySet)
+	return baseRunner(logger, spectypes.RoleProposer, keySet)
 }
 
 var AggregatorRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleAggregator, specssv.AggregatorValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey[:]), spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(logger, spectypes.RoleAggregator, keySet)
 }
 
 var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleSyncCommitteeContribution, specssv.SyncCommitteeContributionValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(logger, spectypes.RoleSyncCommitteeContribution, keySet)
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	ret := baseRunner(logger, spectypes.RoleValidatorRegistration, nil, keySet)
+	ret := baseRunner(logger, spectypes.RoleValidatorRegistration, keySet)
 	return ret
 }
 
 var VoluntaryExitRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleVoluntaryExit, nil, keySet)
+	return baseRunner(logger, spectypes.RoleVoluntaryExit, keySet)
 }
 
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectestingutils.UnknownDutyType, nil, keySet)
+	return baseRunner(logger, spectestingutils.UnknownDutyType, keySet)
 }
 
 var baseRunner = func(
 	logger *zap.Logger,
 	role spectypes.RunnerRole,
-	valCheck specqbft.ProposedValueCheckF,
 	keySet *spectestingutils.TestKeySet,
 ) runner.Runner {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
@@ -78,6 +67,24 @@ var baseRunner = func(
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
+
+	var valCheck specqbft.ProposedValueCheckF
+	switch role {
+	case spectypes.RoleCommittee:
+		valCheck = specssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
+			[]spectypes.ShareValidatorPK{share.SharePubKey}, spectestingutils.TestingDutyEpoch)
+	case spectypes.RoleProposer:
+		valCheck = specssv.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
+			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, share.SharePubKey)
+	case spectypes.RoleAggregator:
+		valCheck = specssv.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
+			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
+	case spectypes.RoleSyncCommitteeContribution:
+		valCheck = specssv.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
+			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
+	default:
+		valCheck = nil
+	}
 
 	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
@@ -258,14 +265,19 @@ var baseRunner = func(
 var baseRunnerWithShareMap = func(
 	logger *zap.Logger,
 	role spectypes.RunnerRole,
-	valCheck specqbft.ProposedValueCheckF,
 	shareMap map[phase0.ValidatorIndex]*spectypes.Share,
 ) runner.Runner {
 
 	var keySetInstance *spectestingutils.TestKeySet
+	var shareInstance *spectypes.Share
 	for _, share := range shareMap {
 		keySetInstance = spectestingutils.KeySetForShare(share)
 		break
+	}
+
+	sharePubKeys := make([]spectypes.ShareValidatorPK, 0)
+	for _, share := range shareMap {
+		sharePubKeys = append(sharePubKeys, share.SharePubKey)
 	}
 
 	// Identifier
@@ -287,6 +299,24 @@ var baseRunnerWithShareMap = func(
 	km := spectestingutils.NewTestingKeyManager()
 	committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)
 	opSigner := spectestingutils.NewOperatorSigner(keySetInstance, committeeMember.OperatorID)
+
+	var valCheck specqbft.ProposedValueCheckF
+	switch role {
+	case spectypes.RoleCommittee:
+		valCheck = specssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
+			sharePubKeys, spectestingutils.TestingDutyEpoch)
+	case spectypes.RoleProposer:
+		valCheck = specssv.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
+			shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, shareInstance.SharePubKey)
+	case spectypes.RoleAggregator:
+		valCheck = specssv.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
+			shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
+	case spectypes.RoleSyncCommitteeContribution:
+		valCheck = specssv.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
+			shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
+	default:
+		valCheck = nil
+	}
 
 	config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
