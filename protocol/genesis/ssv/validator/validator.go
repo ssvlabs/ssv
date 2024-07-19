@@ -114,6 +114,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+	logger.Debug("processing message", fields.MessageType(spectypes.MsgType(msg.MsgType)))
 	messageID := msg.GetID()
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(genesisspectypes.MessageID(messageID))
 	if dutyRunner == nil {
