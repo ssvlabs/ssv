@@ -56,13 +56,14 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
-		}
-		if len(msg.Signers) > 1 {
+		} else if len(msg.Signers) > 1 {
 			if c.Decided >= limits.Decided {
 				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("decided, having %v", c.String())
 				return err
 			}
+		} else {
+			return ErrNoSigners
 		}
 	case specqbft.RoundChangeMsgType:
 		if c.RoundChange >= limits.RoundChange {
@@ -82,13 +83,13 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedPartialSignatureMessage, limits MessageCounts) error {
 	switch m.Message.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
-		if c.PreConsensus > limits.PreConsensus {
+		if c.PreConsensus >= limits.PreConsensus {
 			err := ErrTooManySameTypeMessagesPerRound
 			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 			return err
 		}
 	case spectypes.PostConsensusPartialSig:
-		if c.PostConsensus > limits.PostConsensus {
+		if c.PostConsensus >= limits.PostConsensus {
 			err := ErrTooManySameTypeMessagesPerRound
 			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
 			return err
