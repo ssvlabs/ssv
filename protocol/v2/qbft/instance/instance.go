@@ -269,5 +269,5 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 
 // CanProcessMessages will return true if instance can process messages
 func (i *Instance) CanProcessMessages() bool {
-	return !i.forceStop && int(i.State.Round) < CutoffRound
+	return !i.forceStop && i.State.Round < i.config.GetCutOffRound()
 }
