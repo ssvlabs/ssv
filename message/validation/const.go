@@ -14,6 +14,7 @@ const (
 	lateSlotAllowance     = 2
 	syncCommitteeSize     = 512
 	rsaSignatureSize      = 256
+	blsSignatureSize      = 96
 	operatorIDSize        = 8 // uint64
 	slotSize              = 8 // uint64
 	validatorIndexSize    = 8 // uint64
