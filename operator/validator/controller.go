@@ -394,25 +394,39 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
-			// TODO: only try copying clusterid if validator failed
-			dutyExecutorID := msg.GetID().GetDutyExecutorID() // it should work for genesis flow too
-			var cid spectypes.CommitteeID
-			copy(cid[:], dutyExecutorID[16:])
-
-			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-				if msg.GenesisSignedSSVMessage != nil {
+			if msg.GenesisSignedSSVMessage != nil {
+				c.logger.Debug("📬 handling genesis SSV message")
+				msgID := genesisspectypes.MessageID(msg.GetID())
+				pk := msgID.GetPubKey()
+				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk[:])); ok {
 					v.GenesisValidator.HandleMessage(c.logger, msg)
+				} else if c.validatorOptions.Exporter {
+					if msg.MsgType != spectypes.SSVConsensusMsgType {
+						continue // not supporting other types
+					}
+					if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
+						c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+					}
 				} else {
+					c.logger.Error("could not find genesis validator", fields.PubKey(pk))
+				}
+			} else {
+				// TODO: only try copying clusterid if validator failed
+				dutyExecutorID := msg.GetID().GetDutyExecutorID() // it should work for genesis flow too
+				var cid spectypes.CommitteeID
+				copy(cid[:], dutyExecutorID[16:])
+
+				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
 					v.Validator.HandleMessage(c.logger, msg)
-				}
-			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-				vc.HandleMessage(c.logger, msg)
-			} else if c.validatorOptions.Exporter {
-				if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != spectypes.SSVPartialSignatureMsgType {
-					continue
-				}
-				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
-					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
+					vc.HandleMessage(c.logger, msg)
+				} else if c.validatorOptions.Exporter {
+					if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+						continue
+					}
+					if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
+						c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+					}
 				}
 			}
 		}
