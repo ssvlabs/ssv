@@ -176,28 +176,28 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	if duties == nil {
 		return
 	}
-
-	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-		return
-	}
-
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
+	h.logger.Debug("🔧 executing duties", zap.Any("duties #", len(duties)))
+	// if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+	toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
+			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
+			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+	// return
+	// }
+
+	// toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
+	// for _, d := range duties {
+	// 	if h.shouldExecute(d) {
+	// 		toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
+	// 	}
+	// }
+
+	// h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {

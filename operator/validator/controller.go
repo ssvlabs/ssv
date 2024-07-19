@@ -757,6 +757,7 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 	// so we need to copy the pubkey val to avoid pointer
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
+	logger.Debug("📬 queue: pushing message", fields.GenesisRole(duty.Type), fields.PubKey(pk[:]))
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateGenesisDutyExecuteMsg(duty, pk, genesisssvtypes.GetDefaultDomain())
