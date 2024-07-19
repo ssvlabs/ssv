@@ -98,6 +98,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
+
 	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
 	toRemove := make([]int, 0)
 	// Remove beacon duties that don't have a share
@@ -112,23 +113,31 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		}
 		validatorShares[bd.ValidatorIndex] = share
 	}
-	// Remove beacon duties that don't have a share
-	if len(toRemove) > 0 {
-		newDuties, err := removeIndices(duty.ValidatorDuties, toRemove)
-		if err != nil {
-			logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
-		} else {
-			duty.ValidatorDuties = newDuties
-		}
-	}
 
-	if len(duty.ValidatorDuties) == 0 {
-		return errors.New("CommitteeDuty has no valid beacon duties")
-	}
+	// TODO bring this back when https://github.com/ssvlabs/ssv-spec/pull/467 is merged and spec is aligned
+	//// Remove beacon duties that don't have a share
+	//if len(toRemove) > 0 {
+	//	newDuties, err := removeIndices(duty.BeaconDuties, toRemove)
+	//	if err != nil {
+	//		logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
+	//	} else {
+	//		duty.ValidatorDuties = newDuties
+	//	}
+	//}
+	//
+	//if len(duty.BeaconDuties) == 0 {
+	//	return errors.New("CommitteeDuty has no valid beacon duties")
+	//}
 
-	// TODO: investigate why validatorShares was used and if something gets broken if c.Shares is used instead
-	r := c.CreateRunnerFn(duty.Slot, c.Shares, slashableValidators) // fixes spec tests
-	//r := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators) // original code
+	// TODO REMOVE this after https://github.com/ssvlabs/ssv-spec/pull/467 is merged and we are aligned to the spec
+	// 			   and pas validatorShares instead of sharesCopy the runner
+	// -->
+	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
+	for k, v := range c.Shares {
+		sharesCopy[k] = v
+	}
+	// <--
+	r := c.CreateRunnerFn(duty.Slot, sharesCopy, slashableValidators)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r

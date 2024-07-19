@@ -403,7 +403,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
-			vlogger.Debug("🧩 reconstructed partial signatures",
+			vlogger.Debug("🧩 reconstructed partial signatures committee",
 				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
 			validatorObjs, exists := beaconObjects[validator]

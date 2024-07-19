@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
 	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -388,11 +387,15 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		}
 	}
 
+	if ret.GetBaseRunner().DomainTypeProvider == nil {
+		ret.GetBaseRunner().DomainTypeProvider = networkconfig.TestNetwork
+	}
+
 	return ret
 }
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
-	config := qbfttesting.TestingConfig(logger, ks, convert.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, ks, spectypes.RoleCommittee)
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,
