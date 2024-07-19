@@ -55,7 +55,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -156,9 +155,9 @@ type Recipients interface {
 }
 
 type SharesStorage interface {
-	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
-	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
-	Range(txn basedb.Reader, fn func(*types.SSVShare) bool)
+	Get(txn basedb.Reader, pubKey []byte) *ssvtypes.SSVShare
+	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
+	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
 	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
@@ -754,7 +753,29 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validators.Val
 }
 
 func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty) {
-	panic("implement me")
+	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
+	// so we need to copy the pubkey val to avoid pointer
+	var pk phase0.BLSPubKey
+	copy(pk[:], duty.PubKey[:])
+
+	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
+		ssvMsg, err := CreateGenesisDutyExecuteMsg(duty, pk, genesisssvtypes.GetDefaultDomain())
+		if err != nil {
+			logger.Error("could not create duty execute msg", zap.Error(err))
+			return
+		}
+		dec, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		if err != nil {
+			logger.Error("could not decode duty execute msg", zap.Error(err))
+			return
+		}
+		if pushed := v.GenesisValidator.Queues[duty.Type].Q.TryPush(dec); !pushed {
+			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		}
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
+	} else {
+		logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
+	}
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty) {
@@ -805,7 +826,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			return
 		}
 		// TODO alan: no queue in cc, what should we do?
-		if err := cm.OnExecuteDuty(logger, dec.Body.(*types.EventMsg)); err != nil {
+		if err := cm.OnExecuteDuty(logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
 			logger.Error("could not execute committee duty", zap.Error(err))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
@@ -816,7 +837,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
 func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeDutyData := types.ExecuteDutyData{Duty: duty}
+	executeDutyData := ssvtypes.ExecuteDutyData{Duty: duty}
 	data, err := json.Marshal(executeDutyData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
@@ -827,7 +848,7 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spec
 
 // CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
 func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
+	executeCommitteeDutyData := ssvtypes.ExecuteCommitteeDutyData{Duty: duty}
 	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
@@ -836,13 +857,34 @@ func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID sp
 	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
 }
 
+func CreateGenesisDutyExecuteMsg(duty *genesisspectypes.Duty, pubKey phase0.BLSPubKey, domain genesisspectypes.DomainType) (*genesisspectypes.SSVMessage, error) {
+	executeDutyData := genesisssvtypes.ExecuteDutyData{Duty: duty}
+	edd, err := json.Marshal(executeDutyData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+	}
+	msg := genesisssvtypes.EventMsg{
+		Type: genesisssvtypes.ExecuteDuty,
+		Data: edd,
+	}
+	data, err := msg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode event msg")
+	}
+	return &genesisspectypes.SSVMessage{
+		MsgType: genesisspectypes.MsgType(message.SSVEventMsgType),
+		MsgID:   genesisspectypes.NewMsgID(domain, pubKey[:], duty.Type),
+		Data:    data,
+	}, nil
+}
+
 func dutyDataToSSVMsg(
 	domain spectypes.DomainType,
 	msgIdentifier []byte,
 	runnerRole spectypes.RunnerRole,
 	data []byte,
 ) (*spectypes.SSVMessage, error) {
-	msg := types.EventMsg{
+	msg := ssvtypes.EventMsg{
 		Type: ssvtypes.ExecuteDuty,
 		Data: data,
 	}
@@ -1044,7 +1086,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		}
 	}
 
-	f := types.ComputeF(len(share.Committee))
+	f := ssvtypes.ComputeF(len(share.Committee))
 
 	return &spectypes.CommitteeMember{
 		OperatorID:        c.operatorDataStore.GetOperatorID(),
