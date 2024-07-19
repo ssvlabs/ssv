@@ -169,7 +169,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 		// If justifiedRoundChangeMsg has prepare justification chose prepared value
 		valueToPropose := instanceStartValue
 		if containerRoundChangeMessage.QBFTMessage.RoundChangePrepared() {
-			valueToPropose = roundChangeMessage.SignedMessage.FullData
+			valueToPropose = containerRoundChangeMessage.SignedMessage.FullData
 		}
 
 		roundChangeSignedMessagesJustification, _ := containerRoundChangeMessage.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on isValidRoundChange
