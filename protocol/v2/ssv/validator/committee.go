@@ -126,7 +126,9 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New("CommitteeDuty has no valid beacon duties")
 	}
 
-	r := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
+	// TODO: investigate why validatorShares was used and if something gets broken if c.Shares is used instead
+	r := c.CreateRunnerFn(duty.Slot, c.Shares, slashableValidators) // fixes spec tests
+	//r := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators) // original code
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
