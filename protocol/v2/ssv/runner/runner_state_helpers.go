@@ -19,8 +19,8 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
 
-	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).BeaconDuties {
-		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][hex.EncodeToString(root[:])]
+	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 		for op := range sigs {
 			signers = append(signers, op)
 		}
@@ -40,8 +40,8 @@ func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.O
 
 func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
-	valIdx := state.StartingDuty.(*spectypes.BeaconDuty).ValidatorIndex
-	sigs := state.PostConsensusContainer.Signatures[valIdx][hex.EncodeToString(root[:])]
+	valIdx := state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+	sigs := state.PostConsensusContainer.Signatures[valIdx][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 	for op := range sigs {
 		signers = append(signers, op)
 	}

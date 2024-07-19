@@ -86,7 +86,7 @@ var baseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
@@ -318,7 +318,7 @@ var baseRunnerWithShareMap = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySetInstance, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
