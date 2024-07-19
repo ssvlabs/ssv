@@ -328,8 +328,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	const maxMsgSize = 4 + 56 + 8388668
 	const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
 	if len(messageData) > maxEncodedMsgSize {
-		// MSGVALIDATIONREVIEW: the error name here seems not to be in accordance with what is being checked.
-		// E.g., an appropriate one would be something like ErrSignedSSVMessageDataToobig
 		e := ErrPubSubDataTooBig
 		e.got = len(messageData)
 		return nil, Descriptor{}, e
@@ -338,7 +336,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	msg, err := queue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
 		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
-			// MSGVALIDATIONREVIEW: the error name here seems not to be in accordance with what is being checked.
 			e := ErrMalformedPubSubMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
@@ -445,9 +442,6 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
 	mutex, ok := mv.validationLocks[spectypes.MessageID(msg.GetID())]
-	// MSGVALIDATIONREVIEW: the mutex assignment below is not protected. Notice that two threads could create two different locks.
-	// The creation and assignment should also be protected. Also, aftet the locker is acquired, it needs to re-check again if the map entry
-	// is indeed empty.
 	if !ok {
 		mutex = &sync.Mutex{}
 		mv.validationLocks[spectypes.MessageID(msg.GetID())] = mutex
