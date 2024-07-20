@@ -114,8 +114,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
-
-				h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
+				if h.baseHandler.network.AlanFork() {
+					h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
+				}
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.

@@ -142,11 +142,11 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			return errors.Wrap(err, "invalid signed message")
 		}
 
-			// Verify SignedSSVMessage's signature
-			if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-				return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
-			}
+		// Verify SignedSSVMessage's signature
+		if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
+			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
+
 	}
 
 	messageID := msg.GetID()

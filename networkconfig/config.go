@@ -77,6 +77,5 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 }
 
 func (n NetworkConfig) AlanFork() bool {
-	// TODO: implement
-	return true
+	return n.Beacon.EstimatedCurrentEpoch() >= n.AlanForkEpoch
 }

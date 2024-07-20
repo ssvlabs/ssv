@@ -31,3 +31,9 @@ func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
 		mv.selfAccept = selfAccept
 	}
 }
+
+func WithGenesisValidator(genesisValidator MessageValidator) Option {
+	return func(mv *messageValidator) {
+		mv.genesisValidator = genesisValidator
+	}
+}

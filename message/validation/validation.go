@@ -53,6 +53,8 @@ type messageValidator struct {
 
 	selfPID    peer.ID
 	selfAccept bool
+
+	genesisValidator MessageValidator
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
@@ -83,13 +85,19 @@ func New(
 
 // ValidatorForTopic returns a validation function for the given topic.
 // This function can be used to validate messages within the libp2p pubsub framework.
-func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if mv.genesisValidator != nil && !mv.netCfg.AlanFork() {
+		return mv.genesisValidator.ValidatorForTopic(topic)
+	}
 	return mv.Validate
 }
 
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if mv.genesisValidator != nil && !mv.netCfg.AlanFork() {
+		return mv.genesisValidator.Validate(ctx, peerID, pmsg)
+	}
 	if mv.selfAccept && peerID == mv.selfPID {
 		return mv.validateSelf(pmsg)
 	}

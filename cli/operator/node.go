@@ -219,26 +219,21 @@ var StartNodeCmd = &cobra.Command{
 		validatorStore := nodeStorage.ValidatorStore()
 		// validatorStore = newValidatorStore(...) // TODO
 
-		var messageValidator validation.MessageValidator
-
-		if networkConfig.AlanFork() {
-			messageValidator = validation.New(
-				networkConfig,
-				validatorStore,
-				dutyStore,
-				signatureVerifier,
-				validation.WithLogger(logger),
-				validation.WithMetrics(metricsReporter),
-			)
-		} else {
-			messageValidator = genesisvalidation.New(
+		messageValidator := validation.New(
+			networkConfig,
+			validatorStore,
+			dutyStore,
+			signatureVerifier,
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
+			validation.WithGenesisValidator(genesisvalidation.New(
 				networkConfig,
 				genesisvalidation.WithNodeStorage(nodeStorage),
 				genesisvalidation.WithLogger(logger),
 				genesisvalidation.WithMetrics(metricsReporter),
 				genesisvalidation.WithDutyStore(dutyStore),
-			)
-		}
+			)),
+		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
