@@ -144,7 +144,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	share := n.validatorStore.Validator(pk[:])
+	share := n.nodeStorage.ValidatorStore().Validator(pk[:])
 	if share == nil {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}

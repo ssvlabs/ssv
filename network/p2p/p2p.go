@@ -29,7 +29,6 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
@@ -83,7 +82,6 @@ type p2pNetwork struct {
 
 	state int32
 
-	validatorStore   storage.ValidatorStore
 	activeValidators *hashmap.Map[string, validatorStatus]
 	activeCommittees *hashmap.Map[string, validatorStatus]
 
@@ -116,6 +114,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeValidators:        hashmap.New[string, validatorStatus](),
+		activeCommittees:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
