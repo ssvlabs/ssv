@@ -34,7 +34,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	defer v.mtx.RUnlock()
 
 	role := msg.MsgID.GetRoleType()
-	if !v.NetworkConfig.AlanFork() {
+	if !v.NetworkConfig.PastAlanFork() {
 		role = spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msg.MsgID).GetRoleType()))
 	}
 
@@ -79,7 +79,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
 		var ok bool
-		if v.NetworkConfig.AlanFork() {
+		if v.NetworkConfig.PastAlanFork() {
 			q, ok = v.Queues[msgID.GetRoleType()]
 		} else {
 			q, ok = v.Queues[spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msgID).GetRoleType()))]

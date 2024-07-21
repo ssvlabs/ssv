@@ -85,11 +85,6 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
 }
 
-func (n NetworkConfig) AlanFork() bool {
-	// TODO: implement
-	return true
-}
-
 // DomainType returns current domain type based on the current fork.
 func (n NetworkConfig) DomainType() spectypes.DomainType {
 	return n.DomainTypeAtEpoch(n.Beacon.EstimatedCurrentEpoch())

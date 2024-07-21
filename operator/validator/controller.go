@@ -810,7 +810,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if c.networkConfig.AlanFork() {
+		if c.networkConfig.PastAlanFork() {
 			if pushed := v.Validator.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 				logger.Warn("dropping ExecuteDuty message because the queue is full")
 			}
