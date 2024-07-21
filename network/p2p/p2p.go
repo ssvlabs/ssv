@@ -2,8 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"log"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -166,7 +164,10 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		return nil
 	}
 
-	logger.Info("starting")
+	logger.Info("starting p2p", zap.String("my_addresses", peer.AddrInfo{
+		ID:    n.host.ID(),
+		Addrs: n.host.Addrs(),
+	}.String()))
 
 	go n.startDiscovery(logger)
 
@@ -217,26 +218,22 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
 	}()
 
 	// Connect to trusted peers.
-	addrStrs := []string{}
-	for _, addr := range n.host.Addrs() {
-		addrStrs = append(addrStrs, addr.String())
+	trustedPeers, err := discovery.ParseENR(nil, true, n.cfg.TrustedPeers...)
+	if err != nil {
+		logger.Fatal("could not parse trusted peers", zap.Error(err))
 	}
-	log.Printf("self IPs: %s", strings.Join(addrStrs, ", "))
-	// trustedPeers, err := discovery.ParseENR(nil, true, n.cfg.TrustedPeers...)
-	// if err != nil {
-	// 	logger.Fatal("could not parse trusted peers", zap.Error(err))
-	// }
-	// go func() {
-	// 	for _, peer := range trustedPeers {
-	// 		addrInfo := peer.AddrInfo{
-	// 			ID:    peer.ID(),
-	// 			Addrs: peer.
-	// 		}
-	// 		if err := n.host.Connect(n.ctx, addrInfo); err != nil {
-	// 			logger.Warn("could not connect to peer", zap.String("peer", peerStr), zap.Error(err))
-	// 		}
-	// 	}
-	// }()
+
+	go func() {
+		for _, peer := range trustedPeers {
+			addrInfo := peer.AddrInfo{
+				ID:    peer.ID(),
+				Addrs: peer.IP(),
+			}
+			if err := n.host.Connect(n.ctx, addrInfo); err != nil {
+				logger.Warn("could not connect to peer", zap.String("peer", peerStr), zap.Error(err))
+			}
+		}
+	}()
 
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
