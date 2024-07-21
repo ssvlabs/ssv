@@ -2,6 +2,8 @@ package p2pv1
 
 import (
 	"context"
+	"log"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -213,6 +215,29 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
 		defer cancel()
 		n.backoffConnector.Connect(ctx, discoveredPeers)
 	}()
+
+	// Connect to trusted peers.
+	addrStrs := []string{}
+	for _, addr := range n.host.Addrs() {
+		addrStrs = append(addrStrs, addr.String())
+	}
+	log.Printf("self IPs: %s", strings.Join(addrStrs, ", "))
+	// trustedPeers, err := discovery.ParseENR(nil, true, n.cfg.TrustedPeers...)
+	// if err != nil {
+	// 	logger.Fatal("could not parse trusted peers", zap.Error(err))
+	// }
+	// go func() {
+	// 	for _, peer := range trustedPeers {
+	// 		addrInfo := peer.AddrInfo{
+	// 			ID:    peer.ID(),
+	// 			Addrs: peer.
+	// 		}
+	// 		if err := n.host.Connect(n.ctx, addrInfo); err != nil {
+	// 			logger.Warn("could not connect to peer", zap.String("peer", peerStr), zap.Error(err))
+	// 		}
+	// 	}
+	// }()
+
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
