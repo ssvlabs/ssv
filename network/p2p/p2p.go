@@ -218,22 +218,21 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
 	}()
 
 	// Connect to trusted peers.
-	// trustedPeers, err := discovery.ParseENR(nil, true, n.cfg.TrustedPeers...)
-	// if err != nil {
-	// 	logger.Fatal("could not parse trusted peers", zap.Error(err))
-	// }
-
-	// go func() {
-	// 	for _, peer := range trustedPeers {
-	// 		addrInfo := peer.AddrInfo{
-	// 			ID:    peer.ID(),
-	// 			Addrs: peer.IP(),
-	// 		}
-	// 		if err := n.host.Connect(n.ctx, addrInfo); err != nil {
-	// 			logger.Warn("could not connect to peer", zap.String("peer", peerStr), zap.Error(err))
-	// 		}
-	// 	}
-	// }()
+	if len(n.cfg.TrustedPeers) > 0 {
+		trustedPeers := make([]*peer.AddrInfo, len(n.cfg.TrustedPeers))
+		for i, ma := range n.cfg.TrustedPeers {
+			var err error
+			trustedPeers[i], err = peer.AddrInfoFromString(ma)
+			if err != nil {
+				logger.Fatal("could not parse trusted peer", zap.String("peer", ma), zap.Error(err))
+			}
+		}
+		go func() {
+			for _, peer := range trustedPeers {
+				discoveredPeers <- *peer
+			}
+		}()
+	}
 
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
