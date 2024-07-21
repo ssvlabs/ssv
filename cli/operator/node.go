@@ -3,11 +3,13 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bloxapp/ssv/operator/keystore"
@@ -539,7 +541,17 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	if err != nil {
 		return networkconfig.NetworkConfig{}, err
 	}
-
+	if strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
+		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
+		if err != nil {
+			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+		}
+		if len(byts) != 4 {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
+		}
+		networkConfig.Domain = spectypes.DomainType(byts)
+		logger.Info("running with custom domain", zap.String("customDomain", cfg.SSVOptions.CustomDomainType))
+	}
 	types.SetDefaultDomain(networkConfig.Domain)
 
 	nodeType := "light"
