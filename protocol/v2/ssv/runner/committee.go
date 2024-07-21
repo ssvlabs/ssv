@@ -74,6 +74,7 @@ func NewCommitteeRunner(
 		valCheck:          valCheck,
 		stoppedValidators: make(map[spectypes.ValidatorPK]struct{}),
 		submittedDuties:   make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
+		metrics:           metrics.NewConsensusMetrics(spectypes.RoleCommittee),
 	}
 }
 
@@ -431,10 +432,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 	}
 
-	logger.Info("✅ successfully submitted attestations",
-		fields.SubmissionTime(time.Since(submmitionStart)),
-		fields.Height(cr.BaseRunner.QBFTController.Height),
-		fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+	if len(attestations) > 0 {
+		logger.Info("✅ successfully submitted attestations",
+			fields.SubmissionTime(time.Since(submmitionStart)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+		fields.Root([32]byte(attestations[0].Data.BeaconBlockRoot[:]))
+	}
 	// Record successful submissions
 	for validator := range attestationsToSubmit {
 		cr.RecordSubmission(types.BNRoleAttester, validator)
@@ -450,10 +454,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		logger.Error("❌ failed to submit sync committee", zap.Error(err))
 		return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 	}
-	logger.Info("✅ successfully submitted sync committee",
-		fields.SubmissionTime(time.Since(submmitionStart)),
-		fields.Height(cr.BaseRunner.QBFTController.Height),
-		fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+	if len(syncCommitteeMessages) > 0 {
+		logger.Info("✅ successfully submitted sync committee",
+			fields.SubmissionTime(time.Since(submmitionStart)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+		fields.Root([32]byte(syncCommitteeMessages[0].BeaconBlockRoot[:]))
+	}
 	// Record successful submissions
 	for validator := range syncCommitteeMessagesToSubmit {
 		cr.RecordSubmission(types.BNRoleSyncCommittee, validator)
