@@ -19,5 +19,5 @@ var HoleskyStage = NetworkConfig{
 	Bootnodes: []string{
 		"enr:-Ja4QDYHVgUs9NvlMqq93ot6VNqbmrIlMrwKnq4X3DPRgyUNB4ospDp8ubMvsf-KsgqY8rzpZKy4GbE1DLphabpRBc-GAY_diLjngmlkgnY0gmlwhDQrLYqJc2VjcDI1NmsxoQKnAiuSlgSR8asjCH0aYoVKM8uPbi4noFuFHZHaAHqknYNzc3YBg3RjcIITiYN1ZHCCD6E",
 	},
-	AlanForkEpoch: 66825,
+	AlanForkEpoch: 66850,
 }
