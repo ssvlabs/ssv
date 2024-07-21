@@ -10,7 +10,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -36,21 +35,30 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 	n.msgRouter = router
 }
 
-// Peers registers a message router to handle incoming messages
-func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
-	all := make([]peer.ID, 0)
-	topics, err := n.broadcastTopics(pk)
-	if err != nil {
-		return nil, fmt.Errorf("could not get validator topics: %w", err)
+//
+//// Peers registers a message router to handle incoming messages
+//func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
+//	all := make([]peer.ID, 0)
+//	topics, err := n.broadcastTopics(pk[:])
+//	if err != nil {
+//		return nil, fmt.Errorf("could not get validator topics: %w", err)
+//	}
+//	for _, topic := range topics {
+//		peers, err := n.topicsCtrl.Peers(topic)
+//		if err != nil {
+//			return nil, err
+//		}
+//		all = append(all, peers...)
+//	}
+//	return all, nil
+//}
+
+func dutyExecutorToID(fork bool, dutyExecutor []byte) []byte {
+	if fork {
+		return dutyExecutor[16:]
+	} else {
+		return dutyExecutor
 	}
-	for _, topic := range topics {
-		peers, err := n.topicsCtrl.Peers(topic)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, peers...)
-	}
-	return all, nil
 }
 
 // Broadcast publishes the message to all peers in subnet
@@ -79,7 +87,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	topics, err := n.broadcastTopics(spectypes.ValidatorPK(msg.SSVMessage.MsgID.GetDutyExecutorID()))
+	topics, err := n.broadcastTopics(dutyExecutorToID(n.cfg.Network.PastAlanFork(), msg.SSVMessage.MsgID.GetDutyExecutorID()))
 	if err != nil {
 		return fmt.Errorf("could not get validator topics: %w", err)
 	}
@@ -280,15 +288,14 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) broadcastTopics(pk spectypes.ValidatorPK) ([]string, error) {
-	pkBytes := pk[:]
+func (n *p2pNetwork) broadcastTopics(id []byte) ([]string, error) {
 	if n.cfg.Network.PastAlanFork() {
-		share := n.nodeStorage.ValidatorStore().Validator(pkBytes)
+		share := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(id))
 		if share == nil {
-			return nil, fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pkBytes))
+			return nil, fmt.Errorf("could not find share for validator %s", hex.EncodeToString(id))
 		}
-		cid := share.CommitteeID()
+		cid := share.ID
 		return commons.CommitteeTopicID(cid), nil
 	}
-	return commons.ValidatorTopicID(pkBytes), nil
+	return commons.ValidatorTopicID(id), nil
 }
