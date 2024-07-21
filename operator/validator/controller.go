@@ -699,7 +699,7 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty) {
-	panic("implement me")
+	return
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty) {
