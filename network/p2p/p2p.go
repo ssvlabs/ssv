@@ -2,6 +2,8 @@ package p2pv1
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
+	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
@@ -164,12 +167,49 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		return nil
 	}
 
-	logger.Info("starting p2p", zap.String("my_addresses", peer.AddrInfo{
+	connector := make(chan peer.AddrInfo, connectorQueueSize)
+	go func() {
+		ctx, cancel := context.WithCancel(n.ctx)
+		defer cancel()
+		n.backoffConnector.Connect(ctx, connector)
+	}()
+
+	// Connect to trusted peers.
+	trustedPeers := map[peer.ID][]ma.Multiaddr{}
+	if len(n.cfg.TrustedPeers) > 0 {
+		for _, mas := range n.cfg.TrustedPeers {
+			for _, ma := range strings.Split(mas, ",") {
+				addrInfo, err := peer.AddrInfoFromString(ma)
+				if err != nil {
+					return fmt.Errorf("could not parse trusted peer: %w", err)
+				}
+				trustedPeers[addrInfo.ID] = append(trustedPeers[addrInfo.ID], addrInfo.Addrs...)
+			}
+		}
+		go func() {
+			for id, addrs := range trustedPeers {
+				connector <- peer.AddrInfo{ID: id, Addrs: addrs}
+			}
+		}()
+	}
+
+	ma, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
 		ID:    n.host.ID(),
 		Addrs: n.host.Addrs(),
-	}.String()))
+	})
+	if err != nil {
+		logger.Fatal("could not get my address", zap.Error(err))
+	}
+	maStrs := make([]string, len(ma))
+	for i, ma := range ma {
+		maStrs[i] = ma.String()
+	}
+	logger.Info("starting p2p",
+		zap.String("my_address", strings.Join(maStrs, ",")),
+		zap.Int("trusted_peers", len(trustedPeers)),
+	)
 
-	go n.startDiscovery(logger)
+	go n.startDiscovery(logger, connector)
 
 	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing(logger))
 	// don't report metrics in tests
@@ -209,38 +249,14 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 // startDiscovery starts the required services
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
-	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
-	go func() {
-		ctx, cancel := context.WithCancel(n.ctx)
-		defer cancel()
-		n.backoffConnector.Connect(ctx, discoveredPeers)
-	}()
-
-	// Connect to trusted peers.
-	if len(n.cfg.TrustedPeers) > 0 {
-		trustedPeers := make([]*peer.AddrInfo, len(n.cfg.TrustedPeers))
-		for i, ma := range n.cfg.TrustedPeers {
-			var err error
-			trustedPeers[i], err = peer.AddrInfoFromString(ma)
-			if err != nil {
-				logger.Fatal("could not parse trusted peer", zap.String("peer", ma), zap.Error(err))
-			}
-		}
-		go func() {
-			for _, peer := range trustedPeers {
-				discoveredPeers <- *peer
-			}
-		}()
-	}
-
+func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
 				return
 			}
 			select {
-			case discoveredPeers <- e.AddrInfo:
+			case connector <- e.AddrInfo:
 			default:
 				logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
 			}
