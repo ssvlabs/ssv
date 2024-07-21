@@ -79,11 +79,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
 		var ok bool
-		if v.NetworkConfig.PastAlanFork() {
-			q, ok = v.Queues[msgID.GetRoleType()]
-		} else {
-			q, ok = v.Queues[spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msgID).GetRoleType()))]
-		}
+		q, ok = v.Queues[msgID.GetRoleType()]
 		if !ok {
 			return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
 		}

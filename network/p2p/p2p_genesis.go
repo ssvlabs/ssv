@@ -17,6 +17,9 @@ type GenesisP2p struct {
 }
 
 func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {
+
+	zap.L().Debug("broadcasting genesis msg", fields.PubKey(message.MsgID.GetPubKey()), zap.Int("msg_type", int(message.MsgType)))
+
 	if !p.Network.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}

@@ -108,6 +108,7 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 
 // DecodeGenesisSSVMessage decodes a genesis SSVMessage into a DecodedSSVMessage.
 func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
+
 	body, err := ExtractGenesisMsgBody(m)
 	if err != nil {
 		return nil, err

@@ -58,6 +58,8 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
+	zap.L().Debug("broadcasting post-fork msg", fields.PubKey(msgID.GetDutyExecutorID()), zap.Int("msg_type", int(msg.SSVMessage.MsgType)))
+
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
