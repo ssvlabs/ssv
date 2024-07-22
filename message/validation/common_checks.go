@@ -101,7 +101,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
 		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
-		// Non-committee roles always have one index, committee roles have several indices.
+		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
 		if mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
 			return ErrNoDuty
@@ -111,7 +111,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleSyncCommitteeContribution {
 		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
-		// Non-committee roles always have one index, committee roles have several indices.
+		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
 		if mv.dutyStore.SyncCommittee.Duty(period, validatorIndex) == nil {
 			return ErrNoDuty
