@@ -118,7 +118,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage) error {
 	logger.Debug("processing message", fields.MessageType(spectypes.MsgType(msg.MsgType)))
 	messageID := msg.GetID()
-	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(genesisspectypes.MessageID(messageID))
+	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
 		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -34,10 +33,6 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	defer v.mtx.RUnlock()
 
 	role := msg.MsgID.GetRoleType()
-	if !v.NetworkConfig.PastAlanFork() {
-		role = spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msg.MsgID).GetRoleType()))
-	}
-
 	logger.Debug("📬 handling SSV message",
 		zap.Uint64("type", uint64(msg.MsgType)),
 		fields.Role(msg.MsgID.GetRoleType()))

@@ -356,7 +356,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	// Check if the message was sent on the right topic.
 	currentTopic := pMsg.GetTopic()
 	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
-	topics := commons.ValidatorTopicID(spectypes.MessageID(msg.GetID()).GetPubKey())
+	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
 
 	topicFound := false
 	for _, tp := range topics {
@@ -396,8 +396,8 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 		return nil, descriptor, err
 	}
 
-	validatorPK := spectypes.MessageID(ssvMessage.GetID()).GetPubKey()
-	role := spectypes.MessageID(ssvMessage.GetID()).GetRoleType()
+	validatorPK := ssvMessage.GetID().GetPubKey()
+	role := ssvMessage.GetID().GetRoleType()
 	descriptor.Role = role
 	descriptor.ValidatorPK = validatorPK
 
@@ -439,10 +439,10 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
-	mutex, ok := mv.validationLocks[spectypes.MessageID(msg.GetID())]
+	mutex, ok := mv.validationLocks[msg.GetID()]
 	if !ok {
 		mutex = &sync.Mutex{}
-		mv.validationLocks[spectypes.MessageID(msg.GetID())] = mutex
+		mv.validationLocks[msg.GetID()] = mutex
 	}
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -461,7 +461,7 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			}
 
 			signedMessage := msg.Body.(*specqbft.SignedMessage)
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, spectypes.MessageID(msg.GetID()), receivedAt, signatureVerifier)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -477,7 +477,7 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			}
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, spectypes.MessageID(msg.GetID()), signatureVerifier)
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err

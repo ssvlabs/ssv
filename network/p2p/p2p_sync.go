@@ -9,14 +9,11 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
@@ -130,78 +127,6 @@ func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPe
 		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
 	}
 	return peers[:maxPeers], nil
-}
-
-func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
-	var results []p2pprotocol.SyncResult
-	data, err := syncMsg.Encode()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not encode sync message")
-	}
-
-	msg := &spectypes.SSVMessage{
-		MsgType: message.SSVSyncMsgType,
-		MsgID:   mid,
-		Data:    data,
-	}
-	encoded, err := commons.EncodeNetworkMsg(msg)
-	if err != nil {
-		return nil, err
-	}
-
-	logger = logger.With(zap.String("protocol", string(protocol)))
-	msgID := commons.MsgID()
-	distinct := make(map[string]struct{})
-	for _, pid := range peers {
-		logger := logger.With(fields.PeerID(pid))
-
-		raw, err := n.streamCtrl.Request(logger, pid, protocol, encoded)
-		if err != nil {
-			// TODO: is this how to check for ErrNotSupported?
-			var e multistream.ErrNotSupported[libp2p_protocol.ID]
-			if !errors.Is(err, e) {
-				logger.Debug("could not make stream request", zap.Error(err))
-			}
-			continue
-		}
-
-		mid := msgID(raw)
-		if _, ok := distinct[mid]; ok {
-			continue
-		}
-		distinct[mid] = struct{}{}
-
-		var res *spectypes.SSVMessage
-		if n.cfg.Network.PastAlanFork() {
-			res, err = commons.DecodeNetworkMsg(raw)
-			if err != nil {
-				logger.Debug("could not decode stream response", zap.Error(err))
-				continue
-			}
-		} else {
-			genesisSSVMsg, err := commons.DecodeGenesisNetworkMsg(raw)
-			if err != nil {
-				logger.Debug("could not decode stream response", zap.Error(err))
-				continue
-			}
-
-			if genesisSSVMsg == nil {
-				res = nil
-			} else {
-				res = &spectypes.SSVMessage{
-					MsgType: spectypes.MsgType(genesisSSVMsg.MsgType),
-					MsgID:   spectypes.MessageID(genesisSSVMsg.MsgID),
-					Data:    genesisSSVMsg.Data,
-				}
-			}
-		}
-
-		results = append(results, p2pprotocol.SyncResult{
-			Msg:    res,
-			Sender: pid.String(),
-		})
-	}
-	return results, nil
 }
 
 // peersWithProtocolsFilter is used to accept peers that supports the given protocols
