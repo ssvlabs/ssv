@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -967,18 +968,29 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			//TODO alan: support removed ops
 			return nil, fmt.Errorf("operator not found")
 		}
+
+		operatorPEM, err := base64.StdEncoding.DecodeString(string(opdata.PublicKey))
+		if err != nil {
+			return nil, fmt.Errorf("could not decode public key: %w", err)
+		}
+
 		operators[i] = &spectypes.Operator{
 			OperatorID:        cm.Signer,
-			SSVOperatorPubKey: opdata.PublicKey,
+			SSVOperatorPubKey: operatorPEM,
 		}
 	}
 
 	f := types.ComputeF(len(share.Committee))
 
+	operatorPEM, err := base64.StdEncoding.DecodeString(string(c.operatorDataStore.GetOperatorData().PublicKey))
+	if err != nil {
+		return nil, fmt.Errorf("could not decode public key: %w", err)
+	}
+
 	return &spectypes.CommitteeMember{
 		OperatorID:        c.operatorDataStore.GetOperatorID(),
 		CommitteeID:       share.CommitteeID(),
-		SSVOperatorPubKey: c.operatorDataStore.GetOperatorData().PublicKey,
+		SSVOperatorPubKey: operatorPEM,
 		FaultyNodes:       f,
 		Committee:         operators,
 	}, nil

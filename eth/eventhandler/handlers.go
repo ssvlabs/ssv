@@ -2,6 +2,7 @@ package eventhandler
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -9,9 +10,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/exporter/convert"
@@ -293,9 +294,14 @@ func (eh *EventHandler) validatorAddedEventToShare(
 			}
 		}
 
+		operatorPEM, err := base64.StdEncoding.DecodeString(string(od.PublicKey))
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not decode public key: %w", err)
+		}
+
 		committee = append(committee, &spectypes.CommitteeMember{
 			OperatorID:        operatorID,
-			SSVOperatorPubKey: od.PublicKey,
+			SSVOperatorPubKey: operatorPEM,
 		})
 
 		shareMembers = append(shareMembers, &spectypes.ShareMember{
@@ -330,7 +336,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 		operators = append(operators, &spectypes.Operator{
 			OperatorID:        operatorID,
-			SSVOperatorPubKey: od.PublicKey,
+			SSVOperatorPubKey: operatorPEM,
 		})
 	}
 
