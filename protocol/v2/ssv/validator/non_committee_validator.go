@@ -106,13 +106,18 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) error
 		role := ncv.getRole(msg, key.Root)
 		validator := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
 		MsgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
+		var operatorIDs []string
+		for _, share := range quorum {
+			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
+		}
 		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, slot, quorum); err != nil {
+			logger.Error("❌ failed to save participants",
+				zap.String("converted_role", role.ToBeaconRole()),
+				zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
+				zap.String("signers", strings.Join(operatorIDs, ", ")),
+			)
 			return fmt.Errorf("could not save participants %w", err)
 		} else {
-			var operatorIDs []string
-			for _, share := range quorum {
-				operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
-			}
 			logger.Info("✅ saved participants",
 				zap.String("converted_role", role.ToBeaconRole()),
 				zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
