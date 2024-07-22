@@ -205,8 +205,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		logger.Fatal("could not get my address", zap.Error(err))
 	}
 	maStrs := make([]string, len(ma))
-	for i, ma := range ma {
-		maStrs[i] = ma.String()
+	for i, ima := range ma {
+		maStrs[i] = ima.String()
 	}
 	logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
