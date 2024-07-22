@@ -187,6 +187,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 		}
 		go func() {
+			time.Sleep(10 * time.Second)
 			for id, addrs := range trustedPeers {
 				connector <- peer.AddrInfo{ID: id, Addrs: addrs}
 			}
