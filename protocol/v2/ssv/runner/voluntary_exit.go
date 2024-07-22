@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -34,6 +35,7 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
@@ -43,9 +45,10 @@ func NewVoluntaryExitRunner(
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: spectypes.RoleVoluntaryExit,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			RunnerRoleType:     spectypes.RoleVoluntaryExit,
+			DomainTypeProvider: domainTypeProvider,
+			BeaconNetwork:      beaconNetwork,
+			Share:              share,
 		},
 
 		beacon:         beacon,
@@ -53,7 +56,7 @@ func NewVoluntaryExitRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleVoluntaryExit),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleVoluntaryExit),
 	}
 }
 
@@ -152,7 +155,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Dut
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
 	if err != nil {
 		return errors.Wrap(err, "could not sign pre-consensus partial signature message")

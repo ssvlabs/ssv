@@ -119,10 +119,11 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	// Rule: If domain is different then self domain
-	if !bytes.Equal(ssvMessage.GetID().GetDomain(), mv.netCfg.Domain[:]) {
+	domain := mv.netCfg.DomainType()
+	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		err.want = hex.EncodeToString(domain[:])
 		return err
 	}
 

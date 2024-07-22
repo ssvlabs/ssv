@@ -9,7 +9,8 @@ import (
 var LocalTestnet = NetworkConfig{
 	Name:                 "local-testnet",
 	Beacon:               beacon.NewLocalTestNetwork(spectypes.PraterNetwork),
-	Domain:               spectypes.JatoV2Testnet,
+	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x1},
+	AlanDomainType:       spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},
 	GenesisEpoch:         1,
 	RegistryContractAddr: "0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D",
 	Bootnodes: []string{

@@ -181,7 +181,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.RoleCommittee)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.RoleCommittee)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -403,7 +403,7 @@ func dummyMsg(t *testing.T, ks *spectestingutils.TestKeySet, pkHex string, heigh
 		ownerID = pk[:]
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, ownerID, role)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), ownerID, role)
 	qbftMsg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      2,
