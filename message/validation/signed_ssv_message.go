@@ -6,9 +6,8 @@ import (
 	"fmt"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"golang.org/x/exp/slices"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"golang.org/x/exp/slices"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
