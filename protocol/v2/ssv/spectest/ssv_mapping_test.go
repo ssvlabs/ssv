@@ -78,11 +78,6 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 
 	switch testType {
 	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
-		// TODO: fix blinded test
-		if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
-			logger.Info("skipping blinded block test", zap.String("test", testName))
-			return nil
-		}
 		typedTest := msgProcessingSpecTestFromMap(t, test.(map[string]interface{}))
 
 		return &runnable{
