@@ -242,9 +242,6 @@ func uInt64ToByteSlice(n uint64) []byte {
 }
 
 func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
-	if len(operators) != 4 && len(operators) != 7 && len(operators) != 13 {
-		return nil, fmt.Errorf("invalid operators list size: %d", len(operators))
-	}
 	encoded := make([]byte, len(operators)*8)
 	for i, v := range operators {
 		binary.BigEndian.PutUint64(encoded[i*8:], v)
