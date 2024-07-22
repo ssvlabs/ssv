@@ -6,17 +6,34 @@ import (
 	"os"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/utils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
+
+type TestDomainTypeProvider struct {
+}
+
+func (td *TestDomainTypeProvider) DomainType() spectypes.DomainType {
+	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+}
+
+func (td *TestDomainTypeProvider) NextDomainType() spectypes.DomainType {
+	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+}
+
+func (td *TestDomainTypeProvider) DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType {
+	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+}
 
 func TestCheckPeer(t *testing.T) {
 	var (
@@ -35,13 +52,13 @@ func TestCheckPeer(t *testing.T) {
 				name:          "missing domain type",
 				domainType:    nil,
 				subnets:       mySubnets,
-				expectedError: nil,
+				expectedError: errors.New("not found"),
 			},
 			{
-				name:          "different domain type",
+				name:          "domain type mismatch",
 				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
 				subnets:       mySubnets,
-				expectedError: nil,
+				expectedError: errors.New("domain type mismatch"),
 			},
 			{
 				name:          "missing subnets",
@@ -90,7 +107,7 @@ func TestCheckPeer(t *testing.T) {
 		require.NoError(t, err)
 
 		if test.domainType != nil {
-			err := records.SetDomainTypeEntry(localNode, *test.domainType)
+			err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
 			require.NoError(t, err)
 		}
 		if test.subnets != nil {
@@ -107,7 +124,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx:        ctx,
 		conns:      &mock.MockConnectionIndex{LimitValue: true},
 		subnetsIdx: subnetIndex,
-		domainType: myDomainType,
+		domainType: &TestDomainTypeProvider{},
 		subnets:    mySubnets,
 	}
 

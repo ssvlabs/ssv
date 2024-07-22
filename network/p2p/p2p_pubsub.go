@@ -58,6 +58,8 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
+	zap.L().Debug("broadcasting post-fork msg", fields.PubKey(msgID.GetDutyExecutorID()), zap.Int("msg_type", int(msg.SSVMessage.MsgType)))
+
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -238,12 +240,12 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return errors.New("message was not decoded")
 		}
 
-		//p2pID := decodedMsg.GetID().String()
+		// p2pID := decodedMsg.GetID().String()
 
-		//	logger.With(
-		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
-		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
-		// 	).Debug("handlePubsubMessages")
+		logger.With(
+			zap.String("pubKey", hex.EncodeToString(decodedMsg.SSVMessage.MsgID.GetDutyExecutorID())),
+			zap.String("role", decodedMsg.SSVMessage.MsgID.GetRoleType().String()),
+		).Debug("handlePubsubMessages")
 
 		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 

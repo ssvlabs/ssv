@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -44,7 +44,7 @@ func TestRouter(t *testing.T) {
 		msg := &queue.DecodedSSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.MsgType(i % 3),
-				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
 				Data:    []byte(fmt.Sprintf("data-%d", i)),
 			},
 		}

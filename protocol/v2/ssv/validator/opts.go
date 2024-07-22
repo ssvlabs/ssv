@@ -5,13 +5,12 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
+	genesisqbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
+
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
-	genesisqbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -50,7 +49,6 @@ type GenesisOptions struct {
 	Network           genesisspecqbft.Network
 	Storage           *genesisstorage.QBFTStores
 	Signer            genesisspectypes.KeyManager
-	DutyRunners       genesisrunner.DutyRunners
 	NewDecidedHandler genesisqbftctrl.NewDecidedHandler
 }
 

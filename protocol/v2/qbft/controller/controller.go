@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -18,7 +20,7 @@ import (
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
-type NewDecidedHandler func(msg *spectypes.SignedSSVMessage)
+type NewDecidedHandler func(msg qbftstorage.ParticipantsRangeEntry)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {

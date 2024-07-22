@@ -11,21 +11,21 @@ import (
 )
 
 var (
-	metricsStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_instance_stage_duration_seconds",
+	metricsStageDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_instance_stage_duration_seconds_genesis",
 		Help:    "Instance stage duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 5},
 	}, []string{"stage"})
-	metricsRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv_qbft_instance_round",
+	metricsRoundGenesis = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_qbft_instance_round_genesis",
 		Help: "QBFT instance round",
 	}, []string{"roleType"})
 )
 
 func init() {
 	allMetrics := []prometheus.Collector{
-		metricsStageDuration,
-		metricsRound,
+		metricsStageDurationGenesis,
+		metricsRoundGenesis,
 	}
 	logger := zap.L()
 	for _, c := range allMetrics {
@@ -45,10 +45,10 @@ type metrics struct {
 
 func newMetrics(msgID genesisspectypes.MessageID) *metrics {
 	return &metrics{
-		proposalDuration: metricsStageDuration.WithLabelValues("proposal"),
-		prepareDuration:  metricsStageDuration.WithLabelValues("prepare"),
-		commitDuration:   metricsStageDuration.WithLabelValues("commit"),
-		round:            metricsRound.WithLabelValues(msgID.GetRoleType().String()),
+		proposalDuration: metricsStageDurationGenesis.WithLabelValues("proposal"),
+		prepareDuration:  metricsStageDurationGenesis.WithLabelValues("prepare"),
+		commitDuration:   metricsStageDurationGenesis.WithLabelValues("commit"),
+		round:            metricsRoundGenesis.WithLabelValues(msgID.GetRoleType().String()),
 	}
 }
 

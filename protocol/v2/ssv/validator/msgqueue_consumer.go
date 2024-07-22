@@ -34,13 +34,13 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	defer v.mtx.RUnlock()
 
 	role := msg.MsgID.GetRoleType()
-	if !v.NetworkConfig.AlanFork() {
+	if !v.NetworkConfig.PastAlanFork() {
 		role = spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msg.MsgID).GetRoleType()))
 	}
 
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
+	logger.Debug("📬 handling SSV message",
+		zap.Uint64("type", uint64(msg.MsgType)),
+		fields.Role(msg.MsgID.GetRoleType()))
 
 	if q, ok := v.Queues[role]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
@@ -79,11 +79,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
 		var ok bool
-		if v.NetworkConfig.AlanFork() {
-			q, ok = v.Queues[msgID.GetRoleType()]
-		} else {
-			q, ok = v.Queues[spectypes.MapDutyToRunnerRole(spectypes.BeaconRole(genesisspectypes.MessageID(msgID).GetRoleType()))]
-		}
+		q, ok = v.Queues[msgID.GetRoleType()]
 		if !ok {
 			return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
 		}

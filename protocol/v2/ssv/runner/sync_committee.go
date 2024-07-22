@@ -1,6 +1,5 @@
 package runner
 
-//
 //import (
 //	"crypto/sha256"
 //	"encoding/hex"
@@ -58,7 +57,7 @@ package runner
 //		valCheck:       valCheck,
 //		operatorSigner: operatorSigner,
 //
-//		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommittee),
+//		metrics: metrics.NewConsensusMetrics(spectypes.RoleSyncCommittee),
 //	}
 //}
 //
@@ -116,7 +115,7 @@ package runner
 //
 //	ssvMsg := &spectypes.SSVMessage{
 //		MsgType: spectypes.SSVPartialSignatureMsgType,
-//		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+//		MsgID:   spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 //		Data:    data,
 //	}
 //

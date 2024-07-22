@@ -4,7 +4,8 @@ import (
 	"context"
 	"sync"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/convert"
+
 	"go.uber.org/zap"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -28,13 +29,15 @@ func getDB(logger *zap.Logger) basedb.Database {
 	return db
 }
 
-var allRoles = []spectypes.RunnerRole{
-	spectypes.RoleCommittee,
-	spectypes.RoleProposer,
-	spectypes.RoleAggregator,
-	spectypes.RoleSyncCommitteeContribution,
-	spectypes.RoleValidatorRegistration,
-	spectypes.RoleVoluntaryExit,
+var allRoles = []convert.RunnerRole{
+	convert.RoleAttester,
+	convert.RoleAggregator,
+	convert.RoleProposer,
+	convert.RoleSyncCommitteeContribution,
+	convert.RoleSyncCommittee,
+	convert.RoleValidatorRegistration,
+	convert.RoleVoluntaryExit,
+	convert.RoleCommittee,
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {

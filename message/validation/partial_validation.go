@@ -23,10 +23,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > MaxPartialSignatureMsgSize {
+	if len(ssvMessage.Data) > maxPartialSignatureMsgsSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = MaxPartialSignatureMsgSize
+		e.want = maxPartialSignatureMsgsSize
 		return nil, e
 	}
 
@@ -138,8 +138,8 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != types.RoleCommittee { // Rule only for validator runners
-		maxSlot, _ := signerStateBySlot.Max()
-		if maxSlot != nil && maxSlot.(phase0.Slot) > partialSignatureMessages.Slot {
+		maxSlot := signerStateBySlot.MaxSlot()
+		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
 			e.got = partialSignatureMessages.Slot
 			e.want = maxSlot
@@ -151,7 +151,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	if signerState, ok := signerStateBySlot.Get(messageSlot); ok {
+	if signerState := signerStateBySlot.Get(messageSlot); signerState != nil && signerState.Slot == messageSlot {
 		// Rule: peer must send only:
 		// - 1 PostConsensusPartialSig, for Committee duty
 		// - 1 RandaoPartialSig and 1 PostConsensusPartialSig for Proposer
@@ -160,7 +160,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
 		limits := maxMessageCounts()
-		if err := signerState.(*SignerState).MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
+		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
 			return err
 		}
 	}
@@ -172,16 +172,16 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
+	clusterValidatorCount := len(committeeInfo.indices)
 	// Rule: valid number of duties per epoch:
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
-	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.indices, signerStateBySlot); err != nil {
+	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, clusterValidatorCount, signerStateBySlot); err != nil {
 		return err
 	}
 
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
-	clusterValidatorCount := len(committeeInfo.indices)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster
@@ -222,15 +222,12 @@ func (mv *messageValidator) updatePartialSignatureState(
 ) {
 	stateBySlot := state.GetOrCreate(signer)
 	messageSlot := partialSignatureMessages.Slot
-	var signerState *SignerState
+	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
 
-	signerStateInterface, ok := stateBySlot.Get(messageSlot)
-	if !ok {
-		signerState = NewSignerState(specqbft.FirstRound)
-		stateBySlot.Put(messageSlot, signerState)
-		mv.pruneOldSlots(stateBySlot, messageSlot)
-	} else {
-		signerState = signerStateInterface.(*SignerState)
+	signerState := stateBySlot.Get(messageSlot)
+	if signerState == nil || signerState.Slot != messageSlot {
+		signerState = NewSignerState(messageSlot, specqbft.FirstRound)
+		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 
 	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)

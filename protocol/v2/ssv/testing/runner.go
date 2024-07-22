@@ -6,7 +6,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"go.uber.org/zap"
@@ -22,13 +21,13 @@ var TestingHighestDecidedSlot = phase0.Slot(0)
 var CommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	// TODO fixme ?
 
-	return baseRunner(logger, spectypes.RoleCommittee, validator.TempBeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), keySet)
+	return baseRunner(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), keySet)
 	//return baseRunner(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), keySet)
 }
 
 var CommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.ValidatorIndex]*spectypes.Share) runner.Runner {
 	// TODO fixme ?
-	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, validator.TempBeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), shareMap)
+	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), shareMap)
 	//return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, nil, spectestingutils.TestingDutyEpoch), shareMap)
 }
 
@@ -118,6 +117,7 @@ var baseRunner = func(
 		).(runner.Runner)
 	case spectypes.RoleAggregator:
 		return runner.NewAggregatorRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -130,6 +130,7 @@ var baseRunner = func(
 		).(runner.Runner)
 	case spectypes.RoleProposer:
 		return runner.NewProposerRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -142,6 +143,7 @@ var baseRunner = func(
 		).(runner.Runner)
 	case spectypes.RoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -154,6 +156,7 @@ var baseRunner = func(
 		).(runner.Runner)
 	case spectypes.RoleValidatorRegistration:
 		return runner.NewValidatorRegistrationRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -164,6 +167,7 @@ var baseRunner = func(
 		).(runner.Runner)
 	case spectypes.RoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -318,6 +322,7 @@ var baseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleAggregator:
 		return runner.NewAggregatorRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -330,6 +335,7 @@ var baseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleProposer:
 		return runner.NewProposerRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -342,6 +348,7 @@ var baseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -354,6 +361,7 @@ var baseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		return runner.NewValidatorRegistrationRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -364,6 +372,7 @@ var baseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
+			networkconfig.TestNetwork,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),

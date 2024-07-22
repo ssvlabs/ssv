@@ -13,7 +13,7 @@ import (
 // TODO: use queues
 
 // validatorIterator is the function used to iterate over existing validators
-type validatorIterator func(validator *validator.Validator) bool
+type validatorIterator func(validator *ValidatorContainer) bool
 type committeeIterator func(validator *validator.Committee) bool
 
 // ValidatorsMap manages a collection of running validators
@@ -21,7 +21,7 @@ type ValidatorsMap struct {
 	ctx        context.Context
 	vlock      sync.RWMutex
 	mlock      sync.RWMutex
-	validators map[spectypes.ValidatorPK]*validator.Validator
+	validators map[spectypes.ValidatorPK]*ValidatorContainer
 	committees map[spectypes.CommitteeID]*validator.Committee
 }
 
@@ -30,7 +30,7 @@ func New(ctx context.Context, opts ...Option) *ValidatorsMap {
 		ctx:        ctx,
 		vlock:      sync.RWMutex{},
 		mlock:      sync.RWMutex{},
-		validators: make(map[spectypes.ValidatorPK]*validator.Validator),
+		validators: make(map[spectypes.ValidatorPK]*ValidatorContainer),
 		committees: make(map[spectypes.CommitteeID]*validator.Committee),
 	}
 
@@ -45,7 +45,7 @@ func New(ctx context.Context, opts ...Option) *ValidatorsMap {
 type Option func(*ValidatorsMap)
 
 // WithInitialState sets initial state
-func WithInitialState(vstate map[spectypes.ValidatorPK]*validator.Validator, mstate map[spectypes.CommitteeID]*validator.Committee) Option {
+func WithInitialState(vstate map[spectypes.ValidatorPK]*ValidatorContainer, mstate map[spectypes.CommitteeID]*validator.Committee) Option {
 	return func(vm *ValidatorsMap) {
 		vm.validators = vstate
 		vm.committees = mstate
@@ -66,11 +66,11 @@ func (vm *ValidatorsMap) ForEachValidator(iterator validatorIterator) bool {
 }
 
 // GetAllValidators returns all validators.
-func (vm *ValidatorsMap) GetAllValidators() []*validator.Validator {
+func (vm *ValidatorsMap) GetAllValidators() []*ValidatorContainer {
 	vm.vlock.RLock()
 	defer vm.vlock.RUnlock()
 
-	var validators []*validator.Validator
+	var validators []*ValidatorContainer
 	for _, val := range vm.validators {
 		validators = append(validators, val)
 	}
@@ -79,7 +79,7 @@ func (vm *ValidatorsMap) GetAllValidators() []*validator.Validator {
 }
 
 // GetValidator returns a validator
-func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
+func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*ValidatorContainer, bool) {
 	vm.vlock.RLock()
 	defer vm.vlock.RUnlock()
 
@@ -89,7 +89,7 @@ func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*validator.
 }
 
 // PutValidator creates a new validator instance
-func (vm *ValidatorsMap) PutValidator(pubKey spectypes.ValidatorPK, v *validator.Validator) {
+func (vm *ValidatorsMap) PutValidator(pubKey spectypes.ValidatorPK, v *ValidatorContainer) {
 	vm.vlock.Lock()
 	defer vm.vlock.Unlock()
 
@@ -98,7 +98,7 @@ func (vm *ValidatorsMap) PutValidator(pubKey spectypes.ValidatorPK, v *validator
 
 // Remove removes a validator instance from the map
 // TODO: pass spectypes.ValidatorPK instead of string
-func (vm *ValidatorsMap) RemoveValidator(pubKey spectypes.ValidatorPK) *validator.Validator {
+func (vm *ValidatorsMap) RemoveValidator(pubKey spectypes.ValidatorPK) *ValidatorContainer {
 	if v, found := vm.GetValidator(pubKey); found {
 		vm.vlock.Lock()
 		defer vm.vlock.Unlock()

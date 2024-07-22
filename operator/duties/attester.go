@@ -66,20 +66,20 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 	h.fetchNextEpoch = true
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			if !h.network.AlanFork() {
-				h.processExecution(currentEpoch, slot)
-			}
+			h.processExecution(currentEpoch, slot)
 			if h.indicesChanged {
 				h.duties.ResetEpoch(currentEpoch)
 				h.indicesChanged = false
@@ -94,11 +94,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextEpoch = true
 			}
 
-			if !h.network.AlanFork() {
-				// last slot of epoch
-				if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-					h.duties.ResetEpoch(currentEpoch)
-				}
+			// last slot of epoch
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+				h.duties.ResetEpoch(currentEpoch - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -178,31 +176,28 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	if duties == nil {
 		return
 	}
-
-	if !h.network.AlanForked(slot) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-		return
-	}
-
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
+	h.logger.Debug("🔧 executing duties", zap.Any("duties #", len(duties)))
+	// if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+	toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			if !h.network.AlanFork() {
-				toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
-			}
-			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
+			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
+			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+	// return
+	// }
+
+	// toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
+	// for _, d := range duties {
+	// 	if h.shouldExecute(d) {
+	// 		toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
+	// 	}
+	// }
+
+	// h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
@@ -210,6 +205,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
 
 	if len(indices) == 0 {
+		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 

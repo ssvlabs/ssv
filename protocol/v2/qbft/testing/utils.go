@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"go.uber.org/zap"
 
@@ -34,7 +35,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage:               TestingStores(logger).Get(role),
+		Storage:               TestingStores(logger).Get(convert.RunnerRole(role)),
 		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,

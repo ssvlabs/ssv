@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -52,12 +53,13 @@ type Runner interface {
 var _ Runner = new(CommitteeRunner)
 
 type BaseRunner struct {
-	mtx            sync.RWMutex
-	State          *State
-	Share          map[phase0.ValidatorIndex]*spectypes.Share
-	QBFTController *controller.Controller
-	BeaconNetwork  spectypes.BeaconNetwork
-	RunnerRoleType spectypes.RunnerRole
+	mtx                sync.RWMutex
+	State              *State
+	Share              map[phase0.ValidatorIndex]*spectypes.Share
+	QBFTController     *controller.Controller
+	DomainTypeProvider networkconfig.DomainTypeProvider
+	BeaconNetwork      spectypes.BeaconNetwork
+	RunnerRoleType     spectypes.RunnerRole
 	spectypes.OperatorSigner
 
 	// implementation vars
@@ -123,6 +125,7 @@ func NewBaseRunner(
 	state *State,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	beaconRoleType spectypes.RunnerRole,
 	operatorSigner spectypes.OperatorSigner,
@@ -133,6 +136,7 @@ func NewBaseRunner(
 		Share:              share,
 		QBFTController:     controller,
 		BeaconNetwork:      beaconNetwork,
+		DomainTypeProvider: domainTypeProvider,
 		RunnerRoleType:     beaconRoleType,
 		OperatorSigner:     operatorSigner,
 		highestDecidedSlot: highestDecidedSlot,

@@ -14,9 +14,10 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -29,12 +30,12 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	"github.com/ssvlabs/ssv/exporter/convert"
+	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/message/signatureverifier"
-	"github.com/ssvlabs/ssv/message/validation"
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
@@ -214,37 +215,34 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+		// signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 		validatorStore := nodeStorage.ValidatorStore()
 		// validatorStore = newValidatorStore(...) // TODO
 
-		var messageValidator validation.MessageValidator
+		// New msg validation that should be dynamically switched
+		// messageValidator := validation.New(
+		// 	networkConfig,
+		// 	validatorStore,
+		// 	dutyStore,
+		// 	signatureVerifier,
+		// 	validation.WithLogger(logger),
+		// 	validation.WithMetrics(metricsReporter),
+		// )
 
-		if networkConfig.AlanFork() {
-			messageValidator = validation.New(
-				networkConfig,
-				validatorStore,
-				dutyStore,
-				signatureVerifier,
-				validation.WithLogger(logger),
-				validation.WithMetrics(metricsReporter),
-			)
-		} else {
-			messageValidator = genesisvalidation.New(
-				networkConfig,
-				genesisvalidation.WithNodeStorage(nodeStorage),
-				genesisvalidation.WithLogger(logger),
-				genesisvalidation.WithMetrics(metricsReporter),
-				genesisvalidation.WithDutyStore(dutyStore),
-			)
-		}
+		genesisMessageValidator := genesisvalidation.New(
+			networkConfig,
+			genesisvalidation.WithNodeStorage(nodeStorage),
+			genesisvalidation.WithLogger(logger),
+			genesisvalidation.WithMetrics(metricsReporter),
+			genesisvalidation.WithDutyStore(dutyStore),
+		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
-		cfg.P2pNetworkConfig.MessageValidator = messageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
+		cfg.P2pNetworkConfig.MessageValidator = genesisMessageValidator
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = genesisMessageValidator
 
-		p2pNetwork := setupP2P(logger, db, metricsReporter)
+		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db, metricsReporter)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -279,13 +277,15 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.RunnerRole{
-			spectypes.RoleCommittee,
-			spectypes.RoleProposer,
-			spectypes.RoleAggregator,
-			spectypes.RoleSyncCommitteeContribution,
-			spectypes.RoleValidatorRegistration,
-			spectypes.RoleVoluntaryExit,
+		storageRoles := []convert.RunnerRole{
+			convert.RoleCommittee,
+			convert.RoleAttester,
+			convert.RoleProposer,
+			convert.RoleSyncCommittee,
+			convert.RoleAggregator,
+			convert.RoleSyncCommitteeContribution,
+			convert.RoleValidatorRegistration,
+			convert.RoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -294,16 +294,36 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
+		genesisStorageRoles := []genesisspectypes.BeaconRole{
+			genesisspectypes.BNRoleAttester,
+			genesisspectypes.BNRoleAggregator,
+			genesisspectypes.BNRoleProposer,
+			genesisspectypes.BNRoleSyncCommittee,
+			genesisspectypes.BNRoleSyncCommitteeContribution,
+			genesisspectypes.BNRoleValidatorRegistration,
+			genesisspectypes.BNRoleVoluntaryExit,
+		}
+
+		genesisStorageMap := genesisibftstorage.NewStores()
+
+		for _, storageRole := range genesisStorageRoles {
+			genesisStorageMap.Add(storageRole, genesisibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, "genesis_"+storageRole.String()))
+		}
+
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
+
+		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
+		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -378,7 +398,6 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
@@ -566,7 +585,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.Domain),
+		fields.Domain(networkConfig.DomainType()),
 		zap.String("nodeType", nodeType),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
@@ -576,7 +595,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) network.P2PNetwork {
+func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2p) {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {

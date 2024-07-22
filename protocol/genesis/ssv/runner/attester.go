@@ -80,6 +80,7 @@ func (r *AttesterRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *gene
 }
 
 func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesisspecqbft.SignedMessage) error {
+	logger.Debug("🧩 processing consensus message")
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
