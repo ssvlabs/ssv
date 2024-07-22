@@ -584,7 +584,11 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	return p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	p2pNetwork, err := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	if err != nil {
+		logger.Fatal("failed to setup p2p network", zap.Error(err))
+	}
+	return p2pNetwork
 }
 
 func setupConsensusClient(

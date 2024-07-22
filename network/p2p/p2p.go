@@ -69,6 +69,7 @@ type p2pNetwork struct {
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
 	connGater    connmgr.ConnectionGater
+	trustedPeers []*peer.AddrInfo
 	metrics      Metrics
 
 	state int32
@@ -86,12 +87,12 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config, mr Metrics) (network.P2PNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	return &p2pNetwork{
+	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
@@ -107,6 +108,30 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		operatorDataStore:       cfg.OperatorDataStore,
 		metrics:                 mr,
 	}
+	if err := n.parseTrustedPeers(); err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
+func (n *p2pNetwork) parseTrustedPeers() error {
+	// Group addresses by peer ID.
+	trustedPeers := map[peer.ID][]ma.Multiaddr{}
+	if len(n.cfg.TrustedPeers) > 0 {
+		for _, mas := range n.cfg.TrustedPeers {
+			for _, ma := range strings.Split(mas, ",") {
+				addrInfo, err := peer.AddrInfoFromString(ma)
+				if err != nil {
+					return fmt.Errorf("could not parse trusted peer: %w", err)
+				}
+				trustedPeers[addrInfo.ID] = append(trustedPeers[addrInfo.ID], addrInfo.Addrs...)
+			}
+		}
+	}
+	for id, addrs := range trustedPeers {
+		n.trustedPeers = append(n.trustedPeers, &peer.AddrInfo{ID: id, Addrs: addrs})
+	}
+	return nil
 }
 
 // Host implements HostProvider
@@ -178,24 +203,12 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		n.backoffConnector.Connect(ctx, connector)
 	}()
 
-	// Connect to trusted peers.
-	trustedPeers := map[peer.ID][]ma.Multiaddr{}
-	if len(n.cfg.TrustedPeers) > 0 {
-		for _, mas := range n.cfg.TrustedPeers {
-			for _, ma := range strings.Split(mas, ",") {
-				addrInfo, err := peer.AddrInfoFromString(ma)
-				if err != nil {
-					return fmt.Errorf("could not parse trusted peer: %w", err)
-				}
-				trustedPeers[addrInfo.ID] = append(trustedPeers[addrInfo.ID], addrInfo.Addrs...)
-			}
+	// Connect to trusted peers first.
+	go func() {
+		for _, addrInfo := range n.trustedPeers {
+			connector <- *addrInfo
 		}
-		go func() {
-			for id, addrs := range trustedPeers {
-				connector <- peer.AddrInfo{ID: id, Addrs: addrs}
-			}
-		}()
-	}
+	}()
 
 	ma, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
 		ID:    n.host.ID(),
@@ -210,7 +223,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	}
 	logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
-		zap.Int("trusted_peers", len(trustedPeers)),
+		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
 	go n.startDiscovery(logger, connector)
