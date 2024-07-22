@@ -110,8 +110,11 @@ func TestQBFTMapping(t *testing.T) {
 			err = pre.Decode(preByts)
 			require.NoError(t, err)
 			typedTest.Pre = pre
+			t.Run(typedTest.Name, func(t *testing.T) { // using only spec struct so no need to run our version (TODO: check how we choose leader)
+				t.Parallel()
+				RunTimeout(t, typedTest)
+			})
 
-			RunTimeout(t, typedTest)
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)
 		}
