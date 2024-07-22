@@ -169,6 +169,10 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 	connector := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
+		// Wait for own subnets to be subscribed to and updated.
+		// TODO: wait more intelligently with a channel.
+		time.Sleep(8 * time.Second)
+
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
 		n.backoffConnector.Connect(ctx, connector)
@@ -187,7 +191,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 		}
 		go func() {
-			time.Sleep(10 * time.Second)
 			for id, addrs := range trustedPeers {
 				connector <- peer.AddrInfo{ID: id, Addrs: addrs}
 			}
