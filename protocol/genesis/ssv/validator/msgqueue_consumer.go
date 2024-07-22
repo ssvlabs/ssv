@@ -138,9 +138,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 
 		// Pop the highest priority message for the current state.
 		logger.Debug("📬 popping message from queue", fields.Height(state.Height), fields.Round(state.Round))
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), func(ssvMessage *queue.DecodedSSVMessage) bool {
-			return true
-		})
+		filter = queue.FilterAny
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		logger.Debug("📬 popped message from queue", fields.MessageID(spectypes.MessageID(msg.MsgID)), fields.MessageType(spectypes.MsgType(msg.MsgType)))
 		if ctx.Err() != nil {
 			break
