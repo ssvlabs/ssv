@@ -111,6 +111,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {
+			logger.Debug("📬 no duty is running")
 			// If no duty is running, pop only ExecuteDuty messages.
 			filter = func(m *queue.DecodedSSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
@@ -120,6 +121,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 				return e.Type == types.ExecuteDuty
 			}
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+			logger.Debug("📬 no proposal was accepted for the current round")
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
@@ -135,10 +137,15 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 		}
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+		logger.Debug("📬 popping message from queue", fields.Height(state.Height), fields.Round(state.Round))
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), func(ssvMessage *queue.DecodedSSVMessage) bool {
+			return true
+		})
+		logger.Debug("📬 popped message from queue", fields.MessageID(spectypes.MessageID(msg.MsgID)), fields.MessageType(spectypes.MsgType(msg.MsgType)))
 		if ctx.Err() != nil {
 			break
 		}
+
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
