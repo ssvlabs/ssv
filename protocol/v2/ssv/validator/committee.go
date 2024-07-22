@@ -236,8 +236,8 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			return errors.Wrap(err, "invalid qbft Message")
 		}
 		c.mtx.Lock()
-		defer c.mtx.Unlock() // read c.Runners map + ProcessConsensus r/w state
 		runner, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
+		c.mtx.Unlock()
 		if !exists {
 			return errors.New("no runner found for message's slot")
 		}

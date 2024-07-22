@@ -110,10 +110,8 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		if runner.HasRunningDuty() {
 			runningInstance = runner.GetBaseRunner().State.RunningInstance
 			if runningInstance != nil {
-				v.mtx.RLock()
-				decided, _ := runningInstance.IsDecided()
+				decided, _ := runner.GetBaseRunner().IsRunningInstanceDecided()
 				state.HasRunningInstance = !decided
-				v.mtx.RUnlock()
 			}
 		}
 
@@ -128,9 +126,7 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 				return e.Type == types.ExecuteDuty
 			}
 		} else {
-			v.mtx.RLock()
-			proposalAcceptedForCurrentRound := runningInstance.State.ProposalAcceptedForCurrentRound
-			v.mtx.RUnlock()
+			proposalAcceptedForCurrentRound := runner.GetBaseRunner().GetStateProposalAcceptedForCurrentRound()
 			if runningInstance != nil && proposalAcceptedForCurrentRound == nil {
 				// If no proposal was accepted for the current round, skip prepare & commit messages
 				// for the current height and round.
