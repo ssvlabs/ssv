@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"log"
 	"math/big"
 	"net/http"
@@ -577,6 +578,8 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	if err != nil {
 		return networkconfig.NetworkConfig{}, err
 	}
+
+	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
