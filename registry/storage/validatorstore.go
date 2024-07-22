@@ -307,6 +307,9 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 
 	// Update byCommitteeID
 	for _, committee := range c.byCommitteeID {
+		if committee.ID != share.CommitteeID() {
+			continue
+		}
 		for i, validator := range committee.Validators {
 			if validator.ValidatorPubKey == share.ValidatorPubKey {
 				committee.Validators[i] = share
