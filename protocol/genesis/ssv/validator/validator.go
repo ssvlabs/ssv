@@ -122,7 +122,11 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 
 	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
+		return fmt.Errorf("message invalid for msg ID %v (executor id: %x, pubkey: %x): %w",
+			messageID,
+			messageID.GetDutyExecutorID(),
+			v.Share.Share.ValidatorPubKey,
+			err)
 	}
 
 	switch msg.GetType() {
@@ -154,7 +158,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 }
 
 func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
-	if !share.ValidatorPubKey.MessageIDBelongs(spectypes.MessageID(msg.GetID())) {
+	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
