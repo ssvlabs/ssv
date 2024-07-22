@@ -886,6 +886,12 @@ func CreateGenesisDutyExecuteMsg(duty *genesisspectypes.Duty, pubKey phase0.BLSP
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode event msg")
 	}
+	//case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
+	//	msg := &ssvtypes.EventMsg{}
+	//	if err := msg.Decode(m.Data); err != nil {
+	//	return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
+	//	}
+	//	body = msg
 	return &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.MsgType(message.SSVEventMsgType),
 		MsgID:   genesisspectypes.NewMsgID(domain, pubKey[:], duty.Type),

@@ -10,7 +10,7 @@ import (
 
 // TODO: get rid of singleton, pass domain as a parameter
 var (
-	domain = networkconfig.Mainnet.GenesisDomainType
+	domain = networkconfig.HoleskyStage.GenesisDomainType
 )
 
 // GetDefaultDomain returns the global domain used across the system
