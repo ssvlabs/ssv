@@ -1,4 +1,4 @@
-package queue
+package genesisqueue
 
 import (
 	"bytes"
@@ -11,12 +11,12 @@ import (
 
 	"github.com/aquasecurity/table"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/qbft"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	"github.com/ssvlabs/ssv/protocol/genesis/message"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -311,10 +311,10 @@ func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage
 	}
 }
 
-type messageSlice []*SSVMessage
+type messageSlice []*GenesisSSVMessage
 
 func (m messageSlice) shuffle() messageSlice {
-	shuffled := make([]*SSVMessage, len(m))
+	shuffled := make([]*GenesisSSVMessage, len(m))
 	for i, j := range rand.Perm(len(m)) {
 		shuffled[i] = m[j]
 	}

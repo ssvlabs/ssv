@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/message"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -229,12 +229,18 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return nil
 		}
 
-		var decodedMsg *queue.DecodedSSVMessage
+		var decodedMsg network.SSVMessageInterface
 		if msg.ValidatorData != nil {
-			m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
+			m, ok := msg.ValidatorData.(*queue.SSVMessage)
 			if ok {
 				decodedMsg = m
+			} else {
+				m, ok := msg.ValidatorData.(*genesisqueue.GenesisSSVMessage)
+				if ok {
+					decodedMsg = m
+				}
 			}
+
 		}
 		if decodedMsg == nil {
 			return errors.New("message was not decoded")
@@ -242,12 +248,12 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 
 		// p2pID := decodedMsg.GetID().String()
 
-		logger.With(
-			zap.String("pubKey", hex.EncodeToString(decodedMsg.SSVMessage.MsgID.GetDutyExecutorID())),
-			zap.String("role", decodedMsg.SSVMessage.MsgID.GetRoleType().String()),
-		).Debug("handlePubsubMessages")
+		// logger.With(
+		// 	zap.String("pubKey", hex.EncodeToString(decodedMsg.SSVMessage.MsgID.GetDutyExecutorID())),
+		// 	zap.String("role", decodedMsg.SSVMessage.MsgID.GetRoleType().String()),
+		// ).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
+		// metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
 		n.msgRouter.Route(ctx, decodedMsg)
 

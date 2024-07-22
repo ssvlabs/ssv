@@ -8,13 +8,17 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
+
+// SSVMessageInterface serves as a marker interface for any SSV message types.
+type SSVMessageInterface interface {
+	// Potentially no methods needed if you're using only type assertions
+}
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(ctx context.Context, message *queue.DecodedSSVMessage)
+	Route(ctx context.Context, message SSVMessageInterface)
 }
 
 // MessageRouting allows to register a MessageRouter

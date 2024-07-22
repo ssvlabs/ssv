@@ -32,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -227,7 +228,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 		}
 
 		// skipping the error check for testing simplifying
-		decMsg, _ := queue.DecodeGenesisSSVMessage(msg)
+		decMsg, _ := genesisqueue.DecodeGenesisSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
 	}
@@ -284,11 +285,11 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
-func (mv *messageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) ValidateSSVMessage(ssvMessage *genesisqueue.GenesisSSVMessage) (*genesisqueue.GenesisSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
-func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*genesisqueue.GenesisSSVMessage, Descriptor, error) {
 	topic := pMsg.GetTopic()
 
 	mv.metrics.ActiveMsgValidation(topic)
@@ -331,7 +332,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 
-	msg, err := queue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
+	msg, err := genesisqueue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
 		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
 			e := ErrMalformedPubSubMessage
@@ -368,12 +369,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
 
-	mv.metrics.SSVMessageType(msg.MsgType)
+	mv.metrics.GenesisSSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*genesisqueue.GenesisSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 	ssvMessage := msg.SSVMessage
 

@@ -6,49 +6,49 @@ import (
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(logger *zap.Logger, msg *queue.DecodedSSVMessage) error
+type MessageHandler func(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
-	Q          queue.Queue
-	queueState *queue.State
+	Q          genesisqueue.Queue
+	queueState *genesisqueue.State
 }
 
 // HandleMessage handles a genesisspectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
+func (v *Validator) HandleMessage(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
 	logger.Debug("📬 handling SSV message",
 		zap.Uint64("type", uint64(msg.MsgType)),
-		fields.Role(msg.MsgID.GetRoleType()))
+		fields.GenesisRole(msg.MsgID.GetRoleType()))
 
-	if q, ok := v.Queues[((*genesisspectypes.MessageID)(msg.MsgID[:])).GetRoleType()]; ok {
+	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
-				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+				zap.String("msg_type", genesismessage.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
+		logger.Error("❌ missing queue for role type", fields.GenesisRole(msg.MsgID.GetRoleType()))
 	}
 }
 
@@ -105,15 +105,15 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 				state.HasRunningInstance = !decided
 			}
 		}
-		state.Height = specqbft.Height(v.GetLastHeight(msgID))
-		state.Round = specqbft.Round(v.GetLastRound(msgID))
+		state.Height = v.GetLastHeight(msgID)
+		state.Round = v.GetLastRound(msgID)
 		state.Quorum = v.Share.Quorum()
 
-		filter := queue.FilterAny
+		filter := genesisqueue.FilterAny
 		if !runner.HasRunningDuty() {
 			logger.Debug("📬 no duty is running")
 			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.DecodedSSVMessage) bool {
+			filter = func(m *genesisqueue.GenesisSSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
 					return false
@@ -124,12 +124,12 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 			logger.Debug("📬 no proposal was accepted for the current round")
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
-			filter = func(m *queue.DecodedSSVMessage) bool {
+			filter = func(m *genesisqueue.GenesisSSVMessage) bool {
 				sm, ok := m.Body.(*genesisspecqbft.SignedMessage)
 				if !ok {
 					return true
 				}
-				if specqbft.Height(sm.Message.Height) != state.Height || specqbft.Round(sm.Message.Round) != state.Round {
+				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
 					return true
 				}
 				return sm.Message.MsgType != genesisspecqbft.PrepareMsgType && sm.Message.MsgType != genesisspecqbft.CommitMsgType
@@ -137,9 +137,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 		}
 
 		// Pop the highest priority message for the current state.
-		logger.Debug("📬 popping message from queue", fields.Height(state.Height), fields.Round(state.Round))
-		filter = queue.FilterAny
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+		logger.Debug("📬 popping message from queue", fields.Height(specqbft.Height(state.Height)), fields.Round(specqbft.Round(state.Round)))
+		filter = genesisqueue.FilterAny
+		msg := q.Q.Pop(ctx, genesisqueue.NewMessagePrioritizer(&state), filter)
 		logger.Debug("📬 popped message from queue", fields.MessageID(spectypes.MessageID(msg.MsgID)), fields.MessageType(spectypes.MsgType(msg.MsgType)))
 		if ctx.Err() != nil {
 			break
@@ -169,10 +169,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 	return nil
 }
 
-func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, withFields ...zap.Field) {
+func (v *Validator) logMsg(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	case genesisspectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*genesisspecqbft.SignedMessage)
 		baseFields = []zap.Field{
 			zap.Int64("msg_height", int64(sm.Message.Height)),
@@ -180,7 +180,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
 			zap.Any("signers", sm.Signers),
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	case genesisspectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		baseFields = []zap.Field{
 			zap.Int64("signer", int64(psm.Signer)),

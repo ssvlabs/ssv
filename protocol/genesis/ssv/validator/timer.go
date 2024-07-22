@@ -10,9 +10,9 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func (v *Validator) onTimeout(logger *zap.Logger, identifier genesisspectypes.MessageID, height genesisspecqbft.Height) roundtimer.OnRoundTimeoutF {
@@ -36,7 +36,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier genesisspectypes.Me
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
 		}
-		dec, err := queue.DecodeGenesisSSVMessage(msg)
+		dec, err := genesisqueue.DecodeGenesisSSVMessage(msg)
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return

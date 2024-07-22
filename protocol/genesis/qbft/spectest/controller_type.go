@@ -23,7 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {

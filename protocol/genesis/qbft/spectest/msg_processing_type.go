@@ -17,7 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 )
 

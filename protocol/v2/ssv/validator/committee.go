@@ -176,7 +176,7 @@ func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.Valida
 	}
 }
 
-func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) {
+func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 	c.mtx.RLock()
 	defer c.mtx.RUnlock()
 	if pushed := c.Queues[slot].Q.TryPush(dec); !pushed {
@@ -209,7 +209,7 @@ func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) ([]*spectyp
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) error {
 	// Validate message
 	if msg.GetType() != message.SSVEventMsgType {
 		if err := msg.SignedSSVMessage.Validate(); err != nil {

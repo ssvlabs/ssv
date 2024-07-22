@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -16,9 +17,9 @@ import (
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
+	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
 	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -77,8 +78,9 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		role := dutyRunner.GetBaseRunner().BeaconRoleType
 
 		v.Queues[role] = queueContainer{
-			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
-			queueState: &queue.State{
+			// Q: genesisqueue.WithMetrics(genesisqueue.New(options.QueueSize), options.Metrics),
+			Q: genesisqueue.New(options.QueueSize),
+			queueState: &genesisqueue.State{
 				HasRunningInstance: false,
 				Height:             0,
 				Slot:               0,
@@ -113,7 +115,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+func (v *Validator) ProcessMessage(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage) error {
 	logger.Debug("processing message", fields.MessageType(spectypes.MsgType(msg.MsgType)))
 	messageID := msg.GetID()
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(genesisspectypes.MessageID(messageID))
@@ -124,14 +126,14 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if err := validateMessage(v.Share.Share, msg); err != nil {
 		return fmt.Errorf("message invalid for msg ID %v (executor id: %x, pubkey: %x): %w",
 			messageID,
-			messageID.GetDutyExecutorID(),
+			messageID.GetPubKey(),
 			v.Share.Share.ValidatorPubKey,
 			err)
 	}
 
 	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, ((*genesisspectypes.MessageID)(msg.MsgID[:])).GetRoleType())
+	case genesisspectypes.SSVConsensusMsgType:
+		logger = trySetDutyID(logger, v.dutyIDs, msg.MsgID.GetRoleType())
 
 		signedMsg, ok := msg.Body.(*genesisspecqbft.SignedMessage)
 		if !ok {
@@ -139,8 +141,8 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		}
 		logger = logger.With(fields.Height(specqbft.Height(signedMsg.Message.Height)))
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
-	case spectypes.SSVPartialSignatureMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, ((*genesisspectypes.MessageID)(msg.MsgID[:])).GetRoleType())
+	case genesisspectypes.SSVPartialSignatureMsgType:
+		logger = trySetDutyID(logger, v.dutyIDs, msg.MsgID.GetRoleType())
 
 		signedMsg, ok := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		if !ok {
@@ -150,15 +152,15 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(logger, signedMsg)
-	case message.SSVEventMsgType:
+	case genesismessage.SSVEventMsgType:
 		return v.handleEventMessage(logger, msg, dutyRunner)
 	default:
 		return errors.New("unknown msg")
 	}
 }
 
-func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
-	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
+func validateMessage(share spectypes.Share, msg *genesisqueue.GenesisSSVMessage) error {
+	if !bytes.Equal(share.ValidatorPubKey[:], msg.GetID().GetPubKey()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 

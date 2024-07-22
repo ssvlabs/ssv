@@ -74,7 +74,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 	}
 }
 
-func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) error {
+func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 	logger := ncv.logger.With(fields.CommitteeID(cid), fields.Role(msg.MsgID.GetRoleType()))
 
@@ -132,7 +132,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) error
 	return nil
 }
 
-func (ncv *CommitteeObserver) getRole(msg *queue.DecodedSSVMessage, root [32]byte) convert.RunnerRole {
+func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		_, found := ncv.Roots[root]
 		if !found {
@@ -240,7 +240,7 @@ func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signat
 	return fmt.Errorf("unknown signer")
 }
 
-func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.DecodedSSVMessage) error {
+func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	mssg := &specqbft.Message{}
 	if err := mssg.Decode(msg.SSVMessage.GetData()); err != nil {
 		ncv.logger.Debug("❗ failed to get decode ssv message", zap.Error(err))

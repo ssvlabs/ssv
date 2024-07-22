@@ -1,4 +1,4 @@
-package queue
+package genesisqueue
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -56,14 +56,14 @@ func TestPriorityQueue_Filter(t *testing.T) {
 	require.False(t, queue.Empty())
 
 	// Pop non-matching message.
-	popped := queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
+	popped := queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
 		return msg.Body.(*qbft.Message).Height == 101
 	})
 	require.False(t, queue.Empty())
 	require.Nil(t, popped)
 
 	// Pop matching message.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
 		return msg.Body.(*qbft.Message).Height == 100
 	})
 	require.True(t, queue.Empty())
@@ -75,14 +75,14 @@ func TestPriorityQueue_Filter(t *testing.T) {
 	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
 
 	// Pop 2nd message.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
 		return msg.Body.(*qbft.Message).Height == 101
 	})
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop 1st message.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
 		return msg.Body.(*qbft.Message).Height == 100
 	})
 	require.True(t, queue.Empty())
@@ -90,7 +90,7 @@ func TestPriorityQueue_Filter(t *testing.T) {
 	require.Equal(t, msg1, popped)
 
 	// Pop nil.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
 		return msg.Body.(*qbft.Message).Height == 100
 	})
 	require.Nil(t, popped)
@@ -233,7 +233,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 	queue := factory()
 
 	// Prepare messages.
-	messages := make([]*SSVMessage, messageCount)
+	messages := make([]*GenesisSSVMessage, messageCount)
 	for i := range messages {
 		var err error
 		msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
@@ -253,7 +253,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		start := time.Now()
 
 		// Stream messages to pushers.
-		messageStream := make(chan *SSVMessage)
+		messageStream := make(chan *GenesisSSVMessage)
 		go func() {
 			for _, msg := range messages {
 				messageStream <- msg
@@ -294,7 +294,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 		// Pop all messages.
 		var poppersWg sync.WaitGroup
-		popped := make(chan *SSVMessage, messageCount*2)
+		popped := make(chan *GenesisSSVMessage, messageCount*2)
 		poppingCtx, stopPopping := context.WithCancel(context.Background())
 		for i := 0; i < poppers; i++ {
 			poppersWg.Add(1)
@@ -320,7 +320,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 			close(popped)
 		}()
 
-		allPopped := make(map[*SSVMessage]struct{})
+		allPopped := make(map[*GenesisSSVMessage]struct{})
 		for msg := range popped {
 			allPopped[msg] = struct{}{}
 		}
@@ -357,7 +357,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 
 	messageCount := 10_000
 	types := []qbft.MessageType{qbft.PrepareMsgType, qbft.CommitMsgType, qbft.RoundChangeMsgType}
-	msgs := make(chan *SSVMessage, messageCount*len(types))
+	msgs := make(chan *GenesisSSVMessage, messageCount*len(types))
 	for _, i := range rand.Perm(messageCount) {
 		height := qbft.FirstHeight + qbft.Height(i)
 		for _, t := range types {
@@ -413,7 +413,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	b.Logf("pushed %d messages", pushed.Load())
 }
 
-func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *SSVMessage {
+func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *GenesisSSVMessage {
 	decoded, err := DecodeSignedSSVMessage(msg.ssvMessage(state))
 	require.NoError(t, err)
 	queue.Push(decoded)

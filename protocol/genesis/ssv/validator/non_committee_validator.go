@@ -4,15 +4,14 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
 	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -44,8 +43,8 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier genesisspectypes.Me
 	}
 }
 
-func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
-	logger = logger.With(fields.PubKey(msg.MsgID.GetDutyExecutorID()), fields.Role(msg.MsgID.GetRoleType()))
+func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage) {
+	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.GenesisRole(msg.MsgID.GetRoleType()))
 
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Debug("❌ got invalid message", zap.Error(err))
@@ -53,7 +52,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 	}
 
 	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType:
+	case genesisspectypes.SSVConsensusMsgType:
 		signedMsg := &genesisspecqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))

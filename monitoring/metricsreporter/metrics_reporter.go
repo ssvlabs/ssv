@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -190,6 +191,7 @@ type MetricsReporter interface {
 	MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round)
 	MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round)
 	SSVMessageType(msgType spectypes.MsgType)
+	GenesisSSVMessageType(msgType genesisspectypes.MsgType)
 	ConsensusMsgType(msgType specqbft.MessageType, signers int)
 	MessageValidationDuration(duration time.Duration, labels ...string)
 	SignatureValidationDuration(duration time.Duration, labels ...string)
@@ -385,6 +387,9 @@ func (m *metricsReporter) SSVMessageType(msgType spectypes.MsgType) {
 	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
 }
 
+func (m *metricsReporter) GenesisSSVMessageType(msgType genesisspectypes.MsgType) {
+	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(spectypes.MsgType(msgType))).Inc()
+}
 func (m *metricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
 	messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()
 }

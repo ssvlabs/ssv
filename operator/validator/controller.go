@@ -38,9 +38,11 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validators"
+	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
 	genesisqbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	genesisqbftcontroller "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	genesisroundtimer "github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
 	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
@@ -389,46 +391,54 @@ func (c *controller) handleRouterMessages() {
 			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
-			// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
-			if msg.MsgType == message.SSVEventMsgType {
-				continue
-			}
 
-			if msg.GenesisSignedSSVMessage != nil {
+			switch m := msg.(type) {
+			case *genesisqueue.GenesisSSVMessage:
+				if m.MsgType == genesismessage.SSVEventMsgType {
+					continue
+				}
 				c.logger.Debug("📬 handling genesis SSV message")
-				msgID := genesisspectypes.MessageID(msg.GetID())
-				pk := msgID.GetPubKey()
+
+				pk := m.GetID().GetPubKey()
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk[:])); ok {
-					v.GenesisValidator.HandleMessage(c.logger, msg)
-				} else if c.validatorOptions.Exporter {
-					if msg.MsgType != spectypes.SSVConsensusMsgType {
-						continue // not supporting other types
-					}
-					if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
-						c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-					}
+					v.GenesisValidator.HandleMessage(c.logger, m)
+					// } else if c.validatorOptions.Exporter {
+					// 	if m.MsgType != genesisspectypes.SSVConsensusMsgType {
+					// 		continue // not supporting other types
+					// 	}
+					// 	if !c.messageWorker.TryEnqueue(m) { // start to save non committee decided messages only post fork
+					// 		c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+					// 	}
 				} else {
 					c.logger.Error("could not find genesis validator", fields.PubKey(pk))
 				}
-			} else {
-				// TODO: only try copying clusterid if validator failed
-				dutyExecutorID := msg.GetID().GetDutyExecutorID() // it should work for genesis flow too
+
+			case *queue.SSVMessage:
+				if m.MsgType == message.SSVEventMsgType {
+					continue
+				}
+
+				dutyExecutorID := m.GetID().GetDutyExecutorID() // it should work for genesis flow too
 				var cid spectypes.CommitteeID
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.Validator.HandleMessage(c.logger, msg)
+					v.Validator.HandleMessage(c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.HandleMessage(c.logger, msg)
+					vc.HandleMessage(c.logger, m)
 				} else if c.validatorOptions.Exporter {
-					if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
-					if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
+					if !c.messageWorker.TryEnqueue(m) { // start to save non committee decided messages only post fork
 						c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 					}
 				}
+
+			default:
+				panic("Unknown message type")
 			}
+
 		}
 	}
 }
@@ -441,9 +451,11 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
 	spectypes.RoleSyncCommitteeContribution: 4,
 }
 
-func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
+func (c *controller) handleWorkerMessages(msg network.SSVMessageInterface) error {
 	var ncv *committeeObserver
-	item := c.getNonCommitteeValidators(msg.GetID())
+	ssvMsg := msg.(*queue.SSVMessage)
+
+	item := c.getNonCommitteeValidators(ssvMsg.GetID())
 	if item == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
 			Logger:            c.logger,
@@ -456,24 +468,24 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
 		}
 		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(msg.MsgID), committeeObserverOptions),
+			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
 		}
-		ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
 		c.committeesObservers.Set(
-			msg.GetID(),
+			ssvMsg.GetID(),
 			ncv,
 			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
 		)
 	} else {
 		ncv = item
 	}
-	if err := c.handleNonCommitteeMessages(msg, ncv); err != nil {
+	if err := c.handleNonCommitteeMessages(ssvMsg, ncv); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *controller) handleNonCommitteeMessages(msg *queue.DecodedSSVMessage, ncv *committeeObserver) error {
+func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *committeeObserver) error {
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
@@ -779,7 +791,7 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 			logger.Error("could not create duty execute msg", zap.Error(err))
 			return
 		}
-		dec, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		dec, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		if err != nil {
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
@@ -787,7 +799,7 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 		if pushed := v.GenesisValidator.Queues[duty.Type].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
-		logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
+		logger.Debug("📬 queue: pushed message", fields.MessageID(spectypes.MessageID(dec.MsgID)), fields.MessageType(spectypes.MsgType(dec.MsgType)))
 	} else {
 		logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
 	}
@@ -810,16 +822,9 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if c.networkConfig.PastAlanFork() {
-			if pushed := v.Validator.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-				logger.Warn("dropping ExecuteDuty message because the queue is full")
-			}
-		} else {
-			if pushed := v.GenesisValidator.Queues[genesisspectypes.BeaconRole(duty.Type)].Q.TryPush(dec); !pushed {
-				logger.Warn("dropping ExecuteDuty message because the queue is full")
-			}
+		if pushed := v.Validator.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
-
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
 		logger.Warn("could not find validator")

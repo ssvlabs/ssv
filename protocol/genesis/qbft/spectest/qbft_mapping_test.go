@@ -17,8 +17,8 @@ import (
 	testing2 "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func TestQBFTMapping(t *testing.T) {

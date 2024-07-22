@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -13,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 var (
@@ -271,12 +269,12 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			continue
 		}
 
-		if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
-			).Inc()
-		}
+		// if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
+		// 	metricPubsubInbound.WithLabelValues(
+		// 		commons.GetTopicBaseName(topicName),
+		// 		strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
+		// 	).Inc()
+		// }
 
 		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))

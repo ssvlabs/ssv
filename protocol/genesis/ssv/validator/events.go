@@ -6,12 +6,12 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
-func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage, dutyRunner genesisrunner.Runner) error {
+func (v *Validator) handleEventMessage(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage, dutyRunner genesisrunner.Runner) error {
 	eventMsg, ok := msg.Body.(*types.EventMsg)
 	if !ok {
 		return errors.New("could not decode event message")

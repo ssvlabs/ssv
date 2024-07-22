@@ -321,7 +321,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("no data", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		message := &queue.DecodedSSVMessage{
+		message := &queue.SSVMessage{
 			SSVMessage: &alanspectypes.SSVMessage{
 				MsgType: alanspectypes.MsgType(spectypes.SSVConsensusMsgType),
 				MsgID:   alanspectypes.MessageID(spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)),

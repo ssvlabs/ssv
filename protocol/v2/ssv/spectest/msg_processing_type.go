@@ -274,12 +274,12 @@ var baseCommitteeWithRunnerSample = func(
 // wrapSignedSSVMessageToDecodedSSVMessage - wraps a SignedSSVMessage to a DecodedSSVMessage to pass the queue.DecodedSSVMessage to ProcessMessage
 // In spec it accepts SignedSSVMessage, but in the protocol it accepts DecodedSSVMessage
 // Without handling nil case in tests we get a panic in decodeSignedSSVMessage
-func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*queue.DecodedSSVMessage, error) {
-	var dmsg *queue.DecodedSSVMessage
+func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*queue.SSVMessage, error) {
+	var dmsg *queue.SSVMessage
 	var err error
 
 	if msg.SSVMessage == nil {
-		dmsg = &queue.DecodedSSVMessage{
+		dmsg = &queue.SSVMessage{
 			SignedSSVMessage: msg,
 			SSVMessage:       &spectypes.SSVMessage{},
 		}

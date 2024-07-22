@@ -1,7 +1,7 @@
-package queue
+package genesisqueue
 
 import (
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // Metrics records metrics about the Queue.
@@ -22,7 +22,7 @@ func WithMetrics(q Queue, metrics Metrics) Queue {
 	}
 }
 
-func (q *queueWithMetrics) TryPush(msg *SSVMessage) bool {
+func (q *queueWithMetrics) TryPush(msg *GenesisSSVMessage) bool {
 	pushed := q.Queue.TryPush(msg)
 	if !pushed {
 		q.metrics.DroppedQueueMessage(msg.GetID())

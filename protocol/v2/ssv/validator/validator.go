@@ -132,7 +132,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) error {
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
@@ -215,7 +215,7 @@ func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole,
 	return logger
 }
 
-func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
+func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}

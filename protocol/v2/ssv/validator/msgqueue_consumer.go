@@ -18,7 +18,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(logger *zap.Logger, msg *queue.DecodedSSVMessage) error
+type MessageHandler func(logger *zap.Logger, msg *queue.SSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -29,7 +29,7 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
+func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
@@ -115,7 +115,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {
 			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.DecodedSSVMessage) bool {
+			filter = func(m *queue.SSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
 					return false
@@ -125,7 +125,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
-			filter = func(m *queue.DecodedSSVMessage) bool {
+			filter = func(m *queue.SSVMessage) bool {
 				qbftMsg, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return true
@@ -167,7 +167,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	return nil
 }
 
-func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, withFields ...zap.Field) {
+func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:

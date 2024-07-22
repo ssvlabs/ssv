@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/network"
 )
 
 const bufSize = 65536
@@ -13,16 +13,16 @@ const bufSize = 65536
 func newMessageRouter(logger *zap.Logger) *messageRouter {
 	return &messageRouter{
 		logger: logger,
-		ch:     make(chan *queue.DecodedSSVMessage, bufSize),
+		ch:     make(chan network.SSVMessageInterface, bufSize),
 	}
 }
 
 type messageRouter struct {
 	logger *zap.Logger
-	ch     chan *queue.DecodedSSVMessage
+	ch     chan network.SSVMessageInterface
 }
 
-func (r *messageRouter) Route(ctx context.Context, message *queue.DecodedSSVMessage) {
+func (r *messageRouter) Route(ctx context.Context, message network.SSVMessageInterface) {
 	select {
 	case <-ctx.Done():
 		r.logger.Warn("context canceled, dropping message")
@@ -32,6 +32,6 @@ func (r *messageRouter) Route(ctx context.Context, message *queue.DecodedSSVMess
 	}
 }
 
-func (r *messageRouter) GetMessageChan() <-chan *queue.DecodedSSVMessage {
+func (r *messageRouter) GetMessageChan() <-chan network.SSVMessageInterface {
 	return r.ch
 }
