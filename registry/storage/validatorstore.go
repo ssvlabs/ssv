@@ -310,12 +310,6 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 		for i, validator := range committee.Validators {
 			if validator.ValidatorPubKey == share.ValidatorPubKey {
 				committee.Validators[i] = share
-				break
-			}
-		}
-
-		for i, index := range committee.Indices {
-			if index == share.ValidatorIndex {
 				committee.Indices[i] = share.ValidatorIndex
 				break
 			}
