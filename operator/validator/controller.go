@@ -1203,6 +1203,7 @@ func SetupCommitteeRunners(
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			SignatureVerification: true,
+			CutOffRound:           specqbft.Round(specqbft.CutoffRound),
 		}
 		config.ValueCheckF = valueCheckF
 
@@ -1263,6 +1264,7 @@ func SetupRunners(
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			SignatureVerification: true,
+			CutOffRound:           specqbft.Round(specqbft.CutoffRound),
 		}
 		config.ValueCheckF = valueCheckF
 

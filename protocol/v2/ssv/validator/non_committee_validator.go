@@ -55,6 +55,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		Storage:               opts.Storage.Get(identifier.GetRoleType()),
 		Network:               opts.Network,
 		SignatureVerification: true,
+		CutOffRound:           specqbft.Round(specqbft.CutoffRound),
 	}
 
 	// TODO: does the specific operator matters?

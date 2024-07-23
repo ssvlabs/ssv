@@ -8,8 +8,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
-var CutoffRound = 12 // stop processing attestations after 8*2+120*3 = 6.2 min (~ 1 epoch)
-
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing timeouts")
