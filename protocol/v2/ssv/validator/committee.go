@@ -131,7 +131,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// TODO REMOVE this after https://github.com/ssvlabs/ssv-spec/pull/467 is merged and we are aligned to the spec
 	// 			   and pas validatorShares instead of sharesCopy the runner
 	// -->
-	for _, bd := range duty.BeaconDuties {
+	for _, bd := range duty.ValidatorDuties {
 		share, ok := c.Shares[bd.ValidatorIndex]
 		if !ok {
 			continue

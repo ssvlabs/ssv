@@ -2,7 +2,6 @@ package eventhandler
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
