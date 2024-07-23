@@ -3,7 +3,7 @@ package instance
 import (
 	"testing"
 
-	spec "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"

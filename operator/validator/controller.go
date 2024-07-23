@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	genesisphase0 "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -1352,8 +1352,8 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 	share.Committee = make([]*genesisspectypes.Operator, len(options.SSVShare.Share.Committee))
 	for _, c := range options.SSVShare.Share.Committee {
 		share.Committee = append(share.Committee, &genesisspectypes.Operator{
-			OperatorID: c.Signer,
-			PubKey:     c.SharePubKey,
+			OperatorID:  c.Signer,
+			SharePubKey: c.SharePubKey,
 		})
 	}
 

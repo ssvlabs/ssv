@@ -1,7 +1,7 @@
 package qbft
 
 import (
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -52,8 +52,8 @@ var testingShare = &genesisspectypes.Share{
 	PartialQuorum:   2,
 	Committee: []*genesisspectypes.Operator{
 		{
-			OperatorID: 1,
-			PubKey:     TestingSK.GetPublicKey().Serialize(),
+			OperatorID:  1,
+			SharePubKey: TestingSK.GetPublicKey().Serialize(),
 		},
 	},
 }

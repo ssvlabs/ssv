@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	eth2client "github.com/AKorpusenko/genesis-go-eth2-client"
-	eth2apiv1 "github.com/AKorpusenko/genesis-go-eth2-client/api/v1"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/bellatrix"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	eth2client "github.com/attestantio/go-eth2-client"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 )
 

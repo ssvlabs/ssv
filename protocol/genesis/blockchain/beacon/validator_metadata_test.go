@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	eth2apiv1 "github.com/AKorpusenko/genesis-go-eth2-client/api/v1"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 

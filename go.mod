@@ -3,7 +3,6 @@ module github.com/ssvlabs/ssv
 go 1.20
 
 require (
-	github.com/AKorpusenko/genesis-go-eth2-client v1.0.0
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.21.3
 	github.com/bloxapp/eth2-key-manager v1.4.0
@@ -42,7 +41,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
 	github.com/ssvlabs/ssv-spec v0.3.10-0.20240624121006-7adef2ac3ea6
-	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240716115821-98c37ab8631f
+	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240722085904-cd5475723b20
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1

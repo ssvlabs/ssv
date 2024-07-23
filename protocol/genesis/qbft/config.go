@@ -10,7 +10,7 @@ import (
 
 type signing interface {
 	// GetSigner returns a Signer instance
-	GetSigner() spectypes.SSVSigner
+	GetSigner() spectypes.ShareSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() spectypes.DomainType
 }
@@ -32,7 +32,7 @@ type IConfig interface {
 }
 
 type Config struct {
-	Signer                spectypes.SSVSigner
+	Signer                spectypes.ShareSigner
 	SigningPK             []byte
 	Domain                spectypes.DomainType
 	ValueCheckF           specqbft.ProposedValueCheckF
@@ -44,7 +44,7 @@ type Config struct {
 }
 
 // GetSigner returns a Signer instance
-func (c *Config) GetSigner() spectypes.SSVSigner {
+func (c *Config) GetSigner() spectypes.ShareSigner {
 	return c.Signer
 }
 

@@ -1,8 +1,8 @@
 package ekm
 
 import (
-	genesisphase0 "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"

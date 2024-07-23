@@ -94,24 +94,15 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 	})
 }
 
+// TODO fixme
 func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing messages")
 	}
-	byts, err := msg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode message")
-	}
-
 	msgID := spectypes.MessageID{}
-	copy(msgID[:], msg.Message.Identifier)
+	copy(msgID[:], i.State.ID)
 
-	msgToBroadcast := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   msgID,
-		Data:    byts,
-	}
-	return i.config.GetNetwork().Broadcast(msgToBroadcast)
+	return i.config.GetNetwork().Broadcast(msgID, msg)
 }
 
 func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {

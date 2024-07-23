@@ -1,10 +1,10 @@
 package testing
 
 import (
-	spec2 "github.com/AKorpusenko/genesis-go-eth2-client/spec"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/altair"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/deneb"
-	spec "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	spec2 "github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/altair"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"

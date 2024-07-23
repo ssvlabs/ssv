@@ -38,8 +38,8 @@ func GenerateBLSKeys(oids ...spectypes.OperatorID) (map[spectypes.OperatorID]*bl
 		sk.SetByCSPRNG()
 
 		nodes = append(nodes, &spectypes.Operator{
-			OperatorID: spectypes.OperatorID(i),
-			PubKey:     sk.GetPublicKey().Serialize(),
+			OperatorID:  spectypes.OperatorID(i),
+			SharePubKey: sk.GetPublicKey().Serialize(),
 		})
 		sks[oid] = sk
 	}

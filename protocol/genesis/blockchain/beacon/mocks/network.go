@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	phase0 "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	gomock "github.com/golang/mock/gomock"
