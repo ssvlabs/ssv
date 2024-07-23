@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/hex"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
@@ -28,7 +28,8 @@ func init() {
 	}
 }
 
-func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+func ReconstructSignature(ps *runner.PartialSigContainer, root [32]byte, validatorPubKey []byte,
+	validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
 	signature, err := spectypes.ReconstructSignatures(ps.Signatures[validatorIndex][rootHex(root)])
 	if err != nil {

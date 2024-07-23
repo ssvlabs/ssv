@@ -116,7 +116,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 }
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
-func (b *BaseRunner) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
+func (b *BaseRunner) resolveDuplicateSignature(container *PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
 
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)

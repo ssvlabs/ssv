@@ -15,8 +15,8 @@ import (
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	PreConsensusContainer  *specssv.PartialSigContainer
-	PostConsensusContainer *specssv.PartialSigContainer
+	PreConsensusContainer  *PartialSigContainer
+	PostConsensusContainer *PartialSigContainer
 	RunningInstance        *instance.Instance
 	DecidedValue           []byte //spectypes.Encoder
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
@@ -36,7 +36,7 @@ func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
 	signature, err := types.ReconstructSignature(container, root, validatorPubKey[:], validatorIndex)
 	if err != nil {
@@ -68,8 +68,8 @@ func (pcs *State) Decode(data []byte) error {
 func (pcs *State) MarshalJSON() ([]byte, error) {
 	// Create alias without duty
 	type StateAlias struct {
-		PreConsensusContainer  *specssv.PartialSigContainer
-		PostConsensusContainer *specssv.PartialSigContainer
+		PreConsensusContainer  *PartialSigContainer
+		PostConsensusContainer *PartialSigContainer
 		RunningInstance        *instance.Instance
 		DecidedValue           []byte
 		Finished               bool
@@ -103,8 +103,8 @@ func (pcs *State) UnmarshalJSON(data []byte) error {
 
 	// Create alias without duty
 	type StateAlias struct {
-		PreConsensusContainer  *specssv.PartialSigContainer
-		PostConsensusContainer *specssv.PartialSigContainer
+		PreConsensusContainer  *PartialSigContainer
+		PostConsensusContainer *PartialSigContainer
 		RunningInstance        *instance.Instance
 		DecidedValue           []byte
 		Finished               bool
