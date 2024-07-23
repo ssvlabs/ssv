@@ -419,8 +419,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		}
 	}
 
-	var submissionStart time.Time
-
 	logger = logger.With(durationFields...)
 	// Submit multiple attestations
 	attestations := make([]*phase0.Attestation, 0, len(attestationsToSubmit))
@@ -429,7 +427,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 
 	if len(attestations) > 0 {
-		submissionStart = time.Now()
+		submissionStart := time.Now()
 		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
@@ -451,7 +449,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		syncCommitteeMessages = append(syncCommitteeMessages, syncMsg)
 	}
 	if len(syncCommitteeMessages) > 0 {
-		submissionStart = time.Now()
+		submissionStart := time.Now()
 		if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
 			logger.Error("❌ failed to submit sync committee", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
