@@ -24,7 +24,7 @@ func TestCleanInstances(t *testing.T) {
 
 	generateInstance := func(id genesisspectypes.MessageID, h genesisspecqbft.Height) *genesisqbftstorage.StoredInstance {
 		return &genesisqbftstorage.StoredInstance{
-			State: &types.State{
+			State: &genesisspecqbft.State{
 				ID:                   id[:],
 				Round:                1,
 				Height:               h,
@@ -96,7 +96,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 	identifier := genesisspectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), genesisspectypes.BNRoleAttester)
 
 	instance := &genesisqbftstorage.StoredInstance{
-		State: &types.State{
+		State: &genesisspecqbft.State{
 			Share:                           nil,
 			ID:                              identifier[:],
 			Round:                           1,
@@ -134,7 +134,7 @@ func TestSaveAndFetchState(t *testing.T) {
 	identifier := genesisspectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), genesisspectypes.BNRoleAttester)
 
 	instance := &genesisqbftstorage.StoredInstance{
-		State: &types.State{
+		State: &genesisspecqbft.State{
 			Share:                           nil,
 			ID:                              identifier[:],
 			Round:                           1,

@@ -5,25 +5,23 @@ import (
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/stretchr/testify/require"
 )
 
 var compactTests = []struct {
 	name       string
-	inputState *types.State
+	inputState *genesisspecqbft.State
 	inputMsg   *genesisspecqbft.SignedMessage
-	expected   *types.State // if nil, expected to be equal to input
+	expected   *genesisspecqbft.State // if nil, expected to be equal to input
 }{
 	{
 		name:       "empty",
-		inputState: &types.State{},
+		inputState: &genesisspecqbft.State{},
 		expected:   nil,
 	},
 	{
 		name: "empty but not nil",
-		inputState: &types.State{
+		inputState: &genesisspecqbft.State{
 			Round:                1,
 			ProposeContainer:     &genesisspecqbft.MsgContainer{},
 			PrepareContainer:     &genesisspecqbft.MsgContainer{},
@@ -34,7 +32,7 @@ var compactTests = []struct {
 	},
 	{
 		name: "nothing to compact",
-		inputState: &types.State{
+		inputState: &genesisspecqbft.State{
 			Round:                1,
 			ProposeContainer:     mockContainer(1, 2),
 			PrepareContainer:     mockContainer(1, 2),
@@ -45,7 +43,7 @@ var compactTests = []struct {
 	},
 	{
 		name: "compact non-decided with previous rounds",
-		inputState: &types.State{
+		inputState: &genesisspecqbft.State{
 			Round:                2,
 			LastPreparedRound:    2,
 			ProposeContainer:     mockContainer(1, 2),
@@ -53,7 +51,7 @@ var compactTests = []struct {
 			CommitContainer:      mockContainer(1, 2),
 			RoundChangeContainer: mockContainer(1, 2),
 		},
-		expected: &types.State{
+		expected: &genesisspecqbft.State{
 			Round:                2,
 			LastPreparedRound:    2,
 			ProposeContainer:     mockContainer(2),
@@ -64,7 +62,7 @@ var compactTests = []struct {
 	},
 	{
 		name: "compact non-decided with previous rounds except for prepared",
-		inputState: &types.State{
+		inputState: &genesisspecqbft.State{
 			Round:                2,
 			LastPreparedRound:    1,
 			ProposeContainer:     mockContainer(1, 2),
@@ -72,7 +70,7 @@ var compactTests = []struct {
 			CommitContainer:      mockContainer(1, 2),
 			RoundChangeContainer: mockContainer(1, 2),
 		},
-		expected: &types.State{
+		expected: &genesisspecqbft.State{
 			Round:                2,
 			LastPreparedRound:    1,
 			ProposeContainer:     mockContainer(2),
@@ -83,12 +81,12 @@ var compactTests = []struct {
 	},
 	{
 		name: "compact quorum decided with previous rounds",
-		inputState: &types.State{
+		inputState: &genesisspecqbft.State{
 			Round:             3,
 			LastPreparedRound: 3,
 			Decided:           true,
-			Share: &spectypes.CommitteeMember{
-				Committee: make([]*spectypes.Operator, 4),
+			Share: &genesisspectypes.Share{
+				Committee: make([]*genesisspectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
@@ -98,12 +96,12 @@ var compactTests = []struct {
 		inputMsg: &genesisspecqbft.SignedMessage{
 			Signers: []genesisspectypes.OperatorID{1, 2, 3},
 		},
-		expected: &types.State{
+		expected: &genesisspecqbft.State{
 			Round:             3,
 			LastPreparedRound: 3,
 			Decided:           true,
-			Share: &spectypes.CommitteeMember{
-				Committee: make([]*spectypes.Operator, 4),
+			Share: &genesisspectypes.Share{
+				Committee: make([]*genesisspectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
@@ -113,12 +111,12 @@ var compactTests = []struct {
 	},
 	{
 		name: "compact whole committee decided with previous rounds",
-		inputState: &types.State{
+		inputState: &genesisspecqbft.State{
 			Round:             2,
 			LastPreparedRound: 2,
 			Decided:           true,
-			Share: &spectypes.CommitteeMember{
-				Committee: make([]*spectypes.Operator, 4),
+			Share: &genesisspectypes.Share{
+				Committee: make([]*genesisspectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
@@ -128,12 +126,12 @@ var compactTests = []struct {
 		inputMsg: &genesisspecqbft.SignedMessage{
 			Signers: []genesisspectypes.OperatorID{1, 2, 3, 4},
 		},
-		expected: &types.State{
+		expected: &genesisspecqbft.State{
 			Round:             2,
 			LastPreparedRound: 2,
 			Decided:           true,
-			Share: &spectypes.CommitteeMember{
-				Committee: make([]*spectypes.Operator, 4),
+			Share: &genesisspectypes.Share{
+				Committee: make([]*genesisspectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
@@ -150,7 +148,7 @@ func TestCompact(t *testing.T) {
 			require.NoError(t, err)
 
 			if tt.expected == nil {
-				tt.expected = &types.State{}
+				tt.expected = &genesisspecqbft.State{}
 				require.NoError(t, tt.expected.Decode(inputStateBefore))
 			}
 
