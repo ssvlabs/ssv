@@ -541,7 +541,12 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	if err != nil {
 		return networkconfig.NetworkConfig{}, err
 	}
-	if strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
+
+	// Overwrite DomainType if CustomTypeDomain is set.
+	if cfg.SSVOptions.CustomDomainType != "" {
+		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
+		}
 		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
 			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
@@ -550,8 +555,9 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
 		networkConfig.Domain = spectypes.DomainType(byts)
-		logger.Info("running with custom domain", zap.String("customDomain", cfg.SSVOptions.CustomDomainType))
+		logger.Info("running with custom domain type", fields.Domain(networkConfig.Domain))
 	}
+
 	types.SetDefaultDomain(networkConfig.Domain)
 
 	nodeType := "light"
