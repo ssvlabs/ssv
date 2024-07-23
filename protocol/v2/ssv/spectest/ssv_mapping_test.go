@@ -171,7 +171,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 	case reflect.TypeOf(&partialsigcontainer.PartialSigContainerTest{}).String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &partialsigcontainer.PartialSigContainerTest{}
+		typedTest := partialSigContainerFromMap(t, test.(map[string]interface{}))
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
@@ -210,6 +210,27 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		t.Fatalf("unsupported test type %s [%s]", testType, testName)
 		return nil
 	}
+}
+
+func partialSigContainerFromMap(t *testing.T, m map[string]interface{}) PartialSigContainerTest {
+	signatureMessages := make([]*spectypes.PartialSignatureMessage, 0)
+	for _, msg := range m["SignatureMsgs"].([]interface{}) {
+		byts, _ := json.Marshal(msg)
+		typedMsg := &spectypes.PartialSignatureMessage{}
+		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		signatureMessages = append(signatureMessages, typedMsg)
+	}
+
+	return PartialSigContainerTest{
+		Name:            m["Name"].(string),
+		Quorum:          uint64(m["Quorum"].(float64)),
+		ValidatorPubKey: m["ValidatorPubKey"].([]byte),
+		SignatureMsgs:   signatureMessages,
+		ExpectedError:   m["ExpectedError"].(string),
+		ExpectedResult:  m["ExpectedResult"].([]byte),
+		ExpectedQuorum:  m["ExpectedQuorum"].(bool),
+	}
+
 }
 
 func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *StartNewRunnerDutySpecTest {
