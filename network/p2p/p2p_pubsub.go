@@ -68,17 +68,6 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("operator ID is not ready")
 	}
 
-	// TODO: (genesis) old encoding
-	// encodedMsg, err := commons.EncodeNetworkMsg(msg)
-	// if err != nil {
-	// 	return errors.Wrap(err, "could not decode msg")
-	// }
-	// signature, err := n.operatorSigner.Sign(encodedMsg)
-	// if err != nil {
-	// 	return err
-	// }
-	// encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
-
 	encodedMsg, err := msg.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode signed ssv message: %w", err)

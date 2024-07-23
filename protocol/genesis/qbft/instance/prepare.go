@@ -7,7 +7,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -18,7 +17,7 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbft.SignedMessage, prepareMsgContainer *genesisspecqbft.MsgContainer) error {
-	hasQuorumBefore := HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round))
+	hasQuorumBefore := HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
@@ -37,7 +36,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 		return nil // already moved to commit stage
 	}
 
-	if !HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+	if !HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
 
@@ -72,7 +71,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 
 // getRoundChangeJustification returns the round change justification for the current round.
 // The justification is a quorum of signed prepare messages that agree on state.LastPreparedValue
-func getRoundChangeJustification(state *types.State, config qbft.IConfig, prepareMsgContainer *genesisspecqbft.MsgContainer) ([]*genesisspecqbft.SignedMessage, error) {
+func getRoundChangeJustification(state *genesisspecqbft.State, config qbft.IConfig, prepareMsgContainer *genesisspecqbft.MsgContainer) ([]*genesisspecqbft.SignedMessage, error) {
 	if state.LastPreparedValue == nil {
 		return nil, nil
 	}
@@ -91,13 +90,13 @@ func getRoundChangeJustification(state *types.State, config qbft.IConfig, prepar
 			state.Height,
 			state.LastPreparedRound,
 			r,
-			state.CommitteeMember.Committee,
+			state.Share.Committee,
 		); err == nil {
 			ret = append(ret, msg)
 		}
 	}
 
-	if !HasQuorum(state.CommitteeMember, ret) {
+	if !HasQuorum(state.Share, ret) {
 		return nil, nil
 	}
 
@@ -135,7 +134,7 @@ func validSignedPrepareForHeightRoundAndRoot(
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator) error {
+	operators []*genesisspectypes.Operator) error {
 	if signedPrepare.Message.MsgType != genesisspecqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -179,7 +178,7 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *types.State, config qbft.IConfig, newRound genesisspecqbft.Round, root [32]byte) (*genesisspecqbft.SignedMessage, error) {
+func CreatePrepare(state *genesisspecqbft.State, config qbft.IConfig, newRound genesisspecqbft.Round, root [32]byte) (*genesisspecqbft.SignedMessage, error) {
 	msg := &genesisspecqbft.Message{
 		MsgType:    genesisspecqbft.PrepareMsgType,
 		Height:     state.Height,
@@ -188,7 +187,7 @@ func CreatePrepare(state *types.State, config qbft.IConfig, newRound genesisspec
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.CommitteeMember.SSVOperatorPubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}

@@ -29,7 +29,26 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier genesisspectypes.Me
 		Network:               opts.Network,
 		SignatureVerification: true,
 	}
-	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.FullNode)
+
+	share := &genesisspectypes.Share{}
+
+	share.OperatorID = opts.Operator.OperatorID
+	share.ValidatorPubKey = opts.SSVShare.Share.ValidatorPubKey[:]
+	share.SharePubKey = opts.SSVShare.Share.SharePubKey
+	share.Committee = make([]*genesisspectypes.Operator, len(opts.SSVShare.Share.Committee))
+	for _, c := range opts.SSVShare.Share.Committee {
+		share.Committee = append(share.Committee, &genesisspectypes.Operator{
+			OperatorID: c.Signer,
+			PubKey:     c.SharePubKey,
+		})
+	}
+
+	share.Quorum = opts.Operator.GetQuorum()
+	share.DomainType = genesisspectypes.DomainType(opts.SSVShare.Share.DomainType)
+	share.FeeRecipientAddress = opts.SSVShare.Share.FeeRecipientAddress
+	share.Graffiti = opts.SSVShare.Share.Graffiti
+
+	ctrl := qbftcontroller.NewController(identifier[:], share, config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	ctrl.NewDecidedHandler = opts.NewDecidedHandler
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {

@@ -87,7 +87,7 @@ var compactTests = []struct {
 			Round:             3,
 			LastPreparedRound: 3,
 			Decided:           true,
-			CommitteeMember: &spectypes.CommitteeMember{
+			Share: &spectypes.CommitteeMember{
 				Committee: make([]*spectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
@@ -102,7 +102,7 @@ var compactTests = []struct {
 			Round:             3,
 			LastPreparedRound: 3,
 			Decided:           true,
-			CommitteeMember: &spectypes.CommitteeMember{
+			Share: &spectypes.CommitteeMember{
 				Committee: make([]*spectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(),
@@ -117,7 +117,7 @@ var compactTests = []struct {
 			Round:             2,
 			LastPreparedRound: 2,
 			Decided:           true,
-			CommitteeMember: &spectypes.CommitteeMember{
+			Share: &spectypes.CommitteeMember{
 				Committee: make([]*spectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
@@ -132,7 +132,7 @@ var compactTests = []struct {
 			Round:             2,
 			LastPreparedRound: 2,
 			Decided:           true,
-			CommitteeMember: &spectypes.CommitteeMember{
+			Share: &spectypes.CommitteeMember{
 				Committee: make([]*spectypes.Operator, 4),
 			},
 			ProposeContainer:     mockContainer(),

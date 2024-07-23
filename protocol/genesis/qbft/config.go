@@ -6,7 +6,6 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type signing interface {
@@ -21,7 +20,7 @@ type IConfig interface {
 	// GetValueCheckF returns value check function
 	GetValueCheckF() genesisspecqbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() func(state *types.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
+	GetProposerF() genesisspecqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() genesisspecqbft.Network
 	// GetStorage returns a storage instance
@@ -39,7 +38,7 @@ type Config struct {
 	SigningPK             []byte
 	Domain                genesisspectypes.DomainType
 	ValueCheckF           genesisspecqbft.ProposedValueCheckF
-	ProposerF             func(state *types.State, round genesisspecqbft.Round) genesisspectypes.OperatorID
+	ProposerF             genesisspecqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
 	Network               genesisspecqbft.Network
 	Timer                 roundtimer.Timer
@@ -68,7 +67,7 @@ func (c *Config) GetValueCheckF() genesisspecqbft.ProposedValueCheckF {
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() func(state *types.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+func (c *Config) GetProposerF() genesisspecqbft.ProposerF {
 	return c.ProposerF
 }
 

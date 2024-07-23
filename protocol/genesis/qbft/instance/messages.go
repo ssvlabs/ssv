@@ -2,6 +2,7 @@ package instance
 
 import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -23,7 +24,7 @@ func CheckSignersInCommittee(signedMsg *genesisspecqbft.SignedMessage, committee
 	return true
 }
 
-func HasQuorum(share *spectypes.CommitteeMember, msgs []*genesisspecqbft.SignedMessage) bool {
+func HasQuorum(share *genesisspectypes.Share, msgs []*genesisspecqbft.SignedMessage) bool {
 	uniqueSigners := make(map[spectypes.OperatorID]bool)
 	for _, msg := range msgs {
 		for _, signer := range msg.GetSigners() {
@@ -34,8 +35,8 @@ func HasQuorum(share *spectypes.CommitteeMember, msgs []*genesisspecqbft.SignedM
 }
 
 // HasPartialQuorum returns true if a unique set of signers has partial quorum
-func HasPartialQuorum(share *spectypes.CommitteeMember, msgs []*genesisspecqbft.SignedMessage) bool {
-	uniqueSigners := make(map[spectypes.OperatorID]bool)
+func HasPartialQuorum(share *genesisspectypes.Share, msgs []*genesisspecqbft.SignedMessage) bool {
+	uniqueSigners := make(map[genesisspectypes.OperatorID]bool)
 	for _, msg := range msgs {
 		for _, signer := range msg.GetSigners() {
 			uniqueSigners[signer] = true

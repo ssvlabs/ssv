@@ -1461,14 +1461,32 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		genesisspectypes.BNRoleVoluntaryExit,
 	}
 
+	share := &genesisspectypes.Share{}
+
+	share.OperatorID = options.Operator.OperatorID
+	share.ValidatorPubKey = options.SSVShare.Share.ValidatorPubKey[:]
+	share.SharePubKey = options.SSVShare.Share.SharePubKey
+	share.Committee = make([]*genesisspectypes.Operator, len(options.SSVShare.Share.Committee))
+	for _, c := range options.SSVShare.Share.Committee {
+		share.Committee = append(share.Committee, &genesisspectypes.Operator{
+			OperatorID: c.Signer,
+			PubKey:     c.SharePubKey,
+		})
+	}
+
+	share.Quorum = options.Operator.GetQuorum()
+	share.DomainType = genesisspectypes.DomainType(options.SSVShare.Share.DomainType)
+	share.FeeRecipientAddress = options.SSVShare.Share.FeeRecipientAddress
+	share.Graffiti = options.SSVShare.Share.Graffiti
+
 	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *genesisqbftcontroller.Controller {
 		config := &genesisqbft.Config{
 			Signer:      options.GenesisOptions.Signer,
 			SigningPK:   options.SSVShare.ValidatorPubKey[:],
 			Domain:      genesisssvtypes.GetDefaultDomain(),
 			ValueCheckF: nil, // sets per role type
-			ProposerF: func(state *genesisssvtypes.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
-				leader := genesisssvtypes.RoundRobinProposer(state, round)
+			ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+				leader := genesisspecqbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
@@ -1481,7 +1499,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		config.ValueCheckF = valueCheckF
 
 		identifier := genesisspectypes.NewMsgID(genesisssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
-		qbftCtrl := genesisqbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
+		qbftCtrl := genesisqbftcontroller.NewController(identifier[:], share, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.GenesisOptions.NewDecidedHandler
 		return qbftCtrl
 	}
