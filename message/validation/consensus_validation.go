@@ -330,10 +330,6 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 	return nil
 }
 
-func (mv *messageValidator) maxSlotsInState() phase0.Slot {
-	return phase0.Slot(mv.netCfg.SlotsPerEpoch()) + lateSlotAllowance
-}
-
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {
 	pj, err := message.GetPrepareJustifications()
 	if err != nil {

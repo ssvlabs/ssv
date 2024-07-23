@@ -62,7 +62,7 @@ var baseRunner = func(
 	keySet *spectestingutils.TestKeySet,
 ) runner.Runner {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(role))
+	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
@@ -86,7 +86,7 @@ var baseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())
+	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
@@ -117,7 +117,7 @@ var baseRunner = func(
 			km,
 			opSigner,
 			valCheck,
-		).(runner.Runner)
+		)
 	case spectypes.RoleAggregator:
 		return runner.NewAggregatorRunner(
 			networkconfig.TestNetwork,
@@ -130,7 +130,7 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
-		).(runner.Runner)
+		)
 	case spectypes.RoleProposer:
 		return runner.NewProposerRunner(
 			networkconfig.TestNetwork,
@@ -143,7 +143,7 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
-		).(runner.Runner)
+		)
 	case spectypes.RoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
 			networkconfig.TestNetwork,
@@ -156,7 +156,7 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
-		).(runner.Runner)
+		)
 	case spectypes.RoleValidatorRegistration:
 		return runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
@@ -167,7 +167,7 @@ var baseRunner = func(
 			net,
 			km,
 			opSigner,
-		).(runner.Runner)
+		)
 	case spectypes.RoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
 			networkconfig.TestNetwork,
@@ -177,7 +177,7 @@ var baseRunner = func(
 			net,
 			km,
 			opSigner,
-		).(runner.Runner)
+		)
 	case spectestingutils.UnknownDutyType:
 		ret := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
@@ -190,7 +190,7 @@ var baseRunner = func(
 			valCheck,
 		)
 		ret.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
-		return ret.(runner.Runner)
+		return ret
 	default:
 		panic("unknown role type")
 	}
@@ -318,7 +318,7 @@ var baseRunnerWithShareMap = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySetInstance, identifier.GetRoleType())
+	config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1

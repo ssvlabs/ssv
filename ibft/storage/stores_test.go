@@ -36,9 +36,10 @@ func TestQBFTStores(t *testing.T) {
 
 	id := []byte{1, 2, 3}
 
-	qbftMap.Each(func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
+	err = qbftMap.Each(func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
 		return store.SaveInstance(&qbftstorage.StoredInstance{State: &specqbft.State{Height: 1, ID: id}})
 	})
+	require.NoError(t, err)
 
 	instance, err := qbftMap.Get(convert.RoleCommittee).GetInstance(id, 1)
 	require.NoError(t, err)

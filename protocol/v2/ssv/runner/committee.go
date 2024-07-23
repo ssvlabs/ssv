@@ -38,7 +38,6 @@ type CommitteeRunner struct {
 	beacon         beacon.BeaconNode
 	signer         spectypes.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	domain         spectypes.DomainType
 	valCheck       specqbft.ProposedValueCheckF
 
 	stoppedValidators map[spectypes.ValidatorPK]struct{}

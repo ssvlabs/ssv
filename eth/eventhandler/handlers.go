@@ -278,13 +278,11 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 	var shareSecret *bls.SecretKey
 
-	operators := make([]*spectypes.Operator, 0)
-	committee := make([]*spectypes.CommitteeMember, 0)
 	shareMembers := make([]*spectypes.ShareMember, 0)
 
 	for i := range event.OperatorIds {
 		operatorID := event.OperatorIds[i]
-		od, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
+		_, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not get operator data: %w", err)
 		}
@@ -293,16 +291,6 @@ func (eh *EventHandler) validatorAddedEventToShare(
 				Err: fmt.Errorf("operator data not found: %w", err),
 			}
 		}
-
-		operatorPEM, err := base64.StdEncoding.DecodeString(string(od.PublicKey))
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not decode public key: %w", err)
-		}
-
-		committee = append(committee, &spectypes.CommitteeMember{
-			OperatorID:        operatorID,
-			SSVOperatorPubKey: operatorPEM,
-		})
 
 		shareMembers = append(shareMembers, &spectypes.ShareMember{
 			Signer:      operatorID,
@@ -333,11 +321,6 @@ func (eh *EventHandler) validatorAddedEventToShare(
 				Err: errors.New("share private key does not match public key"),
 			}
 		}
-
-		operators = append(operators, &spectypes.Operator{
-			OperatorID:        operatorID,
-			SSVOperatorPubKey: operatorPEM,
-		})
 	}
 
 	validatorShare.DomainType = eh.networkConfig.DomainType()

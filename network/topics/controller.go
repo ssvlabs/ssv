@@ -125,7 +125,7 @@ func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
 			continue
 		}
 		if err := topic.SetScoreParams(p); err != nil {
-			errs = errs + fmt.Sprintf("could not set score params for topic %s: %w; ", topicName, err)
+			errs = errs + fmt.Sprintf("could not set score params for topic %s: %d; ", topicName, err)
 			continue
 		}
 	}

@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -29,7 +28,6 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
-	started time.Time
 	metrics *metrics
 }
 
@@ -40,7 +38,7 @@ func NewInstance(
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
 ) *Instance {
-	var name = ""
+	var name string
 	if len(identifier) == 56 {
 		name = spectypes.MessageID(identifier).GetRoleType().String()
 	} else {
@@ -64,15 +62,6 @@ func NewInstance(
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(name),
 	}
-}
-
-// TODO remove
-func messageIDFromBytes(mid []byte) spectypes.MessageID {
-	if len(mid) < 56 {
-		return spectypes.MessageID{}
-	}
-
-	return spectypes.MessageID(mid)
 }
 
 func (i *Instance) ForceStop() {

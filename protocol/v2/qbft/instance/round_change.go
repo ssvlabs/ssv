@@ -115,7 +115,9 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	}
 
 	root, err := specqbft.HashDataRoot(instanceStartValue)
-
+	if err != nil {
+		return errors.Wrap(err, "failed to hash instance start value")
+	}
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
 		fields.Round(i.State.Round),
 		fields.Root(root),
