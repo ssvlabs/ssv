@@ -46,7 +46,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *genesisqueue.GenesisS
 				zap.String("msg_type", genesismessage.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		logger.Debug("📬 queue: pushed message", fields.MessageID(spectypes.MessageID(msg.MsgID)), fields.MessageType(spectypes.MsgType(msg.MsgType)))
 	} else {
 		logger.Error("❌ missing queue for role type", fields.GenesisRole(msg.MsgID.GetRoleType()))
 	}
