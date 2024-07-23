@@ -1,10 +1,10 @@
-package genesisrunner
+package runner
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	"github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 )
@@ -46,14 +46,14 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *genesisspectypes.C
 	}
 
 	// validate justification quorum
-	if uint64(len(data.PreConsensusJustifications)) >= b.State.PreConsensusContainer.Quorum {
+	if !b.Share.HasQuorum(len(data.PreConsensusJustifications)) {
 		return errors.New("no quorum")
 	}
 
 	signers := make(map[genesisspectypes.OperatorID]bool)
 	roots := make(map[[32]byte]bool)
 	rootCount := 0
-	partialSigContainer := genesisspecssv.NewPartialSigContainer(b.State.PreConsensusContainer.Quorum)
+	partialSigContainer := ssv.NewPartialSigContainer(b.Share.Quorum)
 	for i, msg := range data.PreConsensusJustifications {
 		if err := msg.Validate(); err != nil {
 			return err
@@ -103,7 +103,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *genesisspectypes.C
 
 	// Verify the reconstructed signature for each root
 	for root := range roots {
-		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share.ValidatorPubKey[:])
+		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share.ValidatorPubKey)
 		if err != nil {
 			return errors.Wrap(err, "wrong pre-consensus partial signature")
 		}
@@ -139,7 +139,7 @@ func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner
 
 	// if no duty is running start one
 	if !b.hasRunningDuty() {
-		b.baseSetupForNewDuty(&cd.Duty, b.State.PreConsensusContainer.Quorum)
+		b.baseSetupForNewDuty(&cd.Duty)
 	}
 
 	// add pre-consensus sigs to state container

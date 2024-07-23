@@ -23,7 +23,7 @@ func (i *Instance) uponRoundChange(
 	roundChangeMsgContainer *genesisspecqbft.MsgContainer,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 ) error {
-	hasQuorumBefore := HasQuorum(i.State.CommitteeMember, roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.
+	hasQuorumBefore := genesisspecqbft.HasQuorum(i.State.Share, roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.
 		Round))
 	// Currently, even if we have a quorum of round change messages, we update the container
 	addedMsg, err := roundChangeMsgContainer.AddFirstMsgForSignerAndRound(signedRoundChange)
@@ -118,7 +118,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound gen
 	return nil
 }
 
-func hasReceivedPartialQuorum(state *types.State, roundChangeMsgContainer *genesisspecqbft.MsgContainer) (bool, []*genesisspecqbft.SignedMessage) {
+func hasReceivedPartialQuorum(state *genesisspecqbft.State, roundChangeMsgContainer *genesisspecqbft.MsgContainer) (bool, []*genesisspecqbft.SignedMessage) {
 	all := roundChangeMsgContainer.AllMessaged()
 
 	rc := make([]*genesisspecqbft.SignedMessage, 0)
@@ -128,7 +128,7 @@ func hasReceivedPartialQuorum(state *types.State, roundChangeMsgContainer *genes
 		}
 	}
 
-	return HasPartialQuorum(state.CommitteeMember, rc), rc
+	return genesisspecqbft.HasPartialQuorum(state.Share, rc), rc
 }
 
 // hasReceivedProposalJustificationForLeadingRound returns
@@ -136,7 +136,7 @@ func hasReceivedPartialQuorum(state *types.State, roundChangeMsgContainer *genes
 // if received round change msgs with prepare justification - returns the highest prepare justification round change msg and value to propose
 // (all the above considering the operator is a leader for the round
 func hasReceivedProposalJustificationForLeadingRound(
-	state *types.State,
+	state *genesisspecqbft.State,
 	config qbft.IConfig,
 	instanceStartValue []byte,
 	signedRoundChange *genesisspecqbft.SignedMessage,
@@ -145,7 +145,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 ) (*genesisspecqbft.SignedMessage, []byte, error) {
 	roundChanges := roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.Round)
 	// optimization, if no round change quorum can return false
-	if !HasQuorum(state.CommitteeMember, roundChanges) {
+	if !genesisspecqbft.HasQuorum(state.Share, roundChanges) {
 		return nil, nil, nil
 	}
 
@@ -181,7 +181,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 
 // isProposalJustificationForLeadingRound - returns nil if we have a quorum of round change msgs and highest justified value for leading round
 func isProposalJustificationForLeadingRound(
-	state *types.State,
+	state *genesisspecqbft.State,
 	config qbft.IConfig,
 	roundChangeMsg *genesisspecqbft.SignedMessage,
 	roundChanges []*genesisspecqbft.SignedMessage,
@@ -201,7 +201,7 @@ func isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if proposer(state, config, roundChangeMsg.Message.Round) != config.GetOperatorID() {
+	if proposer(state, config, roundChangeMsg.Message.Round) != state.Share.OperatorID {
 		return errors.New("not proposer")
 	}
 
@@ -217,7 +217,7 @@ func isProposalJustificationForLeadingRound(
 
 // isReceivedProposalJustification - returns nil if we have a quorum of round change msgs and highest justified value
 func isReceivedProposalJustification(
-	state *types.State,
+	state *genesisspecqbft.State,
 	config qbft.IConfig,
 	roundChanges, prepares []*genesisspecqbft.SignedMessage,
 	newRound genesisspecqbft.Round,
@@ -240,7 +240,7 @@ func isReceivedProposalJustification(
 }
 
 func validRoundChangeForData(
-	state *types.State,
+	state *genesisspecqbft.State,
 	config qbft.IConfig,
 	signedMsg *genesisspecqbft.SignedMessage,
 	height genesisspecqbft.Height,
@@ -261,7 +261,7 @@ func validRoundChangeForData(
 	}
 
 	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.CommitteeMember.Committee); err != nil {
+		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.Share.Committee); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
@@ -287,7 +287,7 @@ func validRoundChangeForData(
 				state.Height,
 				signedMsg.Message.DataRound,
 				signedMsg.Message.Root,
-				state.CommitteeMember.Committee); err != nil {
+				state.Share.Committee); err != nil {
 				return errors.Wrap(err, "round change justification invalid")
 			}
 		}
@@ -296,7 +296,7 @@ func validRoundChangeForData(
 			return errors.New("H(data) != root")
 		}
 
-		if !HasQuorum(state.CommitteeMember, prepareMsgs) {
+		if !genesisspecqbft.HasQuorum(state.Share, prepareMsgs) {
 			return errors.New("no justifications quorum")
 		}
 
@@ -339,7 +339,7 @@ func minRound(roundChangeMsgs []*genesisspecqbft.SignedMessage) genesisspecqbft.
 	return ret
 }
 
-func getRoundChangeData(state *types.State, config qbft.IConfig, instanceStartValue []byte) (genesisspecqbft.Round, [32]byte, []byte, []*genesisspecqbft.SignedMessage, error) {
+func getRoundChangeData(state *genesisspecqbft.State, config qbft.IConfig, instanceStartValue []byte) (genesisspecqbft.Round, [32]byte, []byte, []*genesisspecqbft.SignedMessage, error) {
 	if state.LastPreparedRound != genesisspecqbft.NoRound && state.LastPreparedValue != nil {
 		justifications, err := getRoundChangeJustification(state, config, state.PrepareContainer)
 		if err != nil {
@@ -370,7 +370,7 @@ RoundChange(
            getRoundChangeJustification(current)
        )
 */
-func CreateRoundChange(state *types.State, config qbft.IConfig, newRound genesisspecqbft.Round, instanceStartValue []byte) (*genesisspecqbft.SignedMessage, error) {
+func CreateRoundChange(state *genesisspecqbft.State, config qbft.IConfig, newRound genesisspecqbft.Round, instanceStartValue []byte) (*genesisspecqbft.SignedMessage, error) {
 	round, root, fullData, justifications, err := getRoundChangeData(state, config, instanceStartValue)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")
@@ -390,14 +390,14 @@ func CreateRoundChange(state *types.State, config qbft.IConfig, newRound genesis
 		DataRound:                round,
 		RoundChangeJustification: justificationsData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.CommitteeMember.SSVOperatorPubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing round change msg")
 	}
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
+		Signers:   []genesisspectypes.OperatorID{state.Share.OperatorID},
 		Message:   *msg,
 
 		FullData: fullData,

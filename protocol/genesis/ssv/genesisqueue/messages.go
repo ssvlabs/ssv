@@ -3,13 +3,13 @@ package genesisqueue
 import (
 	"fmt"
 
+	preforkphase0 "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/genesis/message"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
@@ -28,8 +28,8 @@ type GenesisSSVMessage struct {
 
 func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {
-	case *genesisssvtypes.EventMsg: // TODO: do we need slot in events?
-		if m.Type == genesisssvtypes.Timeout {
+	case *ssvtypes.EventMsg: // TODO: do we need slot in events?
+		if m.Type == ssvtypes.Timeout {
 			data, err := m.GetTimeoutData()
 			if err != nil {
 				return 0, ErrUnknownMessageType // TODO alan: other error
@@ -40,7 +40,7 @@ func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 	case *genesisspecqbft.SignedMessage: // TODO: remove post-fork
 		return phase0.Slot(m.Message.Height), nil
 	case *genesisspectypes.SignedPartialSignatureMessage: // TODO: remove post-fork
-		return m.Message.Slot, nil
+		return phase0.Slot(m.Message.Slot), nil
 	default:
 		return 0, ErrUnknownMessageType
 	}
@@ -120,10 +120,10 @@ func compareHeightOrSlot(state *State, m *GenesisSSVMessage) int {
 			return 1
 		}
 	} else if pms, ok := m.Body.(*genesisspectypes.PartialSignatureMessages); ok { // everyone likes pms
-		if pms.Slot == state.Slot {
+		if pms.Slot == preforkphase0.Slot(state.Slot) {
 			return 0
 		}
-		if pms.Slot > state.Slot {
+		if pms.Slot > preforkphase0.Slot(state.Slot) {
 			return 1
 		}
 	}

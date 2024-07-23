@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -235,7 +235,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			if ok {
 				decodedMsg = m
 			} else {
-				m, ok := msg.ValidatorData.(*genesisqueue.GenesisSSVMessage)
+				m, ok := msg.ValidatorData.(*genesisqueue.DecodedSSVMessage)
 				if ok {
 					decodedMsg = m
 				}

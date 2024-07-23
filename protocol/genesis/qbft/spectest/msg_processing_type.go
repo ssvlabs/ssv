@@ -9,15 +9,15 @@ import (
 	"time"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 	"github.com/stretchr/testify/require"
 )
 

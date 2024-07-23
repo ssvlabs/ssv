@@ -10,7 +10,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -28,7 +27,7 @@ type Controller struct {
 	Height     genesisspecqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
-	CommitteeMember   *spectypes.CommitteeMember
+	Share             *genesisspectypes.Share
 	NewDecidedHandler NewDecidedHandler `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
@@ -36,14 +35,14 @@ type Controller struct {
 
 func NewController(
 	identifier []byte,
-	committeeMember *spectypes.CommitteeMember,
+	share *genesisspectypes.Share,
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
 	return &Controller{
 		Identifier:      identifier,
 		Height:          genesisspecqbft.FirstHeight,
-		CommitteeMember: committeeMember,
+		Share:           share,
 		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
 		config:          config,
 		fullNode:        fullNode,
@@ -94,7 +93,7 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *genesisspecqbft.SignedM
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	if IsDecidedMsg(c.CommitteeMember, msg) {
+	if IsDecidedMsg(c.Share, msg) {
 		return c.UponDecided(logger, msg)
 	} else if c.isFutureMessage(msg) {
 		return nil, fmt.Errorf("future msg from height, could not process")
@@ -169,7 +168,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height genesisspecqbf
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier, storedInst.State.Height)
+	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
 	inst.State = storedInst.State
 	return inst
 }
@@ -190,7 +189,7 @@ func (c *Controller) isFutureMessage(msg *genesisspecqbft.SignedMessage) bool {
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height)
+	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
+	"github.com/ssvlabs/ssv/protocol/genesis/message"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
@@ -28,6 +28,7 @@ type queueContainer struct {
 	queueState *genesisqueue.State
 }
 
+
 // HandleMessage handles a genesisspectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
@@ -35,20 +36,20 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *genesisqueue.GenesisS
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
-	logger.Debug("📬 handling SSV message",
-		zap.Uint64("type", uint64(msg.MsgType)),
-		fields.GenesisRole(msg.MsgID.GetRoleType()))
+	// logger.Debug("📬 handling SSV message",
+	// 	zap.Uint64("type", uint64(msg.MsgType)),
+	// 	fields.Role(msg.MsgID.GetRoleType()))
 
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
-				zap.String("msg_type", genesismessage.MsgTypeToString(msg.MsgType)),
+				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.GenesisRole(msg.MsgID.GetRoleType()))
+		logger.Error("❌ missing queue for role type", fields.BeaconRole(spectypes.BeaconRole(msg.MsgID.GetRoleType())))
 	}
 }
 
@@ -107,11 +108,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 		}
 		state.Height = v.GetLastHeight(msgID)
 		state.Round = v.GetLastRound(msgID)
-		state.Quorum = v.Share.Quorum()
+		state.Quorum = v.Share.Quorum
 
 		filter := genesisqueue.FilterAny
 		if !runner.HasRunningDuty() {
-			logger.Debug("📬 no duty is running")
 			// If no duty is running, pop only ExecuteDuty messages.
 			filter = func(m *genesisqueue.GenesisSSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
@@ -121,7 +121,6 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 				return e.Type == types.ExecuteDuty
 			}
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
-			logger.Debug("📬 no proposal was accepted for the current round")
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *genesisqueue.GenesisSSVMessage) bool {
@@ -137,14 +136,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 		}
 
 		// Pop the highest priority message for the current state.
-		logger.Debug("📬 popping message from queue", fields.Height(specqbft.Height(state.Height)), fields.Round(specqbft.Round(state.Round)))
-		filter = genesisqueue.FilterAny
 		msg := q.Q.Pop(ctx, genesisqueue.NewMessagePrioritizer(&state), filter)
-		logger.Debug("📬 popped message from queue", fields.MessageID(spectypes.MessageID(msg.MsgID)), fields.MessageType(spectypes.MsgType(msg.MsgType)))
 		if ctx.Err() != nil {
 			break
 		}
-
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
@@ -184,7 +179,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessa
 		psm := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		baseFields = []zap.Field{
 			zap.Int64("signer", int64(psm.Signer)),
-			fields.Slot(psm.Message.Slot),
+			fields.Slot(phase0.Slot(psm.Message.Slot)),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)

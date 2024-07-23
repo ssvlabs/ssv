@@ -1,10 +1,10 @@
 package qbft
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
@@ -20,22 +20,22 @@ var TestingSignedMsg = func() *genesisspecqbft.SignedMessage {
 	return SignMsg(TestingSK, 1, TestingMessage)
 }()
 
-var SignMsg = func(sk *bls.SecretKey, id genesisspectypes.OperatorID, msg *genesisspecqbft.Message) *genesisspecqbft.SignedMessage {
+var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *genesisspecqbft.Message) *genesisspecqbft.SignedMessage {
 	domain := testingutils.TestingSSVDomainType
-	sigType := genesisspectypes.QBFTSignatureType
+	sigType := types.QBFTSignatureType
 
-	r, _ := genesisspectypes.ComputeSigningRoot(msg, genesisspectypes.ComputeSignatureDomain(domain, sigType))
+	r, _ := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
 	sig := sk.SignByte(r[:])
 
 	return &genesisspecqbft.SignedMessage{
 		Message:   *msg,
-		Signers:   []genesisspectypes.OperatorID{id},
+		Signers:   []types.OperatorID{id},
 		Signature: sig.Serialize(),
 	}
 }
 
 var TestingSK = func() *bls.SecretKey {
-	genesisspectypes.InitBLS()
+	types.InitBLS()
 	ret := &bls.SecretKey{}
 	ret.SetByCSPRNG()
 	return ret
@@ -43,14 +43,14 @@ var TestingSK = func() *bls.SecretKey {
 
 var testingValidatorPK = phase0.BLSPubKey{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4}
 
-var testingShare = &genesisspectypes.Share{
+var testingShare = &types.Share{
 	OperatorID:      1,
 	ValidatorPubKey: testingValidatorPK[:],
 	SharePubKey:     TestingSK.GetPublicKey().Serialize(),
 	DomainType:      testingutils.TestingSSVDomainType,
 	Quorum:          3,
 	PartialQuorum:   2,
-	Committee: []*genesisspectypes.Operator{
+	Committee: []*types.Operator{
 		{
 			OperatorID: 1,
 			PubKey:     TestingSK.GetPublicKey().Serialize(),

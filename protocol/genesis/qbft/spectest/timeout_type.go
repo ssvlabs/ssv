@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"

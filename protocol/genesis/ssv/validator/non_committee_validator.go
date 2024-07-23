@@ -4,32 +4,32 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ibft/genesisstorage"
+	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
-	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 type NonCommitteeValidator struct {
 	Share          *types.SSVShare
-	Storage        *genesisstorage.QBFTStores
+	Storage        *genesisibftstorage.QBFTStores
 	qbftController *qbftcontroller.Controller
 }
 
 func NewNonCommitteeValidator(logger *zap.Logger, identifier genesisspectypes.MessageID, opts Options) *NonCommitteeValidator {
-	// currently, only need domain & genesisstorage
+	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:                genesistypes.GetDefaultDomain(),
+		Domain:                types.GetDefaultDomain(),
 		Storage:               opts.Storage.Get(identifier.GetRoleType()),
 		Network:               opts.Network,
 		SignatureVerification: true,
 	}
-	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.FullNode)
+	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	ctrl.NewDecidedHandler = opts.NewDecidedHandler
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
@@ -44,7 +44,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier genesisspectypes.Me
 }
 
 func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessage) {
-	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.GenesisRole(msg.MsgID.GetRoleType()))
+	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.BeaconRole(spectypes.BeaconRole(msg.MsgID.GetRoleType())))
 
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Debug("❌ got invalid message", zap.Error(err))

@@ -5,9 +5,7 @@ import (
 	"testing"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -40,12 +38,12 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	testConfig := &qbft.Config{
-		Signer:  genesisspectestingutils.NewTestingKeyManager(),
-		Network: genesisspectestingutils.NewTestingNetwork(),
+		Signer:  spectestingutils.NewTestingKeyManager(),
+		Network: spectestingutils.NewTestingNetwork(),
 		Timer:   roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet())
+	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())
 	inst := instance.NewInstance(
 		testConfig,
 		share,

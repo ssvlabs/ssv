@@ -10,17 +10,16 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
-	State  *types.State
+	State  *genesisspecqbft.State
 	config qbft.IConfig
 
 	processMsgF *genesisspectypes.ThreadSafeF
@@ -34,14 +33,14 @@ type Instance struct {
 
 func NewInstance(
 	config qbft.IConfig,
-	committeeMember *spectypes.CommitteeMember,
+	share *genesisspectypes.Share,
 	identifier []byte,
 	height genesisspecqbft.Height,
 ) *Instance {
 	msgId := genesisspectypes.MessageIDFromBytes(identifier)
 	return &Instance{
-		State: &types.State{
-			CommitteeMember:      committeeMember,
+		State: &genesisspecqbft.State{
+			Share:                share,
 			ID:                   identifier,
 			Round:                genesisspecqbft.FirstRound,
 			Height:               height,
@@ -79,7 +78,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height genesisspecqbf
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
-		if proposerID == i.config.GetOperatorID() {
+		if proposerID == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -176,7 +175,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			i.config,
 			msg,
 			i.config.GetValueCheckF(),
-			i.State.CommitteeMember.Committee,
+			i.State.Share.Committee,
 		)
 	case genesisspecqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
@@ -189,7 +188,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			i.State.Height,
 			i.State.Round,
 			proposedMsg.Message.Root,
-			i.State.CommitteeMember.Committee,
+			i.State.Share.Committee,
 		)
 	case genesisspecqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
@@ -202,7 +201,7 @@ func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 			i.State.Height,
 			i.State.Round,
 			i.State.ProposalAcceptedForCurrentRound,
-			i.State.CommitteeMember.Committee,
+			i.State.Share.Committee,
 		)
 	case genesisspecqbft.RoundChangeMsgType:
 		return validRoundChangeForData(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)

@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import (
 	"crypto/sha256"
@@ -6,7 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
@@ -14,23 +15,20 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type AttesterRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon     beacon.BeaconNode
-	network    genesisspecssv.Network
-	signer     genesisspectypes.KeyManager
-	valCheck   genesisspecqbft.ProposedValueCheckF
-	operatorId genesisspectypes.OperatorID
+	beacon   genesisspecssv.BeaconNode
+	network  genesisspecssv.Network
+	signer   genesisspectypes.KeyManager
+	valCheck genesisspecqbft.ProposedValueCheckF
 
 	started time.Time
 	metrics metrics.ConsensusMetrics
@@ -38,14 +36,13 @@ type AttesterRunner struct {
 
 func NewAttesterRunnner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
+	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
@@ -56,18 +53,17 @@ func NewAttesterRunnner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		valCheck:   valCheck,
-		operatorId: operatorId,
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
 
 		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleAttester),
 	}
 }
 
-func (r *AttesterRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty, quorum)
+func (r *AttesterRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -80,7 +76,6 @@ func (r *AttesterRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *gene
 }
 
 func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesisspecqbft.SignedMessage) error {
-	logger.Debug("🧩 processing consensus message")
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -122,7 +117,7 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesis
 
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:][:], r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -139,7 +134,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 	}
 
 	duty := r.GetState().DecidedValue.Duty
-	logger = logger.With(fields.Slot(duty.Slot))
+	logger = logger.With(fields.Slot(postforkphase0.Slot(duty.Slot)))
 	logger.Debug("🧩 got partial signatures",
 		zap.Uint64("signer", signedMsg.Signer))
 
@@ -155,7 +150,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 	}
 
 	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:][:])
+		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
@@ -182,7 +177,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 
 		// Submit it to the BN.
 		start := time.Now()
-		if err := r.beacon.SubmitAttestations([]*phase0.Attestation{signedAtt}); err != nil {
+		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
@@ -261,11 +256,11 @@ func (r *AttesterRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *AttesterRunner) GetBeaconNode() beacon.BeaconNode {
+func (r *AttesterRunner) GetBeaconNode() genesisspecssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *AttesterRunner) GetShare() *spectypes.Share {
+func (r *AttesterRunner) GetShare() *genesisspectypes.Share {
 	return r.BaseRunner.Share
 }
 
@@ -299,8 +294,4 @@ func (r *AttesterRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
-}
-
-func (r *AttesterRunner) GetOperatorID() genesisspectypes.OperatorID {
-	return r.operatorId
 }

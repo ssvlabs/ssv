@@ -1,7 +1,7 @@
-package genesisrunner
+package runner
 
 import (
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spec "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -30,7 +30,7 @@ func (b *BaseRunner) signBeaconObject(
 	return &genesisspectypes.PartialSignatureMessage{
 		PartialSignature: sig,
 		SigningRoot:      r,
-		Signer:           runner.GetOperatorID(),
+		Signer:           runner.GetBaseRunner().Share.OperatorID,
 	}, nil
 }
 
@@ -43,7 +43,7 @@ func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *genesisspectypes.P
 	return &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   *msg,
 		Signature: signature,
-		Signer:    runner.GetOperatorID(),
+		Signer:    b.Share.OperatorID,
 	}, nil
 }
 
@@ -63,7 +63,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	// Check if signer is in committee
 	signerInCommittee := false
 	for _, operator := range b.Share.Committee {
-		if operator.Signer == signedMsg.Signer {
+		if operator.OperatorID == signedMsg.Signer {
 			signerInCommittee = true
 			break
 		}
@@ -76,11 +76,11 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 }
 
 func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature genesisspectypes.Signature, root [32]byte) error {
-	types.MetricsSignaturesVerificationsGenesis.WithLabelValues().Inc()
+	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	for _, n := range b.Share.Committee {
-		if n.Signer == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey[:])
+		if n.GetID() == signer {
+			pk, err := types.DeserializeBLSPublicKey(n.GetPublicKey())
 			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}

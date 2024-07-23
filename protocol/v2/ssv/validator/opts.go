@@ -11,6 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
+	genesisbeacon "github.com/ssvlabs/ssv/protocol/genesis/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -26,6 +27,7 @@ type Options struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	Network           specqbft.Network
 	Beacon            beacon.BeaconNode
+	GenesisBeacon     genesisbeacon.BeaconNode
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
 	Operator          *spectypes.CommitteeMember

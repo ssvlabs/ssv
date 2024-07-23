@@ -1,28 +1,25 @@
-package genesisrunner
+package runner
 
 import (
 	"sync"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spec "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
-	GetBeaconNode() beacon.BeaconNode
+	GetBeaconNode() genesisspecssv.BeaconNode
 	GetValCheckF() genesisspecqbft.ProposedValueCheckF
 	GetSigner() genesisspectypes.KeyManager
 	GetNetwork() genesisspecssv.Network
-	GetOperatorID() genesisspectypes.OperatorID
 }
 
 type Runner interface {
@@ -31,7 +28,7 @@ type Runner interface {
 	Getters
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
-	StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error
+	StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error
 	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
@@ -51,7 +48,7 @@ type Runner interface {
 type BaseRunner struct {
 	mtx            sync.RWMutex
 	State          *State
-	Share          *spectypes.Share
+	Share          *genesisspectypes.Share
 	QBFTController *controller.Controller
 	BeaconNetwork  genesisspectypes.BeaconNetwork
 	BeaconRoleType genesisspectypes.BeaconRole
@@ -69,9 +66,9 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
 }
 
 // setupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty *genesisspectypes.Duty, quorum uint64) {
+func (b *BaseRunner) baseSetupForNewDuty(duty *genesisspectypes.Duty) {
 	// start new state
-	state := NewRunnerState(quorum, duty)
+	state := NewRunnerState(b.Share.Quorum, duty)
 
 	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
 	// b.State but currently does not write to it
@@ -82,7 +79,7 @@ func (b *BaseRunner) baseSetupForNewDuty(duty *genesisspectypes.Duty, quorum uin
 
 func NewBaseRunner(
 	state *State,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	controller *controller.Controller,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	beaconRoleType genesisspectypes.BeaconRole,
@@ -99,22 +96,22 @@ func NewBaseRunner(
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
-func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *genesisspectypes.Duty, quorum uint64) error {
+func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *genesisspectypes.Duty) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start duty")
 	}
 
-	b.baseSetupForNewDuty(duty, quorum)
+	b.baseSetupForNewDuty(duty)
 
 	return runner.executeDuty(logger, duty)
 }
 
 // baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
-func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty *genesisspectypes.Duty, quorum uint64) error {
+func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty *genesisspectypes.Duty) error {
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start non-beacon duty")
 	}
-	b.baseSetupForNewDuty(duty, quorum)
+	b.baseSetupForNewDuty(duty)
 	return runner.executeDuty(logger, duty)
 }
 

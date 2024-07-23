@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import (
 	"crypto/sha256"

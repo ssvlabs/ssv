@@ -4,15 +4,16 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/genesis/message"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 func (v *Validator) onTimeout(logger *zap.Logger, identifier genesisspectypes.MessageID, height genesisspecqbft.Height) roundtimer.OnRoundTimeoutF {
@@ -44,7 +45,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier genesisspectypes.Me
 
 		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.GenesisRole(identifier.GetRoleType()))
+				fields.BeaconRole(spectypes.BeaconRole(identifier.GetRoleType())))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}
@@ -69,7 +70,7 @@ func (v *Validator) createTimerMessage(identifier genesisspectypes.MessageID, he
 		return nil, errors.Wrap(err, "failed to encode timeout signed msg")
 	}
 	return &genesisspectypes.SSVMessage{
-		MsgType: genesisspectypes.MsgType(message.SSVEventMsgType),
+		MsgType: message.SSVEventMsgType,
 		MsgID:   identifier,
 		Data:    eventMsgData,
 	}, nil

@@ -239,10 +239,6 @@ func ExporterRole(val convert.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 
-func GenesisRole(val genesisspectypes.BeaconRole) zap.Field {
-	return zap.Stringer(FieldRole, val)
-}
-
 func MessageID(val spectypes.MessageID) zap.Field {
 	return zap.Stringer(FieldMessageID, val)
 }
@@ -372,6 +368,9 @@ func FeeRecipient(pubKey []byte) zap.Field {
 }
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+func GenesisFormatDutyID(epoch phase0.Epoch, duty *genesisspectypes.Duty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 

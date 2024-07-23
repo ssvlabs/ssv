@@ -3,25 +3,25 @@ package message
 import (
 	"fmt"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 const (
 	// SSVSyncMsgType extends spec msg type
-	SSVSyncMsgType spectypes.MsgType = 100
+	SSVSyncMsgType genesisspectypes.MsgType = 100
 	// SSVEventMsgType extends spec msg type
-	SSVEventMsgType spectypes.MsgType = 200
+	SSVEventMsgType genesisspectypes.MsgType = 200
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
-func MsgTypeToString(mt spectypes.MsgType) string {
+func MsgTypeToString(mt genesisspectypes.MsgType) string {
 	switch mt {
-	case spectypes.SSVConsensusMsgType:
+	case genesisspectypes.SSVConsensusMsgType:
 		return "consensus"
-	case spectypes.SSVPartialSignatureMsgType:
+	case genesisspectypes.SSVPartialSignatureMsgType:
 		return "partial_signature"
-	case spectypes.DKGMsgType:
+	case genesisspectypes.DKGMsgType:
 		return "dkg"
 	case SSVSyncMsgType:
 		return "sync"
@@ -32,15 +32,15 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 	}
 }
 
-func QBFTMsgTypeToString(mt specqbft.MessageType) string {
+func QBFTMsgTypeToString(mt genesisspecqbft.MessageType) string {
 	switch mt {
-	case specqbft.ProposalMsgType:
+	case genesisspecqbft.ProposalMsgType:
 		return "proposal"
-	case specqbft.PrepareMsgType:
+	case genesisspecqbft.PrepareMsgType:
 		return "prepare"
-	case specqbft.CommitMsgType:
+	case genesisspecqbft.CommitMsgType:
 		return "commit"
-	case specqbft.RoundChangeMsgType:
+	case genesisspecqbft.RoundChangeMsgType:
 		return "round_change"
 	default:
 		return fmt.Sprintf("unknown(%d)", mt)
@@ -48,22 +48,22 @@ func QBFTMsgTypeToString(mt specqbft.MessageType) string {
 }
 
 // BeaconRoleFromString returns BeaconRole from string
-func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
+func BeaconRoleFromString(s string) (genesisspectypes.BeaconRole, error) {
 	switch s {
 	case "ATTESTER":
-		return spectypes.BNRoleAttester, nil
+		return genesisspectypes.BNRoleAttester, nil
 	case "AGGREGATOR":
-		return spectypes.BNRoleAggregator, nil
+		return genesisspectypes.BNRoleAggregator, nil
 	case "PROPOSER":
-		return spectypes.BNRoleProposer, nil
+		return genesisspectypes.BNRoleProposer, nil
 	case "SYNC_COMMITTEE":
-		return spectypes.BNRoleSyncCommittee, nil
+		return genesisspectypes.BNRoleSyncCommittee, nil
 	case "SYNC_COMMITTEE_CONTRIBUTION":
-		return spectypes.BNRoleSyncCommitteeContribution, nil
+		return genesisspectypes.BNRoleSyncCommitteeContribution, nil
 	case "VALIDATOR_REGISTRATION":
-		return spectypes.BNRoleValidatorRegistration, nil
+		return genesisspectypes.BNRoleValidatorRegistration, nil
 	case "VOLUNTARY_EXIT":
-		return spectypes.BNRoleVoluntaryExit, nil
+		return genesisspectypes.BNRoleVoluntaryExit, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}

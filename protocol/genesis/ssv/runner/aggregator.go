@@ -1,48 +1,44 @@
-package genesisrunner
+package runner
 
 import (
 	"crypto/sha256"
 	"encoding/json"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type AggregatorRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon     beacon.BeaconNode
-	network    genesisspecssv.Network
-	signer     genesisspectypes.KeyManager
-	valCheck   genesisspecqbft.ProposedValueCheckF
-	operatorId genesisspectypes.OperatorID
-	metrics    metrics.ConsensusMetrics
+	beacon   genesisspecssv.BeaconNode
+	network  genesisspecssv.Network
+	signer   genesisspectypes.KeyManager
+	valCheck genesisspecqbft.ProposedValueCheckF
+	metrics  metrics.ConsensusMetrics
 }
 
 var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
+	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
@@ -52,18 +48,16 @@ func NewAggregatorRunner(
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		valCheck:   valCheck,
-		operatorId: operatorId,
-
-		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleAggregator),
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
+		metrics:  metrics.NewConsensusMetrics(genesisspectypes.BNRoleAggregator),
 	}
 }
 
-func (r *AggregatorRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty, quorum)
+func (r *AggregatorRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -86,7 +80,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *ge
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
 	// reconstruct selection proof sig
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
@@ -97,7 +91,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *ge
 
 	logger.Debug("🧩 got partial signature quorum",
 		zap.Any("signer", signedMsg.Signer),
-		fields.Slot(duty.Slot),
+		fields.Slot(postforkphase0.Slot(duty.Slot)),
 	)
 
 	r.metrics.PauseDutyFullFlow()
@@ -170,7 +164,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genes
 
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:][:], r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -193,7 +187,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *g
 	r.metrics.EndPostConsensus()
 
 	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
+		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
@@ -275,7 +269,7 @@ func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty *genesisspectype
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.operatorId,
+		Signer:    r.GetShare().OperatorID,
 	}
 
 	// broadcast
@@ -285,7 +279,7 @@ func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty *genesisspectype
 	}
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:][:], r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -302,11 +296,11 @@ func (r *AggregatorRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
+func (r *AggregatorRunner) GetBeaconNode() genesisspecssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *AggregatorRunner) GetShare() *spectypes.Share {
+func (r *AggregatorRunner) GetShare() *genesisspectypes.Share {
 	return r.BaseRunner.Share
 }
 
@@ -341,8 +335,4 @@ func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
-}
-
-func (r *AggregatorRunner) GetOperatorID() genesisspectypes.OperatorID {
-	return r.operatorId
 }
