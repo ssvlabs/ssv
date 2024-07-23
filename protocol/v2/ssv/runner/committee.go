@@ -39,7 +39,6 @@ type CommitteeRunner struct {
 	beacon         beacon.BeaconNode
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
-	domain         spectypes.DomainType
 	valCheck       specqbft.ProposedValueCheckF
 
 	stoppedValidators map[spectypes.ValidatorPK]struct{}
@@ -419,44 +418,50 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			}
 		}
 	}
+
 	logger = logger.With(durationFields...)
 	// Submit multiple attestations
-	attestations := make([]*phase0.Attestation, 0)
+	attestations := make([]*phase0.Attestation, 0, len(attestationsToSubmit))
 	for _, att := range attestationsToSubmit {
 		attestations = append(attestations, att)
 	}
-	submmitionStart := time.Now()
-	if err := cr.beacon.SubmitAttestations(attestations); err != nil {
-		logger.Error("❌ failed to submit attestation", zap.Error(err))
-		return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
-	}
 
-	logger.Info("✅ successfully submitted attestations",
-		fields.SubmissionTime(time.Since(submmitionStart)),
-		fields.Height(cr.BaseRunner.QBFTController.Height),
-		fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
-	// Record successful submissions
-	for validator := range attestationsToSubmit {
-		cr.RecordSubmission(types.BNRoleAttester, validator)
+	if len(attestations) > 0 {
+		submissionStart := time.Now()
+		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
+			logger.Error("❌ failed to submit attestation", zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+		}
+
+		logger.Info("✅ successfully submitted attestations",
+			fields.SubmissionTime(time.Since(submissionStart)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+		// Record successful submissions
+		for validator := range attestationsToSubmit {
+			cr.RecordSubmission(types.BNRoleAttester, validator)
+		}
 	}
 
 	// Submit multiple sync committee
-	syncCommitteeMessages := make([]*altair.SyncCommitteeMessage, 0)
+	syncCommitteeMessages := make([]*altair.SyncCommitteeMessage, 0, len(syncCommitteeMessagesToSubmit))
 	for _, syncMsg := range syncCommitteeMessagesToSubmit {
 		syncCommitteeMessages = append(syncCommitteeMessages, syncMsg)
 	}
-	submmitionStart = time.Now()
-	if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
-		logger.Error("❌ failed to submit sync committee", zap.Error(err))
-		return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
-	}
-	logger.Info("✅ successfully submitted sync committee",
-		fields.SubmissionTime(time.Since(submmitionStart)),
-		fields.Height(cr.BaseRunner.QBFTController.Height),
-		fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
-	// Record successful submissions
-	for validator := range syncCommitteeMessagesToSubmit {
-		cr.RecordSubmission(types.BNRoleSyncCommittee, validator)
+	if len(syncCommitteeMessages) > 0 {
+		submissionStart := time.Now()
+		if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
+			logger.Error("❌ failed to submit sync committee", zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+		}
+		logger.Info("✅ successfully submitted sync committee",
+			fields.SubmissionTime(time.Since(submissionStart)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+		// Record successful submissions
+		for validator := range syncCommitteeMessagesToSubmit {
+			cr.RecordSubmission(types.BNRoleSyncCommittee, validator)
+		}
 	}
 
 	if anyErr != nil {
@@ -567,8 +572,11 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
 	for _, beaconDuty := range duty.(*types.CommitteeDuty).BeaconDuties {
+		if beaconDuty == nil {
+			continue
+		}
 		_, stopped := cr.stoppedValidators[spectypes.ValidatorPK(beaconDuty.PubKey)]
-		if beaconDuty == nil || stopped {
+		if stopped {
 			continue
 		}
 		slot := beaconDuty.DutySlot()

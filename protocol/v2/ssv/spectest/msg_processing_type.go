@@ -134,7 +134,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	}
 
 	network := &spectestingutils.TestingNetwork{}
-	beaconNetwork := tests.NewTestingBeaconNodeWrapped()
+	var beaconNetwork *tests.TestingBeaconNodeWrapped
 	var committee []*spectypes.Operator
 
 	switch test.Runner.(type) {
@@ -150,14 +150,14 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	default:
 		network = v.Network.(*spectestingutils.TestingNetwork)
 		committee = v.Operator.Committee
-		beaconNetwork = test.Runner.GetBeaconNode()
+		beaconNetwork = test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
 	}
 
 	// test output message
 	spectestingutils.ComparePartialSignatureOutputMessages(t, test.OutputMessages, network.BroadcastedMsgs, committee)
 
 	// test beacon broadcasted msgs
-	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, beaconNetwork.(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots())
+	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, beaconNetwork.GetBroadcastedRoots())
 
 	// post root
 	postRoot, err := test.Runner.GetRoot()
@@ -169,20 +169,20 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	}
 }
 
-func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
-	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
-	for _, r1 := range test.BeaconBroadcastedRoots {
-		found := false
-		for _, r2 := range broadcastedRoots {
-			if r1 == hex.EncodeToString(r2[:]) {
-				found = true
-				break
-			}
-		}
-		require.Truef(t, found, "broadcasted beacon root not found")
-	}
-}
+//func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
+//	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
+//	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
+//	for _, r1 := range test.BeaconBroadcastedRoots {
+//		found := false
+//		for _, r2 := range broadcastedRoots {
+//			if r1 == hex.EncodeToString(r2[:]) {
+//				found = true
+//				break
+//			}
+//		}
+//		require.Truef(t, found, "broadcasted beacon root not found")
+//	}
+//}
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testType := reflect.TypeOf(test).String()
@@ -240,7 +240,7 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 		return runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,

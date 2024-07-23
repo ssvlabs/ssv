@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"net"
 	"os"
 	"testing"
@@ -116,7 +117,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx:        ctx,
 		conns:      &mock.MockConnectionIndex{LimitValue: true},
 		subnetsIdx: subnetIndex,
-		domainType: &TestDomainType{myDomainType},
+		domainType: networkconfig.TestNetwork,
 		subnets:    mySubnets,
 	}
 

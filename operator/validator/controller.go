@@ -188,7 +188,6 @@ type controller struct {
 	committeesObserversMutex sync.Mutex
 
 	recentlyStartedValidators uint64
-	recentlyStartedCommittees uint64
 	metadataLastUpdated       map[spectypes.ValidatorPK]time.Time
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
@@ -887,11 +886,6 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	}
 }
 
-// todo wrapper to start both validator and committee
-type starter interface {
-	Start() error
-}
-
 func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator, *validator.Committee, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey[:]))
@@ -931,7 +925,8 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	if !found {
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
-		ctx, _ := context.WithCancel(c.context)
+		ctx, cancel := context.WithCancel(c.context)
+		_ = cancel
 
 		opts := c.validatorOptions
 		opts.SSVShare = share
