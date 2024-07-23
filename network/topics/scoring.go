@@ -1,7 +1,6 @@
 package topics
 
 import (
-	"math"
 	"time"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -26,7 +25,8 @@ func DefaultScoringConfig() *ScoringConfig {
 
 // scoreInspector inspects scores and updates the score index accordingly
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency int, metrics Metrics, peerConnected func(pid peer.ID) bool) pubsub.ExtendedPeerScoreInspectFn {
+// TODO: remove the peerScoreParams and topicScoreParamsFactory arguments
+func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency int, metrics Metrics, peerConnected func(pid peer.ID) bool, peerScoreParams *pubsub.PeerScoreParams, topicScoreParamsFactory func(string) *pubsub.TopicScoreParams) pubsub.ExtendedPeerScoreInspectFn {
 	inspections := 0
 
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
@@ -36,26 +36,76 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 		for pid, peerScores := range scores {
 			// Compute score-related stats for this peer.
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
-			var totalInvalidMessages float64
-			var totalLowMeshDeliveries int
-			var p4ScoreSquaresSum float64
-			for topic, snapshot := range peerScores.Topics {
-				p4ScoreSquaresSum += snapshot.InvalidMessageDeliveries * snapshot.InvalidMessageDeliveries
 
+			var totalLowMeshDeliveries int
+			for topic, snapshot := range peerScores.Topics {
+				// Topics stats with invalid messages
 				if snapshot.InvalidMessageDeliveries != 0 {
 					filtered[topic] = snapshot
 				}
-				if snapshot.InvalidMessageDeliveries > 0 {
-					totalInvalidMessages += math.Sqrt(snapshot.InvalidMessageDeliveries)
-				}
+				// Total topics with low mesh delivery
 				if snapshot.MeshMessageDeliveries < 107 {
 					totalLowMeshDeliveries++
 				}
 			}
 
+			// Compute p1, p2, p4, p6 and p7. The subscores p3 and p5 are unused.
+
+			// Parameters to compute the p1 counter
+			p1 := float64(0)
+
+			// The weight for the p2 score (w2) may be different through topics
+			// So we store a list of counters P2c and the associated weight W2
+			type P2Score struct {
+				P2Counter float64
+				W2        float64
+			}
+			p2 := make([]*P2Score, 0)
+			p2Total := float64(0)
+
+			// P4. The weight should be equal for all topics. So we can just sum up the counters squared.
+			p4 := float64(0)
+
+			for topic, snapshot := range peerScores.Topics {
+
+				topicScoreParams := topicScoreParamsFactory(topic)
+
+				// The weight should be equal for all topics. So we can just compute the counter and sum it
+				p1Counter := float64(snapshot.TimeInMesh / topicScoreParams.TimeInMeshQuantum)
+				if p1Counter > topicScoreParams.TimeInMeshCap {
+					p1Counter = topicScoreParams.TimeInMeshCap
+				}
+				p1 += p1Counter
+
+				p4 += snapshot.InvalidMessageDeliveries * snapshot.InvalidMessageDeliveries
+
+				w2 := topicScoreParams.FirstMessageDeliveriesWeight
+				p2 = append(p2, &P2Score{
+					P2Counter: snapshot.FirstMessageDeliveries,
+					W2:        w2,
+				})
+				p2Total += snapshot.FirstMessageDeliveries * w2
+			}
+
+			p6 := peerScores.IPColocationFactor
+			w6 := peerScoreParams.IPColocationFactorWeight
+
+			p7 := peerScores.BehaviourPenalty
+			w7 := peerScoreParams.BehaviourPenaltyWeight
+
+			// Take w1 and w4 (which should be the same for all topics)
+			w1 := float64(0)
+			w4 := float64(0)
+			for topic := range peerScores.Topics {
+				topicScoreParams := topicScoreParamsFactory(topic)
+				w1 = topicScoreParams.TimeInMeshWeight
+				w4 = topicScoreParams.InvalidMessageDeliveriesWeight
+				break
+			}
+
 			// Update metrics.
 			metrics.PeerScore(pid, peerScores.Score)
-			metrics.PeerP4Score(pid, p4ScoreSquaresSum)
+			metrics.PeerP4Score(pid, p4)
 
 			if inspections%logFrequency != 0 {
 				// Don't log yet.
@@ -66,12 +116,17 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 			fields := []zap.Field{
 				fields.PeerID(pid),
 				fields.PeerScore(peerScores.Score),
-				zap.Any("invalid_messages", filtered),
-				zap.Float64("ip_colocation", peerScores.IPColocationFactor),
-				zap.Float64("behaviour_penalty", peerScores.BehaviourPenalty),
-				zap.Float64("app_specific_penalty", peerScores.AppSpecificScore),
+				zap.Float64("p1_time_in_mesh", p1),
+				zap.Float64("w1_time_in_mesh", w1),
+				zap.Any("p2_first_message_deliveries", p2),
+				zap.Any("p2_total", p2Total),
+				zap.Float64("p4_invalid_message_deliveries", p4),
+				zap.Float64("w4_invalid_message_deliveries", w4),
+				zap.Float64("p6_ip_colocation_factor", p6),
+				zap.Float64("w6_ip_colocation_factor", w6),
+				zap.Float64("p7_behaviour_penalty", p7),
+				zap.Float64("w7_behaviour_penalty", w7),
 				zap.Float64("total_low_mesh_deliveries", float64(totalLowMeshDeliveries)),
-				zap.Float64("total_invalid_messages", totalInvalidMessages),
 				zap.Any("invalid_messages", filtered),
 			}
 			if peerConnected(pid) {
