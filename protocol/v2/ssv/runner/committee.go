@@ -39,7 +39,6 @@ type CommitteeRunner struct {
 	beacon         beacon.BeaconNode
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
-	domain         spectypes.DomainType
 	valCheck       specqbft.ProposedValueCheckF
 
 	stoppedValidators map[spectypes.ValidatorPK]struct{}
@@ -567,8 +566,11 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
 	for _, beaconDuty := range duty.(*types.CommitteeDuty).BeaconDuties {
+		if beaconDuty == nil {
+			continue
+		}
 		_, stopped := cr.stoppedValidators[spectypes.ValidatorPK(beaconDuty.PubKey)]
-		if beaconDuty == nil || stopped {
+		if stopped {
 			continue
 		}
 		slot := beaconDuty.DutySlot()
