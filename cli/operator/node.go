@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"log"
 	"math/big"
 	"net/http"
@@ -19,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -93,26 +92,6 @@ var cfg config
 var globalArgs global_config.Args
 
 var operatorNode operator.Node
-
-type ForkingMessageValidation struct {
-	networkConfig networkconfig.NetworkConfig
-	genesis       genesisvalidation.MessageValidator
-	alan          validation.MessageValidator
-}
-
-func (f *ForkingMessageValidation) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	if f.networkConfig.PastAlanFork() {
-		return f.alan.Validate(ctx, p, pmsg)
-	}
-	return f.genesis.Validate(ctx, p, pmsg)
-}
-
-func (f *ForkingMessageValidation) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	if f.networkConfig.PastAlanFork() {
-		return f.alan.ValidatorForTopic(topic)
-	}
-	return f.genesis.ValidatorForTopic(topic)
-}
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -241,11 +220,11 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorStore := nodeStorage.ValidatorStore()
 
-		messageValidator := &ForkingMessageValidation{
-			networkConfig: networkConfig,
+		messageValidator := &validation.ForkingMessageValidation{
+			NetworkConfig: networkConfig,
 		}
 
-		messageValidator.alan = validation.New(
+		messageValidator.Alan = validation.New(
 			networkConfig,
 			validatorStore,
 			dutyStore,
@@ -254,7 +233,7 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithMetrics(metricsReporter),
 		)
 		if !networkConfig.PastAlanFork() {
-			messageValidator.genesis = genesisvalidation.New(
+			messageValidator.Genesis = genesisvalidation.New(
 				networkConfig,
 				genesisvalidation.WithNodeStorage(nodeStorage),
 				genesisvalidation.WithLogger(logger),
