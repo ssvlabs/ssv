@@ -1357,8 +1357,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		})
 	}
 
-	// TODO NEED TO HAVE QUORUM IN NEW SPEC
-	//share.Quorum = options.SSVShare.Share.Quorum
+	share.Quorum = options.Operator.GetQuorum()
 	share.DomainType = genesisspectypes.DomainType(options.SSVShare.Share.DomainType)
 	share.FeeRecipientAddress = options.SSVShare.Share.FeeRecipientAddress
 	share.Graffiti = options.SSVShare.Share.Graffiti
