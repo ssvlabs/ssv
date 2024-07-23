@@ -14,7 +14,6 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -38,7 +37,7 @@ type AttesterRunner struct {
 
 func NewAttesterRunnner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
@@ -265,7 +264,7 @@ func (r *AttesterRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *AttesterRunner) GetShare() *spectypes.Share {
+func (r *AttesterRunner) GetShare() *genesisspectypes.Share {
 	return r.BaseRunner.Share
 }
 

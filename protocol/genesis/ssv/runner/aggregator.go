@@ -10,8 +10,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -35,7 +33,7 @@ var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
@@ -306,7 +304,7 @@ func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *AggregatorRunner) GetShare() *spectypes.Share {
+func (r *AggregatorRunner) GetShare() *genesisspectypes.Share {
 	return r.BaseRunner.Share
 }
 

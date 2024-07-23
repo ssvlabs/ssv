@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"github.com/ssvlabs/ssv-spec/types"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
@@ -49,7 +50,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			}
 		}
 
-		if err := n.Subscribe(dutyRunner.GetBaseRunner().Share.ValidatorPubKey); err != nil {
+		if err := n.Subscribe(types.ValidatorPK(dutyRunner.GetBaseRunner().Share.ValidatorPubKey)); err != nil {
 			return true, err
 		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)

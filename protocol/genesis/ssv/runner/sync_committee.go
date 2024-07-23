@@ -13,7 +13,6 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -36,7 +35,7 @@ type SyncCommitteeRunner struct {
 
 func NewSyncCommitteeRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
@@ -240,7 +239,7 @@ func (r *SyncCommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *SyncCommitteeRunner) GetShare() *spectypes.Share {
+func (r *SyncCommitteeRunner) GetShare() *genesisspectypes.Share {
 	return r.BaseRunner.Share
 }
 

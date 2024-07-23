@@ -18,7 +18,6 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -45,7 +44,7 @@ type ProposerRunner struct {
 
 func NewProposerRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
@@ -378,7 +377,7 @@ func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *ProposerRunner) GetShare() *spectypes.Share {
+func (r *ProposerRunner) GetShare() *genesisspectypes.Share {
 	return r.BaseRunner.Share
 }
 
