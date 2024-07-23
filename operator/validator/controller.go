@@ -44,6 +44,7 @@ import (
 	genesisqbft "github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	genesisqbftcontroller "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	genesisroundtimer "github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
@@ -100,6 +101,7 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
+	NetworkConfig              networkconfig.NetworkConfig
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -266,7 +268,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	genesisValidatorOptions := genesisvalidator.Options{
 		Network:          options.GenesisControllerOptions.Network,
 		BuilderProposals: options.BuilderProposals,
-		Beacon:           options.Beacon,
+		// Beacon:           options.Beacon,
 		BeaconNetwork:    options.NetworkConfig.Beacon,
 		Storage:          options.GenesisControllerOptions.StorageMap,
 		//Share:   nil,  // set per validator
@@ -785,7 +787,7 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 	// so we need to copy the pubkey val to avoid pointer
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
-	logger.Debug("📬 queue: pushing message", fields.GenesisRole(duty.Type), fields.PubKey(pk[:]))
+	logger.Debug("📬 queue: pushing message", fields.BeaconRole(spectypes.BeaconRole(duty.Type)), fields.PubKey(pk[:]))
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateGenesisDutyExecuteMsg(duty, pk, genesisssvtypes.GetDefaultDomain())
@@ -1052,8 +1054,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		av := validator.NewValidator(ctx, cancel, opts)
 
 		genesisOpts := c.genesisValidatorOptions
-		genesisOpts.SSVShare = share
-		genesisOpts.Operator = operator
+		genesisOpts.SSVShare = share // TODO convert
 		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
 		gv := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)

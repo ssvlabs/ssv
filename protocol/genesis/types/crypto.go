@@ -14,7 +14,7 @@ import (
 
 var (
 	MetricsSignaturesVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_signature_verifications",
+		Name: "genesis::ssv_signature_verifications",
 		Help: "Number of signatures verifications",
 	}, []string{})
 )

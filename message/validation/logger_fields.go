@@ -106,7 +106,7 @@ func (d GenesisLoggerFields) AsZapFields() []zapcore.Field {
 	return result
 }
 
-func (mv *messageValidator) buildGenesisLoggerFields(decodedMessage *genesisqueue.DecodedSSVMessage) *GenesisLoggerFields {
+func (mv *messageValidator) buildGenesisLoggerFields(decodedMessage *genesisqueue.GenesisSSVMessage) *GenesisLoggerFields {
 	descriptor := &GenesisLoggerFields{
 		Consensus: &ConsensusFields{},
 	}

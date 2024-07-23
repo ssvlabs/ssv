@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -157,7 +158,7 @@ func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMes
 	return pubsub.ValidationAccept
 }
 
-func (mv *messageValidator) handleGenesisValidationError(peerID peer.ID, decodedMessage *queue.DecodedSSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleGenesisValidationError(peerID peer.ID, decodedMessage *genesisqueue.GenesisSSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -187,7 +188,7 @@ func (mv *messageValidator) handleGenesisValidationError(peerID peer.ID, decoded
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleGenesisValidationSuccess(decodedMessage *queue.DecodedSSVMessage) pubsub.ValidationResult {
+func (mv *messageValidator) handleGenesisValidationSuccess(decodedMessage *genesisqueue.GenesisSSVMessage) pubsub.ValidationResult {
 	// loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
 	// mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 
