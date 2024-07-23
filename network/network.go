@@ -6,7 +6,9 @@ import (
 
 	"go.uber.org/zap"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/network/discovery"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -42,6 +44,10 @@ type P2PNetwork interface {
 	UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error
 	// UpdateScoreParams will update the scoring parameters of GossipSub
 	UpdateScoreParams(logger *zap.Logger)
+	// Returns the pubsub object
+	GetPubSub() *pubsub.PubSub
+	// Get discovery service
+	GetDiscoveryService() discovery.Service
 }
 
 // GetValidatorStats returns stats of validators, including the following:

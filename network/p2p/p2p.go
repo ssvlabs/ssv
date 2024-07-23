@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cornelk/hashmap"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -72,6 +73,7 @@ type p2pNetwork struct {
 	streamCtrl   streams.StreamController
 	idx          peers.Index
 	disc         discovery.Service
+	pubsub       *pubsub.PubSub
 	topicsCtrl   topics.Controller
 	msgRouter    network.MessageRouter
 	msgResolver  topics.MsgPeersResolver
@@ -355,4 +357,14 @@ func (n *p2pNetwork) UpdateDomainType(logger *zap.Logger, domain spectypes.Domai
 	}
 	logger.Debug("updated and published ENR with domain type", fields.Domain(domain))
 	return nil
+}
+
+// Implements the interface GetPubSub method
+func (n *p2pNetwork) GetPubSub() *pubsub.PubSub {
+	return n.pubsub
+}
+
+// Implements the interface GetDiscoveryService method
+func (n *p2pNetwork) GetDiscoveryService() discovery.Service {
+	return n.disc
 }
