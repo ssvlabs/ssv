@@ -3,15 +3,14 @@ package p2pv1
 import (
 	"strconv"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/peers/connections"
-	"github.com/ssvlabs/ssv/network/topics"
-
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/peers/connections"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -63,7 +62,7 @@ var unknown = "unknown"
 func (n *p2pNetwork) reportAllPeers(logger *zap.Logger) func() {
 	return func() {
 		pids := n.host.Network().Peers()
-		logger.Debug("connected peers status", fields.Count(len(pids)))
+		logger.Info("connected peers status", zap.Any("ids", pids))
 		MetricsAllConnectedPeers.Set(float64(len(pids)))
 	}
 }
@@ -132,7 +131,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	}
 
 	state := n.idx.State(pid)
-	logger.Debug("peer identity",
+	logger.Info("peer identity",
 		fields.PeerID(pid),
 		zap.String("node_version", nodeVersion),
 		zap.String("operator_id", opID),
