@@ -94,10 +94,6 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
 				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
-					//test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableDataRoot(validatorShare.
-					//	SharePubKey, spectestingutils.TestingAttestationDataRoot[:])
-
-					// TODO: check correctness
 					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}

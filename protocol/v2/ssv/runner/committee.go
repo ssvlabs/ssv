@@ -246,25 +246,6 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 		}
 	}
 
-	// TODO: which one to use?
-	// spec
-	//committeeMember := cr.BaseRunner.QBFTController.CommitteeMember
-	//operatorIDs := make([]spectypes.OperatorID, len(committeeMember.Committee))
-	//for i, operator := range committeeMember.Committee {
-	//	operatorIDs[i] = operator.OperatorID
-	//}
-	//committeeID := spectypes.GetCommitteeID(operatorIDs)
-	//
-	//ssvMsg := &spectypes.SSVMessage{
-	//	MsgType: spectypes.SSVPartialSignatureMsgType,
-	//	MsgID: spectypes.NewMsgID(
-	//		committeeMember.DomainType,
-	//		committeeID[:],
-	//		cr.BaseRunner.RunnerRoleType,
-	//	),
-	//}
-
-	// impl
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(

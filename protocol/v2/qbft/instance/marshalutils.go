@@ -2,8 +2,6 @@ package instance
 
 import "encoding/json"
 
-// TODO: can this be deleted?
-
 /////////////////////// JSON Marshalling for Tests ///////////////////////
 
 // region: JSON Marshalling for Instance
