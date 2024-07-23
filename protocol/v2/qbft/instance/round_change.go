@@ -304,11 +304,11 @@ func validRoundChangeForDataIgnoreSignature(
 
 		prepareMsgs := make([]*specqbft.ProcessingMessage, 0)
 		for _, signedMessage := range prepareSignedMsgs {
-			msg, err := specqbft.NewProcessingMessage(signedMessage)
+			procMsg, err := specqbft.NewProcessingMessage(signedMessage)
 			if err != nil {
 				return errors.Wrap(err, "could not create ProcessingMessage from prepare message in round change justification")
 			}
-			prepareMsgs = append(prepareMsgs, msg)
+			prepareMsgs = append(prepareMsgs, procMsg)
 		}
 
 		for _, pm := range prepareMsgs {

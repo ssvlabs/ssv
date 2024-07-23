@@ -112,11 +112,11 @@ func isValidProposal(
 	}
 	prepareJustification := make([]*specqbft.ProcessingMessage, 0)
 	for _, prepareSignedMessage := range prepareJustificationSignedMessages {
-		msg, err := specqbft.NewProcessingMessage(prepareSignedMessage)
+		procMsg, err := specqbft.NewProcessingMessage(prepareSignedMessage)
 		if err != nil {
 			return errors.Wrap(err, "could not create ProcessingMessage from prepare justification")
 		}
-		prepareJustification = append(prepareJustification, msg)
+		prepareJustification = append(prepareJustification, procMsg)
 	}
 
 	if err := isProposalJustification(

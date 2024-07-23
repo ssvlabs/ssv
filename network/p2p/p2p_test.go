@@ -3,17 +3,19 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
@@ -21,6 +23,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -247,8 +250,15 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		MsgID:   id,
 		Data:    data,
 	}
-	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
+
+	sig, err := dummySignSSVMessage(ssvMsg)
 	require.NoError(t, err)
+
+	signedSSVMsg := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{1},
+		SSVMessage:  ssvMsg,
+	}
 
 	return id, signedSSVMsg
 }
