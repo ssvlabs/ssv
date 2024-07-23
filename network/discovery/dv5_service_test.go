@@ -35,13 +35,13 @@ func TestCheckPeer(t *testing.T) {
 				name:          "missing domain type",
 				domainType:    nil,
 				subnets:       mySubnets,
-				expectedError: nil,
+				expectedError: errors.New("could not read domain type: not found"),
 			},
 			{
 				name:          "different domain type",
 				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
 				subnets:       mySubnets,
-				expectedError: nil,
+				expectedError: errors.New("mismatched domain type: 01020305"),
 			},
 			{
 				name:          "missing subnets",

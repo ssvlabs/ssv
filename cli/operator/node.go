@@ -3,11 +3,13 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bloxapp/ssv/operator/keystore"
@@ -540,6 +542,22 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		return networkconfig.NetworkConfig{}, err
 	}
 
+	// Overwrite DomainType if CustomTypeDomain is set.
+	if cfg.SSVOptions.CustomDomainType != "" {
+		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
+		}
+		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
+		if err != nil {
+			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+		}
+		if len(byts) != 4 {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
+		}
+		networkConfig.Domain = spectypes.DomainType(byts)
+		logger.Info("running with custom domain type", fields.Domain(networkConfig.Domain))
+	}
+
 	types.SetDefaultDomain(networkConfig.Domain)
 
 	nodeType := "light"
@@ -572,7 +590,11 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	return p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	p2pNetwork, err := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	if err != nil {
+		logger.Fatal("failed to setup p2p network", zap.Error(err))
+	}
+	return p2pNetwork
 }
 
 func setupConsensusClient(
