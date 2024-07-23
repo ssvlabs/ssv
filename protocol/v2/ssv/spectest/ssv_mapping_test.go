@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -384,6 +385,10 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
 			}
 		}
+	}
+
+	if ret.GetBaseRunner().DomainTypeProvider == nil {
+		ret.GetBaseRunner().DomainTypeProvider = networkconfig.TestNetwork
 	}
 
 	return ret

@@ -1,10 +1,10 @@
 package storage
 
 import (
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"testing"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"

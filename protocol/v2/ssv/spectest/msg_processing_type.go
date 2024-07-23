@@ -169,6 +169,21 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	}
 }
 
+//func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
+//	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
+//	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
+//	for _, r1 := range test.BeaconBroadcastedRoots {
+//		found := false
+//		for _, r2 := range broadcastedRoots {
+//			if r1 == hex.EncodeToString(r2[:]) {
+//				found = true
+//				break
+//			}
+//		}
+//		require.Truef(t, found, "broadcasted beacon root not found")
+//	}
+//}
+
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testType := reflect.TypeOf(test).String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
@@ -224,6 +239,7 @@ var baseCommitteeWithRunnerSample = func(
 	for valIdx, ks := range keySetMap {
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
+
 	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 		return runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
