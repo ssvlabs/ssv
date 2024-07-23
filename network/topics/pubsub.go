@@ -149,7 +149,6 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 	if cfg.ScoreIndex != nil || inspector != nil {
 		cfg.initScoring()
 
-		// TODO: put this code back in the end of this "if" scope
 		// Get topic score params factory
 		if cfg.GetValidatorStats == nil {
 			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -159,28 +158,23 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		}
 		topicScoreFactory = topicScoreParams(logger, cfg, committeesProvider)
 
+		// Get overall score params
 		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
 
+		// Define score inspector
 		if inspector == nil {
 			peerConnected := func(pid peer.ID) bool {
 				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
 			}
 			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected, peerScoreParams, topicScoreFactory)
 		}
-
 		if inspectInterval == 0 {
 			inspectInterval = defaultScoreInspectInterval
 		}
 
+		// Append score params to pubsub options
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
-		if cfg.GetValidatorStats == nil {
-			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-				// default in case it was not injected
-				return 100, 100, 10, nil
-			}
-		}
-		topicScoreFactory = topicScoreParams(logger, cfg, committeesProvider)
 	}
 
 	if cfg.MsgIDHandler != nil {
