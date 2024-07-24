@@ -9,8 +9,6 @@ dmitri.shuralyov.com/html/belt v0.0.0-20180602232347-f7d459c86be0/go.mod h1:JLBr
 dmitri.shuralyov.com/service/change v0.0.0-20181023043359-a85b471d5412/go.mod h1:a1inKt/atXimZ4Mv927x+r7UpyzRUf4emIoiiSC2TN4=
 dmitri.shuralyov.com/state v0.0.0-20180228185332-28bcc343414c/go.mod h1:0PRwlb0D6DFvNNtx+9ybjezNCa8XF0xaYcETyp6rHWU=
 git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
-github.com/AKorpusenko/genesis-go-eth2-client v1.0.0 h1:ZsJ6aJt3CSL3GQy6xyBHccoYKNmw9VBTATgTB+UeCtw=
-github.com/AKorpusenko/genesis-go-eth2-client v1.0.0/go.mod h1:Ce+WmRr1bxqmdvtzHfmxhegjF1zW/4YnWJEnodR8wqQ=
 github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/toml v1.1.0/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
@@ -761,8 +759,8 @@ github.com/spf13/viper v1.0.0/go.mod h1:A8kyI5cUJhb8N+3pkfONlcEcZbueH6nhAm0Fq7Sr
 github.com/spf13/viper v1.3.2/go.mod h1:ZiWeW+zYFKm7srdB9IoDzzZXaJaI5eL9QjNiN/DMA2s=
 github.com/ssvlabs/ssv-spec v0.3.10-0.20240624121006-7adef2ac3ea6 h1:MDbz5Ia++c1yScP6UjccBfPYh3oZdbSQWE1muYxgf+4=
 github.com/ssvlabs/ssv-spec v0.3.10-0.20240624121006-7adef2ac3ea6/go.mod h1:woZFNQHwfkY2fVvIRK6uPZGsUm8hCubZ6VWRbXRzCkM=
-github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240716115821-98c37ab8631f h1:xtOzovxK+XqijhcjnS88EjYAsbxVOk22RCgr67mr+zk=
-github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240716115821-98c37ab8631f/go.mod h1:DhtLeWp5ADlpr7Aa3x8TOE5QFhX8XFDL9GD+GBJwMng=
+github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240724163908-737c5321cffa h1:/cUV5VrdOi5FhRIDVJU7NaC1MoxanqyPmd59V/48kBo=
+github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240724163908-737c5321cffa/go.mod h1:CUnFDv0Hmn7tZ/WpI8XBEXGgNbFpeQ1ByG2cZe+Fa/4=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

@@ -1,7 +1,7 @@
 package beacon
 
 import (
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 // DutyData represent unified duty types data

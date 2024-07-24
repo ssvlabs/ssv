@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	eth2apiv1 "github.com/AKorpusenko/genesis-go-eth2-client/api/v1"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"

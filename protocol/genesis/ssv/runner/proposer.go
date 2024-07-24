@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AKorpusenko/genesis-go-eth2-client/api"
-	apiv1capella "github.com/AKorpusenko/genesis-go-eth2-client/api/v1/capella"
-	apiv1deneb "github.com/AKorpusenko/genesis-go-eth2-client/api/v1/deneb"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/capella"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/deneb"
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/api"
+	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -21,7 +21,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
@@ -426,13 +426,13 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		return summary, fmt.Errorf("block is nil")
 	}
 	switch b := block.(type) {
-	case *api.VersionedV3Proposal:
-		if b.ExecutionPayloadBlinded {
+	case *api.VersionedProposal:
+		if b.Blinded {
 			switch b.Version {
 			case spec.DataVersionCapella:
-				return summarizeBlock(b.BlindedCapella)
+				return summarizeBlock(b.CapellaBlinded)
 			case spec.DataVersionDeneb:
-				return summarizeBlock(b.BlindedDeneb)
+				return summarizeBlock(b.DenebBlinded)
 			default:
 				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 			}

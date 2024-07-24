@@ -1,7 +1,7 @@
 package qbft
 
 import (
-	"github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"

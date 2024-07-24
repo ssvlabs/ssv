@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	preforkphase0 "github.com/AKorpusenko/genesis-go-eth2-client/spec/phase0"
 	"github.com/aquasecurity/table"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	preforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
