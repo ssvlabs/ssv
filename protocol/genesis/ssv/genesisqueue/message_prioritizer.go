@@ -2,15 +2,15 @@ package genesisqueue
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // State represents a portion of the the current state
 // that is relevant to the prioritization of messages.
 type State struct {
 	HasRunningInstance bool
-	Height             specqbft.Height
-	Round              specqbft.Round
+	Height             qbft.Height
+	Round              qbft.Round
 	Slot               phase0.Slot
 	Quorum             uint64
 }
@@ -52,7 +52,7 @@ func (p *standardPrioritizer) Prior(a, b *GenesisSSVMessage) bool {
 		return scoreA > scoreB
 	}
 
-	scoreA, scoreB = scoreConsensusType(a), scoreConsensusType(b)
+	scoreA, scoreB = scoreConsensusType(p.state, a), scoreConsensusType(p.state, b)
 	if scoreA != scoreB {
 		return scoreA > scoreB
 	}
