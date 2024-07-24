@@ -49,6 +49,6 @@ func dumpState(t *testing.T,
 func logJSON(t *testing.T, name string, value interface{}) {
 	bytes, err := json.Marshal(value)
 	require.NoError(t, err)
-	err = os.WriteFile(fmt.Sprintf("%s/%s_test_serialized.json", dumpDir, name), bytes, 0644)
+	err = os.WriteFile(fmt.Sprintf("%s/%s_test_serialized.json", dumpDir, name), bytes, 0600)
 	require.NoError(t, err)
 }
