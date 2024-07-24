@@ -10,6 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -307,22 +308,20 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 	wg.Wait()
 	// let the nodes subscribe
-	<-time.After(time.Second)
-	for _, pk := range pks {
-		vpk, err := hex.DecodeString(pk)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "could not decode validator public key")
-		}
+	for {
+		noPeers := false
 		for _, node := range ln.Nodes {
-			peers := make([]peer.ID, 0)
-			for len(peers) < 2 {
-				peers, err = node.Peers(spectypes.ValidatorPK(vpk))
-				if err != nil {
-					return nil, nil, err
-				}
-				time.Sleep(time.Millisecond * 100)
+			peers, _ := node.PeersByTopic()
+			if len(peers) < 2 {
+				noPeers = true
 			}
 		}
+		if noPeers {
+			noPeers = false
+			time.Sleep(time.Second * 1)
+			continue
+		}
+		break
 	}
 
 	return ln, routers, nil
@@ -347,6 +346,38 @@ func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([
 		},
 		Protocol: message.LastDecidedType,
 	})
+}
+
+// getSubsetOfPeers returns a subset of the peers from that topic
+func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+	var ps []peer.ID
+	seen := make(map[peer.ID]struct{})
+	topics := commons.ValidatorTopicID(senderID)
+	for _, topic := range topics {
+		ps, err = n.topicsCtrl.Peers(topic)
+		if err != nil {
+			continue
+		}
+		for _, p := range ps {
+			if _, ok := seen[p]; !ok && filter(p) {
+				peers = append(peers, p)
+				seen[p] = struct{}{}
+			}
+		}
+	}
+	// if we seen some peers, ignore the error
+	if err != nil && len(seen) == 0 {
+		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(senderID))
+	}
+	if len(peers) == 0 {
+		return nil, nil
+	}
+	if maxPeers > len(peers) {
+		maxPeers = len(peers)
+	} else {
+		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
+	}
+	return peers[:maxPeers], nil
 }
 
 func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
