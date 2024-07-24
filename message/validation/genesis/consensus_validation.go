@@ -4,7 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -43,14 +42,6 @@ func (mv *messageValidator) validateConsensusMessage(
 	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		e := ErrUnexpectedConsensusMessage
 		e.got = messageID.GetRoleType()
-		return consensusDescriptor, msgSlot, e
-	}
-
-	// Rule: consensus message must have the same identifier as the ssv message's identifier
-	if !bytes.Equal(signedMsg.Message.Identifier, messageID[:]) {
-		e := ErrMismatchedIdentifier
-		e.want = hex.EncodeToString(messageID[:])
-		e.got = hex.EncodeToString(signedMsg.Message.Identifier)
 		return consensusDescriptor, msgSlot, e
 	}
 
@@ -140,8 +131,10 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.Reset(msgRound)
 		}
 
-		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil && signedMsg.Message.MsgType == genesisspecqbft.ProposalMsgType {
-			signerState.ProposalData = signedMsg.FullData
+		if signedMsg.Message.MsgType == genesisspecqbft.ProposalMsgType {
+			if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+				signerState.ProposalData = signedMsg.FullData
+			}
 		}
 
 		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
@@ -214,6 +207,12 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	msgSlot := phase0.Slot(signedMsg.Message.Height)
 	msgRound := signedMsg.Message.Round
+
+	// If signer state is nil, this is the first message for the signer and
+	// the next rules can't be checked.
+	if signerState == nil {
+		return mv.validateJustifications(share, signedMsg)
+	}
 
 	if msgSlot < signerState.Slot {
 		// Signers aren't allowed to decrease their slot.
