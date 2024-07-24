@@ -104,10 +104,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	}
 
 	for _, message := range partialSignatureMessages.Messages {
-		// Rule: Partial signature must have expected length
-		if len(message.PartialSignature) != blsSignatureSize {
-			return ErrWrongBLSSignatureSize
-		}
+		// Rule: Partial signature must have expected length. Already enforced by ssz.
 
 		// Rule: Partial signature signer must be consistent
 		if message.Signer != signer {
