@@ -15,10 +15,8 @@ import (
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/genesis/message"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -236,9 +234,9 @@ type mockExecuteDutyMessage struct {
 }
 
 func (m mockExecuteDutyMessage) ssvMessage(state *State) *genesisspectypes.SSVMessage {
-	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.BeaconDuty{
-		Type: spectypes.BeaconRole(m.Role),
-		Slot: m.Slot,
+	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &genesisspectypes.Duty{
+		Type: m.Role,
+		Slot: preforkphase0.Slot(m.Slot),
 	}})
 	if err != nil {
 		panic(err)
@@ -263,7 +261,7 @@ type mockTimeoutMessage struct {
 }
 
 func (m mockTimeoutMessage) ssvMessage(state *State) *genesisspectypes.SSVMessage {
-	td := types.TimeoutData{Height: genesisspecqbft.Height(m.Height)}
+	td := types.TimeoutData{Height: m.Height}
 	data, err := json.Marshal(td)
 	if err != nil {
 		panic(err)

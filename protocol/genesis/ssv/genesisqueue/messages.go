@@ -7,7 +7,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	"github.com/ssvlabs/ssv/network/commons"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/genesis/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
@@ -227,8 +226,8 @@ func scoreMessageSubtype(state *State, m *GenesisSSVMessage, relativeHeight int)
 // scoreConsensusType returns an integer score for the type of consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
 func scoreConsensusType(m *GenesisSSVMessage) int {
-	if qbftMsg, ok := m.Body.(*genesisspecqbft.Message); ok {
-		switch qbftMsg.MsgType {
+	if qbftMsg, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
+		switch qbftMsg.Message.MsgType {
 		case genesisspecqbft.ProposalMsgType:
 			return 4
 		case genesisspecqbft.PrepareMsgType:
@@ -249,84 +248,4 @@ func isDecidedMessage(s *State, m *GenesisSSVMessage) bool {
 	}
 	return consensusMessage.Message.MsgType == genesisspecqbft.CommitMsgType &&
 		len(consensusMessage.Signers) > int(s.Quorum)
-}
-
-// scoreCommitteeMessageSubtype returns an integer score for the message's type.
-func scoreCommitteeMessageSubtype(state *State, m *GenesisSSVMessage, relativeHeight int) int {
-	_, isConsensusMessage := m.Body.(*genesisspecqbft.Message)
-
-	var (
-		isPreConsensusMessage  = false
-		isPostConsensusMessage = false
-	)
-	if mm, ok := m.Body.(*genesisspectypes.PartialSignatureMessages); ok {
-		isPostConsensusMessage = mm.Type == genesisspectypes.PostConsensusPartialSig
-		isPreConsensusMessage = !isPostConsensusMessage
-	}
-
-	// Current height.
-	if relativeHeight == 0 {
-		if state.HasRunningInstance {
-			switch {
-			case isPostConsensusMessage:
-				return 4
-			case isConsensusMessage:
-				return 3
-			case isPreConsensusMessage:
-				return 2
-			}
-			return 0
-		}
-		switch {
-		case isPostConsensusMessage:
-			return 3
-		case isPreConsensusMessage:
-			return 2
-		case isConsensusMessage:
-			return 1
-		}
-		return 0
-	}
-
-	// Higher height.
-	if relativeHeight == 1 {
-		switch {
-		case isPostConsensusMessage:
-			return 4
-		case isDecidedMessage(state, m):
-			return 3
-		case isPreConsensusMessage:
-			return 2
-		case isConsensusMessage:
-			return 1
-		}
-		return 0
-	}
-
-	// Lower height.
-	switch {
-	case isDecidedMessage(state, m):
-		return 2
-	case isConsensusMessage && genesisspecqbft.MessageType(m.SSVMessage.MsgType) == genesisspecqbft.CommitMsgType:
-		return 1
-	}
-	return 0
-}
-
-// scoreCommitteeConsensusType returns an integer score for the type of committee consensus message.
-// When given a non-consensus message, scoreConsensusType returns 0.
-func scoreCommitteeConsensusType(m *GenesisSSVMessage) int {
-	if qbftMsg, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
-		switch qbftMsg.Message.MsgType {
-		case genesisspecqbft.ProposalMsgType:
-			return 4
-		case genesisspecqbft.PrepareMsgType:
-			return 3
-		case genesisspecqbft.CommitMsgType:
-			return 2
-		case genesisspecqbft.RoundChangeMsgType:
-			return 1
-		}
-	}
-	return 0
 }
