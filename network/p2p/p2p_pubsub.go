@@ -7,18 +7,17 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -95,12 +94,12 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	topics := commons.CommitteeTopicID(committeeID)
 
 	for _, topic := range topics {
-		n.interfaceLogger.Debug("broadcasting msg",
+		n.interfaceLogger.Info("broadcasting msg",
 			zap.String("committee_id", hex.EncodeToString(committeeID[:])),
 			zap.Int("msg_type", int(msg.SSVMessage.MsgType)),
 			fields.Topic(topic))
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.CommitteeID(committeeID), zap.Error(err))
+			n.interfaceLogger.Info("could not broadcast msg", fields.CommitteeID(committeeID), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
