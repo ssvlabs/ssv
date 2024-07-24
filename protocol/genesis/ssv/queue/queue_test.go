@@ -57,14 +57,14 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop non-matching message.
 	popped := queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 101
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
 	})
 	require.False(t, queue.Empty())
 	require.Nil(t, popped)
 
 	// Pop matching message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 100
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
 	})
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
@@ -76,14 +76,14 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop 2nd message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 101
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
 	})
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop 1st message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 100
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
 	})
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
@@ -91,7 +91,7 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop nil.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *GenesisSSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 100
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
 	})
 	require.Nil(t, popped)
 }
@@ -109,7 +109,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	queue := New(capacity)
 	require.True(t, queue.Empty())
 
-	msg, err := DecodeGenesisSignedSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	msg, err := DecodeGenesisSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 
 	// Push messages.
@@ -163,7 +163,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
-				mm, err := DecodeGenesisSignedSSVMessage(m.ssvMessage(test.state))
+				mm, err := DecodeGenesisSSVMessage(m.ssvMessage(test.state))
 				require.NoError(t, err)
 				messages[i] = mm
 			}
@@ -198,7 +198,7 @@ func TestWithMetrics(t *testing.T) {
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
-	msg, err := DecodeGenesisSignedSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	msg, err := DecodeGenesisSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 	pushed := queue.TryPush(msg)
 	require.True(t, pushed)
@@ -236,7 +236,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 	messages := make([]*GenesisSSVMessage, messageCount)
 	for i := range messages {
 		var err error
-		msg, err := DecodeGenesisSignedSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+		msg, err := DecodeGenesisSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 		require.NoError(b, err)
 		messages[i] = msg
 	}
@@ -361,7 +361,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	for _, i := range rand.Perm(messageCount) {
 		height := qbft.FirstHeight + qbft.Height(i)
 		for _, t := range types {
-			decoded, err := DecodeGenesisSignedSSVMessage(mockConsensusMessage{Height: height, Type: t}.ssvMessage(mockState))
+			decoded, err := DecodeGenesisSSVMessage(mockConsensusMessage{Height: height, Type: t}.ssvMessage(mockState))
 			require.NoError(b, err)
 			msgs <- decoded
 		}
@@ -414,7 +414,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 }
 
 func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *GenesisSSVMessage {
-	decoded, err := DecodeGenesisSignedSSVMessage(msg.ssvMessage(state))
+	decoded, err := DecodeGenesisSSVMessage(msg.ssvMessage(state))
 	require.NoError(t, err)
 	queue.Push(decoded)
 	return decoded

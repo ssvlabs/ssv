@@ -52,7 +52,7 @@ func (p *standardPrioritizer) Prior(a, b *GenesisSSVMessage) bool {
 		return scoreA > scoreB
 	}
 
-	scoreA, scoreB = scoreConsensusType(a), scoreConsensusType(b)
+	scoreA, scoreB = scoreConsensusType(p.state, a), scoreConsensusType(p.state, b)
 	if scoreA != scoreB {
 		return scoreA > scoreB
 	}
@@ -70,36 +70,4 @@ func scoreHeight(relativeHeight int) int {
 		return 0
 	}
 	return 0
-}
-
-func NewCommitteeQueuePrioritizer(state *State) MessagePrioritizer {
-	return &committeePrioritizer{state: state}
-}
-
-type committeePrioritizer struct {
-	state *State
-}
-
-func (p *committeePrioritizer) Prior(a, b *GenesisSSVMessage) bool {
-	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
-	if msgScoreA != msgScoreB {
-		return msgScoreA > msgScoreB
-	}
-
-	relativeHeightA, relativeHeightB := compareHeightOrSlot(p.state, a), compareHeightOrSlot(p.state, b)
-	if relativeHeightA != relativeHeightB {
-		return scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)
-	}
-
-	scoreA, scoreB := scoreCommitteeMessageSubtype(p.state, a, relativeHeightA), scoreCommitteeMessageSubtype(p.state, b, relativeHeightB)
-	if scoreA != scoreB {
-		return scoreA > scoreB
-	}
-
-	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
-	if scoreA != scoreB {
-		return scoreA > scoreB
-	}
-
-	return true
 }

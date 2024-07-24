@@ -110,20 +110,20 @@ func ExtractGenesisMsgBody(m *genesisspectypes.SSVMessage) (any, error) {
 }
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
-// The result will be 0 if equal, -1 if lower, 1 if higher.
+// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *GenesisSSVMessage) int {
-	if qbftMsg, ok := m.Body.(*genesisspecqbft.Message); ok {
-		if qbftMsg.Height == state.Height {
+	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
+		if mm.Message.Height == state.Height {
 			return 0
 		}
-		if qbftMsg.Height > state.Height {
+		if mm.Message.Height > state.Height {
 			return 1
 		}
-	} else if pms, ok := m.Body.(*genesisspectypes.PartialSignatureMessages); ok { // everyone likes pms
-		if pms.Slot == state.Slot {
+	} else if mm, ok := m.Body.(*genesisspectypes.SignedPartialSignatureMessage); ok {
+		if mm.Message.Slot == state.Slot {
 			return 0
 		}
-		if pms.Slot > state.Slot {
+		if mm.Message.Slot > state.Slot {
 			return 1
 		}
 	}
@@ -131,13 +131,13 @@ func compareHeightOrSlot(state *State, m *GenesisSSVMessage) int {
 }
 
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
-// The result will be 0 if equal, -1 if lower, 1 if higher.
+// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *GenesisSSVMessage) int {
-	if qbftMsg, ok := m.Body.(*genesisspecqbft.Message); ok {
-		if qbftMsg.Round == state.Round {
+	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
+		if mm.Message.Round == state.Round {
 			return 2
 		}
-		if qbftMsg.Round > state.Round {
+		if mm.Message.Round > state.Round {
 			return 1
 		}
 		return -1
@@ -164,14 +164,14 @@ func scoreMessageType(m *GenesisSSVMessage) int {
 
 // scoreMessageSubtype returns an integer score for the message's type.
 func scoreMessageSubtype(state *State, m *GenesisSSVMessage, relativeHeight int) int {
-	_, isConsensusMessage := m.Body.(*genesisspecqbft.Message)
+	consensusMessage, isConsensusMessage := m.Body.(*genesisspecqbft.SignedMessage)
 
 	var (
 		isPreConsensusMessage  = false
 		isPostConsensusMessage = false
 	)
-	if mm, ok := m.Body.(*genesisspectypes.PartialSignatureMessages); ok {
-		isPostConsensusMessage = mm.Type == genesisspectypes.PostConsensusPartialSig
+	if mm, ok := m.Body.(*genesisspectypes.SignedPartialSignatureMessage); ok {
+		isPostConsensusMessage = mm.Message.Type == genesisspectypes.PostConsensusPartialSig
 		isPreConsensusMessage = !isPostConsensusMessage
 	}
 
@@ -202,7 +202,7 @@ func scoreMessageSubtype(state *State, m *GenesisSSVMessage, relativeHeight int)
 	// Higher height.
 	if relativeHeight == 1 {
 		switch {
-		case isDecidedMessage(state, m):
+		case isDecidedMesssage(state, consensusMessage):
 			return 4
 		case isPreConsensusMessage:
 			return 3
@@ -216,19 +216,19 @@ func scoreMessageSubtype(state *State, m *GenesisSSVMessage, relativeHeight int)
 
 	// Lower height.
 	switch {
-	case isDecidedMessage(state, m):
+	case isDecidedMesssage(state, consensusMessage):
 		return 2
-	case isConsensusMessage && genesisspecqbft.MessageType(m.SSVMessage.MsgType) == genesisspecqbft.CommitMsgType:
+	case isConsensusMessage && consensusMessage.Message.MsgType == genesisspecqbft.CommitMsgType:
 		return 1
 	}
 	return 0
 }
 
-// scoreConsensusType returns an integer score for the type of consensus message.
+// scoreConsensusType returns an integer score for the type of a consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
-func scoreConsensusType(m *GenesisSSVMessage) int {
-	if qbftMsg, ok := m.Body.(*genesisspecqbft.Message); ok {
-		switch qbftMsg.MsgType {
+func scoreConsensusType(state *State, m *GenesisSSVMessage) int {
+	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
+		switch mm.Message.MsgType {
 		case genesisspecqbft.ProposalMsgType:
 			return 4
 		case genesisspecqbft.PrepareMsgType:
@@ -242,91 +242,10 @@ func scoreConsensusType(m *GenesisSSVMessage) int {
 	return 0
 }
 
-func isDecidedMessage(s *State, m *GenesisSSVMessage) bool {
-	consensusMessage, isConsensusMessage := m.Body.(*genesisspecqbft.SignedMessage)
-	if !isConsensusMessage {
+func isDecidedMesssage(s *State, sm *genesisspecqbft.SignedMessage) bool {
+	if sm == nil {
 		return false
 	}
-	return consensusMessage.Message.MsgType == genesisspecqbft.CommitMsgType &&
-		len(consensusMessage.Signers) > int(s.Quorum)
-}
-
-// scoreCommitteeMessageSubtype returns an integer score for the message's type.
-func scoreCommitteeMessageSubtype(state *State, m *GenesisSSVMessage, relativeHeight int) int {
-	_, isConsensusMessage := m.Body.(*genesisspecqbft.Message)
-
-	var (
-		isPreConsensusMessage  = false
-		isPostConsensusMessage = false
-	)
-	if mm, ok := m.Body.(*genesisspectypes.PartialSignatureMessages); ok {
-		isPostConsensusMessage = mm.Type == genesisspectypes.PostConsensusPartialSig
-		isPreConsensusMessage = !isPostConsensusMessage
-	}
-
-	// Current height.
-	if relativeHeight == 0 {
-		if state.HasRunningInstance {
-			switch {
-			case isPostConsensusMessage:
-				return 4
-			case isConsensusMessage:
-				return 3
-			case isPreConsensusMessage:
-				return 2
-			}
-			return 0
-		}
-		switch {
-		case isPostConsensusMessage:
-			return 3
-		case isPreConsensusMessage:
-			return 2
-		case isConsensusMessage:
-			return 1
-		}
-		return 0
-	}
-
-	// Higher height.
-	if relativeHeight == 1 {
-		switch {
-		case isPostConsensusMessage:
-			return 4
-		case isDecidedMessage(state, m):
-			return 3
-		case isPreConsensusMessage:
-			return 2
-		case isConsensusMessage:
-			return 1
-		}
-		return 0
-	}
-
-	// Lower height.
-	switch {
-	case isDecidedMessage(state, m):
-		return 2
-	case isConsensusMessage && genesisspecqbft.MessageType(m.SSVMessage.MsgType) == genesisspecqbft.CommitMsgType:
-		return 1
-	}
-	return 0
-}
-
-// scoreCommitteeConsensusType returns an integer score for the type of committee consensus message.
-// When given a non-consensus message, scoreConsensusType returns 0.
-func scoreCommitteeConsensusType(m *GenesisSSVMessage) int {
-	if qbftMsg, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
-		switch qbftMsg.Message.MsgType {
-		case genesisspecqbft.ProposalMsgType:
-			return 4
-		case genesisspecqbft.PrepareMsgType:
-			return 3
-		case genesisspecqbft.CommitMsgType:
-			return 2
-		case genesisspecqbft.RoundChangeMsgType:
-			return 1
-		}
-	}
-	return 0
+	return sm.Message.MsgType == genesisspecqbft.CommitMsgType &&
+		len(sm.Signers) > int(s.Quorum)
 }
