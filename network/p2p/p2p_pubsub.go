@@ -35,24 +35,6 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 	n.msgRouter = router
 }
 
-//
-//// Peers registers a message router to handle incoming messages
-//func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
-//	all := make([]peer.ID, 0)
-//	topics, err := n.broadcastTopics(pk[:])
-//	if err != nil {
-//		return nil, fmt.Errorf("could not get validator topics: %w", err)
-//	}
-//	for _, topic := range topics {
-//		peers, err := n.topicsCtrl.Peers(topic)
-//		if err != nil {
-//			return nil, err
-//		}
-//		all = append(all, peers...)
-//	}
-//	return all, nil
-//}
-
 func dutyExecutorToID(fork bool, dutyExecutor []byte) []byte {
 	if fork {
 		return dutyExecutor[16:]
