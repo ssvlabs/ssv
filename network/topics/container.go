@@ -67,16 +67,17 @@ func (tc *topicsContainer) Join(name string, opts ...pubsub.TopicOpt) (*pubsub.T
 	return topic, nil
 }
 
-func (tc *topicsContainer) Unsubscribe(name string) {
+func (tc *topicsContainer) Unsubscribe(name string) bool {
 	tc.subLock.Lock()
 	defer tc.subLock.Unlock()
 
 	sub, ok := tc.subs[name]
 	if !ok {
-		return
+		return false
 	}
 	delete(tc.subs, name)
 	sub.Cancel()
+	return true
 }
 
 func (tc *topicsContainer) Subscribe(name string, opts ...pubsub.SubOpt) (*pubsub.Subscription, error) {

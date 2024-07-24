@@ -135,6 +135,27 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 	}
 }
 
+// topicScoreParams factory for creating scoring params for topics
+func validatorTopicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
+	return func(t string) *pubsub.TopicScoreParams {
+		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
+		if err != nil {
+			logger.Debug("could not read stats: active validators")
+			return nil
+		}
+		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
+			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
+		logger.Debug("got validator stats for score params")
+		opts := params.NewSubnetTopicOptsValidators(int(totalValidators), commons.Subnets())
+		tp, err := params.TopicParams(opts)
+		if err != nil {
+			logger.Debug("ignoring topic score params", zap.Error(err))
+			return nil
+		}
+		return tp
+	}
+}
+
 // Returns a new committee list with only the committees that belong to the given topic
 func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -25,7 +24,6 @@ type Subscriber interface {
 	// Unsubscribe unsubscribes from the validator subnet
 	Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error
 	// Peers returns the peers that are connected to the given validator
-	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 }
 
 // Broadcaster enables to broadcast messages
