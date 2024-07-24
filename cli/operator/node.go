@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
 	"time"
+
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -266,8 +267,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
-		genesisKeyManager := &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
-		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.KeyManager = genesisKeyManager
+		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.KeyManager = &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
 
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)

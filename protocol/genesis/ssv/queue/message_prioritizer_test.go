@@ -38,7 +38,7 @@ var messagePriorityTests = []struct {
 			// 1.1. Events/ExecuteDuty
 			mockExecuteDutyMessage{Slot: 62, Role: spectypes.BNRoleProposer},
 			// 1.2. Events/Timeout
-			mockTimeoutMessage{Height: 98, Role: spectypes.RunnerRole(spectypes.BNRoleProposer)},
+			mockTimeoutMessage{Height: 98, Role: spectypes.BNRoleProposer},
 
 			// 2. Current height/slot:
 			// 2.1. Consensus
@@ -125,7 +125,7 @@ func TestMessagePrioritizer(t *testing.T) {
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
 				var err error
-				messages[i], err = DecodeSignedSSVMessage(m.ssvMessage(test.state))
+				messages[i], err = DecodeGenesisSignedSSVMessage(m.ssvMessage(test.state))
 				require.NoError(t, err)
 			}
 
@@ -158,7 +158,7 @@ type mockMessage interface {
 }
 
 type mockConsensusMessage struct {
-	Role    spectypes.RunnerRole
+	Role    spectypes.BeaconRole
 	Type    qbft.MessageType
 	Decided bool
 	Height  qbft.Height
@@ -213,7 +213,7 @@ func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMessa
 }
 
 type mockNonConsensusMessage struct {
-	Role spectypes.RunnerRole
+	Role spectypes.BeaconRole
 	Type spectypes.PartialSigMsgType
 	Slot phase0.Slot
 }

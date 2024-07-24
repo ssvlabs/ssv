@@ -8,7 +8,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -60,9 +59,9 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *genesisspecqbft.
 }
 
 // returns true if there is a quorum for the current round for this provided value
-func commitQuorumForRoundRoot(state *types.State, commitMsgContainer *genesisspecqbft.MsgContainer, root [32]byte, round genesisspecqbft.Round) (bool, []*genesisspecqbft.SignedMessage, error) {
+func commitQuorumForRoundRoot(state *genesisspecqbft.State, commitMsgContainer *genesisspecqbft.MsgContainer, root [32]byte, round genesisspecqbft.Round) (bool, []*genesisspecqbft.SignedMessage, error) {
 	signers, msgs := commitMsgContainer.LongestUniqueSignersForRoundAndRoot(round, root)
-	return state.CommitteeMember.HasQuorum(len(signers)), msgs, nil
+	return state.Share.HasQuorum(len(signers)), msgs, nil
 }
 
 func aggregateCommitMsgs(msgs []*genesisspecqbft.SignedMessage, fullData []byte) (*genesisspecqbft.SignedMessage, error) {
@@ -103,7 +102,7 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *types.State, config qbft.IConfig, root [32]byte) (*genesisspecqbft.SignedMessage, error) {
+func CreateCommit(state *genesisspecqbft.State, config qbft.IConfig, root [32]byte) (*genesisspecqbft.SignedMessage, error) {
 	msg := &genesisspecqbft.Message{
 		MsgType:    genesisspecqbft.CommitMsgType,
 		Height:     state.Height,
@@ -112,7 +111,7 @@ func CreateCommit(state *types.State, config qbft.IConfig, root [32]byte) (*gene
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.CommitteeMember.SSVOperatorPubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing commit msg")
 	}
@@ -129,7 +128,7 @@ func BaseCommitValidation(
 	config qbft.IConfig,
 	signedCommit *genesisspecqbft.SignedMessage,
 	height genesisspecqbft.Height,
-	operators []*spectypes.Operator,
+	operators []*genesisspectypes.Operator,
 ) error {
 	if signedCommit.Message.MsgType != genesisspecqbft.CommitMsgType {
 		return errors.New("commit msg type is wrong")
@@ -157,7 +156,7 @@ func validateCommit(
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	proposedMsg *genesisspecqbft.SignedMessage,
-	operators []*spectypes.Operator,
+	operators []*genesisspectypes.Operator,
 ) error {
 	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return err

@@ -9,7 +9,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
@@ -51,7 +50,7 @@ type Runner interface {
 type BaseRunner struct {
 	mtx            sync.RWMutex
 	State          *State
-	Share          *spectypes.Share
+	Share          *genesisspectypes.Share
 	QBFTController *controller.Controller
 	BeaconNetwork  genesisspectypes.BeaconNetwork
 	BeaconRoleType genesisspectypes.BeaconRole
@@ -82,7 +81,7 @@ func (b *BaseRunner) baseSetupForNewDuty(duty *genesisspectypes.Duty, quorum uin
 
 func NewBaseRunner(
 	state *State,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	controller *controller.Controller,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	beaconRoleType genesisspectypes.BeaconRole,

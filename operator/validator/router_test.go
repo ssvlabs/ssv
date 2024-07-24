@@ -41,7 +41,7 @@ func TestRouter(t *testing.T) {
 	}()
 
 	for i := 0; i < expectedCount; i++ {
-		msg := &queue.DecodedSSVMessage{
+		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.MsgType(i % 3),
 				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),

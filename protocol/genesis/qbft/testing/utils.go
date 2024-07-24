@@ -6,7 +6,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -14,7 +13,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
-	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role genesisspectypes.BeaconRole) *qbft.Config {
@@ -33,7 +31,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			}
 			return nil
 		},
-		ProposerF: func(state *genesisrunner.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 			return 1
 		},
 		Storage:               TestingStores(logger).Get(role),
@@ -81,7 +79,7 @@ var baseInstance = func(share *genesisspectypes.Share, keySet *testingutils.Test
 
 func NewTestingQBFTController(
 	identifier []byte,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	config qbft.IConfig,
 	fullNode bool,
 ) *controller.Controller {

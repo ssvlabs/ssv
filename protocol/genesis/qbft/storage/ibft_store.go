@@ -6,12 +6,11 @@ import (
 	"go.uber.org/zap"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
-	State          *types.State
+	State          *genesisspecqbft.State
 	DecidedMessage *genesisspecqbft.SignedMessage
 }
 

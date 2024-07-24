@@ -11,7 +11,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -36,7 +35,7 @@ type VoluntaryExitRunner struct {
 
 func NewVoluntaryExitRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
-	share *spectypes.Share,
+	share *genesisspectypes.Share,
 	beacon beacon.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
@@ -207,7 +206,7 @@ func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
+func (r *VoluntaryExitRunner) GetShare() *genesisspectypes.Share {
 	return r.BaseRunner.Share
 }
 
