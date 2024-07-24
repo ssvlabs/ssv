@@ -1052,6 +1052,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 								Signer:           1,
 							},
 						},
+						Slot: slot,
 					}
 
 					sig, err := spectestingutils.NewTestingKeyManager().SignRoot(innerMsg, spectypes.PartialSignatureType, ks.Shares[1].GetPublicKey().Serialize())
