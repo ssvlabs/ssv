@@ -49,7 +49,9 @@ func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {
 		return fmt.Errorf("could not find validator: %x", message.MsgID.GetPubKey())
 	}
 
-	topics := commons.ValidatorTopicID(message.MsgID.GetPubKey())
+	// TODO Alan - revert it back once we have dual subnets
+	// topics := commons.ValidatorTopicID(message.MsgID.GetPubKey())
+	topics := commons.CommitteeTopicID(share.CommitteeID())
 
 	for _, topic := range topics {
 		p.Network.interfaceLogger.Debug("broadcasting msg",

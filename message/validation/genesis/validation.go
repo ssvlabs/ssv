@@ -27,7 +27,6 @@ import (
 	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -353,21 +352,22 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrEmptyPubSubMessage
 	}
 
+	// TODO Alan - revert it back once we have dual subnets
 	// Check if the message was sent on the right topic.
-	currentTopic := pMsg.GetTopic()
-	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
-	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
+	// currentTopic := pMsg.GetTopic()
+	// currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
+	// topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
 
-	topicFound := false
-	for _, tp := range topics {
-		if tp == currentTopicBaseName {
-			topicFound = true
-			break
-		}
-	}
-	if !topicFound {
-		return nil, Descriptor{}, ErrTopicNotFound
-	}
+	// topicFound := false
+	// for _, tp := range topics {
+	// 	if tp == currentTopicBaseName {
+	// 		topicFound = true
+	// 		break
+	// 	}
+	// }
+	// if !topicFound {
+	// 	return nil, Descriptor{}, ErrTopicNotFound
+	// }
 
 	mv.metrics.GenesisSSVMessageType(msg.MsgType)
 
