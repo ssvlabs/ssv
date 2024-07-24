@@ -6,21 +6,23 @@ import (
 )
 
 func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.CommitteeMember) *genesisspectypes.Share {
-	genesisShare := &genesisspectypes.Share{}
+	genesisShare := &genesisspectypes.Share{
+		OperatorID:          operator.OperatorID,
+		ValidatorPubKey:     share.ValidatorPubKey[:], // Ensure this is necessary; remove if ValidatorPubKey is already a slice.
+		SharePubKey:         share.SharePubKey,
+		Committee:           make([]*genesisspectypes.Operator, 0, len(share.Committee)),
+		Quorum:              operator.GetQuorum(),
+		DomainType:          genesisspectypes.DomainType(share.DomainType),
+		FeeRecipientAddress: share.FeeRecipientAddress,
+		Graffiti:            share.Graffiti,
+	}
 
-	genesisShare.OperatorID = operator.OperatorID
-	genesisShare.ValidatorPubKey = share.ValidatorPubKey[:]
-	genesisShare.SharePubKey = share.SharePubKey
-	genesisShare.Committee = make([]*genesisspectypes.Operator, 0, len(share.Committee))
 	for _, c := range share.Committee {
 		genesisShare.Committee = append(genesisShare.Committee, &genesisspectypes.Operator{
 			OperatorID: c.Signer,
 			PubKey:     c.SharePubKey,
 		})
 	}
-	genesisShare.Quorum = operator.GetQuorum()
-	genesisShare.DomainType = genesisspectypes.DomainType(share.DomainType)
-	genesisShare.FeeRecipientAddress = share.FeeRecipientAddress
-	genesisShare.Graffiti = share.Graffiti
+
 	return genesisShare
 }

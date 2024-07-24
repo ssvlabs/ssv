@@ -44,8 +44,8 @@ func VerifyByOperators(s genesisspectypes.Signature, data genesisspectypes.Messa
 	for _, id := range data.GetSigners() {
 		found := false
 		for _, n := range operators {
-			if id == n.OperatorID {
-				pk, err := DeserializeBLSPublicKey(n.PubKey)
+			if id == n.GetID() {
+				pk, err := DeserializeBLSPublicKey(n.GetPublicKey())
 				if err != nil {
 					return errors.Wrap(err, "failed to deserialize public key")
 				}
