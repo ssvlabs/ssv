@@ -205,14 +205,14 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 ) error {
 	signerState := state.GetSignerState(signer)
 
-	msgSlot := phase0.Slot(signedMsg.Message.Height)
-	msgRound := signedMsg.Message.Round
-
 	// If signer state is nil, this is the first message for the signer and
 	// the next rules can't be checked.
 	if signerState == nil {
 		return mv.validateJustifications(share, signedMsg)
 	}
+
+	msgSlot := phase0.Slot(signedMsg.Message.Height)
+	msgRound := signedMsg.Message.Round
 
 	if msgSlot < signerState.Slot {
 		// Signers aren't allowed to decrease their slot.

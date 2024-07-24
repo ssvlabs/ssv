@@ -81,7 +81,6 @@ var (
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
 	ErrMalformedSignedMessage              = Error{text: "signed message could not be decoded", reject: true}
 	ErrUnknownSSVMessageType               = Error{text: "unknown SSV message type", reject: true}
-	ErrMismatchedIdentifier                = Error{text: "identifier mismatch", reject: true}
 	ErrUnknownQBFTMessageType              = Error{text: "unknown QBFT message type", reject: true}
 	ErrUnknownPartialMessageType           = Error{text: "unknown partial signature message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch    = Error{text: "partial signature type and role don't match", reject: true}
