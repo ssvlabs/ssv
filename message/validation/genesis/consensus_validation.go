@@ -207,7 +207,6 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 ) error {
 	signerState := state.GetSignerState(signer)
 
-	// MSGVALIDATIONREVIEW: validateJustifications is also called in the ending of this function.
 	if signerState == nil {
 		return mv.validateJustifications(share, signedMsg)
 	}

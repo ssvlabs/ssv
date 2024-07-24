@@ -452,8 +452,6 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 
 	descriptor.SSVMessageType = spectypes.MsgType(ssvMessage.MsgType)
 
-	// MSGVALIDATIONREVIEW: a nil nodeStorage prevents us form doing any validation. Shouldn't "nodeStorage != nil" be enforced?
-	// E.g. returning an error if so
 	if mv.nodeStorage != nil {
 		switch spectypes.MsgType(ssvMessage.MsgType) {
 		case spectypes.SSVConsensusMsgType:
