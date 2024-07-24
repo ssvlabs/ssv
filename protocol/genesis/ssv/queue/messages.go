@@ -9,7 +9,6 @@ import (
 
 	"github.com/ssvlabs/ssv/network/commons"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/genesis/message"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
@@ -28,8 +27,8 @@ type GenesisSSVMessage struct {
 
 func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {
-	case *genesisssvtypes.EventMsg: // TODO: do we need slot in events?
-		if m.Type == genesisssvtypes.Timeout {
+	case *ssvtypes.EventMsg: // TODO: do we need slot in events?
+		if m.Type == ssvtypes.Timeout {
 			data, err := m.GetTimeoutData()
 			if err != nil {
 				return 0, ErrUnknownMessageType // TODO alan: other error
