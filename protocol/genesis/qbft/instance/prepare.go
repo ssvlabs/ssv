@@ -194,7 +194,7 @@ func CreatePrepare(state *genesisspecqbft.State, config qbft.IConfig, newRound g
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
+		Signers:   []genesisspectypes.OperatorID{state.Share.OperatorID},
 		Message:   *msg,
 	}
 	return signedMsg, nil

@@ -118,7 +118,7 @@ func CreateCommit(state *genesisspecqbft.State, config qbft.IConfig, root [32]by
 
 	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []genesisspectypes.OperatorID{config.GetOperatorID()},
+		Signers:   []genesisspectypes.OperatorID{state.Share.OperatorID},
 		Message:   *msg,
 	}
 	return signedMsg, nil

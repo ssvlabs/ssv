@@ -1478,7 +1478,6 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			Network:               options.GenesisOptions.Network,
 			Timer:                 genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			SignatureVerification: true,
-			OperatorID:            options.Operator.OperatorID,
 		}
 		config.ValueCheckF = valueCheckF
 

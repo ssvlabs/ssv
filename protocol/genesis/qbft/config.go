@@ -29,8 +29,6 @@ type IConfig interface {
 	GetTimer() roundtimer.Timer
 	// VerifySignatures returns if signature is checked
 	VerifySignatures() bool
-	// GetOperatorID returns the operator ID
-	GetOperatorID() genesisspectypes.OperatorID
 }
 
 type Config struct {
@@ -43,7 +41,6 @@ type Config struct {
 	Network               genesisspecqbft.Network
 	Timer                 roundtimer.Timer
 	SignatureVerification bool
-	OperatorID            genesisspectypes.OperatorID
 }
 
 // GetSigner returns a Signer instance
@@ -88,8 +85,4 @@ func (c *Config) GetTimer() roundtimer.Timer {
 
 func (c *Config) VerifySignatures() bool {
 	return c.SignatureVerification
-}
-
-func (c *Config) GetOperatorID() genesisspectypes.OperatorID {
-	return c.OperatorID
 }
