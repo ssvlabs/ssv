@@ -54,7 +54,7 @@ func NewCommittee(
 	operator *spectypes.CommitteeMember,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn CommitteeRunnerFunc,
-// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
+	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
 ) *Committee {
 	return &Committee{
 		logger:        logger,
@@ -95,7 +95,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	if r == nil {
 		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
 	}
-	
+
 	go func() {
 		err := c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, r)
 		logger.Error("failed consuming queue", zap.Error(err))
@@ -181,10 +181,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
-	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
+	runnerLogger := c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 
 	logger.Info("ℹ️ starting duty processing")
-	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
+	return c.Runners[duty.Slot].StartNewDuty(runnerLogger, duty, c.Operator.GetQuorum())
 }
 
 // NOT threadsafe
