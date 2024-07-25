@@ -235,7 +235,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			if ok {
 				decodedMsg = m
 			} else {
-				m, ok := msg.ValidatorData.(*genesisqueue.DecodedSSVMessage)
+				m, ok := msg.ValidatorData.(*genesisqueue.GenesisSSVMessage)
 				if ok {
 					decodedMsg = m
 				}

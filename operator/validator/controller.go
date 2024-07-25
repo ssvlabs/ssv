@@ -117,6 +117,7 @@ type GenesisControllerOptions struct {
 	KeyManager        genesisspectypes.KeyManager
 	StorageMap        *genesisstorage.QBFTStores
 	NewDecidedHandler genesisqbftcontroller.NewDecidedHandler
+	Metrics           genesisvalidator.Metrics
 }
 
 // Controller represent the validators controller,
@@ -279,7 +280,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
-		Metrics:           options.Metrics,
+		Metrics:           options.GenesisControllerOptions.Metrics,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -1053,7 +1054,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		av := validator.NewValidator(ctx, cancel, opts)
 
 		genesisOpts := c.genesisValidatorOptions
-		genesisOpts.SSVShare = share // TODO convert
+		// genesisOpts.SSVShare = share // TODO convert
 		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
 		gv := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
