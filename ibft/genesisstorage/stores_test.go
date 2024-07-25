@@ -9,7 +9,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	genesisqbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -39,7 +38,7 @@ func TestQBFTStores(t *testing.T) {
 	id := []byte{1, 2, 3}
 
 	qbftMap.Each(func(role genesisspectypes.BeaconRole, store genesisqbftstorage.QBFTStore) error {
-		return store.SaveInstance(&genesisqbftstorage.StoredInstance{State: &types.State{Height: 1, ID: id}})
+		return store.SaveInstance(&genesisqbftstorage.StoredInstance{State: &genesisspecqbft.State{Height: 1, ID: id}})
 	})
 
 	instance, err := qbftMap.Get(genesisspectypes.BNRoleAttester).GetInstance(id, 1)

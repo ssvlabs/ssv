@@ -52,7 +52,7 @@ func (mr *MockValidatorMockRecorder) GetShare() *gomock.Call {
 }
 
 // ProcessMessage mocks base method.
-func (m *MockValidator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+func (m *MockValidator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ProcessMessage", logger, msg)
 	ret0, _ := ret[0].(error)

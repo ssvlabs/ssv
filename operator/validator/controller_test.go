@@ -27,6 +27,7 @@ import (
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -280,7 +281,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg *queue.SSVMessage) error {
+	ctr.messageWorker.UseHandler(func(msg network.SSVMessageInterface) error {
 		wg.Done()
 		return nil
 	})
@@ -313,7 +314,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
+	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
 			MsgID:   identifier,
@@ -321,7 +322,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
+	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
 			MsgID:   identifier,

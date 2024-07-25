@@ -68,17 +68,6 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("operator ID is not ready")
 	}
 
-	// TODO: (genesis) old encoding
-	// encodedMsg, err := commons.EncodeNetworkMsg(msg)
-	// if err != nil {
-	// 	return errors.Wrap(err, "could not decode msg")
-	// }
-	// signature, err := n.operatorSigner.Sign(encodedMsg)
-	// if err != nil {
-	// 	return err
-	// }
-	// encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
-
 	encodedMsg, err := msg.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
@@ -234,10 +223,20 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			m, ok := msg.ValidatorData.(*queue.SSVMessage)
 			if ok {
 				decodedMsg = m
+				logger.With(
+					zap.String("pubKey", hex.EncodeToString(m.SSVMessage.MsgID.GetDutyExecutorID())),
+					zap.String("role", m.SSVMessage.MsgID.GetRoleType().String()),
+					fields.MessageType(spectypes.MsgType(m.SSVMessage.MsgType)),
+				).Debug("handlePubsubMessages - alan")
 			} else {
 				m, ok := msg.ValidatorData.(*genesisqueue.GenesisSSVMessage)
 				if ok {
 					decodedMsg = m
+					logger.With(
+						zap.String("pubKey", hex.EncodeToString(m.SSVMessage.MsgID.GetPubKey())),
+						zap.String("role", m.SSVMessage.MsgID.GetRoleType().String()),
+						fields.MessageType(spectypes.MsgType(m.SSVMessage.MsgType)),
+					).Debug("handlePubsubMessages - genesis")
 				}
 			}
 

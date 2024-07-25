@@ -11,7 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
 // uponProposal process proposal message
@@ -79,7 +79,7 @@ func isValidProposal(
 		return errors.New("msg allows 1 signer")
 	}
 	if config.VerifySignatures() {
-		if err := ssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
+		if err := genesisssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
@@ -126,7 +126,7 @@ func isValidProposal(
 
 func IsProposalJustification(
 	config qbft.IConfig,
-	share *ssvtypes.SSVShare,
+	share *genesisspectypes.Share,
 	roundChangeMsgs []*genesisspecqbft.SignedMessage,
 	prepareMsgs []*genesisspecqbft.SignedMessage,
 	height genesisspecqbft.Height,
@@ -135,7 +135,7 @@ func IsProposalJustification(
 ) error {
 	return isProposalJustification(
 		&genesisspecqbft.State{
-			Share:  &share.Share,
+			Share:  share,
 			Height: height,
 		},
 		config,

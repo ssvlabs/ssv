@@ -1464,23 +1464,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		genesisspectypes.BNRoleVoluntaryExit,
 	}
 
-	share := &genesisspectypes.Share{}
-
-	share.OperatorID = options.Operator.OperatorID
-	share.ValidatorPubKey = options.SSVShare.Share.ValidatorPubKey[:]
-	share.SharePubKey = options.SSVShare.Share.SharePubKey
-	share.Committee = make([]*genesisspectypes.Operator, len(options.SSVShare.Share.Committee))
-	for _, c := range options.SSVShare.Share.Committee {
-		share.Committee = append(share.Committee, &genesisspectypes.Operator{
-			OperatorID: c.Signer,
-			PubKey:     c.SharePubKey,
-		})
-	}
-
-	share.Quorum = options.Operator.GetQuorum()
-	share.DomainType = genesisspectypes.DomainType(options.SSVShare.Share.DomainType)
-	share.FeeRecipientAddress = options.SSVShare.Share.FeeRecipientAddress
-	share.Graffiti = options.SSVShare.Share.Graffiti
+	share := genesisssvtypes.ConvertToGenesisShare(&options.SSVShare.Share, options.Operator)
 
 	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *genesisqbftcontroller.Controller {
 		config := &genesisqbft.Config{

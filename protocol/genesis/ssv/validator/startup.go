@@ -8,7 +8,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	"go.uber.org/zap"
 
@@ -34,7 +34,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			logger.Warn("❗ share is missing", fields.BeaconRole(spectypes.BeaconRole(role)))
 			continue
 		}
-		identifier := genesisspectypes.NewMsgID(types.GetDefaultDomain(), dutyRunner.GetBaseRunner().Share.ValidatorPubKey, role)
+		identifier := genesisspectypes.NewMsgID(genesistypes.GetDefaultDomain(), dutyRunner.GetBaseRunner().Share.ValidatorPubKey, role)
 		if ctrl := dutyRunner.GetBaseRunner().QBFTController; ctrl != nil {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {
