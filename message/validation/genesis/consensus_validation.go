@@ -206,7 +206,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	signerState := state.GetSignerState(signer)
 
 	// If signer state is nil, this is the first message for the signer and
-	// the next rules can't be checked.
+	// it's not necessary to check the next rules.
 	if signerState == nil {
 		return mv.validateJustifications(share, signedMsg)
 	}
