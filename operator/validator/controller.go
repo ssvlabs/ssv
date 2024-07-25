@@ -1197,11 +1197,10 @@ func SetupCommitteeRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(convert.RunnerRole(role)),
-			Network:               options.Network,
-			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			SignatureVerification: true,
-			CutOffRound:           specqbft.Round(specqbft.CutoffRound),
+			Storage:     options.Storage.Get(convert.RunnerRole(role)),
+			Network:     options.Network,
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound: specqbft.Round(specqbft.CutoffRound),
 		}
 		config.ValueCheckF = valueCheckF
 
@@ -1258,11 +1257,10 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(convert.RunnerRole(role)),
-			Network:               options.Network,
-			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			SignatureVerification: true,
-			CutOffRound:           specqbft.Round(specqbft.CutoffRound),
+			Storage:     options.Storage.Get(convert.RunnerRole(role)),
+			Network:     options.Network,
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound: specqbft.Round(specqbft.CutoffRound),
 		}
 		config.ValueCheckF = valueCheckF
 

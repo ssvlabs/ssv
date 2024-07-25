@@ -150,11 +150,9 @@ func validSignedPrepareForHeightRoundAndRootVerifySignature(
 		return err
 	}
 
-	if config.VerifySignatures() {
-		// Verify signature
-		if err := spectypes.Verify(msg.SignedMessage, operators); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	// Verify signature
+	if err := spectypes.Verify(msg.SignedMessage, operators); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil

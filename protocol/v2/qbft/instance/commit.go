@@ -168,11 +168,9 @@ func BaseCommitValidationVerifySignature(
 		return err
 	}
 
-	if config.VerifySignatures() {
-		// verify signature
-		if err := spectypes.Verify(msg.SignedMessage, operators); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	// verify signature
+	if err := spectypes.Verify(msg.SignedMessage, operators); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil

@@ -353,11 +353,9 @@ func validRoundChangeForDataVerifySignature(
 		return err
 	}
 
-	if config.VerifySignatures() {
-		// Verify signature
-		if err := spectypes.Verify(msg.SignedMessage, state.CommitteeMember.Committee); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	// Verify signature
+	if err := spectypes.Verify(msg.SignedMessage, state.CommitteeMember.Committee); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil

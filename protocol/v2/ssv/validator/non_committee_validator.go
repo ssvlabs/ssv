@@ -51,11 +51,10 @@ type CommitteeObserverOptions struct {
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:                opts.NetworkConfig.DomainType(),
-		Storage:               opts.Storage.Get(identifier.GetRoleType()),
-		Network:               opts.Network,
-		SignatureVerification: true,
-		CutOffRound:           specqbft.Round(specqbft.CutoffRound),
+		Domain:      opts.NetworkConfig.DomainType(),
+		Storage:     opts.Storage.Get(identifier.GetRoleType()),
+		Network:     opts.Network,
+		CutOffRound: specqbft.Round(specqbft.CutoffRound),
 	}
 
 	// TODO: does the specific operator matters?

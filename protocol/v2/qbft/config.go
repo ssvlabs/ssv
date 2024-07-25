@@ -27,22 +27,19 @@ type IConfig interface {
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
-	// VerifySignatures returns if signature is checked
-	VerifySignatures() bool
 	// GetRoundCutOff returns the round cut off
 	GetCutOffRound() specqbft.Round
 }
 
 type Config struct {
-	BeaconSigner          spectypes.BeaconSigner
-	Domain                spectypes.DomainType
-	ValueCheckF           specqbft.ProposedValueCheckF
-	ProposerF             specqbft.ProposerF
-	Storage               qbftstorage.QBFTStore
-	Network               specqbft.Network
-	Timer                 roundtimer.Timer
-	SignatureVerification bool
-	CutOffRound           specqbft.Round
+	BeaconSigner spectypes.BeaconSigner
+	Domain       spectypes.DomainType
+	ValueCheckF  specqbft.ProposedValueCheckF
+	ProposerF    specqbft.ProposerF
+	Storage      qbftstorage.QBFTStore
+	Network      specqbft.Network
+	Timer        roundtimer.Timer
+	CutOffRound  specqbft.Round
 }
 
 // GetShareSigner returns a BeaconSigner instance
@@ -82,8 +79,4 @@ func (c *Config) GetTimer() roundtimer.Timer {
 
 func (c *Config) GetCutOffRound() specqbft.Round {
 	return c.CutOffRound
-}
-
-func (c *Config) VerifySignatures() bool {
-	return c.SignatureVerification
 }
