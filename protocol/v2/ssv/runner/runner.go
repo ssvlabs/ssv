@@ -179,8 +179,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
-	// TODO: Should we remove this function since it doesn't do anything?
-	b.compactInstanceIfNeeded(msg)
 	if err != nil {
 		return false, nil, err
 	}
