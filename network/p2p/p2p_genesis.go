@@ -42,6 +42,8 @@ func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
+	message.MsgID.GetPubKey()
+
 	share := p.Network.nodeStorage.ValidatorStore().Validator(message.MsgID.GetPubKey())
 	if share == nil {
 		return fmt.Errorf("could not find validator: %x", message.MsgID.GetPubKey())
