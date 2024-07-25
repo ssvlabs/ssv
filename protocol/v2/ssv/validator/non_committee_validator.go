@@ -8,7 +8,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -32,7 +31,7 @@ type CommitteeObserver struct {
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
 	Roots                  map[[32]byte]spectypes.BeaconRole
-	postConsensusContainer map[phase0.ValidatorIndex]*specssv.PartialSigContainer
+	postConsensusContainer map[phase0.ValidatorIndex]*types.PartialSigContainer
 }
 
 type CommitteeObserverOptions struct {
@@ -70,7 +69,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
 		Roots:                  make(map[[32]byte]spectypes.BeaconRole),
-		postConsensusContainer: make(map[phase0.ValidatorIndex]*specssv.PartialSigContainer),
+		postConsensusContainer: make(map[phase0.ValidatorIndex]*types.PartialSigContainer),
 	}
 }
 
@@ -166,7 +165,7 @@ func (ncv *CommitteeObserver) processMessage(
 		validator := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
 		if !ok {
-			container = specssv.NewPartialSigContainer(validator.Quorum())
+			container = types.NewPartialSigContainer(validator.Quorum())
 			ncv.postConsensusContainer[msg.ValidatorIndex] = container
 		}
 		if container.HasSigner(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
@@ -194,7 +193,7 @@ func (ncv *CommitteeObserver) processMessage(
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *types.SSVShare) {
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *types.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *types.SSVShare) {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {

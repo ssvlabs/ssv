@@ -4,8 +4,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +59,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 	signers := make(map[spectypes.OperatorID]bool)
 	roots := make(map[[32]byte]bool)
 	rootCount := 0
-	partialSigContainer := ssv.NewPartialSigContainer(b.State.PreConsensusContainer.Quorum)
+	partialSigContainer := types.NewPartialSigContainer(b.State.PreConsensusContainer.Quorum)
 	for i, msg := range data.PreConsensusJustifications {
 		if err := msg.Validate(); err != nil {
 			return err
