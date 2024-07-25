@@ -6,8 +6,8 @@ const (
 	RoleAttester RunnerRole = iota
 	RoleAggregator
 	RoleProposer
-	RoleSyncCommitteeContribution
 	RoleSyncCommittee
+	RoleSyncCommitteeContribution
 
 	RoleValidatorRegistration
 	RoleVoluntaryExit
