@@ -1054,7 +1054,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		av := validator.NewValidator(ctx, cancel, opts)
 
 		genesisOpts := c.genesisValidatorOptions
-		// genesisOpts.SSVShare = share // TODO convert
+		genesisOpts.SSVShare = genesisssvtypes.ConvertToAlanShare(share, operator)
 		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
 		gv := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
