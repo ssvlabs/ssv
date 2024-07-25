@@ -177,7 +177,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage) (decided bool, decidedValue spectypes.Encoder, err error) {
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
-		prevDecided, _ = b.IsRunningInstanceDecided()
+		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
 	// TODO: revert after pre-consensus liveness is fixed
@@ -187,9 +187,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		}
 	}
 
-	b.mtx.Lock()
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
-	b.mtx.Unlock()
 	b.compactInstanceIfNeeded(msg)
 	if err != nil {
 		return false, nil, err
@@ -376,16 +374,4 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 			b.State.StartingDuty.DutySlot())
 	}
 	return nil
-}
-
-func (b *BaseRunner) IsRunningInstanceDecided() (bool, []byte) {
-	b.mtx.RLock()
-	defer b.mtx.RUnlock()
-	return b.State.RunningInstance.IsDecided()
-}
-
-func (b *BaseRunner) GetStateProposalAcceptedForCurrentRound() *spectypes.SignedSSVMessage {
-	b.mtx.RLock()
-	defer b.mtx.RUnlock()
-	return b.State.RunningInstance.State.ProposalAcceptedForCurrentRound
 }

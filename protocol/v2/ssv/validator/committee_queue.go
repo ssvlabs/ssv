@@ -110,7 +110,7 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		if runner.HasRunningDuty() {
 			runningInstance = runner.GetBaseRunner().State.RunningInstance
 			if runningInstance != nil {
-				decided, _ := runner.GetBaseRunner().IsRunningInstanceDecided()
+				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
 			}
 		}
@@ -125,22 +125,19 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 				}
 				return e.Type == types.ExecuteDuty
 			}
-		} else {
-			proposalAcceptedForCurrentRound := runner.GetBaseRunner().GetStateProposalAcceptedForCurrentRound()
-			if runningInstance != nil && proposalAcceptedForCurrentRound == nil {
-				// If no proposal was accepted for the current round, skip prepare & commit messages
-				// for the current height and round.
-				filter = func(m *queue.DecodedSSVMessage) bool {
-					sm, ok := m.Body.(*specqbft.Message)
-					if !ok {
-						return true
-					}
-
-					if sm.Height != state.Height || sm.Round != state.Round {
-						return true
-					}
-					return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+			// If no proposal was accepted for the current round, skip prepare & commit messages
+			// for the current height and round.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				sm, ok := m.Body.(*specqbft.Message)
+				if !ok {
+					return true
 				}
+
+				if sm.Height != state.Height || sm.Round != state.Round {
+					return true
+				}
+				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
 		}
 
