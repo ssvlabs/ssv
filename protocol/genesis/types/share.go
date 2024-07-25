@@ -10,7 +10,6 @@ func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.Committee
 	q, pc := types.ComputeQuorumAndPartialQuorum(len(share.Committee))
 	genesisShare := &genesisspectypes.Share{
 		OperatorID:          operator.OperatorID,
-		ValidatorPubKey:     share.ValidatorPubKey[:], // Ensure this is necessary; remove if ValidatorPubKey is already a slice.
 		SharePubKey:         share.SharePubKey,
 		Committee:           make([]*genesisspectypes.Operator, 0, len(share.Committee)),
 		Quorum:              q,
@@ -19,6 +18,7 @@ func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.Committee
 		FeeRecipientAddress: share.FeeRecipientAddress,
 		Graffiti:            share.Graffiti,
 	}
+	copy(genesisShare.ValidatorPubKey[:], share.ValidatorPubKey[:])
 
 	for _, c := range share.Committee {
 		genesisShare.Committee = append(genesisShare.Committee, &genesisspectypes.Operator{
