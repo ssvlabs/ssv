@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"

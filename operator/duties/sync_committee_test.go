@@ -80,7 +80,7 @@ func setupSyncCommitteeDutiesMock(
 func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.BeaconDuty {
 	expectedDuties := make([]*spectypes.BeaconDuty, 0)
 	for _, d := range duties {
-		if !handler.network.AlanForked(slot) {
+		if !handler.network.PastAlanForkAtEpoch(handler.network.Beacon.EstimatedEpochAtSlot(slot)) {
 			expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 		}
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))

@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -78,11 +79,6 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 
 	switch testType {
 	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
-		// TODO: fix blinded test
-		if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
-			logger.Info("skipping blinded block test", zap.String("test", testName))
-			return nil
-		}
 		typedTest := msgProcessingSpecTestFromMap(t, test.(map[string]interface{}))
 
 		return &runnable{
@@ -386,6 +382,10 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		}
 	}
 
+	if ret.GetBaseRunner().DomainTypeProvider == nil {
+		ret.GetBaseRunner().DomainTypeProvider = networkconfig.TestNetwork
+	}
+
 	return ret
 }
 
@@ -551,7 +551,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,
 		testingutils.NewTestingVerifier(),
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
+		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 			return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
 		},
 	)

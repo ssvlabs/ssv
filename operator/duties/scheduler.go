@@ -16,14 +16,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -102,6 +102,7 @@ type SchedulerOptions struct {
 	ValidatorExitCh     <-chan ExitDescriptor
 	SlotTickerProvider  slotticker.Provider
 	DutyStore           *dutystore.Store
+	P2PNetwork          network.P2PNetwork
 }
 
 type Scheduler struct {
@@ -149,7 +150,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
-			NewVoluntaryExitHandler(opts.ValidatorExitCh),
+			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 		},
 

@@ -5,6 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -16,18 +20,17 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -68,7 +71,7 @@ func TestTopicManager(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+		validator := genesisvalidation.New(networkconfig.TestNetwork)
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
@@ -372,8 +375,15 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		ScoreInspectorInterval: 100 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
 	}
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop())
+	_, validatorStore, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore)
 	require.NoError(t, err)
 
 	p = &P{
@@ -417,18 +427,18 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err
 	}
 
-	signedMessage := specqbft.SignedMessage{
+	signedMessage := genesisspecqbft.SignedMessage{
 		Signature: signature,
 		Signers:   []spectypes.OperatorID{1, 3, 4},
-		Message: specqbft.Message{
-			MsgType:    specqbft.RoundChangeMsgType,
-			Height:     specqbft.Height(height),
+		Message: genesisspecqbft.Message{
+			MsgType:    genesisspecqbft.RoundChangeMsgType,
+			Height:     genesisspecqbft.Height(height),
 			Round:      2,
 			Identifier: id[:],
 			Root:       [32]byte{},
@@ -463,19 +473,6 @@ func (m *DummyMessageValidator) ValidatorForTopic(topic string) func(ctx context
 	}
 }
 
-func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return pubsub.ValidationAccept
-}
-
-func (m *DummyMessageValidator) ValidateSSVMessage(msg *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
-	var descriptor validation.Descriptor
-
-	validatorPK := msg.SSVMessage.GetID().GetPubKey()
-	role := msg.SSVMessage.GetID().GetRoleType()
-	descriptor.Role = role
-	descriptor.ValidatorPK = validatorPK
-
-	descriptor.SSVMessageType = msg.SSVMessage.GetType()
-
-	return msg, descriptor, nil
 }

@@ -5,6 +5,8 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/cornelk/hashmap"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"math/rand"
 	"os"
 	"sort"
@@ -14,15 +16,12 @@ import (
 	"time"
 
 	"github.com/aquasecurity/table"
-	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // TestP2pNetwork_MessageValidation tests p2pNetwork would score peers according
@@ -49,7 +48,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		cryptorand.Read(validator[:])
 		validators[i] = hex.EncodeToString(validator[:])
 	}
-
+	var mtx sync.Mutex
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
 		acceptedRole = spectypes.RoleProposer
@@ -57,53 +56,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
-	var mtx sync.Mutex
-	for i := 0; i < nodeCount; i++ {
-		i := i
-		messageValidators[i] = &MockMessageValidator{
-			Accepted: make([]int, nodeCount),
-			Ignored:  make([]int, nodeCount),
-			Rejected: make([]int, nodeCount),
-		}
-		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-			peer := vNet.NodeByPeerID(p)
-			signedSSVMsg := &spectypes.SignedSSVMessage{}
-			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
-
-			decodedMsg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
-			require.NoError(t, err)
-			pmsg.ValidatorData = decodedMsg
-			mtx.Lock()
-			// Validation according to role.
-			var validation pubsub.ValidationResult
-			switch signedSSVMsg.SSVMessage.MsgID.GetRoleType() {
-			case acceptedRole:
-				messageValidators[i].Accepted[peer.Index]++
-				messageValidators[i].TotalAccepted++
-				validation = pubsub.ValidationAccept
-			case ignoredRole:
-				messageValidators[i].Ignored[peer.Index]++
-				messageValidators[i].TotalIgnored++
-				validation = pubsub.ValidationIgnore
-			case rejectedRole:
-				messageValidators[i].Rejected[peer.Index]++
-				messageValidators[i].TotalRejected++
-				validation = pubsub.ValidationReject
-			default:
-				panic("unsupported role")
-			}
-			mtx.Unlock()
-
-			// Always accept messages from self to make libp2p propagate them,
-			// while still counting them by their role.
-			if p == vNet.Nodes[i].Network.Host().ID() {
-				return pubsub.ValidationAccept
-			}
-
-			return validation
-		}
-	}
-
 	// Create a VirtualNet with 4 nodes.
 	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
 		return messageValidators[nodeIndex]

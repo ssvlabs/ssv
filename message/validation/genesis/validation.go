@@ -17,14 +17,14 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
-	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
 
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
+	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -387,11 +387,11 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 		err.want = maxMessageSize
 		return nil, descriptor, err
 	}
-
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
+	domain := mv.netCfg.DomainType()
+	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		err.want = hex.EncodeToString(domain[:])
 		return nil, descriptor, err
 	}
 

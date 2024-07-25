@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -34,6 +35,7 @@ type SyncCommitteeAggregatorRunner struct {
 }
 
 func NewSyncCommitteeAggregatorRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -47,6 +49,7 @@ func NewSyncCommitteeAggregatorRunner(
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleSyncCommitteeContribution,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -201,7 +204,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 		Messages: msgs,
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(postConsensusMsg, msgID, r.operatorSigner)
 	if err != nil {
 		return errors.Wrap(err, "could not sign post-consensus partial signature message")
@@ -225,6 +228,9 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	r.metrics.EndPostConsensus()
 
 	consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return errors.Wrap(err, "failed to decode decided value")
+	}
 
 	// get contributions
 	contributions, err := consensusData.GetSyncCommitteeContributions()
@@ -379,7 +385,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty spe
 		msgs.Messages = append(msgs.Messages, msg)
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
 	if err != nil {
 		return errors.Wrap(err, "could not sign pre-consensus partial signature message")

@@ -94,9 +94,9 @@ func (n *p2pNetwork) initCfg() error {
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
-		n.subnets = subnets
+		n.fixedSubnets = subnets
 	} else {
-		n.subnets = make(records.Subnets, p2pcommons.Subnets())
+		n.fixedSubnets = make(records.Subnets, p2pcommons.Subnets())
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
@@ -169,12 +169,12 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-
-	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
+	d := n.cfg.Network.DomainType()
+	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     records.Subnets(n.subnets).String(),
+		Subnets:     records.Subnets(n.fixedSubnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
@@ -195,7 +195,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	subnetsProvider := func() records.Subnets {
-		return n.subnets
+		return n.activeSubnets
 	}
 
 	filters := func() []connections.HandshakeFilter {
@@ -205,14 +205,15 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
-		Streams:         n.streamCtrl,
-		NodeInfos:       n.idx,
-		PeerInfos:       n.idx,
-		ConnIdx:         n.idx,
-		SubnetsIdx:      n.idx,
-		IDService:       ids,
-		Network:         n.host.Network(),
-		SubnetsProvider: subnetsProvider,
+		Streams:            n.streamCtrl,
+		NodeInfos:          n.idx,
+		PeerInfos:          n.idx,
+		ConnIdx:            n.idx,
+		SubnetsIdx:         n.idx,
+		IDService:          ids,
+		Network:            n.host.Network(),
+		DomainTypeProvider: n.cfg.Network,
+		SubnetsProvider:    subnetsProvider,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
@@ -241,8 +242,9 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if len(n.subnets) > 0 {
-			discV5Opts.Subnets = n.subnets
+		if len(n.fixedSubnets) > 0 {
+			discV5Opts.Subnets = n.fixedSubnets
+			logger = logger.With(zap.String("subnets", records.Subnets(n.fixedSubnets).String()))
 		}
 		logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
@@ -255,7 +257,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
-		DomainType:  n.cfg.Network.Domain,
+		DomainType:  n.cfg.Network,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
@@ -270,11 +272,12 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 
 func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	cfg := &topics.PubSubConfig{
-		Host:         n.host,
-		TraceLog:     n.cfg.PubSubTrace,
-		MsgValidator: n.msgValidator,
-		MsgHandler:   n.handlePubsubMessages(logger),
-		ScoreIndex:   n.idx,
+		NetworkConfig: n.cfg.Network,
+		Host:          n.host,
+		TraceLog:      n.cfg.PubSubTrace,
+		MsgValidator:  n.msgValidator,
+		MsgHandler:    n.handlePubsubMessages(logger),
+		ScoreIndex:    n.idx,
 		//Discovery: n.disc,
 		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
@@ -300,7 +303,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics)
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore())
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

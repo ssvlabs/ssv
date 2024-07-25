@@ -5,6 +5,8 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -12,13 +14,12 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -40,7 +41,7 @@ func TestMsgValidator(t *testing.T) {
 
 	ks := spectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
+		Share: *spectestingutils.TestingShare(ks, 1),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: v1.ValidatorStateActiveOngoing,
@@ -50,7 +51,7 @@ func TestMsgValidator(t *testing.T) {
 	}
 	require.NoError(t, ns.Shares().Save(nil, share))
 
-	mv := validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithNodeStorage(ns))
+	mv := genesisvalidation.New(networkconfig.TestNetwork, genesisvalidation.WithNodeStorage(ns))
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
@@ -86,11 +87,11 @@ func TestMsgValidator(t *testing.T) {
 		signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
 		require.NoError(t, err)
 
-		sig := [256]byte{}
+		var sig []byte
 		copy(sig[:], signature)
 
-		packedPubSubMsgPayload := spectypes.EncodeSignedSSVMessage(encodedMsg, operatorId, sig)
-		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetPubKey())
+		packedPubSubMsgPayload := genesisspectypes.EncodeSignedSSVMessage(encodedMsg, operatorId, sig)
+		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetDutyExecutorID())
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -98,8 +99,7 @@ func TestMsgValidator(t *testing.T) {
 				Data:  packedPubSubMsgPayload,
 			},
 		}
-
-		res := mv.ValidatePubsubMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
@@ -120,7 +120,7 @@ func TestMsgValidator(t *testing.T) {
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
-		res := mv.ValidatePubsubMessage(context.Background(), "xxxx", pmsg)
+		res := mv.Validate(context.Background(), "xxxx", pmsg)
 		require.Equal(t, pubsub.ValidationReject, res)
 	})
 
@@ -147,9 +147,9 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(pk spectypes.ValidatorPK, height qbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk[:], spectypes.RoleCommittee)
 	ks := spectestingutils.Testing4SharesSet()
-	validSignedMessage := spectestingutils.TestingRoundChangeMessageWithHeightAndIdentifier(ks.Shares[1], 1, height, id[:])
+	validSignedMessage := spectestingutils.TestingRoundChangeMessageWithHeightAndIdentifier(ks.OperatorKeys[1], 1, height, id[:])
 
 	encodedSignedMessage, err := validSignedMessage.Encode()
 	if err != nil {

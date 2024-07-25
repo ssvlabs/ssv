@@ -49,7 +49,7 @@ type CommitteeObserverOptions struct {
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:                opts.NetworkConfig.Domain,
+		Domain:                opts.NetworkConfig.DomainType(),
 		Storage:               opts.Storage.Get(identifier.GetRoleType()),
 		Network:               opts.Network,
 		SignatureVerification: true,
@@ -83,7 +83,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) error
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
-		return fmt.Errorf("not processing message type %s", partialSigMessages.Type)
+		return fmt.Errorf("not processing message type %d", partialSigMessages.Type)
 	}
 
 	slot := partialSigMessages.Slot

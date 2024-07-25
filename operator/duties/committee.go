@@ -42,18 +42,20 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 
-			if !h.network.AlanForked(slot) {
+			if !h.network.PastAlanForkAtEpoch(epoch) {
 				h.logger.Debug("🛠 ticker event",
 					zap.String("period_epoch_slot_pos", buildStr),
 					zap.String("status", "alan not forked yet"),

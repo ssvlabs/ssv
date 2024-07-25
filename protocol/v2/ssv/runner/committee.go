@@ -4,19 +4,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	"time"
+
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -33,13 +34,13 @@ import (
 //}
 
 type CommitteeRunner struct {
-	BaseRunner        *BaseRunner
-	network           specqbft.Network
-	beacon            beacon.BeaconNode
-	signer            types.BeaconSigner
-	operatorSigner    types.OperatorSigner
-	domain            spectypes.DomainType
-	valCheck          specqbft.ProposedValueCheckF
+	BaseRunner     *BaseRunner
+	network        specqbft.Network
+	beacon         beacon.BeaconNode
+	signer         types.BeaconSigner
+	operatorSigner types.OperatorSigner
+	valCheck       specqbft.ProposedValueCheckF
+
 	stoppedValidators map[spectypes.ValidatorPK]struct{}
 	submittedDuties   map[types.BeaconRole]map[phase0.ValidatorIndex]struct{}
 
@@ -59,12 +60,12 @@ func NewCommitteeRunner(
 ) Runner {
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: types.RoleCommittee,
-			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
-			Share:          share,
-			QBFTController: qbftController,
+			RunnerRoleType:     types.RoleCommittee,
+			DomainTypeProvider: networkConfig,
+			BeaconNetwork:      networkConfig.Beacon.GetBeaconNetwork(),
+			Share:              share,
+			QBFTController:     qbftController,
 		},
-		domain:            networkConfig.Domain,
 		beacon:            beacon,
 		network:           network,
 		signer:            signer,
@@ -254,7 +255,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 	ssvMsg := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
 		MsgID: types.NewMsgID(
-			cr.domain,
+			cr.BaseRunner.DomainTypeProvider.DomainType(),
 			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
@@ -386,8 +387,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
-			vlogger.Debug("🧩 reconstructed partial signatures",
-				zap.Uint64s("signers", getPostConsensusSigners(cr.BaseRunner.State, root)))
+			vlogger.Debug("🧩 reconstructed partial signatures committee",
+				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
 			if _, exists := beaconObjects[validator]; !exists {
 				anyErr = errors.Wrap(err, "could not find beacon object for validator")
@@ -417,44 +418,50 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			}
 		}
 	}
+
 	logger = logger.With(durationFields...)
 	// Submit multiple attestations
-	attestations := make([]*phase0.Attestation, 0)
+	attestations := make([]*phase0.Attestation, 0, len(attestationsToSubmit))
 	for _, att := range attestationsToSubmit {
 		attestations = append(attestations, att)
 	}
-	submmitionStart := time.Now()
-	if err := cr.beacon.SubmitAttestations(attestations); err != nil {
-		logger.Error("❌ failed to submit attestation", zap.Error(err))
-		return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
-	}
 
-	logger.Info("✅ successfully submitted attestations",
-		fields.SubmissionTime(time.Since(submmitionStart)),
-		fields.Height(cr.BaseRunner.QBFTController.Height),
-		fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
-	// Record successful submissions
-	for validator := range attestationsToSubmit {
-		cr.RecordSubmission(types.BNRoleAttester, validator)
+	if len(attestations) > 0 {
+		submissionStart := time.Now()
+		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
+			logger.Error("❌ failed to submit attestation", zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+		}
+
+		logger.Info("✅ successfully submitted attestations",
+			fields.SubmissionTime(time.Since(submissionStart)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+		// Record successful submissions
+		for validator := range attestationsToSubmit {
+			cr.RecordSubmission(types.BNRoleAttester, validator)
+		}
 	}
 
 	// Submit multiple sync committee
-	syncCommitteeMessages := make([]*altair.SyncCommitteeMessage, 0)
+	syncCommitteeMessages := make([]*altair.SyncCommitteeMessage, 0, len(syncCommitteeMessagesToSubmit))
 	for _, syncMsg := range syncCommitteeMessagesToSubmit {
 		syncCommitteeMessages = append(syncCommitteeMessages, syncMsg)
 	}
-	submmitionStart = time.Now()
-	if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
-		logger.Error("❌ failed to submit sync committee", zap.Error(err))
-		return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
-	}
-	logger.Info("✅ successfully submitted sync committee",
-		fields.SubmissionTime(time.Since(submmitionStart)),
-		fields.Height(cr.BaseRunner.QBFTController.Height),
-		fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
-	// Record successful submissions
-	for validator := range syncCommitteeMessagesToSubmit {
-		cr.RecordSubmission(types.BNRoleSyncCommittee, validator)
+	if len(syncCommitteeMessages) > 0 {
+		submissionStart := time.Now()
+		if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
+			logger.Error("❌ failed to submit sync committee", zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+		}
+		logger.Info("✅ successfully submitted sync committee",
+			fields.SubmissionTime(time.Since(submissionStart)),
+			fields.Height(cr.BaseRunner.QBFTController.Height),
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
+		// Record successful submissions
+		for validator := range syncCommitteeMessagesToSubmit {
+			cr.RecordSubmission(types.BNRoleSyncCommittee, validator)
+		}
 	}
 
 	if anyErr != nil {
@@ -565,8 +572,11 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
 	for _, beaconDuty := range duty.(*types.CommitteeDuty).BeaconDuties {
+		if beaconDuty == nil {
+			continue
+		}
 		_, stopped := cr.stoppedValidators[spectypes.ValidatorPK(beaconDuty.PubKey)]
-		if beaconDuty == nil || stopped {
+		if stopped {
 			continue
 		}
 		slot := beaconDuty.DutySlot()
