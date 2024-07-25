@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/ssvlabs/ssv/message/signatureverifier"
+	"github.com/ssvlabs/ssv/message/validation"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -39,7 +41,6 @@ import (
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -218,32 +219,32 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		// signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 		validatorStore := nodeStorage.ValidatorStore()
 		// validatorStore = newValidatorStore(...) // TODO
 
 		// New msg validation that should be dynamically switched
-		// messageValidator := validation.New(
-		// 	networkConfig,
-		// 	validatorStore,
-		// 	dutyStore,
-		// 	signatureVerifier,
-		// 	validation.WithLogger(logger),
-		// 	validation.WithMetrics(metricsReporter),
-		// )
-
-		genesisMessageValidator := genesisvalidation.New(
+		messageValidator := validation.New(
 			networkConfig,
-			genesisvalidation.WithNodeStorage(nodeStorage),
-			genesisvalidation.WithLogger(logger),
-			genesisvalidation.WithMetrics(metricsReporter),
-			genesisvalidation.WithDutyStore(dutyStore),
+			validatorStore,
+			dutyStore,
+			signatureVerifier,
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
 		)
 
+		// genesisMessageValidator := genesisvalidation.New(
+		// 	networkConfig,
+		// 	genesisvalidation.WithNodeStorage(nodeStorage),
+		// 	genesisvalidation.WithLogger(logger),
+		// 	genesisvalidation.WithMetrics(metricsReporter),
+		// 	genesisvalidation.WithDutyStore(dutyStore),
+		// )
+
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
-		cfg.P2pNetworkConfig.MessageValidator = genesisMessageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = genesisMessageValidator
+		cfg.P2pNetworkConfig.MessageValidator = messageValidator
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db, metricsReporter)
 
