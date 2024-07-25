@@ -151,6 +151,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 		logger.Debug("❌ failed to broadcast decided message", zap.Error(err))
 	}
 
+	// TODO: spec checks if prevDecided (and returns if so) right after inst.ProcessMsg. Should we align?
 	if prevDecided {
 		return nil, err
 	}
@@ -220,7 +221,7 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode state")
+		return [32]byte{}, errors.Wrap(err, "could not encode controller")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
