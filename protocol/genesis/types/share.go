@@ -6,6 +6,7 @@ import (
 	typesv2 "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+// TODO: (Alan) write tests with all fields and equality checks
 func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.CommitteeMember) *genesisspectypes.Share {
 	q, pc := ComputeQuorumAndPartialQuorum(len(share.Committee))
 	genesisShare := &genesisspectypes.Share{
@@ -30,6 +31,7 @@ func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.Committee
 	return genesisShare
 }
 
+// TODO: (Alan) write tests with all fields and equality checks
 func ConvertToAlanShare(alanShare *typesv2.SSVShare, operator *spectypes.CommitteeMember) *SSVShare {
 	q, pc := ComputeQuorumAndPartialQuorum(len(alanShare.Committee))
 

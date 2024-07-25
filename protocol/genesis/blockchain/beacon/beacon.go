@@ -1,8 +1,7 @@
-package beacon
+package genesisbeacon
 
 import (
 	"context"
-	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -46,7 +45,6 @@ type signer interface {
 	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
 }
 
-// BeaconNode interface for all beacon duty calls
 type BeaconNode interface {
 	genesisspecssv.BeaconNode // spec beacon interface
 	beaconDuties
@@ -54,15 +52,4 @@ type BeaconNode interface {
 	beaconValidator
 	signer // TODO need to handle differently
 	proposer
-}
-
-// Options for controller struct creation
-type Options struct {
-	Context        context.Context
-	Network        Network
-	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	Graffiti       []byte
-	GasLimit       uint64
-	CommonTimeout  time.Duration // Optional.
-	LongTimeout    time.Duration // Optional.
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/genesis/blockchain/beacon"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (

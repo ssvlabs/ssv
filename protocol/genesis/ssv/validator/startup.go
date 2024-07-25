@@ -17,7 +17,8 @@ import (
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
-	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey))
+	pubKey := v.Share.ValidatorPubKey
+	logger = logger.Named(logging.NameValidator).With(fields.PubKey(pubKey))
 
 	if !atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		return false, nil
@@ -34,7 +35,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			logger.Warn("❗ share is missing", fields.BeaconRole(spectypes.BeaconRole(role)))
 			continue
 		}
-		identifier := genesisspectypes.NewMsgID(genesistypes.GetDefaultDomain(), dutyRunner.GetBaseRunner().Share.ValidatorPubKey, role)
+		identifier := genesisspectypes.NewMsgID(genesistypes.GetDefaultDomain(), pubKey, role)
 		if ctrl := dutyRunner.GetBaseRunner().QBFTController; ctrl != nil {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {
@@ -51,7 +52,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			}
 		}
 
-		if err := n.Subscribe(identifier.GetPubKey()); err != nil {
+		if err := n.Subscribe(pubKey); err != nil {
 			return true, err
 		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)

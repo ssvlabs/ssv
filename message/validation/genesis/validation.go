@@ -4,7 +4,6 @@ package validation
 // validator.go contains main code for validation and most of the rule checks.
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -388,13 +387,13 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 		err.want = maxMessageSize
 		return nil, descriptor, err
 	}
-	domain := mv.netCfg.DomainType()
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(domain[:])
-		return nil, descriptor, err
-	}
+	// domain := mv.netCfg.DomainType()
+	// if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
+	// 	err := ErrWrongDomain
+	// 	err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
+	// 	err.want = hex.EncodeToString(domain[:])
+	// 	return nil, descriptor, err
+	// }
 
 	validatorPK := ssvMessage.GetID().GetPubKey()
 	role := ssvMessage.GetID().GetRoleType()
@@ -477,8 +476,8 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			}
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
-			descriptor.Slot = slot
+			// slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
+			descriptor.Slot = partialSignatureMessage.Message.Slot
 			if err != nil {
 				return nil, descriptor, err
 			}
