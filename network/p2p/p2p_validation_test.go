@@ -5,8 +5,6 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/cornelk/hashmap"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"math/rand"
 	"os"
 	"sort"
@@ -14,6 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/cornelk/hashmap"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/aquasecurity/table"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -265,6 +266,7 @@ func CreateVirtualNet(
 			node := vn.NodeByPeerID(selfPeer)
 			if node == nil {
 				t.Fatalf("self peer not found (%s)", selfPeer)
+				return
 			}
 
 			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
@@ -275,6 +277,7 @@ func CreateVirtualNet(
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
 					t.Fatalf("peer not found (%s)", peerID)
+					return
 				}
 				node.PeerScores.Set(peerNode.Index, peerScore)
 			}
