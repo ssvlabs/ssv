@@ -48,7 +48,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	signature := signedSSVMessage.Signatures[0]
-	signer := signedSSVMessage.GetOperatorIDs()[0]
+	signer := signedSSVMessage.OperatorIDs[0]
 	if err := mv.signatureVerifier.VerifySignature(signer, ssvMessage, signature); err != nil {
 		e := ErrSignatureVerification
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", signer, err)
@@ -68,7 +68,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	// Rule: Partial Signature message must have 1 signer
-	signers := signedSSVMessage.GetOperatorIDs()
+	signers := signedSSVMessage.OperatorIDs
 	if len(signers) != 1 {
 		return ErrPartialSigOneSigner
 	}
@@ -133,7 +133,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
-	signer := signedSSVMessage.GetOperatorIDs()[0]
+	signer := signedSSVMessage.OperatorIDs[0]
 	signerStateBySlot := state.GetOrCreate(signer)
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.

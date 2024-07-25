@@ -40,6 +40,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		highestInstance.State.CommitteeMember,
 		identifier,
 		highestInstance.State.Height,
+		c.OperatorSigner,
 	)
 	i.State = highestInstance.State
 	return i, nil

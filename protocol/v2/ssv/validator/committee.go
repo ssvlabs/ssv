@@ -12,10 +12,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -41,7 +41,6 @@ type Committee struct {
 
 	Operator *spectypes.CommitteeMember
 
-	SignatureVerifier       spectypes.SignatureVerifier
 	CreateRunnerFn          CommitteeRunnerFunc
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
 }
@@ -52,7 +51,6 @@ func NewCommittee(
 	logger *zap.Logger,
 	beaconNetwork spectypes.BeaconNetwork,
 	operator *spectypes.CommitteeMember,
-	verifier spectypes.SignatureVerifier,
 	createRunnerFn CommitteeRunnerFunc,
 	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
 ) *Committee {
@@ -67,7 +65,6 @@ func NewCommittee(
 		//Shares:                  share,
 		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
 		Operator:                operator,
-		SignatureVerifier:       verifier,
 		CreateRunnerFn:          createRunnerFn,
 	}
 }
@@ -109,18 +106,18 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	if len(duty.BeaconDuties) == 0 {
+	if len(duty.ValidatorDuties) == 0 {
 		return errors.New("no beacon duties")
 	}
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
-	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.BeaconDuties))
-	//validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
+	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
+	//validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
 	//toRemove := make([]int, 0)
 	// Remove beacon duties that don't have a share
-	//for i, bd := range duty.BeaconDuties {
+	//for i, bd := range duty.ValidatorDuties {
 	//	share, ok := c.Shares[bd.ValidatorIndex]
 	//	if !ok {
 	//		toRemove = append(toRemove, i)
@@ -139,7 +136,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	//	if err != nil {
 	//		logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
 	//	} else {
-	//		duty.BeaconDuties = newDuties
+	//		duty.ValidatorDuties = newDuties
 	//	}
 	//}
 	//
@@ -150,7 +147,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// TODO REMOVE this after https://github.com/ssvlabs/ssv-spec/pull/467 is merged and we are aligned to the spec
 	// 			   and pas validatorShares instead of sharesCopy the runner
 	// -->
-	for _, bd := range duty.BeaconDuties {
+	for _, bd := range duty.ValidatorDuties {
 		share, ok := c.Shares[bd.ValidatorIndex]
 		if !ok {
 			continue
@@ -206,7 +203,7 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) 
 	}
 }
 
-func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) ([]*spectypes.BeaconDuty, error) {
+func removeIndices(s []*spectypes.ValidatorDuty, indicesToRemove []int) ([]*spectypes.ValidatorDuty, error) {
 	// Create a set to check for duplicate and invalid indices
 	uniqueIndices := make(map[int]struct{}, len(indicesToRemove))
 	for _, id := range indicesToRemove {
@@ -220,7 +217,7 @@ func removeIndices(s []*spectypes.BeaconDuty, indicesToRemove []int) ([]*spectyp
 	}
 
 	// Create a result slice excluding marked elements
-	result := make([]*spectypes.BeaconDuty, 0, len(s)-len(indicesToRemove))
+	result := make([]*spectypes.ValidatorDuty, 0, len(s)-len(indicesToRemove))
 	for i, item := range s {
 		if _, found := uniqueIndices[i]; !found {
 			result = append(result, item)
@@ -239,7 +236,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		}
 
 		// Verify SignedSSVMessage's signature
-		if err := c.SignatureVerifier.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
+		if err := spectypes.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
 

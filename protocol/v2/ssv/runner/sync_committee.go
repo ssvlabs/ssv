@@ -25,7 +25,7 @@ package runner
 //	beacon         specssv.BeaconNode
 //	network        specqbft.Network
 //	signer         spectypes.BeaconSigner
-//	operatorSigner spectypes.OperatorSigner
+//	operatorSigner ssvtypes.OperatorSigner
 //	valCheck       specqbft.ProposedValueCheckF
 //
 //	metrics metrics.ConsensusMetrics
@@ -38,7 +38,7 @@ package runner
 //	beacon specssv.BeaconNode,
 //	network specqbft.Network,
 //	signer spectypes.BeaconSigner,
-//	operatorSigner spectypes.OperatorSigner,
+//	operatorSigner ssvtypes.OperatorSigner,
 //	valCheck specqbft.ProposedValueCheckF,
 //	highestDecidedSlot phase0.Slot,
 //) Runner {
@@ -218,7 +218,7 @@ package runner
 //	r.metrics.StartDutyFullFlow()
 //	r.metrics.StartConsensus()
 //
-//	input := &spectypes.ConsensusData{
+//	input := &spectypes.ValidatorConsensusData{
 //		Duty:    *duty,
 //		Version: ver,
 //		DataSSZ: root[:],

@@ -33,7 +33,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	assert1to1BlockSlotMapping(t, scheduler)
 	require.EqualValues(t, 1, blockByNumberCalls.Load())
 
-	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
 	const blockNumber = uint64(1)
@@ -172,10 +172,10 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.EqualValues(t, blockNumber, slot)
 }
 
-func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.BeaconDuty {
-	expectedDuties := make([]*spectypes.BeaconDuty, 0)
+func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.ValidatorDuty {
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range descriptors {
-		expectedDuties = append(expectedDuties, &spectypes.BeaconDuty{
+		expectedDuties = append(expectedDuties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleVoluntaryExit,
 			PubKey:         d.PubKey,
 			Slot:           phase0.Slot(d.BlockNumber) + voluntaryExitSlotsToPostpone,

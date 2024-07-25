@@ -11,7 +11,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
@@ -46,46 +46,48 @@ func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 }
 
 func createCommit(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		CommitteeMember: testingutils.TestingCommitteeMember(ks),
+		CommitteeMember: spectestingutils.TestingCommitteeMember(ks),
 		ID:              []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
-	return specqbft.CreateCommit(state, config, test.Value)
+	return specqbft.CreateCommit(state, signer, test.Value)
 }
 
 func createPrepare(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		CommitteeMember: testingutils.TestingCommitteeMember(ks),
+		CommitteeMember: spectestingutils.TestingCommitteeMember(ks),
 		ID:              []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
-	return specqbft.CreatePrepare(state, config, test.Round, test.Value)
+	return specqbft.CreatePrepare(state, signer, test.Round, test.Value)
 }
 
 func createProposal(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		CommitteeMember: testingutils.TestingCommitteeMember(ks),
+		CommitteeMember: spectestingutils.TestingCommitteeMember(ks),
 		ID:              []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
-	return specqbft.CreateProposal(state, config, test.Value[:], test.RoundChangeJustifications, test.PrepareJustifications)
+	return specqbft.CreateProposal(state, signer, test.Value[:],
+		spectestingutils.ToProcessingMessages(test.RoundChangeJustifications),
+		spectestingutils.ToProcessingMessages(test.PrepareJustifications))
 }
 
 func createRoundChange(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		CommitteeMember:  testingutils.TestingCommitteeMember(ks),
+		CommitteeMember:  spectestingutils.TestingCommitteeMember(ks),
 		ID:               []byte{1, 2, 3, 4},
 		PrepareContainer: qbft.NewMsgContainer(),
 	}
-	config := testingutils.TestingConfig(ks)
+	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
 	if len(test.PrepareJustifications) > 0 {
 		prepareMsg, err := qbft.DecodeMessage(test.PrepareJustifications[0].SSVMessage.Data)
@@ -96,12 +98,12 @@ func createRoundChange(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVM
 		state.LastPreparedValue = test.StateValue
 
 		for _, msg := range test.PrepareJustifications {
-			_, err := state.PrepareContainer.AddFirstMsgForSignerAndRound(msg)
+			_, err := state.PrepareContainer.AddFirstMsgForSignerAndRound(spectestingutils.ToProcessingMessage(msg))
 			if err != nil {
 				return nil, errors.Wrap(err, "could not add first message for signer")
 			}
 		}
 	}
 
-	return specqbft.CreateRoundChange(state, config, 1, test.Value[:])
+	return specqbft.CreateRoundChange(state, signer, 1, test.Value[:])
 }

@@ -15,6 +15,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -24,8 +27,6 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 type MsgProcessingSpecTest struct {
@@ -93,8 +94,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
 				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
-					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableDataRoot(validatorShare.
-						SharePubKey, spectestingutils.TestingAttestationDataRoot[:])
+					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}
 		}
@@ -248,6 +248,7 @@ var baseCommitteeWithRunnerSample = func(
 				runnerSample.BaseRunner.QBFTController.Identifier,
 				runnerSample.BaseRunner.QBFTController.CommitteeMember,
 				runnerSample.BaseRunner.QBFTController.GetConfig(),
+				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			),
 			runnerSample.GetBeaconNode(),
@@ -263,7 +264,6 @@ var baseCommitteeWithRunnerSample = func(
 		logger,
 		runnerSample.GetBaseRunner().BeaconNetwork,
 		spectestingutils.TestingCommitteeMember(keySetSample),
-		spectestingutils.NewTestingVerifier(),
 		createRunnerF,
 	)
 	c.Shares = shareMap
@@ -304,7 +304,7 @@ type MsgProcessingSpecTestAlias struct {
 	BeaconBroadcastedRoots  []string
 	DontStartDuty           bool // if set to true will not start a duty for the runner
 	ExpectedError           string
-	BeaconDuty              *spectypes.BeaconDuty    `json:"BeaconDuty,omitempty"`
+	BeaconDuty              *spectypes.ValidatorDuty `json:"ValidatorDuty,omitempty"`
 	CommitteeDuty           *spectypes.CommitteeDuty `json:"CommitteeDuty,omitempty"`
 }
 
@@ -323,12 +323,12 @@ func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
 	}
 
 	if t.Duty != nil {
-		if beaconDuty, ok := t.Duty.(*spectypes.BeaconDuty); ok {
+		if beaconDuty, ok := t.Duty.(*spectypes.ValidatorDuty); ok {
 			alias.BeaconDuty = beaconDuty
 		} else if committeeDuty, ok := t.Duty.(*spectypes.CommitteeDuty); ok {
 			alias.CommitteeDuty = committeeDuty
 		} else {
-			return nil, errors.New("can't marshal StartNewRunnerDutySpecTest because t.Duty isn't BeaconDuty or CommitteeDuty")
+			return nil, errors.New("can't marshal StartNewRunnerDutySpecTest because t.Duty isn't ValidatorDuty or CommitteeDuty")
 		}
 	}
 	byts, err := json.Marshal(alias)

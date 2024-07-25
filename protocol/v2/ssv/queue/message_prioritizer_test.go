@@ -255,7 +255,7 @@ type mockExecuteDutyMessage struct {
 }
 
 func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
-	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.BeaconDuty{
+	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.ValidatorDuty{
 		Type: m.Role,
 		Slot: m.Slot,
 	}})
