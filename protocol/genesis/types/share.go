@@ -9,10 +9,14 @@ import (
 // TODO: (Alan) write tests with all fields and equality checks
 func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.CommitteeMember) *genesisspectypes.Share {
 	q, pc := ComputeQuorumAndPartialQuorum(len(share.Committee))
+
+	key := make([]byte, len(share.ValidatorPubKey))
+	copy(key, share.ValidatorPubKey[:])
+
 	genesisShare := &genesisspectypes.Share{
 		OperatorID:          operator.OperatorID,
-		ValidatorPubKey:     share.ValidatorPubKey[:], // Ensure this is necessary; remove if ValidatorPubKey is already a slice.
 		SharePubKey:         share.SharePubKey,
+		ValidatorPubKey:     key,
 		Committee:           make([]*genesisspectypes.Operator, 0, len(share.Committee)),
 		Quorum:              q,
 		PartialQuorum:       pc,
@@ -35,10 +39,13 @@ func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.Committee
 func ConvertToAlanShare(alanShare *typesv2.SSVShare, operator *spectypes.CommitteeMember) *SSVShare {
 	q, pc := ComputeQuorumAndPartialQuorum(len(alanShare.Committee))
 
+	key := make([]byte, len(alanShare.ValidatorPubKey))
+	copy(key, alanShare.ValidatorPubKey[:])
+
 	share := &SSVShare{
 		Share: genesisspectypes.Share{
 			OperatorID:          operator.OperatorID,
-			ValidatorPubKey:     genesisspectypes.ValidatorPK(alanShare.ValidatorPubKey[:]), // Ensure this is necessary; remove if ValidatorPubKey is already a slice.
+			ValidatorPubKey:     key, // Ensure this is necessary; remove if ValidatorPubKey is already a slice.
 			SharePubKey:         alanShare.SharePubKey,
 			Committee:           make([]*genesisspectypes.Operator, 0, len(alanShare.Committee)),
 			Quorum:              q,
