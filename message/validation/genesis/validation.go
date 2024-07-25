@@ -227,7 +227,11 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 		}
 
 		// skipping the error check for testing simplifying
-		decMsg, _ := genesisqueue.DecodeGenesisSSVMessage(msg)
+		decMsg, err := genesisqueue.DecodeGenesisSSVMessage(msg)
+		if err != nil {
+			mv.logger.Error("failed to decode network message", zap.Error(err))
+			return pubsub.ValidationReject
+		}
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
 	}
