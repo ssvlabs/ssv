@@ -113,14 +113,8 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *spectypes.SignedSSVMessage
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing messages")
 	}
-	// TODO: In spec, the below assignment doesn't exist.
-	// In fact, the msg should already have the correct identifier. Why are we setting it again?
-	// Also, even though it doesn't change anything, we shouldn't change the message's content
-	// after signing it.
-	msgID := spectypes.MessageID{}
-	copy(msgID[:], i.State.ID)
 
-	return i.config.GetNetwork().Broadcast(msgID, msg)
+	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
 }
 
 func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
