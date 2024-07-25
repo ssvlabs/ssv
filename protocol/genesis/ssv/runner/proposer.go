@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import (
 	"crypto/sha256"
@@ -12,6 +12,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -25,7 +26,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 type ProposerRunner struct {
@@ -33,11 +33,10 @@ type ProposerRunner struct {
 	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
 	ProducesBlindedBlocks bool
 
-	beacon     beacon.BeaconNode
-	network    genesisspecssv.Network
-	signer     genesisspectypes.KeyManager
-	valCheck   genesisspecqbft.ProposedValueCheckF
-	operatorId genesisspectypes.OperatorID
+	beacon   genesisspecssv.BeaconNode
+	network  genesisspecssv.Network
+	signer   genesisspectypes.KeyManager
+	valCheck genesisspecqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
 }
@@ -46,12 +45,11 @@ func NewProposerRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
+	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
@@ -62,18 +60,16 @@ func NewProposerRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		valCheck:   valCheck,
-		operatorId: operatorId,
-
-		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleProposer),
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
+		metrics:  metrics.NewConsensusMetrics(genesisspectypes.BNRoleProposer),
 	}
 }
 
-func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty, quorum)
+func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -88,7 +84,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *gene
 	}
 
 	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
+	logger = logger.With(fields.Slot(postforkphase0.Slot(duty.Slot)))
 	logger.Debug("🧩 got partial RANDAO signatures",
 		zap.Uint64("signer", signedMsg.Signer))
 
@@ -115,13 +111,19 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *gene
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
 	var start = time.Now()
-
-	// get block data
-	obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-	if err != nil {
-		return errors.Wrap(err, "failed to get beacon block")
+	if r.ProducesBlindedBlocks {
+		// get block data
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		if err != nil {
+			return errors.Wrap(err, "failed to get blinded beacon block")
+		}
+	} else {
+		// get block data
+		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		if err != nil {
+			return errors.Wrap(err, "failed to get beacon block")
+		}
 	}
-
 	took := time.Since(start)
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
@@ -202,9 +204,8 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesis
 	}
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-
-		Data: data,
+		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
@@ -271,7 +272,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 
 		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
-			fields.Slot(signedMsg.Message.Slot),
+			fields.Slot(postforkphase0.Slot(signedMsg.Message.Slot)),
 			fields.Height(specqbft.Height(r.BaseRunner.QBFTController.Height)),
 			fields.Round(specqbft.Round(r.GetState().RunningInstance.State.Round)),
 			zap.String("block_hash", blockSummary.Hash.String()),
@@ -342,7 +343,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.operatorId,
+		Signer:    r.GetShare().OperatorID,
 	}
 
 	// broadcast
@@ -352,9 +353,8 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.
 	}
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-
-		Data: data,
+		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial randao sig")
@@ -373,7 +373,7 @@ func (r *ProposerRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
+func (r *ProposerRunner) GetBeaconNode() genesisspecssv.BeaconNode {
 	return r.beacon
 }
 
@@ -449,16 +449,6 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)
 		}
 
-	case *api.VersionedBlindedProposal:
-		switch b.Version {
-		case spec.DataVersionCapella:
-			return summarizeBlock(b.Capella)
-		case spec.DataVersionDeneb:
-			return summarizeBlock(b.Deneb)
-		default:
-			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
-		}
-
 	case *capella.BeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
@@ -493,8 +483,4 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		summary.Version = spec.DataVersionDeneb
 	}
 	return
-}
-
-func (r *ProposerRunner) GetOperatorID() genesisspectypes.OperatorID {
-	return r.operatorId
 }

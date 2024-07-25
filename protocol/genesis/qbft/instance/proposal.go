@@ -176,7 +176,7 @@ func isProposalJustification(
 		}
 
 		// check there is a quorum
-		if !HasQuorum(state.Share, roundChangeMsgs) {
+		if !genesisspecqbft.HasQuorum(state.Share, roundChangeMsgs) {
 			return errors.New("change round has no quorum")
 		}
 
@@ -198,7 +198,7 @@ func isProposalJustification(
 		} else {
 
 			// check prepare quorum
-			if !HasQuorum(state.Share, prepareMsgs) {
+			if !genesisspecqbft.HasQuorum(state.Share, prepareMsgs) {
 				return errors.New("prepares has no quorum")
 			}
 

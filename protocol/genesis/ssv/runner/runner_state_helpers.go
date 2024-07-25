@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import (
 	"encoding/hex"

@@ -17,7 +17,7 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbft.SignedMessage, prepareMsgContainer *genesisspecqbft.MsgContainer) error {
-	hasQuorumBefore := HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
+	hasQuorumBefore := genesisspecqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
@@ -36,7 +36,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 		return nil // already moved to commit stage
 	}
 
-	if !HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+	if !genesisspecqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
 
@@ -96,7 +96,7 @@ func getRoundChangeJustification(state *genesisspecqbft.State, config qbft.IConf
 		}
 	}
 
-	if !HasQuorum(state.Share, ret) {
+	if !genesisspecqbft.HasQuorum(state.Share, ret) {
 		return nil, nil
 	}
 

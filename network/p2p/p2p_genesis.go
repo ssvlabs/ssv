@@ -65,6 +65,6 @@ func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {
 }
 
 // Subscribe subscribes to validator subnet
-func (n *GenesisP2p) Subscribe(pk spectypes.ValidatorPK) error {
-	return n.Network.Subscribe(pk)
+func (n *GenesisP2p) Subscribe(pk genesisspectypes.ValidatorPK) error {
+	return n.Network.Subscribe(spectypes.ValidatorPK(pk))
 }

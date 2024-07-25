@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import (
 	"crypto/sha256"
@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -15,18 +16,16 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 // Duty runner for validator voluntary exit duty
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon     beacon.BeaconNode
-	network    genesisspecssv.Network
-	signer     genesisspectypes.KeyManager
-	valCheck   genesisspecqbft.ProposedValueCheckF
-	operatorId genesisspectypes.OperatorID
+	beacon   genesisspecssv.BeaconNode
+	network  genesisspecssv.Network
+	signer   genesisspectypes.KeyManager
+	valCheck genesisspecqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
 
@@ -36,10 +35,9 @@ type VoluntaryExitRunner struct {
 func NewVoluntaryExitRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
-	beacon beacon.BeaconNode,
+	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	operatorId genesisspectypes.OperatorID,
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
@@ -48,17 +46,15 @@ func NewVoluntaryExitRunner(
 			Share:          share,
 		},
 
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		operatorId: operatorId,
-
+		beacon:  beacon,
+		network: network,
+		signer:  signer,
 		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleVoluntaryExit),
 	}
 }
 
-func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty, quorum)
+func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
+	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -81,7 +77,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
@@ -101,7 +97,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	}
 
 	logger.Debug("voluntary exit submitted successfully",
-		fields.Epoch(r.voluntaryExit.Epoch),
+		fields.Epoch(postforkphase0.Epoch(r.voluntaryExit.Epoch)),
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
@@ -160,7 +156,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.operatorId,
+		Signer:    r.GetShare().OperatorID,
 	}
 
 	// broadcast
@@ -170,9 +166,8 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 	}
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-
-		Data: data,
+		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast signedPartialMsg with VoluntaryExit")
@@ -202,7 +197,7 @@ func (r *VoluntaryExitRunner) GetNetwork() genesisspecssv.Network {
 	return r.network
 }
 
-func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
+func (r *VoluntaryExitRunner) GetBeaconNode() genesisspecssv.BeaconNode {
 	return r.beacon
 }
 
@@ -240,8 +235,4 @@ func (r *VoluntaryExitRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
-}
-
-func (r *VoluntaryExitRunner) GetOperatorID() genesisspectypes.OperatorID {
-	return r.operatorId
 }

@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -91,7 +91,7 @@ type GenesisLoggerFields struct {
 func (d GenesisLoggerFields) AsZapFields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.DutyExecutorID(d.DutyExecutorID),
-		fields.GenesisRole(d.Role),
+		fields.BeaconRole(spectypes.BeaconRole(d.Role)),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(spectypes.MsgType(d.SSVMessageType))),
 		fields.Slot(d.Slot),
 	}

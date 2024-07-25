@@ -1,13 +1,14 @@
 package validator
 
 import (
-	"github.com/ssvlabs/ssv-spec/types"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv-spec-pre-cc/p2p"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv-spec/p2p"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
+	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	"go.uber.org/zap"
 
@@ -16,7 +17,8 @@ import (
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
-	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey[:]))
+	pubKey := v.Share.ValidatorPubKey
+	logger = logger.Named(logging.NameValidator).With(fields.PubKey(pubKey))
 
 	if !atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		return false, nil
@@ -27,13 +29,13 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 		return false, errors.New("network does not support subscription")
 	}
 	for role, dutyRunner := range v.DutyRunners {
-		logger := logger.With(fields.GenesisRole(role))
+		logger := logger.With(fields.BeaconRole(spectypes.BeaconRole(role)))
 		share := dutyRunner.GetBaseRunner().Share
 		if share == nil { // TODO: handle missing share?
-			logger.Warn("❗ share is missing", fields.GenesisRole(role))
+			logger.Warn("❗ share is missing", fields.BeaconRole(spectypes.BeaconRole(role)))
 			continue
 		}
-		identifier := genesisspectypes.NewMsgID(genesisspectypes.DomainType(dutyRunner.GetBaseRunner().Share.DomainType), dutyRunner.GetBaseRunner().Share.ValidatorPubKey[:], role)
+		identifier := genesisspectypes.NewMsgID(genesistypes.GetDefaultDomain(), pubKey, role)
 		if ctrl := dutyRunner.GetBaseRunner().QBFTController; ctrl != nil {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {
@@ -50,7 +52,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			}
 		}
 
-		if err := n.Subscribe(types.ValidatorPK(dutyRunner.GetBaseRunner().Share.ValidatorPubKey)); err != nil {
+		if err := n.Subscribe(pubKey); err != nil {
 			return true, err
 		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)

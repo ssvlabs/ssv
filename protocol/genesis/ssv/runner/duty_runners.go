@@ -1,4 +1,4 @@
-package genesisrunner
+package runner
 
 import genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 

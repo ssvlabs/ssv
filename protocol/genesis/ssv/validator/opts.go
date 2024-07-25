@@ -2,15 +2,15 @@ package validator
 
 import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/ibft/genesisstorage"
+
+	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/message/validation"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -20,13 +20,12 @@ const (
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           genesisspecqbft.Network
-	Beacon            specssv.BeaconNode
+	Beacon            genesisspecssv.BeaconNode
 	BeaconNetwork     beacon.BeaconNetwork
-	Storage           *genesisstorage.QBFTStores
+	Storage           *genesisibftstorage.QBFTStores
 	SSVShare          *types.SSVShare
-	Operator          *spectypes.CommitteeMember
 	Signer            genesisspectypes.KeyManager
-	DutyRunners       genesisrunner.DutyRunners
+	DutyRunners       runner.DutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool
 	Exporter          bool

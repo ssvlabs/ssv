@@ -12,33 +12,33 @@ import (
 )
 
 var (
-	metricsConsensusDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_consensus_duration_seconds_genesis",
+	metricsConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "genesis::ssv_validator_consensus_duration_seconds",
 		Help:    "Consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsPreConsensusDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_pre_consensus_duration_seconds_genesis",
+	metricsPreConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "genesis::ssv_validator_pre_consensus_duration_seconds",
 		Help:    "Pre-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsPostConsensusDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_post_consensus_duration_seconds_genesis",
+	metricsPostConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "genesis::ssv_validator_post_consensus_duration_seconds",
 		Help:    "Post-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsBeaconSubmissionDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_beacon_submission_duration_seconds_genesis",
+	metricsBeaconSubmissionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "genesis::ssv_validator_beacon_submission_duration_seconds",
 		Help:    "Submission to beacon node duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsDutyFullFlowDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_duty_full_flow_duration_seconds_genesis",
+	metricsDutyFullFlowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "genesis::ssv_validator_duty_full_flow_duration_seconds",
 		Help:    "Duty full flow duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
-	metricsDutyFullFlowFirstRoundDurationGenesis = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "ssv_validator_duty_full_flow_first_round_duration_seconds_genesis",
+	metricsDutyFullFlowFirstRoundDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "genesis::ssv_validator_duty_full_flow_first_round_duration_seconds",
 		Help: "Duty full flow at first round duration (seconds)",
 		Buckets: []float64{
 			0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
@@ -48,33 +48,33 @@ var (
 			4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0,
 		},
 	}, []string{"role"})
-	metricsRolesSubmittedGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_validator_roles_submitted_genesis",
+	metricsRolesSubmitted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "genesis::ssv_validator_roles_submitted",
 		Help: "Submitted roles",
 	}, []string{"role"})
-	metricsRolesSubmissionFailuresGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_validator_roles_failed_genesis",
+	metricsRolesSubmissionFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "genesis::ssv_validator_roles_failed",
 		Help: "Submitted roles",
 	}, []string{"role"})
-	metricsInstancesStartedGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_instances_started_genesis",
+	metricsInstancesStarted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "genesis::ssv_instances_started",
 		Help: "Number of started QBFT instances",
 	}, []string{"role"})
-	metricsInstancesDecidedGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_instances_decided_genesis",
+	metricsInstancesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "genesis::ssv_instances_decided",
 		Help: "Number of decided QBFT instances",
 	}, []string{"role"})
 )
 
 func init() {
 	metricsList := []prometheus.Collector{
-		metricsConsensusDurationGenesis,
-		metricsPreConsensusDurationGenesis,
-		metricsPostConsensusDurationGenesis,
-		metricsBeaconSubmissionDurationGenesis,
-		metricsDutyFullFlowDurationGenesis,
-		metricsRolesSubmittedGenesis,
-		metricsRolesSubmissionFailuresGenesis,
+		metricsConsensusDuration,
+		metricsPreConsensusDuration,
+		metricsPostConsensusDuration,
+		metricsBeaconSubmissionDuration,
+		metricsDutyFullFlowDuration,
+		metricsRolesSubmitted,
+		metricsRolesSubmissionFailures,
 	}
 	logger := zap.L()
 	for _, metric := range metricsList {
@@ -106,16 +106,16 @@ type ConsensusMetrics struct {
 func NewConsensusMetrics(role genesisspectypes.BeaconRole) ConsensusMetrics {
 	values := []string{role.String()}
 	return ConsensusMetrics{
-		preConsensus:            metricsPreConsensusDurationGenesis.WithLabelValues(values...),
-		consensus:               metricsConsensusDurationGenesis.WithLabelValues(values...),
-		postConsensus:           metricsPostConsensusDurationGenesis.WithLabelValues(values...),
-		beaconSubmission:        metricsBeaconSubmissionDurationGenesis.WithLabelValues(values...),
-		dutyFullFlow:            metricsDutyFullFlowDurationGenesis.WithLabelValues(values...),
-		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDurationGenesis.WithLabelValues(values...),
-		rolesSubmitted:          metricsRolesSubmittedGenesis.WithLabelValues(values...),
-		rolesSubmissionFailures: metricsRolesSubmissionFailuresGenesis.WithLabelValues(values...),
-		metricsInstancesStarted: metricsInstancesStartedGenesis.WithLabelValues(values...),
-		metricsInstancesDecided: metricsInstancesDecidedGenesis.WithLabelValues(values...),
+		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
+		consensus:               metricsConsensusDuration.WithLabelValues(values...),
+		postConsensus:           metricsPostConsensusDuration.WithLabelValues(values...),
+		beaconSubmission:        metricsBeaconSubmissionDuration.WithLabelValues(values...),
+		dutyFullFlow:            metricsDutyFullFlowDuration.WithLabelValues(values...),
+		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
+		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
+		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
+		metricsInstancesStarted: metricsInstancesStarted.WithLabelValues(values...),
+		metricsInstancesDecided: metricsInstancesDecided.WithLabelValues(values...),
 	}
 }
 

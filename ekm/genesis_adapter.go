@@ -57,7 +57,7 @@ func (k *GenesisKeyManagerAdapter) IsAttestationSlashable(pk []byte, data *phase
 }
 
 func (k *GenesisKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
-	return k.KeyManager.IsBeaconBlockSlashable(pk, slot)
+	return k.KeyManager.IsBeaconBlockSlashable(pk, phase0.Slot(slot))
 }
 
 func (k *GenesisKeyManagerAdapter) SignRoot(data genesisspectypes.Root, genSigType genesisspectypes.SignatureType, pk []byte) (genesisspectypes.Signature, error) {

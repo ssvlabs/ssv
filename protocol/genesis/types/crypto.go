@@ -7,22 +7,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"go.uber.org/zap"
-
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"go.uber.org/zap"
 )
 
 var (
-	MetricsSignaturesVerificationsGenesis = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_signature_verifications_genesis",
+	MetricsSignaturesVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "genesis::ssv_signature_verifications",
 		Help: "Number of signatures verifications",
 	}, []string{})
 )
 
 func init() {
 	logger := zap.L()
-	if err := prometheus.Register(MetricsSignaturesVerificationsGenesis); err != nil {
+	if err := prometheus.Register(MetricsSignaturesVerifications); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }
@@ -33,7 +32,7 @@ func init() {
 //
 // TODO: rethink this function and consider moving/refactoring it.
 func VerifyByOperators(s genesisspectypes.Signature, data genesisspectypes.MessageSignature, domain genesisspectypes.DomainType, sigType genesisspectypes.SignatureType, operators []*genesisspectypes.Operator) error {
-	MetricsSignaturesVerificationsGenesis.WithLabelValues().Inc()
+	MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
@@ -83,7 +82,7 @@ func ReconstructSignature(ps *genesisspecssv.PartialSigContainer, root [32]byte,
 }
 
 func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [32]byte) error {
-	MetricsSignaturesVerificationsGenesis.WithLabelValues().Inc()
+	MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	pk, err := DeserializeBLSPublicKey(validatorPubKey)
 	if err != nil {

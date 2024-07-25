@@ -23,7 +23,7 @@ func (i *Instance) uponRoundChange(
 	roundChangeMsgContainer *genesisspecqbft.MsgContainer,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 ) error {
-	hasQuorumBefore := HasQuorum(i.State.Share, roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.
+	hasQuorumBefore := genesisspecqbft.HasQuorum(i.State.Share, roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.
 		Round))
 	// Currently, even if we have a quorum of round change messages, we update the container
 	addedMsg, err := roundChangeMsgContainer.AddFirstMsgForSignerAndRound(signedRoundChange)
@@ -128,7 +128,7 @@ func hasReceivedPartialQuorum(state *genesisspecqbft.State, roundChangeMsgContai
 		}
 	}
 
-	return HasPartialQuorum(state.Share, rc), rc
+	return genesisspecqbft.HasPartialQuorum(state.Share, rc), rc
 }
 
 // hasReceivedProposalJustificationForLeadingRound returns
@@ -145,7 +145,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 ) (*genesisspecqbft.SignedMessage, []byte, error) {
 	roundChanges := roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.Round)
 	// optimization, if no round change quorum can return false
-	if !HasQuorum(state.Share, roundChanges) {
+	if !genesisspecqbft.HasQuorum(state.Share, roundChanges) {
 		return nil, nil, nil
 	}
 
@@ -296,7 +296,7 @@ func validRoundChangeForData(
 			return errors.New("H(data) != root")
 		}
 
-		if !HasQuorum(state.Share, prepareMsgs) {
+		if !genesisspecqbft.HasQuorum(state.Share, prepareMsgs) {
 			return errors.New("no justifications quorum")
 		}
 

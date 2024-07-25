@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/queue"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"

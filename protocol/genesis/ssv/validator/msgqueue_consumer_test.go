@@ -2,12 +2,12 @@ package validator
 
 //
 //import (
-//	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+//	protocoltesting "github.com/ssvlabs/ssv/protocol/genesis/testing"
 //	"testing"
 //
-//	"github.com/ssvlabs/ssv-spec/qbft"
+//	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 //	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-//	"github.com/ssvlabs/ssv-spec/types/testingutils"
+//	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 //	"github.com/stretchr/testify/require"
 //)
 //

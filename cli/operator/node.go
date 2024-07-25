@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/beacon/goclient/genesisgoclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -258,6 +259,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
+		cfg.SSVOptions.ValidatorOptions.GenesisBeacon = genesisgoclient.NewAdapter(consensusClient)
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
@@ -341,7 +343,7 @@ var StartNodeCmd = &cobra.Command{
 				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
 				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
 				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-				"consensus client": consensusClient.(nodeprobe.Node),
+				"consensus client": consensusClient,
 			},
 		)
 
@@ -613,7 +615,7 @@ func setupConsensusClient(
 	logger *zap.Logger,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
-) beaconprotocol.BeaconNode {
+) *goclient.GoClient {
 	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
