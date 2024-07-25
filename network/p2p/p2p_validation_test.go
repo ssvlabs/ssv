@@ -5,6 +5,8 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/cornelk/hashmap"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"math/rand"
 	"os"
 	"sort"
@@ -19,7 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/message/validation"
 )
 
@@ -54,12 +55,11 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		ignoredRole  = spectypes.RoleAggregator
 		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
-	messageValidators := CreateMsgValidators(&mtx, nodeCount, vNet)
+	messageValidators := make([]*MockMessageValidator, nodeCount)
 	// Create a VirtualNet with 4 nodes.
-	ks := spectestingutils.Testing4SharesSet()
 	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
 		return messageValidators[nodeIndex]
-	}, ks)
+	})
 	defer func() {
 		require.NoError(t, vNet.Close())
 	}()
@@ -203,4 +203,117 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 	}
 	defer fmt.Println()
+}
+
+type MockMessageValidator struct {
+	Accepted      []int
+	Ignored       []int
+	Rejected      []int
+	TotalAccepted int
+	TotalIgnored  int
+	TotalRejected int
+
+	ValidateFunc func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+}
+
+func (v *MockMessageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	return v.Validate
+}
+
+func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	return v.ValidateFunc(ctx, p, pmsg)
+}
+
+type NodeIndex int
+
+type VirtualNode struct {
+	Index      NodeIndex
+	Network    *p2pNetwork
+	PeerScores *hashmap.Map[NodeIndex, *pubsub.PeerScoreSnapshot]
+}
+
+func (n *VirtualNode) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
+	return n.Network.Broadcast(msgID, msg)
+}
+
+// VirtualNet is a utility to create & interact with a virtual network of nodes.
+type VirtualNet struct {
+	Nodes []*VirtualNode
+}
+
+func CreateVirtualNet(
+	t *testing.T,
+	ctx context.Context,
+	nodes int,
+	validatorPubKeys []string,
+	messageValidatorProvider func(int) validation.MessageValidator,
+) *VirtualNet {
+	var doneSetup atomic.Bool
+	vn := &VirtualNet{}
+	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
+		Nodes:                    nodes,
+		MinConnected:             nodes - 1,
+		UseDiscv5:                false,
+		TotalValidators:          1000,
+		ActiveValidators:         800,
+		MyValidators:             300,
+		MessageValidatorProvider: messageValidatorProvider,
+		PeerScoreInspector: func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot) {
+			if !doneSetup.Load() {
+				return
+			}
+			node := vn.NodeByPeerID(selfPeer)
+			if node == nil {
+				t.Fatalf("self peer not found (%s)", selfPeer)
+			}
+
+			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
+				node.PeerScores.Del(index)
+				return true
+			})
+			for peerID, peerScore := range peerMap {
+				peerNode := vn.NodeByPeerID(peerID)
+				if peerNode == nil {
+					t.Fatalf("peer not found (%s)", peerID)
+				}
+				node.PeerScores.Set(peerNode.Index, peerScore)
+			}
+
+		},
+		PeerScoreInspectorInterval: time.Millisecond * 5,
+	}, validatorPubKeys...)
+
+	require.NoError(t, err)
+	require.NotNil(t, routers)
+	require.NotNil(t, ln)
+
+	for i, node := range ln.Nodes {
+		vn.Nodes = append(vn.Nodes, &VirtualNode{
+			Index:      NodeIndex(i),
+			Network:    node.(*p2pNetwork),
+			PeerScores: hashmap.New[NodeIndex, *pubsub.PeerScoreSnapshot](), //{}make(map[NodeIndex]*pubsub.PeerScoreSnapshot),
+		})
+	}
+	doneSetup.Store(true)
+
+	return vn
+}
+
+func (vn *VirtualNet) NodeByPeerID(peerID peer.ID) *VirtualNode {
+	for _, node := range vn.Nodes {
+		if node.Network.Host().ID() == peerID {
+			return node
+		}
+	}
+	return nil
+}
+
+func (vn *VirtualNet) Close() error {
+	for _, node := range vn.Nodes {
+		err := node.Network.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

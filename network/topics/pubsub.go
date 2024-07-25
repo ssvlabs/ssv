@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/ssvlabs/ssv/networkconfig"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -44,6 +46,8 @@ const (
 
 // PubSubConfig is the needed config to instantiate pubsub
 type PubSubConfig struct {
+	NetworkConfig networkconfig.NetworkConfig
+
 	Host        host.Host
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
@@ -169,7 +173,13 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 				return 100, 100, 10, nil
 			}
 		}
-		topicScoreFactory = topicScoreParams(logger, cfg, committeesProvider)
+
+		topicScoreFactory = func(t string) *pubsub.TopicScoreParams {
+			if cfg.NetworkConfig.PastAlanFork() {
+				return topicScoreParams(logger, cfg, committeesProvider)(t)
+			}
+			return validatorTopicScoreParams(logger, cfg)(t)
+		}
 	}
 
 	if cfg.MsgIDHandler != nil {

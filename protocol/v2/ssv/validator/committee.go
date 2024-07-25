@@ -117,21 +117,20 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.BeaconDuties))
-
-	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
-	toRemove := make([]int, 0)
+	//validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.BeaconDuties))
+	//toRemove := make([]int, 0)
 	// Remove beacon duties that don't have a share
-	for i, bd := range duty.BeaconDuties {
-		share, ok := c.Shares[bd.ValidatorIndex]
-		if !ok {
-			toRemove = append(toRemove, i)
-			continue
-		}
-		if bd.Type == spectypes.BNRoleAttester {
-			slashableValidators = append(slashableValidators, share.SharePubKey)
-		}
-		validatorShares[bd.ValidatorIndex] = share
-	}
+	//for i, bd := range duty.BeaconDuties {
+	//	share, ok := c.Shares[bd.ValidatorIndex]
+	//	if !ok {
+	//		toRemove = append(toRemove, i)
+	//		continue
+	//	}
+	//	if bd.Type == spectypes.BNRoleAttester {
+	//		slashableValidators = append(slashableValidators, share.SharePubKey)
+	//	}
+	//	validatorShares[bd.ValidatorIndex] = share
+	//}
 
 	// TODO bring this back when https://github.com/ssvlabs/ssv-spec/pull/467 is merged and spec is aligned
 	//// Remove beacon duties that don't have a share
@@ -151,6 +150,15 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// TODO REMOVE this after https://github.com/ssvlabs/ssv-spec/pull/467 is merged and we are aligned to the spec
 	// 			   and pas validatorShares instead of sharesCopy the runner
 	// -->
+	for _, bd := range duty.BeaconDuties {
+		share, ok := c.Shares[bd.ValidatorIndex]
+		if !ok {
+			continue
+		}
+		if bd.Type == spectypes.BNRoleAttester {
+			slashableValidators = append(slashableValidators, share.SharePubKey)
+		}
+	}
 	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
 	for k, v := range c.Shares {
 		sharesCopy[k] = v
@@ -345,21 +353,6 @@ func (c *Committee) UnmarshalJSON(data []byte) error {
 	c.Shares = aux.Shares
 
 	return nil
-}
-
-// updateAttestingSlotMap updates the highest attesting slot map from beacon duties
-func (c *Committee) updateAttestingSlotMap(duty *spectypes.CommitteeDuty) {
-	for _, beaconDuty := range duty.BeaconDuties {
-		if beaconDuty.Type == spectypes.BNRoleAttester {
-			validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
-			if _, ok := c.HighestAttestingSlotMap[validatorPK]; !ok {
-				c.HighestAttestingSlotMap[validatorPK] = beaconDuty.Slot
-			}
-			if c.HighestAttestingSlotMap[validatorPK] < beaconDuty.Slot {
-				c.HighestAttestingSlotMap[validatorPK] = beaconDuty.Slot
-			}
-		}
-	}
 }
 
 func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
