@@ -30,7 +30,7 @@ spec:
       name: http
       protocol: HTTP
     hosts:
-    - "-ssv-full-node-mainnet-2.REPLACE_DOMAIN_SUFFIX"
+    - "ssv-full-node-mainnet-2.REPLACE_DOMAIN_SUFFIX"
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
