@@ -87,6 +87,22 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	}
 }
 
+func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	r := c.Runners[duty.Slot]
+	if r == nil {
+		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
+	}
+
+	go func() {
+		err := c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, r)
+		logger.Error("failed consuming queue", zap.Error(err))
+	}()
+	return nil
+}
+
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.logger.Debug("Starting committee duty runner", zap.Uint64("slot", uint64(duty.Slot)))
@@ -165,17 +181,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
-	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
-	// TODO alan: stop queue
-	go func() {
-		err := c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, c.Runners[duty.Slot])
-		if err != nil {
-			logger.Warn("handles error message", zap.Error(err))
-		}
-	}()
+	runnerLogger := c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 
 	logger.Info("ℹ️ starting duty processing")
-	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
+	return c.Runners[duty.Slot].StartNewDuty(runnerLogger, duty, c.Operator.GetQuorum())
 }
 
 // NOT threadsafe

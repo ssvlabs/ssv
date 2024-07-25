@@ -38,5 +38,9 @@ func (c *Committee) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error
 		return fmt.Errorf("could not start committee duty: %w", err)
 	}
 
+	if err := c.StartConsumeQueue(logger, executeDutyData.Duty); err != nil {
+		return fmt.Errorf("could not start committee consume queue: %w", err)
+	}
+
 	return nil
 }
