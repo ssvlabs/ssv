@@ -1298,8 +1298,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			qbftCtrl := buildController(spectypes.RoleValidatorRegistration, nil)
-			runners[role] = runner.NewValidatorRegistrationRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role] = runner.NewValidatorRegistrationRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		case spectypes.RoleVoluntaryExit:
 			runners[role] = runner.NewVoluntaryExitRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		}
