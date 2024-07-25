@@ -2,6 +2,39 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
+  name: ssv-full-node-mainnet-2-api
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ssv-full-node-mainnet-2.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - ssv-full-node-mainnet-2-api
+  http:
+  - route:
+    - destination:
+        host: ssv-full-node-mainnet-2
+        port:
+          number: 16016
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-full-node-mainnet-2-api
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "-ssv-full-node-mainnet-2.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
   name: ssv-full-node-mainnet-2
   namespace: REPLACE_NAMESPACE
 spec:
@@ -92,11 +125,7 @@ spec:
                   - key: kubernetes.io/role
                     operator: In
                     values:
-                      - ssv-main
-                  - key: beta.kubernetes.io/instance-type
-                    operator: In
-                    values:
-                      - m5a.4xlarge
+                      - ssv-exporter
       containers:
       - name: ssv-full-node-mainnet-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
