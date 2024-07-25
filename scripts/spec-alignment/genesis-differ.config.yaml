@@ -1,0 +1,39 @@
+ApprovedChanges: []
+
+IgnoredIdentifiers:
+  - logger
+ReducedPackageNames:
+  - spectypes
+  - specssv
+  - specqbft
+  - types
+  - ssv
+  - qbft
+  - instance
+  - controller
+Comparisons:
+  - Packages:
+      Left:
+        - ./protocol/genesis/ssv/runner
+        - ./protocol/genesis/types
+      Right:
+        - ./ssv
+    Hints:
+      ReconstructSignature: PartialSigContainer.ReconstructSignature
+
+  - Packages:
+      Left:
+        - ./protocol/genesis/qbft/controller
+        - ./protocol/genesis/qbft/instance
+      Right:
+        - ./qbft
+    Hints:
+      BaseCommitValidation: baseCommitValidation
+  
+  - Packages:
+      Left:
+        - ./protocol/genesis/types
+      Right:
+        - ./types
+    Hints:
+      VerifyByOperators: Signature.VerifyByOperators
