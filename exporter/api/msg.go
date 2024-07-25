@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
@@ -20,14 +21,6 @@ type Message struct {
 	Filter MessageFilter `json:"filter"`
 	// Values holds the results, optional as it's relevant for response
 	Data interface{} `json:"data,omitempty"`
-}
-
-type SignedMessageAPI struct {
-	Signature spectypes.Signature
-	Signers   []spectypes.OperatorID
-	Message   specqbft.Message
-
-	FullData *spectypes.ValidatorConsensusData
 }
 
 type ParticipantsAPI struct {

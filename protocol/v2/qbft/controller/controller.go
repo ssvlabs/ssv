@@ -135,6 +135,10 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 		return nil, errors.Wrap(err, "could not process msg")
 	}
 
+	if prevDecided {
+		return nil, err
+	}
+
 	// save the highest Decided
 	if !decided {
 		return nil, nil
@@ -149,11 +153,6 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
 		logger.Debug("❌ failed to broadcast decided message", zap.Error(err))
-	}
-
-	// TODO: spec checks if prevDecided (and returns if so) right after inst.ProcessMsg. Should we align?
-	if prevDecided {
-		return nil, err
 	}
 
 	return decidedMsg, nil
