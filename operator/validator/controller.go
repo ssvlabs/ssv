@@ -117,6 +117,7 @@ type GenesisControllerOptions struct {
 	KeyManager        genesisspectypes.KeyManager
 	StorageMap        *genesisstorage.QBFTStores
 	NewDecidedHandler genesisqbftcontroller.NewDecidedHandler
+	Metrics           genesisvalidator.Metrics
 }
 
 // Controller represent the validators controller,
@@ -279,7 +280,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
-		Metrics:           options.Metrics,
+		Metrics:           options.GenesisControllerOptions.Metrics,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -1053,7 +1054,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		av := validator.NewValidator(ctx, cancel, opts)
 
 		genesisOpts := c.genesisValidatorOptions
-		genesisOpts.SSVShare = share // TODO convert
+		genesisOpts.SSVShare = genesisssvtypes.ConvertToAlanShare(share, operator)
 		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
 		gv := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
@@ -1463,23 +1464,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		genesisspectypes.BNRoleVoluntaryExit,
 	}
 
-	share := &genesisspectypes.Share{}
-
-	share.OperatorID = options.Operator.OperatorID
-	share.ValidatorPubKey = options.SSVShare.Share.ValidatorPubKey[:]
-	share.SharePubKey = options.SSVShare.Share.SharePubKey
-	share.Committee = make([]*genesisspectypes.Operator, len(options.SSVShare.Share.Committee))
-	for _, c := range options.SSVShare.Share.Committee {
-		share.Committee = append(share.Committee, &genesisspectypes.Operator{
-			OperatorID: c.Signer,
-			PubKey:     c.SharePubKey,
-		})
-	}
-
-	share.Quorum = options.Operator.GetQuorum()
-	share.DomainType = genesisspectypes.DomainType(options.SSVShare.Share.DomainType)
-	share.FeeRecipientAddress = options.SSVShare.Share.FeeRecipientAddress
-	share.Graffiti = options.SSVShare.Share.Graffiti
+	share := genesisssvtypes.ConvertToGenesisShare(&options.SSVShare.Share, options.Operator)
 
 	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *genesisqbftcontroller.Controller {
 		config := &genesisqbft.Config{

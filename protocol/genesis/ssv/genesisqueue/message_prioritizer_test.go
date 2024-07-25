@@ -213,7 +213,7 @@ func (m mockNonConsensusMessage) ssvMessage(state *State) *spectypes.SSVMessage 
 		&spectypes.SignedPartialSignatureMessage{
 			Message: spectypes.PartialSignatureMessages{
 				Type: m.Type,
-				Slot: preforkphase0.Slot(m.Slot),
+				Slot: m.Slot,
 				Messages: []*spectypes.PartialSignatureMessage{
 					{
 						PartialSignature: make([]byte, 96),

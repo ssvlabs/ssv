@@ -4,13 +4,11 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	preforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/genesis/message"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
@@ -29,8 +27,8 @@ type GenesisSSVMessage struct {
 
 func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {
-	case *genesisssvtypes.EventMsg: // TODO: do we need slot in events?
-		if m.Type == genesisssvtypes.Timeout {
+	case *ssvtypes.EventMsg: // TODO: do we need slot in events?
+		if m.Type == ssvtypes.Timeout {
 			data, err := m.GetTimeoutData()
 			if err != nil {
 				return 0, ErrUnknownMessageType // TODO alan: other error
@@ -121,10 +119,10 @@ func compareHeightOrSlot(state *State, m *GenesisSSVMessage) int {
 			return 1
 		}
 	} else if mm, ok := m.Body.(*genesisspectypes.SignedPartialSignatureMessage); ok {
-		if mm.Message.Slot == preforkphase0.Slot(state.Slot) {
+		if mm.Message.Slot == state.Slot {
 			return 0
 		}
-		if mm.Message.Slot > preforkphase0.Slot(state.Slot) {
+		if mm.Message.Slot > state.Slot {
 			return 1
 		}
 	}
