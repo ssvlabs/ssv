@@ -85,7 +85,7 @@ func isValidProposal(
 		return errors.New("proposal leader invalid")
 	}
 
-	if err := msg.SignedMessage.Validate(); err != nil {
+	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "proposal invalid")
 	}
 

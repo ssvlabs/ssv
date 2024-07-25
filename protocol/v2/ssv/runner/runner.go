@@ -179,7 +179,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
-	b.compactInstanceIfNeeded(msg)
 	if err != nil {
 		return false, nil, err
 	}

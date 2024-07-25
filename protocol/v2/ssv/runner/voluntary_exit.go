@@ -245,7 +245,7 @@ func (r *VoluntaryExitRunner) Decode(data []byte) error {
 func (r *VoluntaryExitRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode VoluntaryExitRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

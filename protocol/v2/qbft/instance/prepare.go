@@ -119,7 +119,7 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return errors.New("wrong msg round")
 	}
 
-	if err := msg.SignedMessage.Validate(); err != nil {
+	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "prepareData invalid")
 	}
 
@@ -150,11 +150,9 @@ func validSignedPrepareForHeightRoundAndRootVerifySignature(
 		return err
 	}
 
-	if config.VerifySignatures() {
-		// Verify signature
-		if err := spectypes.Verify(msg.SignedMessage, operators); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	// Verify signature
+	if err := spectypes.Verify(msg.SignedMessage, operators); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil

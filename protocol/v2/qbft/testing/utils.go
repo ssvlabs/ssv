@@ -35,11 +35,10 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage:               TestingStores(logger).Get(role),
-		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-		Timer:                 roundtimer.NewTestingTimer(),
-		SignatureVerification: true,
-		CutOffRound:           testingutils.TestingCutOffRound,
+		Storage:     TestingStores(logger).Get(role),
+		Network:     testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Timer:       roundtimer.NewTestingTimer(),
+		CutOffRound: testingutils.TestingCutOffRound,
 	}
 }
 

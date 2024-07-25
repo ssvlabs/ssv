@@ -283,7 +283,7 @@ func validRoundChangeForDataIgnoreSignature(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if err := msg.SignedMessage.Validate(); err != nil {
+	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "roundChange invalid")
 	}
 
@@ -353,11 +353,9 @@ func validRoundChangeForDataVerifySignature(
 		return err
 	}
 
-	if config.VerifySignatures() {
-		// Verify signature
-		if err := spectypes.Verify(msg.SignedMessage, state.CommitteeMember.Committee); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	// Verify signature
+	if err := spectypes.Verify(msg.SignedMessage, state.CommitteeMember.Committee); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil

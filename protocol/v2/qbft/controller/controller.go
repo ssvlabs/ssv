@@ -220,7 +220,7 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode state")
+		return [32]byte{}, errors.Wrap(err, "could not encode controller")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

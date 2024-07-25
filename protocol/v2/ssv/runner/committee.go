@@ -101,14 +101,14 @@ func (cr *CommitteeRunner) Decode(data []byte) error {
 func (cr *CommitteeRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := cr.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode CommitteeRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
 }
 
 func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
-	type CommitteeAlias struct {
+	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
@@ -118,7 +118,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 	}
 
 	// Create object and marshal
-	alias := &CommitteeAlias{
+	alias := &CommitteeRunnerAlias{
 		BaseRunner:     cr.BaseRunner,
 		beacon:         cr.beacon,
 		network:        cr.network,
@@ -133,7 +133,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 }
 
 func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
-	type CommitteeAlias struct {
+	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
@@ -145,7 +145,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
-	aux := &CommitteeAlias{}
+	aux := &CommitteeRunnerAlias{}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
@@ -369,7 +369,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			// TODO should we return an error here? maybe other sigs are fine?
 			if err != nil {
-				for _, root := range roots {
+				for root := range rootSet {
 					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
 						share.Committee, validator)
 				}

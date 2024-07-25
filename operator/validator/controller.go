@@ -1197,11 +1197,10 @@ func SetupCommitteeRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(convert.RunnerRole(role)),
-			Network:               options.Network,
-			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			SignatureVerification: true,
-			CutOffRound:           specqbft.Round(specqbft.CutoffRound),
+			Storage:     options.Storage.Get(convert.RunnerRole(role)),
+			Network:     options.Network,
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound: specqbft.Round(specqbft.CutoffRound),
 		}
 		config.ValueCheckF = valueCheckF
 
@@ -1258,11 +1257,10 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(convert.RunnerRole(role)),
-			Network:               options.Network,
-			Timer:                 roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			SignatureVerification: true,
-			CutOffRound:           specqbft.Round(specqbft.CutoffRound),
+			Storage:     options.Storage.Get(convert.RunnerRole(role)),
+			Network:     options.Network,
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound: specqbft.Round(specqbft.CutoffRound),
 		}
 		config.ValueCheckF = valueCheckF
 
@@ -1298,8 +1296,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			qbftCtrl := buildController(spectypes.RoleValidatorRegistration, nil)
-			runners[role] = runner.NewValidatorRegistrationRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role] = runner.NewValidatorRegistrationRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		case spectypes.RoleVoluntaryExit:
 			runners[role] = runner.NewVoluntaryExitRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		}

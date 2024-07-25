@@ -60,7 +60,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	slot spec.Slot,
 ) error {
 	if err := psigMsgs.Validate(); err != nil {
-		return errors.Wrap(err, "SignedPartialSignatureMessage invalid")
+		return errors.Wrap(err, "PartialSignatureMessages invalid")
 	}
 
 	if psigMsgs.Slot != slot {

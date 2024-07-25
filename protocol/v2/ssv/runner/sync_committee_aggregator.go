@@ -477,7 +477,7 @@ func (r *SyncCommitteeAggregatorRunner) Decode(data []byte) error {
 func (r *SyncCommitteeAggregatorRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode SyncCommitteeAggregatorRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

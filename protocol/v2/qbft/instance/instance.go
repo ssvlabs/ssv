@@ -113,10 +113,8 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *spectypes.SignedSSVMessage
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing messages")
 	}
-	msgID := spectypes.MessageID{}
-	copy(msgID[:], i.State.ID)
 
-	return i.config.GetNetwork().Broadcast(msgID, msg)
+	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
 }
 
 func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
