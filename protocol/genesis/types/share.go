@@ -9,7 +9,7 @@ import (
 func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.CommitteeMember) *genesisspectypes.Share {
 	q, pc := types.ComputeQuorumAndPartialQuorum(len(share.Committee))
 
-	var key genesisspectypes.ValidatorPK
+	key := make([]byte, len(share.ValidatorPubKey))
 	copy(key, share.ValidatorPubKey[:])
 
 	genesisShare := &genesisspectypes.Share{
