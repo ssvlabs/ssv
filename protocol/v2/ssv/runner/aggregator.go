@@ -260,7 +260,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 	cd := &spectypes.ValidatorConsensusData{}
 	err := cd.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return nil, spectypes.DomainAggregateAndProof, err
+		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
 	}
 	aggregateAndProof, err := cd.GetAggregateAndProof()
 	if err != nil {
@@ -370,7 +370,7 @@ func (r *AggregatorRunner) Decode(data []byte) error {
 func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode AggregatorRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
