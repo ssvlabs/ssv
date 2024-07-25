@@ -3,12 +3,10 @@ package api
 import (
 	"encoding/hex"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
