@@ -126,9 +126,6 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 					return true
 				}
 
-				if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
-					return true
-				}
 				return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
 			}
 		}
