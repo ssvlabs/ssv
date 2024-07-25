@@ -41,6 +41,11 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 			fields.Round(qbftMsg.Round),
 			fields.Role(msg.MsgID.GetRoleType()),
 		)
+	} else {
+		logger.Debug("📬 handling non-qbft message",
+			fields.MessageType(msg.MsgType),
+			fields.Role(msg.MsgID.GetRoleType()),
+		)
 	}
 
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
