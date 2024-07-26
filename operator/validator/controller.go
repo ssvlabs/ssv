@@ -1477,10 +1477,9 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.GenesisOptions.Storage.Get(role),
-			Network:               options.GenesisOptions.Network,
-			Timer:                 genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			SignatureVerification: true,
+			Storage: options.GenesisOptions.Storage.Get(role),
+			Network: options.GenesisOptions.Network,
+			Timer:   genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 		}
 		config.ValueCheckF = valueCheckF
 		identifier := genesisspectypes.NewMsgID(genesisssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
