@@ -358,23 +358,20 @@ func createNetworkAndSubscribeFromKeySet(t *testing.T, ctx context.Context, opti
 	}
 	wg.Wait()
 	// let the nodes subscribe
-	<-time.After(time.Second)
-	for _, pk := range pks {
-		vpkBytes, err := hex.DecodeString(pk)
-		vpk := spectypes.ValidatorPK(vpkBytes)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "could not decode validator public key")
-		}
+	for {
+		noPeers := false
 		for _, node := range ln.Nodes {
-			peers := make([]peer.ID, 0)
-			for len(peers) < 2 {
-				peers, err = node.Peers(spectypes.ValidatorPK(vpk))
-				if err != nil {
-					return nil, nil, err
-				}
-				time.Sleep(time.Millisecond * 100)
+			peers, _ := node.PeersByTopic()
+			if len(peers) < 2 {
+				noPeers = true
 			}
 		}
+		if noPeers {
+			noPeers = false
+			time.Sleep(time.Second * 1)
+			continue
+		}
+		break
 	}
 
 	return ln, routers, nil
@@ -419,10 +416,16 @@ func dummyMsg(t *testing.T, ks *spectestingutils.TestKeySet, pkHex string, heigh
 		MsgID:   id,
 		Data:    data,
 	}
-
-	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
-	require.NoError(t, err)
-
+	var operators []uint64
+	for id, _ := range ks.OperatorKeys {
+		operators = append(operators, id)
+	}
+	signedSSVMsg := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{bytes.Repeat([]byte{}, 256)},
+		OperatorIDs: []uint64{operators[0]},
+		SSVMessage:  ssvMsg,
+		FullData:    nil,
+	}
 	return id, signedSSVMsg
 }
 

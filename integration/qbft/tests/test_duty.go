@@ -24,7 +24,7 @@ func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spe
 	var pkBytes [48]byte
 	copy(pkBytes[:], pk)
 
-	var testingDuty spectypes.BeaconDuty
+	var testingDuty spectypes.ValidatorDuty
 	switch role {
 	case spectypes.BNRoleAttester:
 		return spectestingutils.TestingCommitteeAttesterDuty(slot, []int{int(idx)})
@@ -40,7 +40,7 @@ func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spe
 		panic("unknown role")
 	}
 
-	return &spectypes.BeaconDuty{
+	return &spectypes.ValidatorDuty{
 		Type:                          role,
 		PubKey:                        pkBytes,
 		Slot:                          slot,

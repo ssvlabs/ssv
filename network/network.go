@@ -2,11 +2,11 @@ package network
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"io"
 
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -38,10 +38,11 @@ type P2PNetwork interface {
 	SubscribeAll(logger *zap.Logger) error
 	// SubscribeRandoms subscribes to random subnets
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
-	// UpdateDomainType switches domain type at ENR when we reach fork epoch
-	UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error
 	// UpdateScoreParams will update the scoring parameters of GossipSub
 	UpdateScoreParams(logger *zap.Logger)
+
+	// used for tests and api
+	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
 
 // GetValidatorStats returns stats of validators, including the following:

@@ -13,17 +13,15 @@ import (
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/message/signatureverifier"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/message/validation"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -43,7 +41,7 @@ func TestMsgValidator(t *testing.T) {
 
 	ks := spectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Share: *spectestingutils.TestingShare(ks, 1),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: v1.ValidatorStateActiveOngoing,
@@ -52,11 +50,8 @@ func TestMsgValidator(t *testing.T) {
 		},
 	}
 	require.NoError(t, ns.Shares().Save(nil, share))
-	dutyStore := dutystore.New()
-	ctrl := gomock.NewController(t)
-	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
-	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	mv := validation.New(networkconfig.TestNetwork, ns.ValidatorStore(), dutyStore, signatureVerifier)
+
+	mv := genesisvalidation.New(networkconfig.TestNetwork, genesisvalidation.WithNodeStorage(ns))
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
@@ -92,26 +87,18 @@ func TestMsgValidator(t *testing.T) {
 		signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
 		require.NoError(t, err)
 
-		sig := [256]byte{}
+		var sig []byte
 		copy(sig[:], signature)
 
-		packedPubSubMsgPayload := &spectypes.SignedSSVMessage{
-			Signatures:  [][]byte{sig[:]},
-			OperatorIDs: []spectypes.OperatorID{operatorId},
-			SSVMessage:  ssvMsg,
-		}
-		encPackedPubSubMsgPayload, err := packedPubSubMsgPayload.Encode()
-		require.NoError(t, err)
-
-		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(ssvMsg.GetID().GetDutyExecutorID()[16:]))
+		packedPubSubMsgPayload := genesisspectypes.EncodeSignedSSVMessage(encodedMsg, operatorId, sig)
+		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetDutyExecutorID())
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
 				Topic: &topicID[0],
-				Data:  encPackedPubSubMsgPayload,
+				Data:  packedPubSubMsgPayload,
 			},
 		}
-
 		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})

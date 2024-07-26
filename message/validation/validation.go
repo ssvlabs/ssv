@@ -170,7 +170,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 }
 
 func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committeeInfo.operatorIDs); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.operatorIDs); err != nil {
 		return err
 	}
 

@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/logging"
@@ -38,6 +38,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -411,8 +412,15 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		ScoreInspectorInterval: 100 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
 	}
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop())
+	_, validatorStore, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore)
 	require.NoError(t, err)
 
 	p = &P{
@@ -456,19 +464,25 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMes
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.RunnerRole(spectypes.BNRoleAttester))
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err
 	}
-	msg := &specqbft.Message{
-		MsgType:    specqbft.RoundChangeMsgType,
-		Height:     specqbft.Height(height),
-		Round:      2,
-		Identifier: id[:],
-		Root:       [32]byte{},
+
+	signedMessage := genesisspecqbft.SignedMessage{
+		Signature: signature,
+		Signers:   []spectypes.OperatorID{1, 3, 4},
+		Message: genesisspecqbft.Message{
+			MsgType:    genesisspecqbft.RoundChangeMsgType,
+			Height:     genesisspecqbft.Height(height),
+			Round:      2,
+			Identifier: id[:],
+			Root:       [32]byte{},
+		},
+		FullData: nil,
 	}
-	encMsg, err := msg.Encode()
+	encMsg, err := signedMessage.Encode()
 	ssvMessage := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
@@ -478,14 +492,12 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMes
 		ssvMessage.MsgType = math.MaxUint64
 	}
 
-	signedMessage := &spectypes.SignedSSVMessage{
+	return &spectypes.SignedSSVMessage{
 		Signatures:  [][]byte{signature},
 		OperatorIDs: []spectypes.OperatorID{1, 3, 4},
 		SSVMessage:  ssvMessage,
 		FullData:    nil,
-	}
-
-	return signedMessage, nil
+	}, nil
 }
 
 type DummyMessageValidator struct {
@@ -497,12 +509,8 @@ func (m *DummyMessageValidator) ValidatorForTopic(topic string) func(ctx context
 	}
 }
 
-func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return pubsub.ValidationAccept
-}
-
 func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return 0
+	return pubsub.ValidationAccept
 }
 
 type shareSet struct {
