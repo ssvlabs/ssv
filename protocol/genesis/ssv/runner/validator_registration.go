@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
 
@@ -33,7 +32,6 @@ type ValidatorRegistrationRunner struct {
 func NewValidatorRegistrationRunner(
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
-	qbftController *controller.Controller,
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
@@ -43,7 +41,6 @@ func NewValidatorRegistrationRunner(
 			BeaconRoleType: genesisspectypes.BNRoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
-			QBFTController: qbftController,
 		},
 
 		beacon:  beacon,

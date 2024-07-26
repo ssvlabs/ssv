@@ -1516,8 +1516,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			qbftCtrl := buildController(genesisspectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = genesisrunner.NewSyncCommitteeAggregatorRunner(genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, syncCommitteeContributionValueCheckF, 0)
 		case genesisspectypes.BNRoleValidatorRegistration:
-			qbftCtrl := buildController(genesisspectypes.BNRoleValidatorRegistration, nil)
-			runners[role] = genesisrunner.NewValidatorRegistrationRunner(genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
+			runners[role] = genesisrunner.NewValidatorRegistrationRunner(genesisBeaconNetwork, share, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
 		case genesisspectypes.BNRoleVoluntaryExit:
 			runners[role] = genesisrunner.NewVoluntaryExitRunner(genesisBeaconNetwork, share, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
 		}
