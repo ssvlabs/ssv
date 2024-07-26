@@ -7,7 +7,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -171,7 +170,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully submitted sync committee",
-			fields.Slot(postforkphase0.Slot(msg.Slot)),
+			fields.Slot(msg.Slot),
 			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
 			fields.Height(specqbft.Height(r.BaseRunner.QBFTController.Height)),
 			fields.Round(specqbft.Round(r.GetState().RunningInstance.State.Round)))

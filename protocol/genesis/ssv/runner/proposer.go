@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -84,7 +83,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *gene
 	}
 
 	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(postforkphase0.Slot(duty.Slot)))
+	logger = logger.With(fields.Slot(duty.Slot))
 	logger.Debug("🧩 got partial RANDAO signatures",
 		zap.Uint64("signer", signedMsg.Signer))
 
@@ -272,7 +271,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 
 		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
-			fields.Slot(postforkphase0.Slot(signedMsg.Message.Slot)),
+			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(specqbft.Height(r.BaseRunner.QBFTController.Height)),
 			fields.Round(specqbft.Round(r.GetState().RunningInstance.State.Round)),
 			zap.String("block_hash", blockSummary.Hash.String()),

@@ -8,7 +8,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesiseth2phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -274,9 +273,9 @@ func (h *SyncCommitteeHandler) toGenesisSpecDuty(duty *eth2apiv1.SyncCommitteeDu
 	}
 	return &genesisspectypes.Duty{
 		Type:                          role,
-		PubKey:                        genesiseth2phase0.BLSPubKey(duty.PubKey),
-		Slot:                          genesiseth2phase0.Slot(slot), // in order for the duty scheduler to execute
-		ValidatorIndex:                genesiseth2phase0.ValidatorIndex(duty.ValidatorIndex),
+		PubKey:                        duty.PubKey,
+		Slot:                          slot, // in order for the duty scheduler to execute
+		ValidatorIndex:                duty.ValidatorIndex,
 		ValidatorSyncCommitteeIndices: indices,
 	}
 }

@@ -11,7 +11,6 @@ import (
 
 	"github.com/aquasecurity/table"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	preforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
@@ -236,7 +235,7 @@ type mockExecuteDutyMessage struct {
 func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SSVMessage {
 	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.Duty{
 		Type: m.Role,
-		Slot: preforkphase0.Slot(m.Slot),
+		Slot: m.Slot,
 	}})
 	if err != nil {
 		panic(err)

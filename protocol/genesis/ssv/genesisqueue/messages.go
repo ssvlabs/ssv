@@ -39,7 +39,7 @@ func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 	case *genesisspecqbft.SignedMessage: // TODO: remove post-fork
 		return phase0.Slot(m.Message.Height), nil
 	case *genesisspectypes.SignedPartialSignatureMessage: // TODO: remove post-fork
-		return phase0.Slot(m.Message.Slot), nil
+		return m.Message.Slot, nil
 	default:
 		return 0, ErrUnknownMessageType
 	}
@@ -95,7 +95,7 @@ func ExtractGenesisMsgBody(m *genesisspectypes.SSVMessage) (any, error) {
 			return nil, fmt.Errorf("failed to decode genesis SignedPartialSignatureMessage: %w", err)
 		}
 		body = sm
-	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
+	case ssvmessage.SSVEventMsgType:
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
 			return nil, fmt.Errorf("failed to decode EventMsg: %w", err)

@@ -230,7 +230,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
 					sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(data map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error {
 						for _, share := range tc.shareStorageListResponse {
-							if metadata, ok := data[spectypes.ValidatorPK(share.Share.ValidatorPubKey)]; ok {
+							if metadata, ok := data[share.Share.ValidatorPubKey]; ok {
 								share.Metadata.BeaconMetadata = metadata
 							}
 						}

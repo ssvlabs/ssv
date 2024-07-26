@@ -11,7 +11,6 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -378,14 +377,14 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithGenesisDutyContext(logger, duty)
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(postforkphase0.Slot(duty.Slot)))
+		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(postforkphase0.Slot(duty.Slot))
+				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
 			s.dutyExecutor.ExecuteGenesisDuty(logger, duty)
 		}()
@@ -435,10 +434,10 @@ func (s *Scheduler) loggerWithGenesisDutyContext(logger *zap.Logger, duty *genes
 		With(zap.Stringer(fields.FieldRole, duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
-		With(fields.Slot(postforkphase0.Slot(duty.Slot))).
-		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(postforkphase0.Slot(duty.Slot)))).
+		With(fields.Slot(duty.Slot)).
+		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(postforkphase0.Slot(duty.Slot))))
+		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information

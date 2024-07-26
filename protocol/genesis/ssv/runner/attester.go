@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
@@ -134,7 +133,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 	}
 
 	duty := r.GetState().DecidedValue.Duty
-	logger = logger.With(fields.Slot(postforkphase0.Slot(duty.Slot)))
+	logger = logger.With(fields.Slot(duty.Slot))
 	logger.Debug("🧩 got partial signatures",
 		zap.Uint64("signer", signedMsg.Signer))
 

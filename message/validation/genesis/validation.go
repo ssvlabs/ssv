@@ -396,8 +396,8 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 		return nil, descriptor, err
 	}
 
-	validatorPK := spectypes.MessageID(ssvMessage.GetID()).GetPubKey()
-	role := spectypes.MessageID(ssvMessage.GetID()).GetRoleType()
+	validatorPK := ssvMessage.GetID().GetPubKey()
+	role := ssvMessage.GetID().GetRoleType()
 	descriptor.Role = role
 	descriptor.ValidatorPK = validatorPK
 
@@ -448,10 +448,10 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 	defer mutex.Unlock()
 	mv.validationMutex.Unlock()
 
-	descriptor.SSVMessageType = spectypes.MsgType(ssvMessage.MsgType)
+	descriptor.SSVMessageType = ssvMessage.MsgType
 
 	if mv.nodeStorage != nil {
-		switch spectypes.MsgType(ssvMessage.MsgType) {
+		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if len(ssvMessage.Data) > maxConsensusMsgSize {
 				e := ErrSSVDataTooBig
@@ -477,7 +477,8 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			}
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-			// slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
+			// TODO fix this
+			//slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
 			descriptor.Slot = partialSignatureMessage.Message.Slot
 			if err != nil {
 				return nil, descriptor, err

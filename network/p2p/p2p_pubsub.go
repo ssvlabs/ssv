@@ -231,7 +231,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 				logger.With(
 					zap.String("pubKey", hex.EncodeToString(m.SSVMessage.MsgID.GetDutyExecutorID())),
 					zap.String("role", m.SSVMessage.MsgID.GetRoleType().String()),
-					fields.MessageType(spectypes.MsgType(m.SSVMessage.MsgType)),
+					fields.MessageType(m.SSVMessage.MsgType),
 				).Debug("handlePubsubMessages - alan")
 			} else {
 				m, ok := msg.ValidatorData.(*genesisqueue.GenesisSSVMessage)

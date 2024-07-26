@@ -26,20 +26,20 @@ type Metrics interface {
 
 type NopMetrics struct{}
 
-func (n NopMetrics) ValidatorInactive([]byte)                              {}
-func (n NopMetrics) ValidatorNoIndex([]byte)                               {}
-func (n NopMetrics) ValidatorError([]byte)                                 {}
-func (n NopMetrics) ValidatorReady([]byte)                                 {}
-func (n NopMetrics) ValidatorNotActivated([]byte)                          {}
-func (n NopMetrics) ValidatorExiting([]byte)                               {}
-func (n NopMetrics) ValidatorSlashed([]byte)                               {}
-func (n NopMetrics) ValidatorNotFound([]byte)                              {}
-func (n NopMetrics) ValidatorPending([]byte)                               {}
-func (n NopMetrics) ValidatorRemoved([]byte)                               {}
-func (n NopMetrics) ValidatorUnknown([]byte)                               {}
+func (n NopMetrics) ValidatorInactive([]byte)                                     {}
+func (n NopMetrics) ValidatorNoIndex([]byte)                                      {}
+func (n NopMetrics) ValidatorError([]byte)                                        {}
+func (n NopMetrics) ValidatorReady([]byte)                                        {}
+func (n NopMetrics) ValidatorNotActivated([]byte)                                 {}
+func (n NopMetrics) ValidatorExiting([]byte)                                      {}
+func (n NopMetrics) ValidatorSlashed([]byte)                                      {}
+func (n NopMetrics) ValidatorNotFound([]byte)                                     {}
+func (n NopMetrics) ValidatorPending([]byte)                                      {}
+func (n NopMetrics) ValidatorRemoved([]byte)                                      {}
+func (n NopMetrics) ValidatorUnknown([]byte)                                      {}
 func (n NopMetrics) IncomingQueueMessage(genesisspectypes.MessageID)              {}
 func (n NopMetrics) OutgoingQueueMessage(genesisspectypes.MessageID)              {}
 func (n NopMetrics) DroppedQueueMessage(genesisspectypes.MessageID)               {}
-func (n NopMetrics) MessageQueueSize(int)                                  {}
-func (n NopMetrics) MessageQueueCapacity(int)                              {}
+func (n NopMetrics) MessageQueueSize(int)                                         {}
+func (n NopMetrics) MessageQueueCapacity(int)                                     {}
 func (n NopMetrics) MessageTimeInQueue(genesisspectypes.MessageID, time.Duration) {}

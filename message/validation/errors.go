@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -158,39 +157,9 @@ func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMes
 	return pubsub.ValidationAccept
 }
 
-func (mv *messageValidator) handleGenesisValidationError(peerID peer.ID, decodedMessage *genesisqueue.GenesisSSVMessage, err error) pubsub.ValidationResult {
-	loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
+// func (mv *messageValidator) handleGenesisValidationSuccess(decodedMessage *genesisqueue.GenesisSSVMessage) pubsub.ValidationResult {
+// 	// loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
+// 	// mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 
-	logger := mv.logger.
-		With(loggerFields.AsZapFields()...).
-		With(fields.PeerID(peerID))
-
-	var valErr Error
-	if !errors.As(err, &valErr) {
-		// mv.metrics.MessageIgnored(err.Error(), loggerFields, loggerFields.Consensus.Round)
-		logger.Debug("ignoring invalid message", zap.Error(err))
-		return pubsub.ValidationIgnore
-	}
-
-	if !valErr.Reject() {
-		if !valErr.Silent() {
-			logger.Debug("ignoring invalid message", zap.Error(valErr))
-		}
-		// mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
-		return pubsub.ValidationIgnore
-	}
-
-	if !valErr.Silent() {
-		logger.Debug("rejecting invalid message", zap.Error(valErr))
-	}
-
-	// mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
-	return pubsub.ValidationReject
-}
-
-func (mv *messageValidator) handleGenesisValidationSuccess(decodedMessage *genesisqueue.GenesisSSVMessage) pubsub.ValidationResult {
-	// loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
-	// mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
-
-	return pubsub.ValidationAccept
-}
+// 	return pubsub.ValidationAccept
+// }
