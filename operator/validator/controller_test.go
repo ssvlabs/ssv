@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -1199,7 +1200,7 @@ func decodeHex(t *testing.T, hexStr string, errMsg string) []byte {
 func buildOperatorData(id uint64, ownerAddress string) *registrystorage.OperatorData {
 	return &registrystorage.OperatorData{
 		ID:           id,
-		PublicKey:    []byte("samplePublicKey"),
+		PublicKey:    []byte(base64.StdEncoding.EncodeToString([]byte("samplePublicKey"))),
 		OwnerAddress: common.BytesToAddress([]byte(ownerAddress)),
 	}
 }
