@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -20,7 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -35,11 +35,10 @@ type Validator struct {
 	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 
-	Operator          *spectypes.CommitteeMember
-	Share             *types.SSVShare
-	Signer            spectypes.BeaconSigner
-	OperatorSigner    spectypes.OperatorSigner
-	SignatureVerifier spectypes.SignatureVerifier
+	Operator       *spectypes.CommitteeMember
+	Share          *ssvtypes.SSVShare
+	Signer         spectypes.BeaconSigner
+	OperatorSigner ssvtypes.OperatorSigner
 
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.RunnerRole]queueContainer
@@ -67,22 +66,21 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	v := &Validator{
-		mtx:               &sync.RWMutex{},
-		ctx:               pctx,
-		cancel:            cancel,
-		NetworkConfig:     options.NetworkConfig,
-		DutyRunners:       options.DutyRunners,
-		Network:           options.Network,
-		Storage:           options.Storage,
-		Operator:          options.Operator,
-		Share:             options.SSVShare,
-		Signer:            options.Signer,
-		OperatorSigner:    options.OperatorSigner,
-		SignatureVerifier: options.SignatureVerifier,
-		Queues:            make(map[spectypes.RunnerRole]queueContainer),
-		state:             uint32(NotStarted),
-		dutyIDs:           hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
-		messageValidator:  options.MessageValidator,
+		mtx:              &sync.RWMutex{},
+		ctx:              pctx,
+		cancel:           cancel,
+		NetworkConfig:    options.NetworkConfig,
+		DutyRunners:      options.DutyRunners,
+		Network:          options.Network,
+		Storage:          options.Storage,
+		Operator:         options.Operator,
+		Share:            options.SSVShare,
+		Signer:           options.Signer,
+		OperatorSigner:   options.OperatorSigner,
+		Queues:           make(map[spectypes.RunnerRole]queueContainer),
+		state:            uint32(NotStarted),
+		dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
+		messageValidator: options.MessageValidator,
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -109,7 +107,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
-	duty := iduty.(*spectypes.BeaconDuty) // TODO: err handling
+	duty := iduty.(*spectypes.ValidatorDuty) // TODO: err handling
 
 	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(duty.Type)]
 	if dutyRunner == nil {
@@ -140,7 +138,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		}
 
 		// Verify SignedSSVMessage's signature
-		if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
+		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
 

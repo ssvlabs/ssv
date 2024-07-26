@@ -2,7 +2,7 @@ package p2pv1
 
 import (
 	"context"
-	"encoding/hex"
+	"errors"
 	"sync/atomic"
 	"time"
 
@@ -83,10 +83,14 @@ type p2pNetwork struct {
 	state int32
 
 	activeValidators *hashmap.Map[string, validatorStatus]
+	activeCommittees *hashmap.Map[string, validatorStatus]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
-	subnets          []byte
-	libConnManager   connmgrcore.ConnManager
+
+	fixedSubnets  []byte
+	activeSubnets []byte
+
+	libConnManager connmgrcore.ConnManager
 
 	nodeStorage             operatorstorage.Storage
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
@@ -110,6 +114,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (network.P2PNetwork, Genes
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeValidators:        hashmap.New[string, validatorStatus](),
+		activeCommittees:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -210,7 +215,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		defer cancel()
 
 		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
-		mySubnets := records.Subnets(n.subnets).Clone()
+		mySubnets := records.Subnets(n.activeSubnets).Clone()
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
@@ -261,57 +266,88 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		// Compute the new subnets according to the active validators.
-		newSubnets := make([]byte, commons.Subnets())
-		copy(newSubnets, n.subnets)
-		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-			// TODO: alan - fork support
-			pbBytes, err := hex.DecodeString(pkHex)
-			if err != nil {
-				return false
-			}
-			// TODO: alan - optimization to get active committees only
-			share := n.nodeStorage.Shares().Get(nil, pbBytes)
-			if share == nil {
-				return false
-			}
-			cid := share.CommitteeID()
-			subnet := commons.CommitteeSubnet(cid)
-			newSubnets[subnet] = byte(1)
+		// Compute the new subnets according to the active committees/validators.
+		updatedSubnets := make([]byte, commons.Subnets())
+		copy(updatedSubnets, n.fixedSubnets)
+
+		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
+			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
+			updatedSubnets[subnet] = byte(1)
 			return true
 		})
-		n.subnets = newSubnets
+
+		if !n.cfg.Network.PastAlanFork() {
+			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
+				subnet := commons.ValidatorSubnet(pkHex)
+				updatedSubnets[subnet] = byte(1)
+				return true
+			})
+		}
+		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
-		unregisteredSubnets := make([]int, 0)
-		for subnet, active := range newSubnets {
+		addedSubnets := make([]int, 0)
+		for subnet, active := range updatedSubnets {
 			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				unregisteredSubnets = append(unregisteredSubnets, subnet)
+				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
-		registeredSubnets = newSubnets
 
-		if len(unregisteredSubnets) == 0 {
+		// Compute the not anymore registered subnets.
+		removedSubnets := make([]int, 0)
+		for subnet, active := range registeredSubnets {
+			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
+				removedSubnets = append(removedSubnets, subnet)
+			}
+		}
+
+		registeredSubnets = updatedSubnets
+
+		if len(addedSubnets) == 0 && len(removedSubnets) == 0 {
 			continue
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = records.Subnets(n.subnets).String()
+			self.Metadata.Subnets = records.Subnets(n.activeSubnets).String()
 			return self
 		})
 
-		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
-		if err != nil {
-			logger.Warn("could not register subnets", zap.Error(err))
-			continue
+		var errs error
+		if len(addedSubnets) > 0 {
+			err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+			if err != nil {
+				logger.Debug("could not register subnets", zap.Error(err))
+				errs = errors.Join(errs, err)
+			}
 		}
+		if len(removedSubnets) > 0 {
+			err := n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
+			if err != nil {
+				logger.Debug("could not unregister subnets", zap.Error(err))
+				errs = errors.Join(errs, err)
+			}
+
+			// Unsubscribe from the removed subnets.
+			for _, subnet := range removedSubnets {
+				if err := n.unsubscribeSubnet(logger, uint(subnet)); err != nil {
+					logger.Debug("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
+					errs = errors.Join(errs, err)
+				} else {
+					logger.Debug("unsubscribed from subnet", zap.Int("subnet", subnet))
+				}
+			}
+		}
+
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
+		subnetsList := records.SharedSubnets(allSubs, n.activeSubnets, 0)
 		logger.Debug("updated subnets",
-			zap.Any("added", unregisteredSubnets),
+			zap.Any("added", addedSubnets),
+			zap.Any("removed", removedSubnets),
 			zap.Any("subnets", subnetsList),
+			zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
 			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
+			zap.Error(errs),
 		)
 	}
 }
@@ -324,19 +360,30 @@ func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	// Create ticker
-	oneEpochDuration := n.cfg.Network.Beacon.SlotDurationSec() * time.Duration(n.cfg.Network.Beacon.SlotsPerEpoch())
-	ticker := time.NewTicker(oneEpochDuration)
-	defer ticker.Stop()
+	// function to get the starting time of the next epoch
+	nextEpochStartingTime := func() time.Time {
+		currEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+		nextEpoch := currEpoch + 1
+		return n.cfg.Network.Beacon.EpochStartTime(nextEpoch)
+	}
+
+	// Create timer that triggers on the beginning of the next epoch
+	timer := time.NewTimer(time.Until(nextEpochStartingTime()))
+	defer timer.Stop()
 
 	// Run immediately and then once every epoch
-	for ; true; <-ticker.C {
+	for ; true; <-timer.C {
+
+		// Update score parameters
 		err := n.topicsCtrl.UpdateScoreParams(logger)
 		if err != nil {
 			logger.Debug("score parameters update failed", zap.Error(err))
 		} else {
 			logger.Debug("updated score parameters successfully")
 		}
+
+		// Reset to trigger on the beginning of the next epoch
+		timer.Reset(time.Until(nextEpochStartingTime()))
 	}
 }
 
@@ -346,14 +393,4 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
-}
-
-// UpdateDomainAtFork updates Domain Type at ENR node record after fork epoch.
-func (n *p2pNetwork) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
-	if err := n.disc.UpdateDomainType(logger, domain); err != nil {
-		logger.Error("could not update domain type", zap.Error(err))
-		return err
-	}
-	logger.Debug("updated and published ENR with domain type", fields.Domain(domain))
-	return nil
 }

@@ -8,8 +8,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
-var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
-
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing timeouts")
@@ -27,7 +25,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)
+	roundChange, err := CreateRoundChange(i.State, i.signer, newRound, i.StartValue)
 	if err != nil {
 		return errors.Wrap(err, "could not generate round change msg")
 	}

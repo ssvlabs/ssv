@@ -3,11 +3,12 @@ package runner
 import (
 	"encoding/hex"
 
+	"github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	sigs := state.PreConsensusContainer.Signatures[state.StartingDuty.(*spectypes.BeaconDuty).ValidatorIndex][hex.EncodeToString(root[:])]
+	sigs := state.PreConsensusContainer.Signatures[state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 	var signers []spectypes.OperatorID
 	for op := range sigs {
 		signers = append(signers, op)
@@ -18,8 +19,8 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
 
-	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).BeaconDuties {
-		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][hex.EncodeToString(root[:])]
+	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 		for op := range sigs {
 			signers = append(signers, op)
 		}
@@ -39,8 +40,8 @@ func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.O
 
 func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
-	valIdx := state.StartingDuty.(*spectypes.BeaconDuty).ValidatorIndex
-	sigs := state.PostConsensusContainer.Signatures[valIdx][hex.EncodeToString(root[:])]
+	valIdx := state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+	sigs := state.PostConsensusContainer.Signatures[valIdx][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 	for op := range sigs {
 		signers = append(signers, op)
 	}

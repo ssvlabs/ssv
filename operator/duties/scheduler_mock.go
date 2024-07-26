@@ -61,7 +61,7 @@ func (mr *MockDutiesExecutorMockRecorder) ExecuteCommitteeDuties(logger, duties 
 }
 
 // ExecuteDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteDuties(logger *zap.Logger, duties []*types1.BeaconDuty) {
+func (m *MockDutiesExecutor) ExecuteDuties(logger *zap.Logger, duties []*types1.ValidatorDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuties", logger, duties)
 }
@@ -120,7 +120,7 @@ func (mr *MockDutyExecutorMockRecorder) ExecuteCommitteeDuty(logger, committeeID
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteDuty(logger *zap.Logger, duty *types1.BeaconDuty) {
+func (m *MockDutyExecutor) ExecuteDuty(logger *zap.Logger, duty *types1.ValidatorDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
 }

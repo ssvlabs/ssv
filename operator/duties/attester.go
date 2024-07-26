@@ -190,6 +190,15 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
 		return
 	}
+
+	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
+	for _, d := range duties {
+		if h.shouldExecute(d) {
+			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
+		}
+	}
+
+	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
@@ -206,7 +215,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
 
-	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
+	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
@@ -238,8 +247,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	return nil
 }
 
-func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
-	return &spectypes.BeaconDuty{
+func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,

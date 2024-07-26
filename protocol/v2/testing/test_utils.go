@@ -114,17 +114,27 @@ func GetSSVMappingSpecTestJSON(path string, module string) ([]byte, error) {
 	gzPath := filepath.Join(p, "spectest", "generate", "tests.json.gz")
 	untypedTests := map[string]interface{}{}
 
-	file, err := os.Open(gzPath)
+	file, err := os.Open(gzPath) // #nosec G304
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open gzip file")
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Handle the error, log it, or handle it as appropriate
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create gzip reader")
 	}
-	defer gzipReader.Close()
+	defer func() {
+		if err := gzipReader.Close(); err != nil {
+			// Handle the error, log it, or handle it as appropriate
+			log.Printf("Failed to close reader: %v", err)
+		}
+	}()
 
 	decompressedData, err := io.ReadAll(gzipReader)
 	if err != nil {
@@ -253,7 +263,7 @@ func ExtractTarGz(gzipStream io.Reader) {
 
 	tarReader := tar.NewReader(uncompressedStream)
 
-	for true {
+	for {
 		header, err := tarReader.Next()
 
 		if err == io.EOF {
@@ -266,7 +276,7 @@ func ExtractTarGz(gzipStream io.Reader) {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.Mkdir(header.Name, 0755); err != nil {
+			if err := os.Mkdir(header.Name, 0750); err != nil {
 				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
 			}
 		case tar.TypeReg:
@@ -274,10 +284,20 @@ func ExtractTarGz(gzipStream io.Reader) {
 			if err != nil {
 				log.Fatalf("ExtractTarGz: Create() failed: %s", err.Error())
 			}
-			if _, err := io.Copy(outFile, tarReader); err != nil {
+			// Set a maximum size limit for the decompressed data
+			maxSize := int64(50 * 1024 * 1024) // 50 MB, adjust as needed
+
+			// Wrap the tarReader with a LimitedReader
+			limitedReader := &io.LimitedReader{R: tarReader, N: maxSize}
+
+			// Perform the copy operation with the limited reader
+			if _, err := io.Copy(outFile, limitedReader); err != nil {
 				log.Fatalf("ExtractTarGz: Copy() failed: %s", err.Error())
 			}
-			outFile.Close()
+			err = outFile.Close()
+			if err != nil {
+				log.Fatalf("faild to close file: %s", err.Error())
+			}
 
 		default:
 			log.Fatalf(
@@ -287,14 +307,4 @@ func ExtractTarGz(gzipStream io.Reader) {
 		}
 
 	}
-}
-
-func unpackTestsJson(path string) error {
-	r, err := os.Open(fmt.Sprintf("%s.gz", path))
-	if err != nil {
-		errors.Wrap(err, "could not open file")
-	}
-	ExtractTarGz(r)
-
-	return nil
 }

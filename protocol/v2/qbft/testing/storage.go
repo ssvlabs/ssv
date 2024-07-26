@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 
 	"go.uber.org/zap"

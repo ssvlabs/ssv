@@ -16,8 +16,8 @@ var TestingMessage = &specqbft.Message{
 	Root:       [32]byte{1, 2, 3, 4},
 }
 
-var TestingSignedMsg = func() *spectypes.SignedSSVMessage {
-	return testingutils.SignQBFTMsg(TestingSK, 1, TestingMessage)
+var TestingSignedMsg = func() *specqbft.ProcessingMessage {
+	return testingutils.ToProcessingMessage(testingutils.SignQBFTMsg(TestingSK, 1, TestingMessage))
 }()
 
 var TestingSK = func() *rsa.PrivateKey {
@@ -39,28 +39,28 @@ var TestingInstanceStruct = &specqbft.Instance{
 		DecidedValue:                    []byte{1, 2, 3, 4},
 
 		ProposeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		PrepareContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		CommitContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		RoundChangeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
