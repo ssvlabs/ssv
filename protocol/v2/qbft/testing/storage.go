@@ -8,8 +8,6 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter/convert"
 
-	"go.uber.org/zap"
-
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"

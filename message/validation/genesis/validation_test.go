@@ -27,9 +27,9 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/storage"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -80,7 +80,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -112,7 +112,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedMsg,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -142,7 +142,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedMsg,
 		}
 
-		message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+		message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
@@ -166,7 +166,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedMsg,
 		}
 
-		message3, err := queue.DecodeGenesisSSVMessage(ssvMsg3)
+		message3, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg3)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
@@ -189,7 +189,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedMsg,
 		}
 
-		message4, err := queue.DecodeGenesisSSVMessage(ssvMsg4)
+		message4, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg4)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message4, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
@@ -321,10 +321,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("no data", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		message := &queue.SSVMessage{
-			SSVMessage: &alanspectypes.SSVMessage{
-				MsgType: alanspectypes.MsgType(spectypes.SSVConsensusMsgType),
-				MsgID:   alanspectypes.MessageID(spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)),
+		message := &genesisqueue.GenesisSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    []byte{},
 			},
 		}
@@ -344,10 +344,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		const tooBigMsgSize = maxMessageSize * 2
 
-		message := &queue.DecodedSSVMessage{
-			SSVMessage: &alanspectypes.SSVMessage{
-				MsgType: alanspectypes.MsgType(spectypes.SSVConsensusMsgType),
-				MsgID:   alanspectypes.MessageID(spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)),
+		message := &genesisqueue.GenesisSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester),
 				Data:    bytes.Repeat([]byte{0x1}, tooBigMsgSize),
 			},
 		}
@@ -406,7 +406,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
@@ -430,7 +430,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
@@ -457,7 +457,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -486,7 +486,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -511,7 +511,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -524,7 +524,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err = queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err = genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
@@ -561,7 +561,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
@@ -601,7 +601,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -653,7 +653,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
@@ -703,7 +703,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
@@ -740,7 +740,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -769,7 +769,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
@@ -785,7 +785,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+		message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(roleAttester)), nil)
@@ -801,7 +801,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message3, err := queue.DecodeGenesisSSVMessage(ssvMsg3)
+		message3, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg3)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message3, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(roleAttester)), nil)
@@ -828,7 +828,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)), nil)
@@ -871,7 +871,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -896,7 +896,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -922,7 +922,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -951,7 +951,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -977,7 +977,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1072,7 +1072,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						Data:    encoded,
 					}
 
-					message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+					message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 					require.NoError(t, err)
 
 					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
@@ -1104,7 +1104,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encoded,
 			}
 
-			message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+			message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
@@ -1146,7 +1146,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						Data:    encoded,
 					}
 
-					message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+					message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 					require.NoError(t, err)
 
 					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
@@ -1182,7 +1182,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1225,7 +1225,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encoded,
 			}
 
-			message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+			message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1248,7 +1248,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encoded,
 			}
 
-			message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+			message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1276,7 +1276,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1322,7 +1322,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encodedValidSignedMessage,
 			}
 
-			message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+			message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1344,7 +1344,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encoded,
 			}
 
-			message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+			message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1375,7 +1375,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1403,7 +1403,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1431,7 +1431,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1461,7 +1461,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1502,7 +1502,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					Data:    encodedValidSignedMessage,
 				}
 
-				message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+				message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
 				_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
@@ -1528,7 +1528,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot - 1)
@@ -1553,7 +1553,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1583,7 +1583,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1615,7 +1615,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1650,7 +1650,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1680,7 +1680,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1708,7 +1708,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1734,7 +1734,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned1,
 		}
 
-		message1, err := queue.DecodeGenesisSSVMessage(ssvMsg1)
+		message1, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg1)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1755,7 +1755,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+		message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
@@ -1779,7 +1779,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned1,
 		}
 
-		message1, err := queue.DecodeGenesisSSVMessage(ssvMsg1)
+		message1, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg1)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1798,7 +1798,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+		message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
@@ -1823,7 +1823,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned1,
 		}
 
-		message1, err := queue.DecodeGenesisSSVMessage(ssvMsg1)
+		message1, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg1)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1840,7 +1840,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+		message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
@@ -1865,7 +1865,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned1,
 		}
 
-		message1, err := queue.DecodeGenesisSSVMessage(ssvMsg1)
+		message1, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg1)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1882,7 +1882,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+		message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
@@ -1910,7 +1910,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1953,7 +1953,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					Data:    encodedMessage,
 				}
 
-				message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+				message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
 				receivedAt := netCfg.Beacon.GetSlotStartTime(0).Add(validator.waitAfterSlotStart(role))
@@ -1980,7 +1980,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedMessage,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
@@ -1997,7 +1997,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedMessage,
 		}
 
-		message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+		message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
@@ -2024,7 +2024,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encodedMessage,
 			}
 
-			message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+			message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
 			_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
@@ -2040,7 +2040,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encodedMessage,
 			}
 
-			message2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+			message2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 			require.NoError(t, err)
 
 			_, _, err = validator.validateSSVMessage(message2, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
@@ -2066,7 +2066,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encodedMessage,
 			}
 
-			decodedMsg, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+			decodedMsg, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
 			_, _, err = validator.validateSSVMessage(decodedMsg, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
@@ -2087,7 +2087,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encodedMessage,
 			}
 
-			decodedMsg2, err := queue.DecodeGenesisSSVMessage(ssvMsg2)
+			decodedMsg2, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg2)
 			require.NoError(t, err)
 
 			_, _, err = validator.validateSSVMessage(decodedMsg2, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
@@ -2112,7 +2112,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encoded,
 		}
 
-		message, err := queue.DecodeGenesisSSVMessage(ssvMsg)
+		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))

@@ -23,7 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -270,7 +269,7 @@ type dummyRouter struct {
 	i     int
 }
 
-func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
+func (r *dummyRouter) Route(_ context.Context, _ network.SSVMessageInterface) {
 	atomic.AddUint64(&r.count, 1)
 }
 
