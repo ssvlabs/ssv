@@ -422,7 +422,8 @@ func (c *controller) handleRouterMessages() {
 					continue
 				}
 
-				dutyExecutorID := m.GetID().GetDutyExecutorID() // it should work for genesis flow too
+				// TODO: only try copying clusterid if validator failed
+				dutyExecutorID := m.GetID().GetDutyExecutorID()
 				var cid spectypes.CommitteeID
 				copy(cid[:], dutyExecutorID[16:])
 
@@ -442,7 +443,6 @@ func (c *controller) handleRouterMessages() {
 			default:
 				panic("Unknown message type")
 			}
-
 		}
 	}
 }

@@ -235,7 +235,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 							}
 						}
 						return nil
-					}).Times(1)
+					}).Times(len(tc.shareStorageListResponse))
 					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				}
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()

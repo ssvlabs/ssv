@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ssvlabs/ssv/logging"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -34,10 +35,11 @@ import (
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
 	"github.com/ssvlabs/ssv/exporter/convert"
+
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
+
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
