@@ -104,6 +104,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
+	operatorStorage, done := newOperatorStorageForTest(zap.NewNop())
+	defer done()
+
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		2: {
 			Balance: 0,
@@ -224,18 +227,18 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				}).AnyTimes()
 				if tc.expectMetadataFetch {
 					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-					sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *beacon.ValidatorMetadata) error {
+					sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(data map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error {
 						for _, share := range tc.shareStorageListResponse {
-							if hex.EncodeToString(share.Share.ValidatorPubKey[:]) == pk {
+							if metadata, ok := data[share.Share.ValidatorPubKey]; ok {
 								share.Metadata.BeaconMetadata = metadata
 							}
 						}
 						return nil
-					}).Times(len(tc.shareStorageListResponse))
+					}).Times(1)
 					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				}
+				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
-				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(0)
 			}
 
 			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
@@ -245,6 +248,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				beacon:            bc,
 				network:           network,
 				operatorDataStore: operatorDataStore,
+				operatorStorage:   operatorStorage,
 				sharesStorage:     sharesStorage,
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
