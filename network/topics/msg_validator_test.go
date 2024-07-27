@@ -32,11 +32,6 @@ import (
 
 func TestMsgValidator(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	require.NoError(t, err)
-
-	ns, err := operatorstorage.NewNodeStorage(logger, db)
-	require.NoError(t, err)
 
 	ks := spectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
@@ -48,6 +43,13 @@ func TestMsgValidator(t *testing.T) {
 			Liquidated: false,
 		},
 	}
+
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+
+	ns, err := operatorstorage.NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
 	require.NoError(t, ns.Shares().Save(nil, share))
 
 	committeeID := share.CommitteeID()
@@ -58,27 +60,28 @@ func TestMsgValidator(t *testing.T) {
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
 
+	operatorID := uint64(1)
+	operatorPrivateKey := ks.OperatorKeys[operatorID]
+
+	operatorPubKey, err := rsaencryption.ExtractPublicKey(&operatorPrivateKey.PublicKey)
+	require.NoError(t, err)
+
+	od := &storage.OperatorData{
+		PublicKey:    []byte(operatorPubKey),
+		OwnerAddress: common.Address{},
+		ID:           operatorID,
+	}
+
+	found, err := ns.SaveOperatorData(nil, od)
+	require.False(t, found)
+	require.NoError(t, err)
+
+	operatorSigner := spectestingutils.NewOperatorSigner(ks, operatorID)
+
 	t.Run("valid consensus msg", func(t *testing.T) {
 		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], qbft.Height(slot))
 		require.NoError(t, err)
 
-		operatorID := uint64(1)
-		operatorPrivateKey := ks.OperatorKeys[operatorID]
-
-		operatorPubKey, err := rsaencryption.ExtractPublicKey(&operatorPrivateKey.PublicKey)
-		require.NoError(t, err)
-
-		od := &storage.OperatorData{
-			PublicKey:    []byte(operatorPubKey),
-			OwnerAddress: common.Address{},
-			ID:           operatorID,
-		}
-
-		found, err := ns.SaveOperatorData(nil, od)
-		require.False(t, found)
-		require.NoError(t, err)
-
-		operatorSigner := spectestingutils.NewOperatorSigner(ks, operatorID)
 		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
@@ -103,20 +106,33 @@ func TestMsgValidator(t *testing.T) {
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
-	// TODO: enable once topic validation is in place
-	//t.Run("wrong topic", func(t *testing.T) {
-	//	pkHex := "b5de683dbcb3febe8320cc741948b9282d59b75a6970ed55d6f389da59f26325331b7ea0e71a2552373d0debb6048b8a"
-	//	msg, err := dummySSVConsensusMsg(share.ValidatorPubKey, 15160)
-	//	require.NoError(t, err)
-	//	raw, err := msg.Encode()
-	//	require.NoError(t, err)
-	//	pk, err := hex.DecodeString("a297599ccf617c3b6118bbd248494d7072bb8c6c1cc342ea442a289415987d306bad34415f89469221450a2501a832ec")
-	//	require.NoError(t, err)
-	//	topics := commons.ValidatorTopicID(pk)
-	//	pmsg := newPBMsg(raw, topics[0], []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
-	//	res := mv.ValidateP2PMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
-	//	require.Equal(t, res, pubsub.ValidationReject)
-	//})
+	t.Run("wrong topic", func(t *testing.T) {
+		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], qbft.Height(slot))
+		require.NoError(t, err)
+
+		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
+		require.NoError(t, err)
+
+		signedSSVMessage := &spectypes.SignedSSVMessage{
+			Signatures:  [][]byte{sig},
+			OperatorIDs: []types.OperatorID{operatorID},
+			SSVMessage:  ssvMsg,
+		}
+
+		encodedMsg, err := signedSSVMessage.Encode()
+		require.NoError(t, err)
+
+		topicID := "wrong_topic_id"
+
+		pmsg := &pubsub.Message{
+			Message: &pspb.Message{
+				Topic: &topicID,
+				Data:  encodedMsg,
+			},
+		}
+		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		require.Equal(t, pubsub.ValidationIgnore, res)
+	})
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
@@ -124,16 +140,33 @@ func TestMsgValidator(t *testing.T) {
 		require.Equal(t, pubsub.ValidationReject, res)
 	})
 
-	// TODO: enable once topic validation is in place
-	//t.Run("invalid validator public key", func(t *testing.T) {
-	//	msg, err := dummySSVConsensusMsg("10101011", 1)
-	//	require.NoError(t, err)
-	//	raw, err := msg.Encode()
-	//	require.NoError(t, err)
-	//	pmsg := newPBMsg(raw, "xxx", []byte{})
-	//	res := mv.ValidateP2PMessage(context.Background(), "xxxx", pmsg)
-	//	require.Equal(t, res, pubsub.ValidationReject)
-	//})
+	t.Run("invalid validator public key", func(t *testing.T) {
+		ssvMsg, err := dummySSVConsensusMsg([]byte{1, 2, 3, 4, 5}, qbft.Height(slot))
+		require.NoError(t, err)
+
+		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
+		require.NoError(t, err)
+
+		signedSSVMessage := &spectypes.SignedSSVMessage{
+			Signatures:  [][]byte{sig},
+			OperatorIDs: []types.OperatorID{operatorID},
+			SSVMessage:  ssvMsg,
+		}
+
+		encodedMsg, err := signedSSVMessage.Encode()
+		require.NoError(t, err)
+
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+
+		pmsg := &pubsub.Message{
+			Message: &pspb.Message{
+				Topic: &topicID,
+				Data:  encodedMsg,
+			},
+		}
+		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		require.Equal(t, pubsub.ValidationIgnore, res)
+	})
 }
 
 func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
