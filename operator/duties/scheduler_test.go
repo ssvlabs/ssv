@@ -165,18 +165,18 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
 }
 
-func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.BeaconDuty, executeDutiesCallSize int) {
-	executeDutiesBuffer := make(chan *spectypes.BeaconDuty, executeDutiesCallSize)
+func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
+	executeDutiesBuffer := make(chan *spectypes.ValidatorDuty, executeDutiesCallSize)
 
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(logger *zap.Logger, duty *spectypes.BeaconDuty) error {
+		func(logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 			executeDutiesBuffer <- duty
 
 			// Check if all expected duties have been received
 			if len(executeDutiesBuffer) == executeDutiesCallSize {
 				// Build the array of duties
-				var duties []*spectypes.BeaconDuty
+				var duties []*spectypes.ValidatorDuty
 				for i := 0; i < executeDutiesCallSize; i++ {
 					d := <-executeDutiesBuffer
 					duties = append(duties, d)
@@ -223,7 +223,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
 
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(logger *zap.Logger, duty *spectypes.BeaconDuty) error {
+		func(logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 			return nil
 		},
@@ -253,7 +253,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 	).AnyTimes()
 }
 
-func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.BeaconDuty, timeout time.Duration) {
+func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
 	select {
 	case <-fetchDutiesCall:
 		logger.Debug("duties fetched")
@@ -275,7 +275,7 @@ func waitForGenesisDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall
 	}
 }
 
-func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.BeaconDuty, timeout time.Duration) {
+func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -297,7 +297,7 @@ func waitForNoActionGenesis(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 	}
 }
 
-func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.BeaconDuty, timeout time.Duration, expectedDuties []*spectypes.BeaconDuty) {
+func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration, expectedDuties []*spectypes.ValidatorDuty) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -378,11 +378,11 @@ func waitForDutiesExecutionCommittee(t *testing.T, logger *zap.Logger, fetchDuti
 			if !ok {
 				require.FailNow(t, "missing cluster id")
 			}
-			require.Len(t, aCommDuty.BeaconDuties, len(eCommDuty.BeaconDuties))
+			require.Len(t, aCommDuty.ValidatorDuties, len(eCommDuty.ValidatorDuties))
 
-			for _, e := range eCommDuty.BeaconDuties {
+			for _, e := range eCommDuty.ValidatorDuties {
 				found := false
-				for _, d := range aCommDuty.BeaconDuties {
+				for _, d := range aCommDuty.ValidatorDuties {
 					if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
 						found = true
 						break

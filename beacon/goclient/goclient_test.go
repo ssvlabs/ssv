@@ -47,7 +47,7 @@ func TestTimeouts(t *testing.T) {
 		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		validators, err := client.(*goClient).GetValidatorData(nil) // Should call BeaconState internally.
+		validators, err := client.(*GoClient).GetValidatorData(nil) // Should call BeaconState internally.
 		require.NoError(t, err)
 
 		var validatorKeys []phase0.BLSPubKey
@@ -55,10 +55,10 @@ func TestTimeouts(t *testing.T) {
 			validatorKeys = append(validatorKeys, v.Validator.PublicKey)
 		}
 
-		_, err = client.(*goClient).GetValidatorData(validatorKeys) // Shouldn't call BeaconState internally.
+		_, err = client.(*GoClient).GetValidatorData(validatorKeys) // Shouldn't call BeaconState internally.
 		require.ErrorContains(t, err, "context deadline exceeded")
 
-		duties, err := client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
+		duties, err := client.(*GoClient).ProposerDuties(ctx, mockServerEpoch, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
@@ -71,7 +71,7 @@ func TestTimeouts(t *testing.T) {
 		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		_, err = client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
+		_, err = client.(*GoClient).ProposerDuties(ctx, mockServerEpoch, nil)
 		require.ErrorContains(t, err, "context deadline exceeded")
 	}
 
@@ -84,11 +84,11 @@ func TestTimeouts(t *testing.T) {
 		client, err := mockClient(t, ctx, fastServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		validators, err := client.(*goClient).GetValidatorData(nil)
+		validators, err := client.(*GoClient).GetValidatorData(nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, validators)
 
-		duties, err := client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
+		duties, err := client.(*GoClient).ProposerDuties(ctx, mockServerEpoch, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}

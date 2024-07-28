@@ -17,3 +17,5 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 		return nil
 	}
 }
+
+// TODO: filter based on domaintype

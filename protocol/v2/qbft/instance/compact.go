@@ -63,7 +63,7 @@ func compactContainerEdit(container *specqbft.MsgContainer, currentRound specqbf
 		// Empty already.
 	case clear:
 		// Discard all messages.
-		container.Msgs = map[specqbft.Round][]*spectypes.SignedSSVMessage{}
+		container.Msgs = map[specqbft.Round][]*specqbft.ProcessingMessage{}
 	default:
 		// Trim down to the current and future rounds.
 		for r := range container.Msgs {
@@ -83,12 +83,12 @@ func compactContainerCopy(container *specqbft.MsgContainer, currentRound specqbf
 	case clear:
 		// Discard all messages.
 		return &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{},
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{},
 		}
 	default:
 		// Trim down to the current and future rounds.
 		compact := specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{},
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{},
 		}
 		for r, msgs := range container.Msgs {
 			if r >= currentRound {

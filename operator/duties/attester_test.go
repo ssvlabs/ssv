@@ -20,9 +20,9 @@ func setupAttesterDutiesMock(
 	s *Scheduler,
 	dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty],
 	waitForDuties *SafeValue[bool],
-) (chan struct{}, chan []*spectypes.BeaconDuty) {
+) (chan struct{}, chan []*spectypes.ValidatorDuty) {
 	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
@@ -61,8 +61,8 @@ func setupAttesterDutiesMock(
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv1.AttesterDuty) []*spectypes.BeaconDuty {
-	expectedDuties := make([]*spectypes.BeaconDuty, 0)
+func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv1.AttesterDuty) []*spectypes.ValidatorDuty {
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleAggregator))
 	}

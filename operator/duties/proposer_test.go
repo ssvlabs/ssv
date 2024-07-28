@@ -17,9 +17,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.BeaconDuty) {
+func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.ValidatorDuty) {
 	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().ProposerDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
@@ -55,8 +55,8 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedProposerDuties(handler *ProposerHandler, duties []*eth2apiv1.ProposerDuty) []*spectypes.BeaconDuty {
-	expectedDuties := make([]*spectypes.BeaconDuty, 0)
+func expectedExecutedProposerDuties(handler *ProposerHandler, duties []*eth2apiv1.ProposerDuty) []*spectypes.ValidatorDuty {
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleProposer))
 	}

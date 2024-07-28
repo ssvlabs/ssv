@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -131,11 +130,6 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		return nil, err
 	}
 
-	hash, err := keys.OperatorKey.StorageHash()
-	if err != nil {
-		panic(err)
-	}
-
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, err
@@ -152,10 +146,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
-	cfg.NodeStorage = mock.NodeStorage{
-		MockPrivateKeyHash:              hash,
-		RegisteredOperatorPublicKeyPEMs: []string{},
-	}
+	cfg.NodeStorage = nodeStorage
 	cfg.Metrics = nil
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,

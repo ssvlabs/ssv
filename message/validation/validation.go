@@ -104,7 +104,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	return mv.handleValidationSuccess(decodedMessage)
 }
 
-func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
 	if err := mv.validatePubSubMessage(pMsg); err != nil {
 		return nil, err
 	}
@@ -117,8 +117,8 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
 
-func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
-	decodedMessage := &queue.DecodedSSVMessage{
+func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.SSVMessage, error) {
+	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
 	}
 
@@ -170,7 +170,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 }
 
 func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committeeInfo.operatorIDs); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.operatorIDs); err != nil {
 		return err
 	}
 

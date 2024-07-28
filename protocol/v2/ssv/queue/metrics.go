@@ -22,7 +22,7 @@ func WithMetrics(q Queue, metrics Metrics) Queue {
 	}
 }
 
-func (q *queueWithMetrics) TryPush(msg *DecodedSSVMessage) bool {
+func (q *queueWithMetrics) TryPush(msg *SSVMessage) bool {
 	pushed := q.Queue.TryPush(msg)
 	if !pushed {
 		q.metrics.DroppedQueueMessage(msg.GetID())

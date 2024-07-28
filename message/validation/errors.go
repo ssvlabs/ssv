@@ -120,7 +120,7 @@ var (
 	ErrEncodeOperators                         = Error{text: "encode operators", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.DecodedSSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -150,9 +150,16 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.DecodedSSVMessage) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 
 	return pubsub.ValidationAccept
 }
+
+// func (mv *messageValidator) handleGenesisValidationSuccess(decodedMessage *genesisqueue.GenesisSSVMessage) pubsub.ValidationResult {
+// 	// loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
+// 	// mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
+
+// 	return pubsub.ValidationAccept
+// }

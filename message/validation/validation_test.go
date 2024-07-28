@@ -14,6 +14,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/mock/gomock"
@@ -21,9 +24,6 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -50,6 +50,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	netCfg := networkconfig.TestNetwork
+	netCfg.AlanForkEpoch = math.MaxUint64 // use genesis domain to be able to use message templates from spec
 
 	ks := spectestingutils.Testing4SharesSet()
 	shares := generateShares(t, ks, ns, netCfg)
@@ -85,6 +86,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					&share1,
 					&share2,
 					&share3,
+				},
+				Indices: []phase0.ValidatorIndex{
+					share1.ValidatorIndex,
+					share2.ValidatorIndex,
+					share3.ValidatorIndex,
 				},
 			}
 		}
@@ -737,6 +743,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						ds := dutystore.New()
 						ds.Proposer.Add(spectestingutils.TestingDutyEpoch, spectestingutils.TestingDutySlot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
 						ds.SyncCommittee.Add(0, shares.active.ValidatorIndex, &eth2apiv1.SyncCommitteeDuty{}, true)
+						ds.VoluntaryExit.AddDuty(spectestingutils.TestingDutySlot, phase0.BLSPubKey(shares.active.ValidatorPubKey))
 
 						validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 

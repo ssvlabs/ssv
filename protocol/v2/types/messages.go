@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 
+	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 )
@@ -38,7 +39,7 @@ type TimeoutData struct {
 }
 
 type ExecuteDutyData struct {
-	Duty *types.BeaconDuty
+	Duty *types.ValidatorDuty
 }
 
 type ExecuteCommitteeDutyData struct {
@@ -77,4 +78,33 @@ func (m *EventMsg) Encode() ([]byte, error) {
 // Decode returns error if decoding failed
 func (m *EventMsg) Decode(data []byte) error {
 	return json.Unmarshal(data, &m)
+}
+
+func Sign(msg *qbft.Message, operatorID types.OperatorID, operatorSigner OperatorSigner) (*types.SignedSSVMessage, error) {
+	byts, err := msg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not encode message")
+	}
+
+	msgID := types.MessageID{}
+	copy(msgID[:], msg.Identifier)
+
+	ssvMsg := &types.SSVMessage{
+		MsgType: types.SSVConsensusMsgType,
+		MsgID:   msgID,
+		Data:    byts,
+	}
+
+	sig, err := operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not sign SSVMessage")
+	}
+
+	signedSSVMessage := &types.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []types.OperatorID{operatorID},
+		SSVMessage:  ssvMsg,
+	}
+
+	return signedSSVMessage, nil
 }

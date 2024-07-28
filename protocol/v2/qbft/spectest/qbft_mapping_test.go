@@ -2,6 +2,7 @@ package qbft
 
 import (
 	"encoding/json"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"os"
 	"reflect"
 	"strings"
@@ -9,14 +10,12 @@ import (
 
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
-	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -99,17 +98,23 @@ func TestQBFTMapping(t *testing.T) {
 
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
+			ks := testingutils.Testing4SharesSet()
+			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), spectypes.RoleCommittee),
+				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), convert.RoleCommittee),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
+				signer,
 			)
 			err = pre.Decode(preByts)
 			require.NoError(t, err)
 			typedTest.Pre = pre
+			t.Run(typedTest.Name, func(t *testing.T) { // using only spec struct so no need to run our version (TODO: check how we choose leader)
+				t.Parallel()
+				RunTimeout(t, typedTest)
+			})
 
-			RunTimeout(t, typedTest)
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)
 		}

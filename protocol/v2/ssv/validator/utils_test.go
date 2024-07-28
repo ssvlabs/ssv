@@ -9,7 +9,7 @@ import (
 
 func TestRemoveIndices(t *testing.T) {
 	type TestInputType struct {
-		duties          []*types.BeaconDuty
+		duties          []*types.ValidatorDuty
 		indicesToRemove []int
 	}
 	type TestCase struct {
@@ -21,7 +21,7 @@ func TestRemoveIndices(t *testing.T) {
 	testCases := []TestCase{
 		{
 			input: TestInputType{
-				duties: []*types.BeaconDuty{
+				duties: []*types.ValidatorDuty{
 					{Slot: 0}, {Slot: 1}, {Slot: 2}, {Slot: 3}, {Slot: 4},
 				},
 				indicesToRemove: []int{0, 3, 1},
@@ -31,7 +31,7 @@ func TestRemoveIndices(t *testing.T) {
 		},
 		{
 			input: TestInputType{
-				duties: []*types.BeaconDuty{
+				duties: []*types.ValidatorDuty{
 					{Slot: 1},
 				},
 				indicesToRemove: []int{0},
@@ -41,7 +41,7 @@ func TestRemoveIndices(t *testing.T) {
 		},
 		{
 			input: TestInputType{
-				duties: []*types.BeaconDuty{
+				duties: []*types.ValidatorDuty{
 					{Slot: 0}, {Slot: 1}, {Slot: 2}, {Slot: 3},
 				},
 				indicesToRemove: []int{0, 3},
@@ -51,7 +51,7 @@ func TestRemoveIndices(t *testing.T) {
 		},
 		{
 			input: TestInputType{
-				duties: []*types.BeaconDuty{
+				duties: []*types.ValidatorDuty{
 					{Slot: 0}, {Slot: 1}, {Slot: 2}, {Slot: 3},
 				},
 				indicesToRemove: []int{0, 3, 3, 3},
@@ -61,7 +61,7 @@ func TestRemoveIndices(t *testing.T) {
 		},
 		{
 			input: TestInputType{
-				duties: []*types.BeaconDuty{
+				duties: []*types.ValidatorDuty{
 					{Slot: 0}, {Slot: 1}, {Slot: 2}, {Slot: 3},
 				},
 				indicesToRemove: []int{0, 23, 42},

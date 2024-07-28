@@ -26,7 +26,7 @@ COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
 	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
-UNFORMATTED=$(shell gofmt -s -l .)
+UNFORMATTED=$(shell gofmt -l .)
 
 #Lint
 .PHONY: lint-prepare
@@ -61,6 +61,23 @@ unit-test:
 spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
+
+
+.PHONY: all-spec-test-raceless
+all-spec-test-raceless:
+	@echo "Running spec tests"
+	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
+
+
+.PHONY: pre-fork-spec-test-raceless
+pre-fork-spec-test-raceless:
+	@echo "Running spec tests"
+	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/genesis/...
+
+.PHONY: post-fork-spec-test-raceless
+post-fork-spec-test-raceless:
+	@echo "Running spec tests"
+	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/v2/...
 
 .PHONY: spec-test-raceless
 spec-test-raceless:
