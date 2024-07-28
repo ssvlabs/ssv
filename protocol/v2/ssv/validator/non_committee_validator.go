@@ -85,7 +85,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
-		return fmt.Errorf("not processing message type %b", partialSigMessages.Type)
+		return fmt.Errorf("not processing message type %d", partialSigMessages.Type)
 	}
 
 	slot := partialSigMessages.Slot

@@ -49,12 +49,6 @@ type Validator struct {
 	state uint32
 
 	messageValidator validation.MessageValidator
-
-	GenesisValidator
-}
-
-type GenesisValidator struct {
-	DutyRunners genesisrunner.DutyRunners
 }
 
 // NewValidator creates a new instance of Validator.
@@ -141,7 +135,6 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
-
 	}
 
 	messageID := msg.GetID()
