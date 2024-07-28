@@ -307,8 +307,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		return nil
 	}
 
-	cr.metrics.EndPostConsensus()
-
 	durationFields := []zap.Field{
 		fields.ConsensusTime(cr.metrics.GetConsensusTime()),
 		fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()),
@@ -388,6 +386,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
+
 			vlogger.Debug("🧩 reconstructed partial signatures committee",
 				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
@@ -418,6 +417,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				attestationsToSubmit[validator] = att
 			}
 		}
+		cr.metrics.EndPostConsensus()
 	}
 	logger = logger.With(durationFields...)
 	// Submit multiple attestations
