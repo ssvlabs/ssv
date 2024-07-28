@@ -12,11 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
-type GenesisP2p struct {
+type GenesisP2P struct {
 	Network *p2pNetwork
 }
 
-func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {
+func (p *GenesisP2P) Broadcast(message *genesisspectypes.SSVMessage) error {
 
 	zap.L().Debug("broadcasting genesis msg", fields.PubKey(message.MsgID.GetPubKey()), zap.Int("msg_type", int(message.MsgType)))
 
@@ -65,6 +65,6 @@ func (p *GenesisP2p) Broadcast(message *genesisspectypes.SSVMessage) error {
 }
 
 // Subscribe subscribes to validator subnet
-func (n *GenesisP2p) Subscribe(pk genesisspectypes.ValidatorPK) error {
+func (n *GenesisP2P) Subscribe(pk genesisspectypes.ValidatorPK) error {
 	return n.Network.Subscribe(spectypes.ValidatorPK(pk))
 }

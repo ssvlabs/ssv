@@ -602,7 +602,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2p) {
+func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2P) {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
