@@ -18,6 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
+	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -224,40 +226,18 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		}
 
 		var decodedMsg network.SSVMessageInterface
-		if msg.ValidatorData != nil {
-			m, ok := msg.ValidatorData.(*queue.SSVMessage)
-			if ok {
-				decodedMsg = m
-				logger.With(
-					zap.String("pubKey", hex.EncodeToString(m.SSVMessage.MsgID.GetDutyExecutorID())),
-					zap.String("role", m.SSVMessage.MsgID.GetRoleType().String()),
-					fields.MessageType(m.SSVMessage.MsgType),
-				).Debug("handlePubsubMessages - alan")
-			} else {
-				m, ok := msg.ValidatorData.(*genesisqueue.GenesisSSVMessage)
-				if ok {
-					decodedMsg = m
-					logger.With(
-						zap.String("pubKey", hex.EncodeToString(m.SSVMessage.MsgID.GetPubKey())),
-						zap.String("role", m.SSVMessage.MsgID.GetRoleType().String()),
-						fields.MessageType(spectypes.MsgType(m.SSVMessage.MsgType)),
-					).Debug("handlePubsubMessages - genesis")
-				}
-			}
-
-		}
-		if decodedMsg == nil {
+		switch m := msg.ValidatorData.(type) {
+		case *queue.SSVMessage:
+			decodedMsg = m
+			metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(m.MsgType)).Inc()
+		case *genesisqueue.GenesisSSVMessage:
+			decodedMsg = m
+			metricsRouterIncoming.WithLabelValues(genesismessage.MsgTypeToString(m.MsgType)).Inc()
+		case nil:
 			return errors.New("message was not decoded")
+		default:
+			return fmt.Errorf("unknown decoded message type: %T", m)
 		}
-
-		// p2pID := decodedMsg.GetID().String()
-
-		// logger.With(
-		// 	zap.String("pubKey", hex.EncodeToString(decodedMsg.SSVMessage.MsgID.GetDutyExecutorID())),
-		// 	zap.String("role", decodedMsg.SSVMessage.MsgID.GetRoleType().String()),
-		// ).Debug("handlePubsubMessages")
-
-		// metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
 		n.msgRouter.Route(ctx, decodedMsg)
 
