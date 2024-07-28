@@ -306,12 +306,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	if !quorum {
 		return nil
 	}
-
 	durationFields := []zap.Field{
 		fields.ConsensusTime(cr.metrics.GetConsensusTime()),
-		fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()),
 	}
-
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects()
 	if err != nil {
@@ -417,8 +414,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				attestationsToSubmit[validator] = att
 			}
 		}
-		cr.metrics.EndPostConsensus()
 	}
+	cr.metrics.EndPostConsensus()
+	durationFields = append(durationFields, fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()))
 	logger = logger.With(durationFields...)
 	// Submit multiple attestations
 	attestations := make([]*phase0.Attestation, 0)
