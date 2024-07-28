@@ -433,7 +433,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 
 	if len(attestations) > 0 {
-		logger.Info("✅ successfully submitted attestations",
+		logger.Info("✅ successfully submitted attestations (test)",
 			fields.SubmissionTime(time.Since(submmitionStart)),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
