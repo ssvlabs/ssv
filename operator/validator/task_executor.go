@@ -90,8 +90,8 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("fee_recipient", recipient.String()))
 
 	c.validatorsMap.ForEachValidator(func(v *validators.ValidatorContainer) bool {
-		if v.GetShare().OwnerAddress == owner {
-			v.GetShare().FeeRecipientAddress = recipient
+		if v.Share().OwnerAddress == owner {
+			v.Share().FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}

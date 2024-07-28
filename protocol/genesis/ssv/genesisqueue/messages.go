@@ -49,7 +49,6 @@ func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 
 // DecodeGenesisSSVMessage decodes a genesis SSVMessage into a GenesisSSVMessage.
 func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*GenesisSSVMessage, error) {
-
 	body, err := ExtractGenesisMsgBody(m)
 	if err != nil {
 		return nil, err

@@ -262,10 +262,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	genesisValidatorOptions := genesisvalidator.Options{
 		Network:          options.GenesisControllerOptions.Network,
 		BuilderProposals: options.BuilderProposals,
-		// Beacon:           options.Beacon,
-		BeaconNetwork: options.NetworkConfig.Beacon,
-		Storage:       options.GenesisControllerOptions.StorageMap,
-		//Share:   nil,  // set per validator
+		BeaconNetwork:    options.NetworkConfig.Beacon,
+		Storage:          options.GenesisControllerOptions.StorageMap,
+		// SSVShare:   nil,  // set per validator
 		Signer: options.GenesisControllerOptions.KeyManager,
 		//Mode: validator.ModeRW // set per validator
 		DutyRunners:       nil, // set per validator
@@ -283,6 +282,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		size := options.HistorySyncBatchSize * 2
 		if size > validator.DefaultQueueSize {
 			validatorOptions.QueueSize = size
+		}
+		if size > genesisvalidator.DefaultQueueSize {
+			genesisValidatorOptions.QueueSize = size
 		}
 	}
 
@@ -395,21 +397,19 @@ func (c *controller) handleRouterMessages() {
 				if m.MsgType == genesismessage.SSVEventMsgType {
 					continue
 				}
-				c.logger.Debug("📬 handling genesis SSV message")
 
 				pk := m.GetID().GetPubKey()
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk[:])); ok {
 					v.GenesisValidator.HandleMessage(c.logger, m)
-					// } else if c.validatorOptions.Exporter {
-					// 	if m.MsgType != genesisspectypes.SSVConsensusMsgType {
-					// 		continue // not supporting other types
-					// 	}
-					// 	if !c.messageWorker.TryEnqueue(m) { // start to save non committee decided messages only post fork
-					// 		c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-					// 	}
-				} else {
-					c.logger.Error("could not find genesis validator", fields.PubKey(pk))
 				}
+				// TODO: (Alan) make exporter work with genesis message as well
+				// } else if c.validatorOptions.Exporter {
+				// 	if m.MsgType != genesisspectypes.SSVConsensusMsgType {
+				// 		continue // not supporting other types
+				// 	}
+				// 	if !c.messageWorker.TryEnqueue(m) { // start to save non committee decided messages only post fork
+				// 		c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+				// 	}
 
 			case *queue.SSVMessage:
 				if m.MsgType == message.SSVEventMsgType {
@@ -435,6 +435,7 @@ func (c *controller) handleRouterMessages() {
 				}
 
 			default:
+				// This should be impossible because the channel is typed.
 				c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 			}
 		}
@@ -684,15 +685,15 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	// TODO: why its in the map if not started?
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		//TODO: replace all metadata update occurrences with a function instead
-		v.GetShare().BeaconMetadata = metadata
-		v.GetShare().ValidatorIndex = share.ValidatorIndex
+		v.Share().BeaconMetadata = metadata
+		v.Share().ValidatorIndex = share.ValidatorIndex
 		_, err := c.startValidator(v)
 		if err != nil {
 			c.logger.Warn("could not start validator", zap.Error(err))
 		}
-		vc, found := c.validatorsMap.GetCommittee(v.GetShare().CommitteeID())
+		vc, found := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
 		if found {
-			vc.AddShare(&v.GetShare().Share)
+			vc.AddShare(&v.Share().Share)
 			_, err := c.startCommittee(vc)
 			if err != nil {
 				c.logger.Warn("could not start committee", zap.Error(err))
@@ -741,15 +742,15 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		// Start validator (if not already started).
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			v.GetShare().BeaconMetadata = share.BeaconMetadata
-			v.GetShare().ValidatorIndex = share.ValidatorIndex
+			v.Share().BeaconMetadata = share.BeaconMetadata
+			v.Share().ValidatorIndex = share.ValidatorIndex
 			_, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
 			}
-			vc, found := c.validatorsMap.GetCommittee(v.GetShare().CommitteeID())
+			vc, found := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
 			if found {
-				vc.AddShare(&v.GetShare().Share)
+				vc.AddShare(&v.Share().Share)
 				_, err := c.startCommittee(vc)
 				if err != nil {
 					c.logger.Warn("could not start committee", zap.Error(err))
@@ -778,11 +779,10 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validators.Val
 }
 
 func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty) {
-	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
-	// so we need to copy the pubkey val to avoid pointer
+	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer,
+	// so we need to copy the pubkey to avoid pointer.
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
-	logger.Debug("📬 queue: pushing message", fields.BeaconRole(spectypes.BeaconRole(duty.Type)), fields.PubKey(pk[:]))
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateGenesisDutyExecuteMsg(duty, pk, genesisssvtypes.GetDefaultDomain())
@@ -798,7 +798,6 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 		if pushed := v.GenesisValidator.Queues[duty.Type].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
-		logger.Debug("📬 queue: pushed message", fields.MessageID(spectypes.MessageID(dec.MsgID)), fields.MessageType(spectypes.MsgType(dec.MsgType)))
 	} else {
 		logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
 	}
@@ -878,24 +877,18 @@ func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID sp
 
 func CreateGenesisDutyExecuteMsg(duty *genesisspectypes.Duty, pubKey phase0.BLSPubKey, domain genesisspectypes.DomainType) (*genesisspectypes.SSVMessage, error) {
 	executeDutyData := genesisssvtypes.ExecuteDutyData{Duty: duty}
-	edd, err := json.Marshal(executeDutyData)
+	b, err := json.Marshal(executeDutyData)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal execute duty data")
 	}
 	msg := genesisssvtypes.EventMsg{
 		Type: genesisssvtypes.ExecuteDuty,
-		Data: edd,
+		Data: b,
 	}
 	data, err := msg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode event msg")
 	}
-	//case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
-	//	msg := &ssvtypes.EventMsg{}
-	//	if err := msg.Decode(m.Data); err != nil {
-	//	return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
-	//	}
-	//	body = msg
 	return &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.MsgType(message.SSVEventMsgType),
 		MsgID:   genesisspectypes.NewMsgID(domain, pubKey[:], duty.Type),
@@ -930,8 +923,8 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 	vals := c.validatorsMap.GetAllValidators()
 	indices := make([]phase0.ValidatorIndex, 0, len(vals))
 	for _, v := range vals {
-		if v.GetShare().IsAttesting(epoch) {
-			indices = append(indices, v.GetShare().BeaconMetadata.Index)
+		if v.Share().IsAttesting(epoch) {
+			indices = append(indices, v.Share().BeaconMetadata.Index)
 		}
 	}
 	return indices
@@ -962,10 +955,10 @@ func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconpro
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.GetShare().BeaconMetadata.Equals(meta) {
-			v.GetShare().BeaconMetadata.Status = meta.Status
-			v.GetShare().BeaconMetadata.Balance = meta.Balance
-			v.GetShare().BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
+		if !v.Share().BeaconMetadata.Equals(meta) {
+			v.Share().BeaconMetadata.Status = meta.Status
+			v.Share().BeaconMetadata.Balance = meta.Balance
+			v.Share().BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
 			logger.Debug("metadata was updated")
 		}
 		_, err := c.startValidator(v)
@@ -973,8 +966,8 @@ func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconpro
 			logger.Warn("could not start validator after metadata update",
 				zap.Error(err), zap.Any("metadata", meta))
 		}
-		if vc, vcexist := c.validatorsMap.GetCommittee(v.GetShare().CommitteeID()); vcexist {
-			vc.AddShare(&v.GetShare().Share)
+		if vc, vcexist := c.validatorsMap.GetCommittee(v.Share().CommitteeID()); vcexist {
+			vc.AddShare(&v.Share().Share)
 			_, err := c.startCommittee(vc)
 			if err != nil {
 				logger.Warn("could not start committee after metadata update",
@@ -998,14 +991,14 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// stop instance
 	v.Stop()
 	c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
-	vc, ok := c.validatorsMap.GetCommittee(v.GetShare().CommitteeID())
+	vc, ok := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
 	if ok {
-		vc.RemoveShare(v.GetShare().Share.ValidatorIndex)
+		vc.RemoveShare(v.Share().Share.ValidatorIndex)
 		if len(vc.Shares) == 0 {
-			deletedCommittee := c.validatorsMap.RemoveCommittee(v.GetShare().CommitteeID())
+			deletedCommittee := c.validatorsMap.RemoveCommittee(v.Share().CommitteeID())
 			if deletedCommittee == nil {
 				c.logger.Warn("could not find committee to remove on no validators",
-					fields.CommitteeID(v.GetShare().CommitteeID()),
+					fields.CommitteeID(v.Share().CommitteeID()),
 					fields.PubKey(pubKey[:]),
 				)
 				return
@@ -1041,15 +1034,17 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.SSVShare = share
 		opts.Operator = operator
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
-		av := validator.NewValidator(ctx, cancel, opts)
+		alanValidator := validator.NewValidator(ctx, cancel, opts)
 
 		genesisOpts := c.genesisValidatorOptions
+		// TODO: (Alan) share mutations such as metadata changes and fee recipient updates aren't reflected in genesis shares
+		// because shares are duplicated.
 		genesisOpts.SSVShare = genesisssvtypes.ConvertToAlanShare(share, operator)
 		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
-		gv := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
+		genesisValidator := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
 
-		v = &validators.ValidatorContainer{Validator: av, GenesisValidator: gv}
+		v = &validators.ValidatorContainer{Validator: alanValidator, GenesisValidator: genesisValidator}
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
@@ -1190,13 +1185,13 @@ func (c *controller) validatorStart(validator *validators.ValidatorContainer) (b
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validators.ValidatorContainer) (bool, error) {
-	c.reportValidatorStatus(v.GetShare().ValidatorPubKey[:], v.GetShare().BeaconMetadata)
-	if v.GetShare().BeaconMetadata.Index == 0 {
+	c.reportValidatorStatus(v.Share().ValidatorPubKey[:], v.Share().BeaconMetadata)
+	if v.Share().BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
-		c.metrics.ValidatorError(v.GetShare().ValidatorPubKey[:])
+		c.metrics.ValidatorError(v.Share().ValidatorPubKey[:])
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {
@@ -1469,7 +1464,6 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			ValueCheckF: nil, // sets per role type
 			ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 				leader := genesisspecqbft.RoundRobinProposer(state, round)
-				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
 			Storage:               options.GenesisOptions.Storage.Get(role),

@@ -30,6 +30,6 @@ func (vc *ValidatorContainer) Stop() {
 	}
 }
 
-func (vc *ValidatorContainer) GetShare() *types.SSVShare {
+func (vc *ValidatorContainer) Share() *types.SSVShare {
 	return vc.Validator.Share
 }
