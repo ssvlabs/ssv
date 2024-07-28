@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
@@ -18,6 +18,12 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
+
+		// Ignore genesis messages in the first slot of the fork epoch
+		if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
+			e.reject = false
+		}
+
 		return nil, e
 	}
 
