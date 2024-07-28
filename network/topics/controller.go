@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -12,6 +13,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 var (
@@ -273,12 +276,20 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			continue
 		}
 
-		// if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
-		// 	metricPubsubInbound.WithLabelValues(
-		// 		commons.GetTopicBaseName(topicName),
-		// 		strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
-		// 	).Inc()
-		// }
+		switch m := msg.ValidatorData.(type) {
+		case *queue.SSVMessage:
+			metricPubsubInbound.WithLabelValues(
+				commons.GetTopicBaseName(topicName),
+				strconv.FormatUint(uint64(m.MsgType), 10),
+			).Inc()
+		case *genesisqueue.GenesisSSVMessage:
+			metricPubsubInbound.WithLabelValues(
+				commons.GetTopicBaseName(topicName),
+				strconv.FormatUint(uint64(m.MsgType), 10),
+			).Inc()
+		default:
+			logger.Warn("unknown message type", zap.Any("message", m))
+		}
 
 		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
