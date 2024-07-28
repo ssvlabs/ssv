@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -30,10 +29,26 @@ func init() {
 
 func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
-	signature, err := spectypes.ReconstructSignatures(ps.Signatures[validatorIndex][rootHex(root)])
+	if ps.Signatures[validatorIndex] == nil {
+		return nil, errors.New("no signatures for the given validator index")
+	}
+	if ps.Signatures[validatorIndex][signingRootHex(root)] == nil {
+		return nil, errors.New("no signatures for the given signing root")
+	}
+
+	operatorsSignatures := make(map[uint64][]byte)
+	for operatorID, sig := range ps.Signatures[validatorIndex][signingRootHex(root)] {
+		operatorsSignatures[operatorID] = sig
+	}
+	signature, err := spectypes.ReconstructSignatures(operatorsSignatures)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}
+
+	// Get validator pub key copy (This avoids cgo Go pointer to Go pointer issue)
+	validatorPubKeyCopy := make([]byte, len(validatorPubKey))
+	copy(validatorPubKeyCopy, validatorPubKey)
+
 	if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
 		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
 	}
@@ -54,6 +69,6 @@ func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [3
 	return nil
 }
 
-func rootHex(r [32]byte) string {
-	return hex.EncodeToString(r[:])
+func signingRootHex(r [32]byte) specssv.SigningRoot {
+	return specssv.SigningRoot(hex.EncodeToString(r[:]))
 }

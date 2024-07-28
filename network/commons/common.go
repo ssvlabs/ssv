@@ -24,8 +24,8 @@ const (
 
 	peersForSync = 10
 
-	// subnetsCount returns the subnet count for genesis
-	subnetsCount uint64 = 128
+	// SubnetsCount returns the subnet count for genesis
+	SubnetsCount uint64 = 128
 
 	// UnknownSubnet is used when a validator public key is invalid
 	UnknownSubnet = "unknown"
@@ -99,12 +99,12 @@ func ValidatorSubnet(validatorPKHex string) int {
 		return -1
 	}
 	val := hexToUint64(validatorPKHex[:10])
-	return int(val % subnetsCount)
+	return int(val % SubnetsCount)
 }
 
 // CommitteeSubnet returns the subnet for the given committee
 func CommitteeSubnet(cid spectypes.CommitteeID) int {
-	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(subnetsCount))
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(SubnetsCount))
 	return int(subnet.Int64())
 }
 
@@ -126,7 +126,7 @@ func MsgID() MsgIDFunc {
 
 // Subnets returns the subnets count for this fork
 func Subnets() int {
-	return int(subnetsCount)
+	return int(SubnetsCount)
 }
 
 // Topics returns the available topics for this fork.
@@ -147,7 +147,7 @@ func AddOptions(opts []libp2p.Option) []libp2p.Option {
 	return opts
 }
 
-// EncodeNetworkMsg encodes network message
+// EncodeGenesisNetworkMsg encodes network message
 // TODO: DEPRECATED, remove post-fork
 func EncodeGenesisNetworkMsg(msg *genesisspectypes.SSVMessage) ([]byte, error) {
 	return msg.Encode()

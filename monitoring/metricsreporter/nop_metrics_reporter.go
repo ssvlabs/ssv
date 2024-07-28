@@ -52,6 +52,7 @@ func (n *nopMetrics) MessageIgnored(reason string, role spectypes.RunnerRole, ro
 func (n *nopMetrics) MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round) {
 }
 func (n *nopMetrics) SSVMessageType(msgType spectypes.MsgType)                             {}
+func (n *nopMetrics) GenesisSSVMessageType(msgType genesisspectypes.MsgType)               {}
 func (n *nopMetrics) ConsensusMsgType(msgType specqbft.MessageType, signers int)           {}
 func (n *nopMetrics) MessageValidationDuration(duration time.Duration, labels ...string)   {}
 func (n *nopMetrics) SignatureValidationDuration(duration time.Duration, labels ...string) {}

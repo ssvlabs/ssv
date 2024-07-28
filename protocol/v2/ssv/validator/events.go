@@ -10,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage, dutyRunner runner.Runner) error {
+func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.SSVMessage, dutyRunner runner.Runner) error {
 	eventMsg, ok := msg.Body.(*types.EventMsg)
 	if !ok {
 		return fmt.Errorf("could not decode event message")
@@ -31,7 +31,7 @@ func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 	}
 }
 
-func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.SSVMessage) error {
 	eventMsg, ok := msg.Body.(*types.EventMsg)
 	if !ok {
 		return fmt.Errorf("could not decode event message")

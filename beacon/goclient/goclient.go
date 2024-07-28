@@ -136,10 +136,10 @@ type NodeClientProvider interface {
 	NodeClient() NodeClient
 }
 
-var _ NodeClientProvider = (*goClient)(nil)
+var _ NodeClientProvider = (*GoClient)(nil)
 
-// goClient implementing Beacon struct
-type goClient struct {
+// GoClient implementing Beacon struct
+type GoClient struct {
 	log                  *zap.Logger
 	ctx                  context.Context
 	network              beaconprotocol.Network
@@ -162,7 +162,7 @@ func New(
 	opt beaconprotocol.Options,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
-) (beaconprotocol.BeaconNode, error) {
+) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	commonTimeout := opt.CommonTimeout
@@ -186,7 +186,7 @@ func New(
 		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 
-	client := &goClient{
+	client := &GoClient{
 		log:               logger,
 		ctx:               opt.Context,
 		network:           opt.Network,
@@ -221,13 +221,13 @@ func New(
 	return client, nil
 }
 
-func (gc *goClient) NodeClient() NodeClient {
+func (gc *GoClient) NodeClient() NodeClient {
 	return gc.nodeClient
 }
 
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
-func (gc *goClient) Healthy(ctx context.Context) error {
+func (gc *GoClient) Healthy(ctx context.Context) error {
 	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
@@ -258,18 +258,18 @@ func (gc *goClient) Healthy(ctx context.Context) error {
 }
 
 // GetBeaconNetwork returns the beacon network the node is on
-func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
+func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return gc.network.BeaconNetwork
 }
 
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
-func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
+func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }
 
-func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
+func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	return gc.client.Events(ctx, topics, handler)
 }

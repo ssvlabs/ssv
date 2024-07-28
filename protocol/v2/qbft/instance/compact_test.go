@@ -171,7 +171,7 @@ func mockContainer(rounds ...specqbft.Round) *specqbft.MsgContainer {
 		msg := &specqbft.Message{
 			Round: round,
 		}
-		container.AddMsg(testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, msg))
+		container.AddMsg(testingutils.ToProcessingMessage(testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, msg)))
 	}
 	return container
 }

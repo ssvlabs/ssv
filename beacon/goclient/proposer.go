@@ -27,7 +27,7 @@ const (
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
-func (gc *goClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
+func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
 	resp, err := gc.client.ProposerDuties(ctx, &api.ProposerDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
@@ -43,7 +43,7 @@ func (gc *goClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 }
 
 // GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
-func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
@@ -131,7 +131,7 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	}
 }
 
-func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
+func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
 	signedBlock := &api.VersionedSignedBlindedProposal{
 		Version: block.Version,
 	}
@@ -170,7 +170,7 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 }
 
 // SubmitBeaconBlock submit the block to the node
-func (gc *goClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
+func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	signedBlock := &api.VersionedSignedProposal{
 		Version: block.Version,
 	}
@@ -215,11 +215,11 @@ func (gc *goClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 	return gc.client.SubmitProposal(gc.ctx, opts)
 }
 
-func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+func (gc *GoClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
 	return gc.updateBatchRegistrationCache(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
 }
 
-func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 	var preparations []*eth2apiv1.ProposalPreparation
 	for index, recipient := range feeRecipients {
 		preparations = append(preparations, &eth2apiv1.ProposalPreparation{
@@ -230,7 +230,7 @@ func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
 }
 
-func (gc *goClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
+func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
 	pk, err := registration.PubKey()
 	if err != nil {
 		return err
@@ -243,7 +243,7 @@ func (gc *goClient) updateBatchRegistrationCache(registration *api.VersionedSign
 	return nil
 }
 
-func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
+func (gc *GoClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], pubkey)
 
@@ -262,7 +262,7 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *goClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
+func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
 	operatorID := gc.operatorDataStore.AwaitOperatorID()
 
 	ticker := slotTickerProvider()
@@ -276,7 +276,7 @@ func (gc *goClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 	}
 }
 
-func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operatorID spectypes.OperatorID) {
+func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operatorID spectypes.OperatorID) {
 	slotsPerEpoch := gc.network.SlotsPerEpoch()
 
 	// Lock:
@@ -312,7 +312,7 @@ func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operat
 }
 
 // registrationList is not thread-safe
-func (gc *goClient) registrationList() []*api.VersionedSignedValidatorRegistration {
+func (gc *GoClient) registrationList() []*api.VersionedSignedValidatorRegistration {
 	result := make([]*api.VersionedSignedValidatorRegistration, 0)
 
 	for _, registration := range gc.registrationCache {
@@ -322,7 +322,7 @@ func (gc *goClient) registrationList() []*api.VersionedSignedValidatorRegistrati
 	return result
 }
 
-func (gc *goClient) submitBatchedRegistrations(slot phase0.Slot, registrations []*api.VersionedSignedValidatorRegistration) error {
+func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations []*api.VersionedSignedValidatorRegistration) error {
 	gc.log.Info("going to submit batch validator registrations",
 		fields.Slot(slot),
 		fields.Count(len(registrations)))

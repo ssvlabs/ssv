@@ -20,7 +20,7 @@ package runner
 //	beacon         specssv.BeaconNode
 //	network        specqbft.Network
 //	signer         spectypes.BeaconSigner
-//	operatorSigner spectypes.OperatorSigner
+//	operatorSigner ssvtypes.OperatorSigner
 //	valCheck       specqbft.ProposedValueCheckF
 //
 //	started time.Time
@@ -34,7 +34,7 @@ package runner
 //	beacon specssv.BeaconNode,
 //	network specqbft.Network,
 //	signer spectypes.BeaconSigner,
-//	operatorSigner spectypes.OperatorSigner,
+//	operatorSigner ssvtypes.OperatorSigner,
 //	valCheck specqbft.ProposedValueCheckF,
 //	highestDecidedSlot phase0.Slot,
 //) Runner {
@@ -236,7 +236,7 @@ package runner
 //		return errors.Wrap(err, "could not marshal attestation data")
 //	}
 //
-//	input := &spectypes.ConsensusData{
+//	input := &spectypes.ValidatorConsensusData{
 //		Duty:    *duty,
 //		Version: ver,
 //		DataSSZ: attDataByts,

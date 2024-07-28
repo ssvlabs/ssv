@@ -16,7 +16,7 @@ import (
 )
 
 // IsSyncCommitteeAggregator returns tru if aggregator
-func (gc *goClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
+func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 	// Hash the signature.
 	hash := sha256.Sum256(proof)
 
@@ -30,12 +30,12 @@ func (gc *goClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 }
 
 // SyncCommitteeSubnetID returns sync committee subnet ID from subcommittee index
-func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
+func (gc *GoClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
 	return uint64(index) / (SyncCommitteeSize / SyncCommitteeSubnetCount), nil
 }
 
 // GetSyncCommitteeContribution returns
-func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	if len(selectionProofs) != len(subnetIDs) {
 		return nil, DataVersionNil, fmt.Errorf("mismatching number of selection proofs and subnet IDs")
 	}
@@ -102,12 +102,12 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 }
 
 // SubmitSignedContributionAndProof broadcasts to the network
-func (gc *goClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
+func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
 	return gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
 }
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
+func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
 	delay := gc.network.SlotDurationSec() / 3 /* a third of the slot duration */
 	finalTime := gc.slotStartTime(slot).Add(delay)
 	wait := time.Until(finalTime)

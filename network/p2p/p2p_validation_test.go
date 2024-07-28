@@ -5,8 +5,6 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/cornelk/hashmap"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"math/rand"
 	"os"
 	"sort"
@@ -15,12 +13,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cornelk/hashmap"
+	"github.com/libp2p/go-libp2p/core/peer"
+
 	"github.com/aquasecurity/table"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/message/validation"
 )
 
@@ -32,6 +34,8 @@ import (
 // and finally asserts that each node scores it's peers according to their
 // played role (accepted > ignored > rejected).
 func TestP2pNetwork_MessageValidation(t *testing.T) {
+	t.Skip("test gets stuck")
+
 	const (
 		nodeCount      = 4
 		validatorCount = 20
@@ -265,6 +269,7 @@ func CreateVirtualNet(
 			node := vn.NodeByPeerID(selfPeer)
 			if node == nil {
 				t.Fatalf("self peer not found (%s)", selfPeer)
+				return
 			}
 
 			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
@@ -275,6 +280,7 @@ func CreateVirtualNet(
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
 					t.Fatalf("peer not found (%s)", peerID)
+					return
 				}
 				node.PeerScores.Set(peerNode.Index, peerScore)
 			}

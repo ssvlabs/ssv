@@ -3,6 +3,8 @@ package testing
 import (
 	"context"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
@@ -11,9 +13,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
@@ -30,10 +29,8 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex),
 			},
-			Signer:            spectestingutils.NewTestingKeyManager(),
-			Operator:          spectestingutils.TestingCommitteeMember(keySet),
-			OperatorSigner:    spectestingutils.NewTestingOperatorSigner(keySet, 1),
-			SignatureVerifier: spectestingutils.NewTestingVerifier(),
+			Signer:   spectestingutils.NewTestingKeyManager(),
+			Operator: spectestingutils.TestingCommitteeMember(keySet),
 			DutyRunners: map[spectypes.RunnerRole]runner.Runner{
 				spectypes.RoleCommittee:                 CommitteeRunner(logger, keySet),
 				spectypes.RoleProposer:                  ProposerRunner(logger, keySet),

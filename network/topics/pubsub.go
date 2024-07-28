@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/ssvlabs/ssv/networkconfig"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -44,6 +46,8 @@ const (
 
 // PubSubConfig is the needed config to instantiate pubsub
 type PubSubConfig struct {
+	NetworkConfig networkconfig.NetworkConfig
+
 	Host        host.Host
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
@@ -149,27 +153,38 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 	if cfg.ScoreIndex != nil || inspector != nil {
 		cfg.initScoring()
 
-		if inspector == nil {
-			peerConnected := func(pid peer.ID) bool {
-				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
-			}
-			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected)
-		}
-
-		if inspectInterval == 0 {
-			inspectInterval = defaultScoreInspectInterval
-		}
-
-		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
-		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
-			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
+		// Get topic score params factory
 		if cfg.GetValidatorStats == nil {
 			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 				// default in case it was not injected
 				return 100, 100, 10, nil
 			}
 		}
-		topicScoreFactory = topicScoreParams(logger, cfg, committeesProvider)
+
+		topicScoreFactory = func(t string) *pubsub.TopicScoreParams {
+			if cfg.NetworkConfig.PastAlanFork() {
+				return topicScoreParams(logger, cfg, committeesProvider)(t)
+			}
+			return validatorTopicScoreParams(logger, cfg)(t)
+		}
+
+		// Get overall score params
+		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
+
+		// Define score inspector
+		if inspector == nil {
+			peerConnected := func(pid peer.ID) bool {
+				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
+			}
+			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected, peerScoreParams, topicScoreFactory)
+		}
+		if inspectInterval == 0 {
+			inspectInterval = defaultScoreInspectInterval
+		}
+
+		// Append score params to pubsub options
+		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
+			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
 	}
 
 	if cfg.MsgIDHandler != nil {

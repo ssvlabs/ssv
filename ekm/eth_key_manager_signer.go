@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -63,6 +64,9 @@ type KeyManager interface {
 	AddShare(shareKey *bls.SecretKey) error
 	// RemoveShare removes a share key
 	RemoveShare(pubKey string) error
+
+	// SignRoot TODO: (Alan) genesis support - should be removed after alan fork
+	SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error)
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
