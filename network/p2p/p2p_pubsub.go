@@ -69,7 +69,8 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	topics, err := n.broadcastTopics(dutyExecutorToID(n.cfg.Network.PastAlanFork(), msg.SSVMessage.MsgID.GetDutyExecutorID()))
+	topics, err := n.broadcastTopics(dutyExecutorToID(n.cfg.Network.PastAlanFork(), msg.SSVMessage.MsgID.GetDutyExecutorID()),
+		msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee)
 	if err != nil {
 		return fmt.Errorf("could not get validator topics: %w", err)
 	}
@@ -270,13 +271,22 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) broadcastTopics(id []byte) ([]string, error) {
+func (n *p2pNetwork) broadcastTopics(id []byte, committee bool) ([]string, error) {
 	if n.cfg.Network.PastAlanFork() {
-		share := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(id))
-		if share == nil {
-			return nil, fmt.Errorf("could not find share for validator %s", hex.EncodeToString(id))
+		var cid spectypes.CommitteeID
+		if committee {
+			c := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(id))
+			if c == nil {
+				return nil, fmt.Errorf("could not find committee %s", hex.EncodeToString(id))
+			}
+			cid = c.ID
+		} else {
+			v := n.nodeStorage.ValidatorStore().Validator(id)
+			if v == nil {
+				return nil, fmt.Errorf("could not find share for validator %s", hex.EncodeToString(id))
+			}
+			cid = v.CommitteeID()
 		}
-		cid := share.ID
 		return commons.CommitteeTopicID(cid), nil
 	}
 	return commons.ValidatorTopicID(id), nil
