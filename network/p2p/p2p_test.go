@@ -273,7 +273,7 @@ type dummyRouter struct {
 	i     int
 }
 
-func (r *dummyRouter) Route(_ context.Context, _ network.SSVMessageInterface) {
+func (r *dummyRouter) Route(_ context.Context, _ network.DecodedSSVMessage) {
 	atomic.AddUint64(&r.count, 1)
 }
 

@@ -26,7 +26,7 @@ func init() {
 }
 
 // MsgHandler func that receive message.SSVMessage to handle
-type MsgHandler func(msg network.SSVMessageInterface) error
+type MsgHandler func(msg network.DecodedSSVMessage) error
 
 // ErrorHandler func that handles an error for a specific message
 type ErrorHandler func(msg *queue.SSVMessage, err error) error

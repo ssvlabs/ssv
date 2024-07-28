@@ -15,7 +15,7 @@ type msgRouter struct {
 	validator *protocolvalidator.Validator
 }
 
-func (m *msgRouter) Route(_ context.Context, message network.SSVMessageInterface) {
+func (m *msgRouter) Route(_ context.Context, message network.DecodedSSVMessage) {
 	m.validator.HandleMessage(m.logger, message.(*queue.SSVMessage))
 }
 

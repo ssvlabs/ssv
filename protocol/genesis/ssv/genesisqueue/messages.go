@@ -25,6 +25,8 @@ type GenesisSSVMessage struct {
 	Body interface{} // *EventMsg | *genesisspecqbft.SignedMessage | *genesisspectypes.SignedPartialSignatureMessage
 }
 
+func (d *GenesisSSVMessage) DecodedSSVMessage() {}
+
 func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {
 	case *ssvtypes.EventMsg: // TODO: do we need slot in events?

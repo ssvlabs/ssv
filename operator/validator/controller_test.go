@@ -285,7 +285,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg network.SSVMessageInterface) error {
+	ctr.messageWorker.UseHandler(func(msg network.DecodedSSVMessage) error {
 		wg.Done()
 		return nil
 	})

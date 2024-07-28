@@ -26,6 +26,8 @@ type SSVMessage struct {
 	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
 }
 
+func (d *SSVMessage) DecodedSSVMessage() {}
+
 func (d *SSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {
 	case *specqbft.Message: // TODO: Or message.SSVDecidedMsgType?

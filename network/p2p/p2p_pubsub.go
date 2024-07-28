@@ -225,7 +225,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return nil
 		}
 
-		var decodedMsg network.SSVMessageInterface
+		var decodedMsg network.DecodedSSVMessage
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
 			decodedMsg = m

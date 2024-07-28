@@ -388,8 +388,8 @@ func (c *controller) handleRouterMessages() {
 		case <-ctx.Done():
 			c.logger.Debug("router message handler stopped")
 			return
-		case msg := <-ch:
 
+		case msg := <-ch:
 			switch m := msg.(type) {
 			case *genesisqueue.GenesisSSVMessage:
 				if m.MsgType == genesismessage.SSVEventMsgType {
@@ -435,7 +435,7 @@ func (c *controller) handleRouterMessages() {
 				}
 
 			default:
-				panic("Unknown message type")
+				c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 			}
 		}
 	}
@@ -449,7 +449,7 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
 	spectypes.RoleSyncCommitteeContribution: 4,
 }
 
-func (c *controller) handleWorkerMessages(msg network.SSVMessageInterface) error {
+func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
 

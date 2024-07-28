@@ -2,23 +2,25 @@ package network
 
 import (
 	"context"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"io"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"go.uber.org/zap"
 
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
-// SSVMessageInterface serves as a marker interface for any SSV message types.
-type SSVMessageInterface interface {
-	// Potentially no methods needed if you're using only type assertions
+// DecodedSSVMessage serves as a marker interface for any SSV message types.
+type DecodedSSVMessage interface {
+	// DecodedSSVMessage is a dummy method to avoid type assertion mistakes.
+	DecodedSSVMessage()
 }
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(ctx context.Context, message SSVMessageInterface)
+	Route(ctx context.Context, message DecodedSSVMessage)
 }
 
 // MessageRouting allows to register a MessageRouter

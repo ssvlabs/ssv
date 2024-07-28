@@ -13,16 +13,16 @@ const bufSize = 65536
 func newMessageRouter(logger *zap.Logger) *messageRouter {
 	return &messageRouter{
 		logger: logger,
-		ch:     make(chan network.SSVMessageInterface, bufSize),
+		ch:     make(chan network.DecodedSSVMessage, bufSize),
 	}
 }
 
 type messageRouter struct {
 	logger *zap.Logger
-	ch     chan network.SSVMessageInterface
+	ch     chan network.DecodedSSVMessage
 }
 
-func (r *messageRouter) Route(ctx context.Context, message network.SSVMessageInterface) {
+func (r *messageRouter) Route(ctx context.Context, message network.DecodedSSVMessage) {
 	select {
 	case <-ctx.Done():
 		r.logger.Warn("context canceled, dropping message")
@@ -32,6 +32,6 @@ func (r *messageRouter) Route(ctx context.Context, message network.SSVMessageInt
 	}
 }
 
-func (r *messageRouter) GetMessageChan() <-chan network.SSVMessageInterface {
+func (r *messageRouter) GetMessageChan() <-chan network.DecodedSSVMessage {
 	return r.ch
 }
