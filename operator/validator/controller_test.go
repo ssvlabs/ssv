@@ -107,7 +107,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
-	operatorStorage, done := newOperatorStorageForTest(zap.NewNop())
+	operatorStore, done := newOperatorStorageForTest(zap.NewNop())
 	defer done()
 
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
@@ -206,8 +206,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
-			operatorStore, done := newOperatorStorageForTest(logger)
-			defer done()
+
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(context.TODO())
 
