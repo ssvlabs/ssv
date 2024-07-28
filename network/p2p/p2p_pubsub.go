@@ -35,14 +35,6 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 	n.msgRouter = router
 }
 
-func dutyExecutorToID(fork bool, dutyExecutor []byte) []byte {
-	if fork {
-		return dutyExecutor[16:]
-	} else {
-		return dutyExecutor
-	}
-}
-
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
 	zap.L().Debug("broadcasting post-fork msg", fields.PubKey(msgID.GetDutyExecutorID()), zap.Int("msg_type", int(msg.SSVMessage.MsgType)))
@@ -60,9 +52,16 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	topics, err := n.broadcastTopics(dutyExecutorToID(n.cfg.Network.PastAlanFork(), msg.SSVMessage.MsgID.GetDutyExecutorID()))
-	if err != nil {
-		return fmt.Errorf("could not get validator topics: %w", err)
+	var topics []string
+
+	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
+	} else {
+		val := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if val == nil {
+			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
+		}
+		topics = commons.CommitteeTopicID(val.CommitteeID())
 	}
 
 	for _, topic := range topics {
@@ -282,16 +281,4 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 		}
 	}
 	return nil
-}
-
-func (n *p2pNetwork) broadcastTopics(id []byte) ([]string, error) {
-	if n.cfg.Network.PastAlanFork() {
-		share := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(id))
-		if share == nil {
-			return nil, fmt.Errorf("could not find share for validator %s", hex.EncodeToString(id))
-		}
-		cid := share.ID
-		return commons.CommitteeTopicID(cid), nil
-	}
-	return commons.ValidatorTopicID(id), nil
 }
