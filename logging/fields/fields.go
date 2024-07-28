@@ -306,10 +306,10 @@ func BeaconDataTime(val time.Duration) zap.Field {
 }
 
 func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldSubmissionTime, FormatDuration(val))
 }
 func TotalConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldTotalConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldTotalConsensusTime, FormatDuration(val))
 }
 
 func DutyID(val string) zap.Field {
