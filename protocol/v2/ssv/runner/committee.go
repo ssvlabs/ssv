@@ -312,7 +312,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	durationFields := []zap.Field{
 		fields.ConsensusTime(cr.metrics.GetConsensusTime()),
 		fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()),
-		zap.Duration("total_consensus_time", time.Since(cr.started)),
 	}
 
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
@@ -433,11 +432,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 
 	if len(attestations) > 0 {
-		logger.Info("✅ successfully submitted attestations (test)",
-			fields.SubmissionTime(time.Since(submmitionStart)),
+		logger.Info("✅ successfully submitted attestations",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
-			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
-		fields.Root([32]byte(attestations[0].Data.BeaconBlockRoot[:]))
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+			fields.Root([32]byte(attestations[0].Data.BeaconBlockRoot[:])),
+			fields.SubmissionTime(time.Since(submmitionStart)),
+			zap.Duration("total_consensus_time", time.Since(cr.started)))
 	}
 	// Record successful submissions
 	for validator := range attestationsToSubmit {
@@ -456,10 +456,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 	if len(syncCommitteeMessages) > 0 {
 		logger.Info("✅ successfully submitted sync committee",
-			fields.SubmissionTime(time.Since(submmitionStart)),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
-			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round))
-		fields.Root([32]byte(syncCommitteeMessages[0].BeaconBlockRoot[:]))
+			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+			fields.Root([32]byte(syncCommitteeMessages[0].BeaconBlockRoot[:])),
+			fields.SubmissionTime(time.Since(submmitionStart)),
+			zap.Duration("total_consensus_time", time.Since(cr.started)))
 	}
 	// Record successful submissions
 	for validator := range syncCommitteeMessagesToSubmit {
@@ -653,6 +654,7 @@ func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty types.Duty) erro
 	)
 
 	cr.started = time.Now()
+	cr.metrics.StartConsensus()
 
 	vote := types.BeaconVote{
 		BlockRoot: attData.BeaconBlockRoot,
