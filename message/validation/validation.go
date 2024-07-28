@@ -232,6 +232,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
+	// NOTE: do we have to deserialize the public key here? we already check for existence in the validator store.
+	// 	Attacker could send a message with a valid public key that doesn't exist in the validator store.
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
 	if err != nil {
 		e := ErrDeserializePublicKey
