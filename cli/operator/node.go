@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"log"
 	"math/big"
 	"net/http"
@@ -43,7 +44,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -226,11 +226,9 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorStore := nodeStorage.ValidatorStore()
 
-		messageValidator := &validation.ForkingMessageValidation{
-			NetworkConfig: networkConfig,
-		}
+		var messageValidator validation.MessageValidator
 
-		messageValidator.Alan = validation.New(
+		alanMsgValidator := validation.New(
 			networkConfig,
 			validatorStore,
 			dutyStore,
@@ -238,14 +236,21 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 		)
-		if !networkConfig.PastAlanFork() {
-			messageValidator.Genesis = genesisvalidation.New(
-				networkConfig,
-				genesisvalidation.WithNodeStorage(nodeStorage),
-				genesisvalidation.WithLogger(logger),
-				genesisvalidation.WithMetrics(metricsReporter),
-				genesisvalidation.WithDutyStore(dutyStore),
-			)
+
+		if networkConfig.PastAlanFork() {
+			messageValidator = alanMsgValidator
+		} else {
+			messageValidator = &validation.ForkingMessageValidation{
+				NetworkConfig: networkConfig,
+				Alan:          alanMsgValidator,
+				Genesis: genesisvalidation.New(
+					networkConfig,
+					genesisvalidation.WithNodeStorage(nodeStorage),
+					genesisvalidation.WithLogger(logger),
+					genesisvalidation.WithMetrics(metricsReporter),
+					genesisvalidation.WithDutyStore(dutyStore),
+				),
+			}
 		}
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
