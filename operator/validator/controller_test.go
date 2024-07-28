@@ -662,7 +662,7 @@ func TestSetupValidators(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			genesisStorageMap, genesisKm := setupGenesisTestComponents(t)
+			genesisStorageMap := setupGenesisQBFTStorage(t)
 			defer ctrl.Finish()
 			bc := beacon.NewMockBeaconNode(ctrl)
 			storageMap := ibftstorage.NewStores()
@@ -701,7 +701,6 @@ func TestSetupValidators(t *testing.T) {
 					Storage:       storageMap,
 					GenesisOptions: validator.GenesisOptions{
 						Storage: genesisStorageMap,
-						Signer:  genesisKm,
 					},
 				},
 				metadataLastUpdated: metadataLastMap,
@@ -985,7 +984,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
 
-		actualFeeRecipient := testValidator.GetShare().FeeRecipientAddress[:]
+		actualFeeRecipient := testValidator.Share().FeeRecipientAddress[:]
 		require.Equal(t, secondFeeRecipientBytes, actualFeeRecipient, "Fee recipient address did not update correctly")
 	})
 
@@ -1001,7 +1000,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
 
-		actualFeeRecipient := testValidator.GetShare().FeeRecipientAddress[:]
+		actualFeeRecipient := testValidator.Share().FeeRecipientAddress[:]
 		require.Equal(t, firstFeeRecipientBytes, actualFeeRecipient, "Fee recipient address should not have changed")
 	})
 }
@@ -1262,7 +1261,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }
 
-func setupGenesisTestComponents(t *testing.T) (*genesisibftstorage.QBFTStores, *ekm.GenesisKeyManagerAdapter) {
+func setupGenesisQBFTStorage(t *testing.T) *genesisibftstorage.QBFTStores {
 	logger := logging.TestLogger(t)
 	// ctrl := gomock.NewController(t)
 	// network := mocks.NewMockP2PNetwork(ctrl)
@@ -1286,11 +1285,8 @@ func setupGenesisTestComponents(t *testing.T) (*genesisibftstorage.QBFTStores, *
 		genesisStorageMap.Add(storageRole, genesisibftstorage.New(db, "genesis_"+storageRole.String()))
 	}
 
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
-	genesisKeyManager := &ekm.GenesisKeyManagerAdapter{KeyManager: km}
-
 	require.NoError(t, err)
-	return genesisStorageMap, genesisKeyManager
+	return genesisStorageMap
 }
 
 func buildOperators(t *testing.T) []*spectypes.ShareMember {
