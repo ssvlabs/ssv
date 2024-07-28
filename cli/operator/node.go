@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
 	"time"
+
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 
 	"github.com/ssvlabs/ssv/logging"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
