@@ -83,10 +83,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-
-			if !h.network.PastAlanFork() {
-				h.processExecution(period, slot)
-			}
+			h.processExecution(period, slot)
 			h.processFetching(ctx, period, true)
 			cancel()
 
@@ -99,11 +96,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-			if !h.network.PastAlanFork() {
-				// last slot of period
-				if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-					h.duties.Reset(period - 1)
-				}
+			// last slot of period
+			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+				h.duties.Reset(period - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
