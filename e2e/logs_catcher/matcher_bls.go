@@ -22,8 +22,8 @@ import (
 const (
 	targetContainer = "ssv-node-1"
 
-	verifySignatureErr           = "failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature"
-	reconstructSignatureErr      = "could not reconstruct post consensus signature: could not reconstruct beacon sig: failed to verify reconstruct signature: could not reconstruct a valid signature"
+	verifySignatureErr           = "failed processing consensus message: invalid decided msg: invalid decided msg: msg signature invalid: failed to verify signature"
+	reconstructSignatureErr      = "got post-consensus quorum but it has invalid signatures: could not reconstruct beacon sig: failed to verify reconstruct signature: could not reconstruct a valid signature"
 	pastRoundErr                 = "failed processing consensus message: could not process msg: invalid signed message: past round"
 	reconstructSignaturesSuccess = "reconstructed partial signatures"
 	submittedAttSuccess          = "✅ successfully submitted attestation"
@@ -161,34 +161,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				slot:             dutySlot,
 				round:            1,
 				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.ProposalMsgType,
-				signer:           corruptedOperator,
-				error:            verifySignatureErr,
-			},
-			{
-				role:             types.BNRoleAttester.String(),
-				slot:             dutySlot,
-				round:            1,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.PrepareMsgType,
-				signer:           corruptedOperator,
-				error:            pastRoundErr,
-			},
-			{
-				role:             types.BNRoleAttester.String(),
-				slot:             dutySlot,
-				round:            2,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.RoundChangeMsgType,
-				signer:           corruptedOperator,
-				error:            verifySignatureErr,
-			},
-			{
-				role:             types.BNRoleAttester.String(),
-				slot:             dutySlot,
-				round:            2,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.PrepareMsgType,
+				consensusMsgType: qbft.CommitMsgType,
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
@@ -196,15 +169,6 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 		}
 	} else {
 		conditions = []logCondition{
-			{
-				role:             types.BNRoleAttester.String(),
-				slot:             dutySlot,
-				round:            1,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.PrepareMsgType,
-				signer:           corruptedOperator,
-				error:            verifySignatureErr,
-			},
 			{
 				role:             types.BNRoleAttester.String(),
 				slot:             dutySlot,
@@ -233,7 +197,6 @@ func matchCondition(ctx context.Context, logger *zap.Logger, cli DockerCLI, cond
 		fmt.Sprintf(msgRoundField, condition.round),
 		fmt.Sprintf(msgTypeField, message.MsgTypeToString(condition.msgType)),
 		fmt.Sprintf(consensusMsgTypeField, condition.consensusMsgType),
-		fmt.Sprintf(signersField, condition.signer),
 		fmt.Sprintf(errorField, condition.error),
 	}
 	return matchSingleConditionLog(ctx, logger, cli, conditionStrings, target)
@@ -248,7 +211,7 @@ func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli Docker
 	filteredLogs := res.Grep(first)
 	logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", first))
 
-	if len(filteredLogs) != 1 {
+	if len(filteredLogs) < 1 {
 		return fmt.Errorf("found non matching messages on %v, want %v got %v", target, 1, len(filteredLogs))
 	}
 

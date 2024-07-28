@@ -1,0 +1,9 @@
+# docker-compose.override-images.yml
+version: "3.8"
+services:
+  ssv-node-1:
+    build: ""
+    image: "${NODE_GROUP_1_IMAGE_TAG}"
+  ssv-node-2:
+    build: ""
+    image: "${NODE_GROUP_1_IMAGE_TAG}"

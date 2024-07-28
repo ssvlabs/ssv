@@ -1,0 +1,9 @@
+2024-05-09T12:32:09.781Z	[34mINFO[0m	Running BlsVerification mode
+2024-05-09T12:32:09.782Z	[35mDEBUG[0m	Waiting for start condition at target	{"target": "ssv-node-1", "condition": ["🗂 got duties", "v1476356"]}
+2024-05-09T12:35:00.315Z	[34mINFO[0m	Start condition arrived	{"log_message": ["🗂 got duties", "v1476356"]}
+2024-05-09T12:35:00.315Z	[35mDEBUG[0m	Duty ID: 	{"duty_id": "ATTESTER-e50406-s1612992-v1476356"}
+2024-05-09T12:35:00.315Z	[35mDEBUG[0m	Leader: 	{"leader": 1}
+2024-05-09T12:35:00.315Z	[35mDEBUG[0m	Waiting for start condition at target	{"target": "ssv-node-1", "condition": ["✅ successfully submitted attestation", "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0"]}
+2024-05-09T12:38:26.766Z	[34mINFO[0m	Start condition arrived	{"log_message": ["✅ successfully submitted attestation", "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0"]}
+2024-05-09T12:38:26.783Z	[34mINFO[0m	matched	{"count": 0, "target": "ssv-node-1", "match_string": ["\"role\":\"ATTESTER\"", "\"msg_height\":1612992", "\"msg_round\":1", "\"msg_type\":\"consensus\"", "\"consensus_msg_type\":1", "\"signers\":[2]", "\"error\":\"failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature\""]}
+2024-05-09T12:38:26.783Z	[31mFATAL[0m	run stopped	{"error": "failed to verify BLS signature for validator index 1476356: failed to process non corrupted operator logs: failed to match condition: found non matching messages on ssv-node-1, want 1 got 0"}
