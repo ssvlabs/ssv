@@ -86,6 +86,7 @@ const (
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubmissionTime      = "submission_time"
+	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "sync_offset"
 	FieldSyncResults         = "sync_results"
@@ -319,6 +320,10 @@ func SubmissionTime(val time.Duration) zap.Field {
 	return zap.String(FieldSubmissionTime, FormatDuration(val))
 }
 
+func TotalConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldTotalConsensusTime, FormatDuration(val))
+}
+
 func BroadcastTime(val time.Duration) zap.Field {
 	return zap.String(FieldBroadcastTime, FormatDuration(val))
 }
@@ -396,6 +401,9 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 
 func Root(r [32]byte) zap.Field {
 	return zap.String("root", hex.EncodeToString(r[:]))
+}
+func BlockRoot(r [32]byte) zap.Field {
+	return zap.String("block_root", hex.EncodeToString(r[:]))
 }
 
 func Config(val fmt.Stringer) zap.Field {

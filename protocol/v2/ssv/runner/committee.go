@@ -295,6 +295,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		signers[i] = msg.Signer
 		indices[i] = int(msg.ValidatorIndex)
 	}
+	logger = logger.With(fields.ConsensusTime(cr.metrics.GetConsensusTime()))
 
 	logger.Debug("🧩 got partial signatures",
 		zap.Bool("quorum", quorum),
@@ -306,9 +307,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	if !quorum {
 		return nil
 	}
-	durationFields := []zap.Field{
-		fields.ConsensusTime(cr.metrics.GetConsensusTime()),
-	}
+
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects()
 	if err != nil {
@@ -362,7 +361,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			share := cr.BaseRunner.Share[validator]
 			pubKey := share.ValidatorPubKey
 			vlogger := logger.With(zap.Int("validator_index", int(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
-			vlogger = vlogger.With(durationFields...)
 
 			sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root,
 				pubKey[:], validator)
@@ -416,8 +414,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		}
 	}
 	cr.metrics.EndPostConsensus()
-	durationFields = append(durationFields, fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()))
-	logger = logger.With(durationFields...)
+	logger = logger.With(fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()))
 	// Submit multiple attestations
 	attestations := make([]*phase0.Attestation, 0)
 	for _, att := range attestationsToSubmit {
@@ -433,9 +430,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		logger.Info("✅ successfully submitted attestations",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
-			fields.Root([32]byte(attestations[0].Data.BeaconBlockRoot[:])),
+			fields.BlockRoot(attestations[0].Data.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submmitionStart)),
-			zap.Float64("total_consensus_time", time.Since(cr.started).Seconds()))
+			fields.TotalConsensusTime(time.Since(cr.started)))
 	}
 	// Record successful submissions
 	for validator := range attestationsToSubmit {
@@ -456,9 +453,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		logger.Info("✅ successfully submitted sync committee",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
-			fields.Root([32]byte(syncCommitteeMessages[0].BeaconBlockRoot[:])),
+			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submmitionStart)),
-			zap.Float64("total_consensus_time", time.Since(cr.started).Seconds()))
+			fields.TotalConsensusTime(time.Since(cr.started)))
 	}
 	// Record successful submissions
 	for validator := range syncCommitteeMessagesToSubmit {
