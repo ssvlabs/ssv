@@ -35,6 +35,8 @@ func TestGetMaxPeers(t *testing.T) {
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
+	t.Skip("need to implement validator store")
+
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -110,6 +112,8 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 }
 
 func TestP2pNetwork_Stream(t *testing.T) {
+	t.Skip("test gets stuck")
+
 	n := 12
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)

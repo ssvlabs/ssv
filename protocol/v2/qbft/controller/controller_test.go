@@ -42,6 +42,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 		BeaconSigner: spectestingutils.NewTestingKeyManager(),
 		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:        roundtimer.NewTestingTimer(),
+		CutOffRound:  spectestingutils.TestingCutOffRound,
 	}
 
 	identifier := make([]byte, 56)

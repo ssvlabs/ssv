@@ -29,8 +29,7 @@ func (m NodeInfoIndex) Self() *records.NodeInfo {
 }
 
 func (m NodeInfoIndex) UpdateSelfRecord(update func(self *records.NodeInfo) *records.NodeInfo) {
-	//TODO implement me
-	panic("implement me")
+	update(m.MockNodeInfo)
 }
 
 func (m NodeInfoIndex) SetNodeInfo(id peer.ID, node *records.NodeInfo) {}

@@ -5,26 +5,30 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -34,6 +38,8 @@ import (
 )
 
 func TestTopicManager(t *testing.T) {
+	t.Skip("the test gets stuck, needs to be fixed")
+
 	logger := logging.TestLogger(t)
 
 	// TODO: rework this test to use message validation

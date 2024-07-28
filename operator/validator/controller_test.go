@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -105,6 +106,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	secretKey2 := &bls.SecretKey{}
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
+
+	operatorStorage, done := newOperatorStorageForTest(zap.NewNop())
+	defer done()
 
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		2: {
@@ -235,9 +239,10 @@ func TestSetupValidatorsExporter(t *testing.T) {
 							}
 						}
 						return nil
-					}).Times(len(tc.shareStorageListResponse))
+					}).Times(1)
 					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				}
+				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
@@ -291,7 +296,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
 			Data:    generateDecidedMessage(t, identifier),
@@ -299,7 +304,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
 			Data:    generateChangeRoundMsg(t, identifier),
@@ -315,8 +320,8 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+			MsgType: spectypes.DKGMsgType,
 			MsgID:   identifier,
 			Data:    []byte("data"),
 		},
@@ -1217,7 +1222,7 @@ func decodeHex(t *testing.T, hexStr string, errMsg string) []byte {
 func buildOperatorData(id uint64, ownerAddress string) *registrystorage.OperatorData {
 	return &registrystorage.OperatorData{
 		ID:           id,
-		PublicKey:    []byte("samplePublicKey"),
+		PublicKey:    []byte(base64.StdEncoding.EncodeToString([]byte("samplePublicKey"))),
 		OwnerAddress: common.BytesToAddress([]byte(ownerAddress)),
 	}
 }
