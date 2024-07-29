@@ -1052,6 +1052,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 								Signer:           1,
 							},
 						},
+						Slot: slot,
 					}
 
 					sig, err := spectestingutils.NewTestingKeyManager().SignRoot(innerMsg, spectypes.PartialSignatureType, ks.Shares[1].GetPublicKey().Serialize())
@@ -1759,7 +1760,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
-		expectedErr := ErrDuplicatedProposalWithDifferentData
+		expectedErr := ErrDifferentProposalData
 		require.ErrorIs(t, err, expectedErr)
 	})
 

@@ -104,6 +104,8 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	}
 
 	for _, message := range partialSignatureMessages.Messages {
+		// Rule: Partial signature must have expected length. Already enforced by ssz.
+
 		// Rule: Partial signature signer must be consistent
 		if message.Signer != signer {
 			err := ErrInconsistentSigners
@@ -112,12 +114,16 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 			return err
 		}
 
-		// Rule: Validator index must match with validatorPK or one of CommitteeID's validators
-		if !slices.Contains(validatorIndices, message.ValidatorIndex) {
-			e := ErrValidatorIndexMismatch
-			e.got = message.ValidatorIndex
-			e.want = validatorIndices
-			return e
+		// Rule: (only for Validator duties) Validator index must match with validatorPK
+		// For Committee duties, we don't assume that operators are synced on the validators set
+		// So, we can't make this assertion
+		if !mv.committeeRole(signedSSVMessage.SSVMessage.GetID().GetRoleType()) {
+			if !slices.Contains(validatorIndices, message.ValidatorIndex) {
+				e := ErrValidatorIndexMismatch
+				e.got = message.ValidatorIndex
+				e.want = validatorIndices
+				return e
+			}
 		}
 	}
 
