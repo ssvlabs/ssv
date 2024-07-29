@@ -106,6 +106,8 @@ spec:
               value: "false"
             - name: METRICS_API_PORT
               value: "15021"
+            - name: GRAFFITI
+              value: "Test1"
             - name: SSV_API_PORT
               value: "16021"
             - name: ENABLE_PROFILE
