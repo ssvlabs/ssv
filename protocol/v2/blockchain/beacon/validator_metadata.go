@@ -7,7 +7,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 )
 
@@ -88,8 +87,8 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 		if onUpdated != nil {
 			onUpdated(pk, meta)
 		}
-		logger.Debug("💾️ successfully updated validator metadata",
-			fields.PubKey(pk[:]), zap.Any("metadata", meta))
+		//logger.Debug("💾️ successfully updated validator metadata",
+		//	fields.PubKey(pk[:]), zap.Any("metadata", meta))
 	}
 	return nil
 }
