@@ -26,17 +26,6 @@ var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySe
 	return baseRunner(logger, genesisspectypes.BNRoleProposer, genesisspecssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), genesisspectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
 }
 
-var ProposerBlindedBlockRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	ret := baseRunner(
-		logger,
-		genesisspectypes.BNRoleProposer,
-		genesisspecssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), genesisspectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil),
-		keySet,
-	)
-	ret.(*runner.ProposerRunner).ProducesBlindedBlocks = true
-	return ret
-}
-
 var AggregatorRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, genesisspectypes.BNRoleAggregator, genesisspecssv.AggregatorValueCheckF(spectestingutils.NewTestingKeyManager(), genesisspectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
 }
