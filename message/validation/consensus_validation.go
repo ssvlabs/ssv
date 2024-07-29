@@ -188,7 +188,7 @@ func (mv *messageValidator) validateQBFTLogic(
 			if consensusMessage.Round == signerState.Round {
 				// Rule: Peer must not send two proposals with different data
 				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-					return ErrDuplicatedProposalWithDifferentData
+					return ErrDifferentProposalData
 				}
 
 				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round

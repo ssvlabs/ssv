@@ -478,7 +478,7 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 			// TODO fix this
-			//slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
+			//slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier, receivedAt)
 			descriptor.Slot = partialSignatureMessage.Message.Slot
 			if err != nil {
 				return nil, descriptor, err
@@ -489,6 +489,9 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 
 		case spectypes.DKGMsgType:
 			return nil, descriptor, ErrDKGMessage
+
+		default:
+			return nil, descriptor, ErrUnknownSSVMessageType
 		}
 	}
 
