@@ -11,10 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -214,7 +214,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 			Committee:           ibftCommittee,
 			Quorum:              quorum,
 			PartialQuorum:       partialQuorum,
-			DomainType:          networkconfig.TestNetwork.Domain,
+			DomainType:          networkconfig.TestNetwork.DomainType(),
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
@@ -251,15 +251,12 @@ func generateRandomValidatorSpecShare(splitKeys map[uint64]*bls.SecretKey) (*ssv
 		return ibftCommittee[i].Signer < ibftCommittee[j].Signer
 	})
 
-	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(splitKeys))
-
 	return &ssvtypes.SSVShare{
 		Share: spectypes.Share{
 			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
-			Quorum:              quorum,
-			DomainType:          networkconfig.TestNetwork.Domain,
+			DomainType:          networkconfig.TestNetwork.DomainType(),
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},

@@ -2,7 +2,7 @@ package connections
 
 import (
 	"context"
-	"strings"
+	"encoding/hex"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 )
 
@@ -53,35 +54,38 @@ type handshaker struct {
 	ids        identify.IDService
 	net        libp2pnetwork.Network
 
-	subnetsProvider SubnetsProvider
+	domainTypeProvider networkconfig.DomainTypeProvider
+	subnetsProvider    SubnetsProvider
 }
 
 // HandshakerCfg is the configuration for creating an handshaker instance
 type HandshakerCfg struct {
-	Network         libp2pnetwork.Network
-	Streams         streams.StreamController
-	NodeInfos       peers.NodeInfoIndex
-	PeerInfos       peers.PeerInfoIndex
-	ConnIdx         peers.ConnectionIndex
-	SubnetsIdx      peers.SubnetsIndex
-	IDService       identify.IDService
-	OperatorSigner  keys.OperatorSigner
-	SubnetsProvider SubnetsProvider
+	Network            libp2pnetwork.Network
+	Streams            streams.StreamController
+	NodeInfos          peers.NodeInfoIndex
+	PeerInfos          peers.PeerInfoIndex
+	ConnIdx            peers.ConnectionIndex
+	SubnetsIdx         peers.SubnetsIndex
+	IDService          identify.IDService
+	OperatorSigner     keys.OperatorSigner
+	DomainTypeProvider networkconfig.DomainTypeProvider
+	SubnetsProvider    SubnetsProvider
 }
 
 // NewHandshaker creates a new instance of handshaker
 func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []HandshakeFilter) Handshaker {
 	h := &handshaker{
-		ctx:             ctx,
-		streams:         cfg.Streams,
-		nodeInfos:       cfg.NodeInfos,
-		connIdx:         cfg.ConnIdx,
-		subnetsIdx:      cfg.SubnetsIdx,
-		ids:             cfg.IDService,
-		filters:         filters,
-		peerInfos:       cfg.PeerInfos,
-		subnetsProvider: cfg.SubnetsProvider,
-		net:             cfg.Network,
+		ctx:                ctx,
+		streams:            cfg.Streams,
+		nodeInfos:          cfg.NodeInfos,
+		connIdx:            cfg.ConnIdx,
+		subnetsIdx:         cfg.SubnetsIdx,
+		ids:                cfg.IDService,
+		filters:            filters,
+		peerInfos:          cfg.PeerInfos,
+		subnetsProvider:    cfg.SubnetsProvider,
+		domainTypeProvider: cfg.DomainTypeProvider,
+		net:                cfg.Network,
 	}
 	return h
 }
@@ -104,7 +108,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		}
 
 		// Respond with our own NodeInfo.
-		self, err := h.nodeInfos.SelfSealed()
+		self, err := h.sealedNodeRecord()
 		if err != nil {
 			return errors.Wrap(err, "could not seal self node info")
 		}
@@ -152,11 +156,6 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 		zap.Any("metadata", ni.GetNodeInfo().Metadata),
 		zap.String("networkID", ni.GetNodeInfo().NetworkID),
 	)
-
-	// TODO: (Alan) revert
-	if !strings.Contains(ni.Metadata.NodeVersion, "ALANTEST") {
-		return errors.New("non Alan node version is not supported")
-	}
 
 	return nil
 }
@@ -210,7 +209,7 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 }
 
 func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
-	data, err := h.nodeInfos.SelfSealed()
+	data, err := h.sealedNodeRecord()
 
 	if err != nil {
 		return nil, err
@@ -239,4 +238,15 @@ func (h *handshaker) applyFilters(sender peer.ID, ni *records.NodeInfo) error {
 	}
 
 	return nil
+}
+
+func (h *handshaker) sealedNodeRecord() ([]byte, error) {
+	// Update DomainType.
+	h.nodeInfos.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
+		dt := h.domainTypeProvider.DomainType()
+		self.NetworkID = "0x" + hex.EncodeToString(dt[:])
+		return self
+	})
+
+	return h.nodeInfos.SelfSealed()
 }

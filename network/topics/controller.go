@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -32,6 +34,8 @@ type Controller interface {
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+	// UpdateScoreParams refreshes the score params for every subscribed topic
+	UpdateScoreParams(logger *zap.Logger) error
 
 	io.Closer
 }
@@ -102,6 +106,34 @@ func (ctrl *topicsCtrl) onNewTopic(logger *zap.Logger) onTopicJoined {
 			}
 		}
 	}
+}
+
+func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
+	if ctrl.scoreParamsFactory == nil {
+		return fmt.Errorf("scoreParamsFactory is not set")
+	}
+	errs := ""
+	topics := ctrl.ps.GetTopics()
+	for _, topicName := range topics {
+		topic := ctrl.container.Get(topicName)
+		if topic == nil {
+			errs = errs + fmt.Sprintf("topic %s is not ready; ", topicName)
+			continue
+		}
+		p := ctrl.scoreParamsFactory(topicName)
+		if p == nil {
+			errs = errs + fmt.Sprintf("score params for topic %s is nil; ", topicName)
+			continue
+		}
+		if err := topic.SetScoreParams(p); err != nil {
+			errs = errs + fmt.Sprintf("could not set score params for topic %s: %d; ", topicName, err)
+			continue
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf(errs)
+	}
+	return nil
 }
 
 // Close implements io.Closer
@@ -179,7 +211,11 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 // if hard is true, we will unsubscribe the topic even if there are more subscribers.
 func (ctrl *topicsCtrl) Unsubscribe(logger *zap.Logger, name string, hard bool) error {
-	ctrl.container.Unsubscribe(name)
+	name = commons.GetTopicFullName(name)
+
+	if !ctrl.container.Unsubscribe(name) {
+		return fmt.Errorf("failed to unsubscribe from topic %s: not subscribed", name)
+	}
 
 	if ctrl.msgValidator != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
@@ -240,11 +276,19 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			continue
 		}
 
-		if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
+		switch m := msg.ValidatorData.(type) {
+		case *queue.SSVMessage:
 			metricPubsubInbound.WithLabelValues(
 				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
+				strconv.FormatUint(uint64(m.MsgType), 10),
 			).Inc()
+		case *genesisqueue.GenesisSSVMessage:
+			metricPubsubInbound.WithLabelValues(
+				commons.GetTopicBaseName(topicName),
+				strconv.FormatUint(uint64(m.MsgType), 10),
+			).Inc()
+		default:
+			logger.Warn("unknown message type", zap.Any("message", m))
 		}
 
 		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
@@ -258,15 +302,18 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 	if ctrl.msgValidator != nil {
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
-		_ = ctrl.ps.UnregisterTopicValidator(name)
+		err := ctrl.ps.UnregisterTopicValidator(name)
+		if err != nil {
+			ctrl.logger.Debug("failed to unregister topic validator", zap.String("topic", name), zap.Error(err))
+		}
 
 		var opts []pubsub.ValidatorOpt
 		// Optional: set a timeout for message validation
 		// opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
+		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
 		if err != nil {
-			return errors.Wrap(err, "could not register topic validator")
+			return fmt.Errorf("could not register topic validator: %w", err)
 		}
 	}
 	return nil

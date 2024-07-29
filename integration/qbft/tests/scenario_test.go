@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"testing"
 	"time"
 
@@ -70,7 +71,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.BeaconDuty), pk[:], networkconfig.TestNetwork.Domain)
+				ssvMsg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.ValidatorDuty), pk[:], networkconfig.TestNetwork.DomainType())
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(ssvMsg)
 				require.NoError(t, err)
@@ -81,12 +82,13 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
+			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
+				role := convert.MessageIDFromBytes(identifier[:]).GetRoleType()
 				var err error
-				storedInstance, err = s.validators[id].Storage.Get(spectypes.MessageIDFromBytes(identifier[:]).GetRoleType()).GetHighestInstance(identifier[:])
+				storedInstance, err = s.validators[id].Storage.Get(role).GetHighestInstance(identifier[:])
 				require.NoError(t, err)
 
 				if storedInstance != nil {
@@ -143,7 +145,6 @@ func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) 
 		ValidatorPubKey: spectypes.ValidatorPK(keySet.ValidatorPK.Serialize()),
 		SharePubKey:     keySet.Shares[id].GetPublicKey().Serialize(),
 		DomainType:      testingutils.TestingSSVDomainType,
-		Quorum:          keySet.Threshold,
 		Committee:       keySet.Committee(),
 	}
 }
@@ -160,17 +161,16 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 
 	storageMap := qbftstorage.NewStores()
 
-	roles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit,
+	roles := []convert.RunnerRole{
+		convert.RoleCommittee,
+		convert.RoleProposer,
+		convert.RoleAggregator,
+		convert.RoleSyncCommitteeContribution,
+		convert.RoleValidatorRegistration,
+		convert.RoleVoluntaryExit,
 	}
 	for _, role := range roles {
-		storageMap.Add(spectypes.MapDutyToRunnerRole(role), qbftstorage.New(db, role.String()))
+		storageMap.Add(role, qbftstorage.New(db, role.String()))
 	}
 
 	return storageMap
@@ -189,7 +189,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	options := protocolvalidator.Options{
 		Storage:       newStores(logger),
 		Network:       node,
-		BeaconNetwork: networkconfig.TestNetwork.Beacon,
+		NetworkConfig: networkconfig.TestNetwork,
 		SSVShare: &types.SSVShare{
 			Share: *testingShare(keySet, id),
 			Metadata: types.Metadata{
@@ -200,7 +200,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 				Liquidated:   false,
 			},
 		},
-		Beacon: spectestingutils.NewTestingBeaconNode(),
+		Beacon: NewTestingBeaconNodeWrapped(),
 		Signer: km,
 	}
 

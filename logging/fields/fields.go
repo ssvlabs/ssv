@@ -9,12 +9,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ssvlabs/ssv/exporter/convert"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -38,17 +41,21 @@ const (
 	FieldBlockHash           = "block_hash"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
 	FieldBlockVersion        = "block_version"
-	FieldBuilderProposals    = "builder_proposals"
 	FieldClusterIndex        = "cluster_index"
 	FieldCommitteeID         = "committee_id"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
+	FieldPreConsensusTime    = "pre_consensus_time"
+	FieldPostConsensusTime   = "post_consensus_time"
 	FieldConsensusTime       = "consensus_time"
+	FieldBlockTime           = "block_time"
+	FieldBeaconDataTime      = "beacon_data_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
 	FieldDuties              = "duties"
+	FieldDutyExecutorID      = "duty_executor_id"
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldEpoch               = "epoch"
@@ -71,12 +78,13 @@ const (
 	FieldPeerScore           = "peer_score"
 	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
+	FieldQuorumTime          = "quorum_time"
 	FieldRole                = "role"
 	FieldRound               = "round"
-	FieldSenderID            = "sender_id"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubmissionTime      = "submission_time"
+	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "sync_offset"
 	FieldSyncResults         = "sync_results"
@@ -122,8 +130,8 @@ func Validator(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
 }
 
-func SenderID(senderID []byte) zapcore.Field {
-	return zap.Stringer(FieldSenderID, stringer.HexStringer{Val: senderID})
+func DutyExecutorID(senderID []byte) zapcore.Field {
+	return zap.Stringer(FieldDutyExecutorID, stringer.HexStringer{Val: senderID})
 }
 
 func AddressURL(val url.URL) zapcore.Field {
@@ -225,6 +233,9 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 func Role(val spectypes.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
+func ExporterRole(val convert.RunnerRole) zap.Field {
+	return zap.Stringer(FieldRole, val)
+}
 
 func MessageID(val spectypes.MessageID) zap.Field {
 	return zap.Stringer(FieldMessageID, val)
@@ -274,12 +285,31 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
+func PreConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPreConsensusTime, FormatDuration(val))
+}
+
 func ConsensusTime(val time.Duration) zap.Field {
 	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
 }
 
+func PostConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPostConsensusTime, FormatDuration(val))
+}
+
+func BlockTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockTime, FormatDuration(val))
+}
+
+func BeaconDataTime(val time.Duration) zap.Field {
+	return zap.String(FieldBeaconDataTime, FormatDuration(val))
+}
+
 func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldSubmissionTime, FormatDuration(val))
+}
+func TotalConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldTotalConsensusTime, FormatDuration(val))
 }
 
 func DutyID(val string) zap.Field {
@@ -322,11 +352,19 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.ValidatorDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 
-func FormatCommittee(operators []*spectypes.CommitteeMember) string {
+func GenesisFormatDutyID(epoch phase0.Epoch, duty *genesisspectypes.Duty) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+
+func FormatGenesisDutyID(epoch phase0.Epoch, duty *genesisspectypes.Duty) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+
+func FormatCommittee(operators []*spectypes.Operator) string {
 	var opids []string
 	for _, op := range operators {
 		opids = append(opids, fmt.Sprint(op.OperatorID))
@@ -334,11 +372,11 @@ func FormatCommittee(operators []*spectypes.CommitteeMember) string {
 	return strings.Join(opids, "_")
 }
 
-func FormatCommitteeDutyID(operators []*spectypes.CommitteeMember, epoch phase0.Epoch, slot phase0.Slot) string {
+func FormatCommitteeDutyID(operators []*spectypes.Operator, epoch phase0.Epoch, slot phase0.Slot) string {
 	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
+func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {
@@ -351,6 +389,9 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 
 func Root(r [32]byte) zap.Field {
 	return zap.String("root", hex.EncodeToString(r[:]))
+}
+func BlockRoot(r [32]byte) zap.Field {
+	return zap.String("block_root", hex.EncodeToString(r[:]))
 }
 
 func Config(val fmt.Stringer) zap.Field {
@@ -371,4 +412,8 @@ func Owner(addr common.Address) zap.Field {
 
 func Type(v any) zapcore.Field {
 	return zap.String(FieldType, fmt.Sprintf("%T", v))
+}
+
+func FormatDuration(val time.Duration) string {
+	return strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
 }

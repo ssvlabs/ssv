@@ -10,6 +10,11 @@ import (
 	"os"
 	"time"
 
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
+
+	"github.com/ssvlabs/ssv/logging"
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -17,9 +22,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/beacon/goclient/genesisgoclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -29,13 +36,15 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	"github.com/ssvlabs/ssv/exporter/convert"
+
+	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
+
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -217,36 +226,39 @@ var StartNodeCmd = &cobra.Command{
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 		validatorStore := nodeStorage.ValidatorStore()
-		// validatorStore = newValidatorStore(...) // TODO
 
 		var messageValidator validation.MessageValidator
 
-		alanFork := true
+		alanMsgValidator := validation.New(
+			networkConfig,
+			validatorStore,
+			dutyStore,
+			signatureVerifier,
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
+		)
 
-		if alanFork {
-			messageValidator = validation.New(
-				networkConfig,
-				validatorStore,
-				dutyStore,
-				signatureVerifier,
-				validation.WithLogger(logger),
-				validation.WithMetrics(metricsReporter),
-			)
+		if networkConfig.PastAlanFork() {
+			messageValidator = alanMsgValidator
 		} else {
-			messageValidator = genesisvalidation.New(
-				networkConfig,
-				genesisvalidation.WithNodeStorage(nodeStorage),
-				genesisvalidation.WithLogger(logger),
-				genesisvalidation.WithMetrics(metricsReporter),
-				genesisvalidation.WithDutyStore(dutyStore),
-			)
+			messageValidator = &validation.ForkingMessageValidation{
+				NetworkConfig: networkConfig,
+				Alan:          alanMsgValidator,
+				Genesis: genesisvalidation.New(
+					networkConfig,
+					genesisvalidation.WithNodeStorage(nodeStorage),
+					genesisvalidation.WithLogger(logger),
+					genesisvalidation.WithMetrics(metricsReporter),
+					genesisvalidation.WithDutyStore(dutyStore),
+				),
+			}
 		}
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-		p2pNetwork := setupP2P(logger, db, metricsReporter)
+		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db, metricsReporter)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -254,18 +266,23 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
+		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
+		cfg.SSVOptions.ValidatorOptions.GenesisBeacon = genesisgoclient.NewAdapter(consensusClient)
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
+		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
+
+		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.KeyManager = &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
 
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -276,13 +293,15 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.RunnerRole{
-			spectypes.RoleCommittee,
-			spectypes.RoleProposer,
-			spectypes.RoleAggregator,
-			spectypes.RoleSyncCommitteeContribution,
-			spectypes.RoleValidatorRegistration,
-			spectypes.RoleVoluntaryExit,
+		storageRoles := []convert.RunnerRole{
+			convert.RoleCommittee,
+			convert.RoleAttester,
+			convert.RoleProposer,
+			convert.RoleSyncCommittee,
+			convert.RoleAggregator,
+			convert.RoleSyncCommitteeContribution,
+			convert.RoleValidatorRegistration,
+			convert.RoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -291,16 +310,36 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
+		genesisStorageRoles := []genesisspectypes.BeaconRole{
+			genesisspectypes.BNRoleAttester,
+			genesisspectypes.BNRoleAggregator,
+			genesisspectypes.BNRoleProposer,
+			genesisspectypes.BNRoleSyncCommittee,
+			genesisspectypes.BNRoleSyncCommitteeContribution,
+			genesisspectypes.BNRoleValidatorRegistration,
+			genesisspectypes.BNRoleVoluntaryExit,
+		}
+
+		genesisStorageMap := genesisibftstorage.NewStores()
+
+		for _, storageRole := range genesisStorageRoles {
+			genesisStorageMap.Add(storageRole, genesisibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, "genesis_"+storageRole.String()))
+		}
+
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
+
+		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
+		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -317,7 +356,7 @@ var StartNodeCmd = &cobra.Command{
 				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
 				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
 				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-				"consensus client": consensusClient.(nodeprobe.Node),
+				"consensus client": consensusClient,
 			},
 		)
 
@@ -375,7 +414,6 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
@@ -556,7 +594,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		return networkconfig.NetworkConfig{}, err
 	}
 
-	types.SetDefaultDomain(networkConfig.Domain)
+	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
@@ -565,7 +603,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.Domain),
+		fields.Domain(networkConfig.DomainType()),
 		zap.String("nodeType", nodeType),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
@@ -575,7 +613,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) network.P2PNetwork {
+func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2P) {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -583,14 +621,15 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	return p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	n := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	return n, p2pv1.GenesisP2P{Network: n}
 }
 
 func setupConsensusClient(
 	logger *zap.Logger,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
-) beaconprotocol.BeaconNode {
+) *goclient.GoClient {
 	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),

@@ -1,6 +1,5 @@
 package runner
 
-//
 //import (
 //	"crypto/sha256"
 //	"encoding/hex"
@@ -26,7 +25,7 @@ package runner
 //	beacon         specssv.BeaconNode
 //	network        specqbft.Network
 //	signer         spectypes.BeaconSigner
-//	operatorSigner spectypes.OperatorSigner
+//	operatorSigner ssvtypes.OperatorSigner
 //	valCheck       specqbft.ProposedValueCheckF
 //
 //	metrics metrics.ConsensusMetrics
@@ -39,7 +38,7 @@ package runner
 //	beacon specssv.BeaconNode,
 //	network specqbft.Network,
 //	signer spectypes.BeaconSigner,
-//	operatorSigner spectypes.OperatorSigner,
+//	operatorSigner ssvtypes.OperatorSigner,
 //	valCheck specqbft.ProposedValueCheckF,
 //	highestDecidedSlot phase0.Slot,
 //) Runner {
@@ -58,7 +57,7 @@ package runner
 //		valCheck:       valCheck,
 //		operatorSigner: operatorSigner,
 //
-//		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommittee),
+//		metrics: metrics.NewConsensusMetrics(spectypes.RoleSyncCommittee),
 //	}
 //}
 //
@@ -116,7 +115,7 @@ package runner
 //
 //	ssvMsg := &spectypes.SSVMessage{
 //		MsgType: spectypes.SSVPartialSignatureMsgType,
-//		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+//		MsgID:   spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 //		Data:    data,
 //	}
 //
@@ -219,7 +218,7 @@ package runner
 //	r.metrics.StartDutyFullFlow()
 //	r.metrics.StartConsensus()
 //
-//	input := &spectypes.ConsensusData{
+//	input := &spectypes.ValidatorConsensusData{
 //		Duty:    *duty,
 //		Version: ver,
 //		DataSSZ: root[:],

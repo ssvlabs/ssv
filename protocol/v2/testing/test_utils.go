@@ -1,8 +1,13 @@
 package testing
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -99,6 +104,47 @@ func CreateMultipleStoredInstances(
 // SignMsg handle MultiSignMsg error and return just specqbft.SignedMessage
 func SignMsg(t *testing.T, sks []*rsa.PrivateKey, signers []spectypes.OperatorID, msg *specqbft.Message) *spectypes.SignedSSVMessage {
 	return testingutils.MultiSignQBFTMsg(sks, signers, msg)
+}
+
+func GetSSVMappingSpecTestJSON(path string, module string) ([]byte, error) {
+	p, err := GetSpecDir(path, module)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get spec test dir")
+	}
+	gzPath := filepath.Join(p, "spectest", "generate", "tests.json.gz")
+	untypedTests := map[string]interface{}{}
+
+	file, err := os.Open(gzPath) // #nosec G304
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open gzip file")
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Handle the error, log it, or handle it as appropriate
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create gzip reader")
+	}
+	defer func() {
+		if err := gzipReader.Close(); err != nil {
+			// Handle the error, log it, or handle it as appropriate
+			log.Printf("Failed to close reader: %v", err)
+		}
+	}()
+
+	decompressedData, err := io.ReadAll(gzipReader)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read decompressed data")
+	}
+
+	if err := json.Unmarshal(decompressedData, &untypedTests); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal JSON")
+	}
+	return decompressedData, nil
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {
@@ -207,4 +253,58 @@ func getGoModFile(path string) (*modfile.File, error) {
 
 	// parse go.mod
 	return modfile.Parse("go.mod", buf, nil)
+}
+
+func ExtractTarGz(gzipStream io.Reader) {
+	uncompressedStream, err := gzip.NewReader(gzipStream)
+	if err != nil {
+		log.Fatal("ExtractTarGz: NewReader failed")
+	}
+
+	tarReader := tar.NewReader(uncompressedStream)
+
+	for {
+		header, err := tarReader.Next()
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			log.Fatalf("ExtractTarGz: Next() failed: %s", err.Error())
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.Mkdir(header.Name, 0750); err != nil {
+				log.Fatalf("ExtractTarGz: Mkdir() failed: %s", err.Error())
+			}
+		case tar.TypeReg:
+			outFile, err := os.Create(header.Name)
+			if err != nil {
+				log.Fatalf("ExtractTarGz: Create() failed: %s", err.Error())
+			}
+			// Set a maximum size limit for the decompressed data
+			maxSize := int64(50 * 1024 * 1024) // 50 MB, adjust as needed
+
+			// Wrap the tarReader with a LimitedReader
+			limitedReader := &io.LimitedReader{R: tarReader, N: maxSize}
+
+			// Perform the copy operation with the limited reader
+			if _, err := io.Copy(outFile, limitedReader); err != nil {
+				log.Fatalf("ExtractTarGz: Copy() failed: %s", err.Error())
+			}
+			err = outFile.Close()
+			if err != nil {
+				log.Fatalf("faild to close file: %s", err.Error())
+			}
+
+		default:
+			log.Fatalf(
+				"ExtractTarGz: uknown type: %b in %s",
+				header.Typeflag,
+				header.Name)
+		}
+
+	}
 }

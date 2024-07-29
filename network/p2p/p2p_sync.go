@@ -1,9 +1,7 @@
 package p2pv1
 
 import (
-	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -58,12 +56,30 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 			return errors.Wrap(err, "could not handle stream")
 		}
 
-		smsg, err := commons.DecodeNetworkMsg(req)
-		if err != nil {
-			return errors.Wrap(err, "could not decode msg from stream")
+		var ssvMsg *spectypes.SSVMessage
+		if n.cfg.Network.PastAlanFork() {
+			ssvMsg, err = commons.DecodeNetworkMsg(req)
+			if err != nil {
+				return errors.Wrap(err, "could not decode msg from stream")
+			}
+		} else {
+			genesisSSVMsg, err := commons.DecodeGenesisNetworkMsg(req)
+			if err != nil {
+				return errors.Wrap(err, "could not decode genesis msg from stream")
+			}
+
+			if genesisSSVMsg == nil {
+				ssvMsg = nil
+			} else {
+				ssvMsg = &spectypes.SSVMessage{
+					MsgType: spectypes.MsgType(genesisSSVMsg.MsgType),
+					MsgID:   spectypes.MessageID(genesisSSVMsg.MsgID),
+					Data:    genesisSSVMsg.Data,
+				}
+			}
 		}
 
-		result, err := handler(smsg)
+		result, err := handler(ssvMsg)
 		if err != nil {
 			return errors.Wrap(err, "could not handle msg from stream")
 		}
@@ -79,39 +95,6 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 
 		return nil
 	}
-}
-
-// getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
-	var ps []peer.ID
-	seen := make(map[peer.ID]struct{})
-	// TODO: fork support
-	topics := commons.CommitteeTopicID(spectypes.CommitteeID(senderID[16:]))
-	for _, topic := range topics {
-		ps, err = n.topicsCtrl.Peers(topic)
-		if err != nil {
-			continue
-		}
-		for _, p := range ps {
-			if _, ok := seen[p]; !ok && filter(p) {
-				peers = append(peers, p)
-				seen[p] = struct{}{}
-			}
-		}
-	}
-	// if we seen some peers, ignore the error
-	if err != nil && len(seen) == 0 {
-		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(senderID))
-	}
-	if len(peers) == 0 {
-		return nil, nil
-	}
-	if maxPeers > len(peers) {
-		maxPeers = len(peers)
-	} else {
-		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
-	}
-	return peers[:maxPeers], nil
 }
 
 func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
@@ -188,8 +171,8 @@ func allPeersFilter(id peer.ID) bool {
 
 func waitSubsetOfPeers(
 	logger *zap.Logger,
-	getSubsetOfPeers func(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error),
-	vpk spectypes.ValidatorPK,
+	getSubsetOfPeers func(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error),
+	senderID []byte,
 	minPeers, maxPeers int,
 	timeout time.Duration,
 	filter func(peer.ID) bool,
@@ -207,7 +190,7 @@ func waitSubsetOfPeers(
 	// Wait for minPeers with a deadline.
 	deadline := time.Now().Add(timeout)
 	for {
-		peers, err := getSubsetOfPeers(logger, vpk, maxPeers, filter)
+		peers, err := getSubsetOfPeers(logger, senderID, maxPeers, filter)
 		if err != nil {
 			return nil, err
 		}

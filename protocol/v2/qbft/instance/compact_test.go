@@ -94,7 +94,7 @@ var compactTests = []struct {
 			Round:                3,
 			LastPreparedRound:    3,
 			Decided:              true,
-			Share:                testingutils.TestingOperator(TestingSK),
+			CommitteeMember:      testingutils.TestingCommitteeMember(TestingSK),
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
 			CommitContainer:      mockContainer(1, 2, 3, 4),
@@ -105,7 +105,7 @@ var compactTests = []struct {
 			Round:                3,
 			LastPreparedRound:    3,
 			Decided:              true,
-			Share:                testingutils.TestingOperator(TestingSK),
+			CommitteeMember:      testingutils.TestingCommitteeMember(TestingSK),
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
 			CommitContainer:      mockContainer(3, 4),
@@ -118,7 +118,7 @@ var compactTests = []struct {
 			Round:                2,
 			LastPreparedRound:    2,
 			Decided:              true,
-			Share:                testingutils.TestingOperator(TestingSK),
+			CommitteeMember:      testingutils.TestingCommitteeMember(TestingSK),
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
 			CommitContainer:      mockContainer(1, 2, 3, 4),
@@ -129,7 +129,7 @@ var compactTests = []struct {
 			Round:                2,
 			LastPreparedRound:    2,
 			Decided:              true,
-			Share:                testingutils.TestingOperator(TestingSK),
+			CommitteeMember:      testingutils.TestingCommitteeMember(TestingSK),
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
 			CommitContainer:      mockContainer(2, 3, 4),
@@ -171,7 +171,7 @@ func mockContainer(rounds ...specqbft.Round) *specqbft.MsgContainer {
 		msg := &specqbft.Message{
 			Round: round,
 		}
-		container.AddMsg(testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, msg))
+		container.AddMsg(testingutils.ToProcessingMessage(testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, msg)))
 	}
 	return container
 }

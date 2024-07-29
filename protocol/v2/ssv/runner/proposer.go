@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -20,11 +19,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/attestantio/go-eth2-client/spec"
-
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerRunner struct {
@@ -33,26 +33,27 @@ type ProposerRunner struct {
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
-	operatorSigner spectypes.OperatorSigner
+	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-
-	metrics metrics.ConsensusMetrics
+	metrics        metrics.ConsensusMetrics
 }
 
 func NewProposerRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
-	operatorSigner spectypes.OperatorSigner,
+	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -65,12 +66,12 @@ func NewProposerRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleProposer),
+		metrics: metrics.NewConsensusMetrics(spectypes.RoleProposer),
 	}
 }
 
-func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
+func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty, quorum)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -84,7 +85,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.BeaconDuty)
+	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 
 	logger = logger.With(fields.Slot(duty.DutySlot()))
 	logger.Debug("🧩 got partial RANDAO signatures",
@@ -95,8 +96,6 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
-
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	// randao is relevant only for block proposals, no need to check type
@@ -106,44 +105,44 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
-
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		fields.PreConsensusTime(r.metrics.GetPreConsensusTime()))
 
 	start := time.Now()
-
+	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 	if err != nil {
+		logger.Error("❌ failed to get blinded beacon block",
+			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
+			fields.BlockTime(time.Since(start)),
+			zap.Error(err))
 		return errors.Wrap(err, "failed to get beacon block")
 	}
 
-	took := time.Since(start)
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("took", took),
+		zap.Duration("took", time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
 		return errors.Wrap(err, "could not marshal beacon block")
 	}
+	r.metrics.EndBeaconData()
 
-	input := &spectypes.ConsensusData{
+	input := &spectypes.ValidatorConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: byts,
 	}
 
-	inputBytes, err := input.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode ConsensusData")
-	}
-
 	r.metrics.StartConsensus()
-	if err := r.BaseRunner.decide(logger, r, duty.Slot, inputBytes); err != nil {
+
+	if err := r.BaseRunner.decide(logger, r, duty.Slot, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 
@@ -151,7 +150,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 }
 
 func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
 	}
@@ -166,7 +165,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 	// specific duty sig
 	var blkToSign ssz.HashRoot
 
-	cd := decidedValue.(*spectypes.ConsensusData)
+	cd := decidedValue.(*spectypes.ValidatorConsensusData)
 
 	if r.decidedBlindedBlock() {
 		_, blkToSign, err = cd.GetBlindedBlockData()
@@ -182,7 +181,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 
 	msg, err := r.BaseRunner.signBeaconObject(
 		r,
-		r.BaseRunner.State.StartingDuty.(*spectypes.BeaconDuty),
+		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
 		blkToSign,
 		cd.Duty.Slot,
 		spectypes.DomainProposer,
@@ -196,10 +195,27 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
-	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(postConsensusMsg, msgID, r.operatorSigner)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not sign post-consensus partial signature message")
+		return err
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return errors.Wrap(err, "could not sign SSVMessage")
+	}
+
+	msgToBroadcast := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
 	}
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
@@ -217,8 +233,6 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		return nil
 	}
 
-	r.metrics.EndPostConsensus()
-
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
@@ -230,49 +244,77 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		r.metrics.EndPostConsensus()
+		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
+			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()))
+		endSubmission := r.metrics.StartBeaconSubmission()
 
-		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
-
-		consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+		validatorConsensusData := &spectypes.ValidatorConsensusData{}
+		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
 		if err != nil {
 			return errors.Wrap(err, "could not create consensus data")
 		}
 
 		start := time.Now()
-		var blk any
+
+		logger = logger.With(
+			fields.BeaconDataTime(r.metrics.GetBeaconDataTime()),
+			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.Height(r.BaseRunner.QBFTController.Height),
+			fields.Round(r.GetState().RunningInstance.State.Round),
+			zap.Bool("blinded", r.decidedBlindedBlock()),
+		)
+		var (
+			blockSummary blockSummary
+			summarizeErr error
+		)
 		if r.decidedBlindedBlock() {
-			vBlindedBlk, _, err := consensusData.GetBlindedBlockData()
+			vBlindedBlk, _, err := validatorConsensusData.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
 			}
-			blk = vBlindedBlk
+			blockSummary, summarizeErr = summarizeBlock(vBlindedBlk)
+			logger = logger.With(
+				zap.String("block_hash", blockSummary.Hash.String()),
+				zap.NamedError("summarize_err", summarizeErr),
+			)
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-
+				logger.Error("❌ could not submit blinded Beacon block",
+					fields.SubmissionTime(time.Since(start)),
+					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
-			vBlk, _, err := consensusData.GetBlockData()
+			vBlk, _, err := validatorConsensusData.GetBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get block")
 			}
-			blk = vBlk
+			blockSummary, summarizeErr = summarizeBlock(vBlk)
+			logger = logger.With(
+				zap.String("block_hash", blockSummary.Hash.String()),
+				zap.NamedError("summarize_err", summarizeErr),
+			)
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-
+				logger.Error("❌ could not submit Beacon block",
+					fields.SubmissionTime(time.Since(start)),
+					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
 
-		blockSubmissionEnd()
+		endSubmission()
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
-			fields.Slot(consensusData.Duty.Slot),
+			fields.Slot(validatorConsensusData.Duty.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
 			zap.String("block_hash", blockSummary.Hash.String()),
@@ -287,11 +329,12 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 // decidedBlindedBlock returns true if decided value has a blinded block, false if regular block
 // WARNING!! should be called after decided only
 func (r *ProposerRunner) decidedBlindedBlock() bool {
-	consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
 		return false
 	}
-	_, _, err = consensusData.GetBlindedBlockData()
+	_, _, err = validatorConsensusData.GetBlindedBlockData()
 	return err == nil
 }
 
@@ -302,21 +345,21 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-
-	consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not create consensus data")
 	}
 
 	if r.decidedBlindedBlock() {
-		_, data, err := consensusData.GetBlindedBlockData()
+		_, data, err := validatorConsensusData.GetBlindedBlockData()
 		if err != nil {
 			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block data")
 		}
 		return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 	}
 
-	_, data, err := consensusData.GetBlockData()
+	_, data, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block data")
 	}
@@ -335,7 +378,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.BeaconDuty), spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
+	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
@@ -345,11 +388,29 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
-	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not sign pre-consensus partial signature message")
+		return err
 	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return errors.Wrap(err, "could not sign SSVMessage")
+	}
+
+	msgToBroadcast := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial randao sig")
 	}
@@ -391,7 +452,7 @@ func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
 
-func (r *ProposerRunner) GetOperatorSigner() spectypes.OperatorSigner {
+func (r *ProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 
@@ -409,7 +470,7 @@ func (r *ProposerRunner) Decode(data []byte) error {
 func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode ProposerRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
@@ -449,6 +510,16 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summarizeBlock(b.Deneb.Block)
 		default:
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)
+		}
+
+	case *api.VersionedBlindedProposal:
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return summarizeBlock(b.Capella)
+		case spec.DataVersionDeneb:
+			return summarizeBlock(b.Deneb)
+		default:
+			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 		}
 
 	case *capella.BeaconBlock:

@@ -1,15 +1,11 @@
 package connections
 
 import (
-	"time"
-
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 
 	"github.com/ssvlabs/ssv/network/records"
 )
-
-var AllowedDifference = 30 * time.Second
 
 // NetworkIDFilter determines whether we will connect to the given node by the network ID
 func NetworkIDFilter(networkID string) HandshakeFilter {
@@ -21,3 +17,5 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 		return nil
 	}
 }
+
+// TODO: filter based on domaintype

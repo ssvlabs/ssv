@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -18,7 +21,7 @@ import (
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
-type NewDecidedHandler func(msg *spectypes.SignedSSVMessage)
+type NewDecidedHandler func(msg qbftstorage.ParticipantsRangeEntry)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
@@ -26,24 +29,27 @@ type Controller struct {
 	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
-	Share             *spectypes.Operator
-	NewDecidedHandler NewDecidedHandler `json:"-"`
+	CommitteeMember   *spectypes.CommitteeMember
+	OperatorSigner    ssvtypes.OperatorSigner `json:"-"`
+	NewDecidedHandler NewDecidedHandler       `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
 }
 
 func NewController(
 	identifier []byte,
-	share *spectypes.Operator,
+	committeeMember *spectypes.CommitteeMember,
 	config qbft.IConfig,
+	signer ssvtypes.OperatorSigner,
 	fullNode bool,
 ) *Controller {
 	return &Controller{
 		Identifier:      identifier,
 		Height:          specqbft.FirstHeight,
-		Share:           share,
+		CommitteeMember: committeeMember,
 		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
 		config:          config,
+		OperatorSigner:  signer,
 		fullNode:        fullNode,
 	}
 }
@@ -80,7 +86,12 @@ func (c *Controller) forceStopAllInstanceExceptCurrent() {
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(logger *zap.Logger, msg *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
+func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
+	msg, err := specqbft.NewProcessingMessage(signedMessage)
+	if err != nil {
+		return nil, errors.New("could not create ProcessingMessage from signed message")
+	}
+
 	if err := c.BaseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}
@@ -92,7 +103,7 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *spectypes.SignedSSVMess
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	isDecided, err := IsDecidedMsg(c.Share, msg)
+	isDecided, err := IsDecidedMsg(c.CommitteeMember, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -111,23 +122,21 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *spectypes.SignedSSVMess
 	return c.UponExistingInstanceMsg(logger, msg)
 }
 
-func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
-
-	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	inst := c.InstanceForHeight(logger, msg.Height)
+func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
+	inst := c.InstanceForHeight(logger, msg.QBFTMessage.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
 	}
 
 	prevDecided, _ := inst.IsDecided()
 
-	decided, _, decidedMsg, err := inst.ProcessMsg(logger, signedMsg)
+	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
+	}
+
+	if prevDecided {
+		return nil, err
 	}
 
 	// save the highest Decided
@@ -146,22 +155,13 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, signedMsg *spec
 		logger.Debug("❌ failed to broadcast decided message", zap.Error(err))
 	}
 
-	if prevDecided {
-		return nil, err
-	}
-
 	return decidedMsg, nil
 }
 
 // BaseMsgValidation returns error if msg is invalid (base validation)
-func (c *Controller) BaseMsgValidation(signedMsg *spectypes.SignedSSVMessage) error {
+func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	// verify msg belongs to controller
-	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
-	if err != nil {
-		return err
-	}
-
-	if !bytes.Equal(c.Identifier, msg.Identifier) {
+	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
 		return errors.New("message doesn't belong to Identifier")
 	}
 
@@ -189,7 +189,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier, storedInst.State.Height, c.OperatorSigner)
 	inst.State = storedInst.State
 	return inst
 }
@@ -201,22 +201,17 @@ func (c *Controller) GetIdentifier() []byte {
 
 // isFutureMessage returns true if message height is from a future instance.
 // It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
-func (c *Controller) isFutureMessage(signedMsg *spectypes.SignedSSVMessage) (bool, error) {
+func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) (bool, error) {
 	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
 		return true, nil
 	}
 
-	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
-	if err != nil {
-		return false, err
-	}
-
-	return msg.Height > c.Height, nil
+	return msg.QBFTMessage.Height > c.Height, nil
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
+	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }
@@ -225,7 +220,7 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode state")
+		return [32]byte{}, errors.Wrap(err, "could not encode controller")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

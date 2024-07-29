@@ -11,7 +11,6 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	genesisregistrystorage "github.com/ssvlabs/ssv/registry/storage/genesis"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -123,11 +122,6 @@ func (m NodeStorage) GetRecipientsPrefix() []byte {
 }
 
 func (m NodeStorage) Shares() registrystorage.Shares {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m NodeStorage) GenesisShares() genesisregistrystorage.Shares {
 	//TODO implement me
 	panic("implement me")
 }

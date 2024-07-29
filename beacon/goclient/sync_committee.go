@@ -13,7 +13,7 @@ import (
 )
 
 // SyncCommitteeDuties returns sync committee duties for a given epoch
-func (gc *goClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
+func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 	resp, err := gc.client.SyncCommitteeDuties(ctx, &api.SyncCommitteeDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
@@ -29,7 +29,7 @@ func (gc *goClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 }
 
 // GetSyncMessageBlockRoot returns beacon block root for sync committee
-func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec.DataVersion, error) {
+func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec.DataVersion, error) {
 	reqStart := time.Now()
 	resp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
 		Block: "head",
@@ -48,9 +48,9 @@ func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 	return *resp.Data, spec.DataVersionAltair, nil
 }
 
-// SubmitSyncMessage submits a signed sync committee msg
-func (gc *goClient) SubmitSyncMessage(msg *altair.SyncCommitteeMessage) error {
-	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, []*altair.SyncCommitteeMessage{msg}); err != nil {
+// SubmitSyncMessages submits a signed sync committee msg
+func (gc *GoClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
+	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs); err != nil {
 		return err
 	}
 	return nil

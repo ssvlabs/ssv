@@ -1,22 +1,30 @@
 package spectest
 
 import (
+	"context"
 	"encoding/hex"
+	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -26,6 +34,7 @@ type MsgProcessingSpecTest struct {
 	Runner                  runner.Runner
 	Duty                    spectypes.Duty
 	Messages                []*spectypes.SignedSSVMessage
+	DecidedSlashable        bool // DecidedSlashable makes the decided value slashable. Simulates consensus instances running in parallel.
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
@@ -45,8 +54,9 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	test.RunAsPartOfMultiTest(t, logger)
 }
 
-func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator.Validator, error) {
+func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
+	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
 	if len(test.Runner.GetBaseRunner().Share) == 0 {
 		panic("No share in base runner for tests")
 	}
@@ -54,31 +64,68 @@ func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator
 		share = validatorShare
 		break
 	}
-	v := protocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
-	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
-	v.Network = test.Runner.GetNetwork()
 
+	for valIdx, validatorShare := range test.Runner.GetBaseRunner().Share {
+		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
+	}
+
+	var v *validator.Validator
+	var c *validator.Committee
 	var lastErr error
-	if !test.DontStartDuty {
-		lastErr = v.StartDuty(logger, test.Duty)
-	}
-	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			lastErr = err
-			continue
+	switch test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner))
+
+		if test.DontStartDuty {
+			c.Runners[test.Duty.DutySlot()] = test.Runner.(*runner.CommitteeRunner)
+		} else {
+			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
-		err = v.ProcessMessage(logger, dmsg)
-		if err != nil {
-			lastErr = err
+
+		for _, msg := range test.Messages {
+			dmsg, err := wrapSignedSSVMessageToDecodedSSVMessage(msg)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			err = c.ProcessMessage(logger, dmsg)
+			if err != nil {
+				lastErr = err
+			}
+			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
+				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
+				}
+			}
+		}
+
+	default:
+		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
+		v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
+		v.Network = test.Runner.GetNetwork()
+
+		if !test.DontStartDuty {
+			lastErr = v.StartDuty(logger, test.Duty)
+		}
+		for _, msg := range test.Messages {
+			dmsg, err := wrapSignedSSVMessageToDecodedSSVMessage(msg)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			err = v.ProcessMessage(logger, dmsg)
+			if err != nil {
+				lastErr = err
+			}
 		}
 	}
 
-	return v, lastErr
+	return v, c, lastErr
 }
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
-	v, lastErr := test.runPreTesting(logger)
+	ctx := context.Background()
+	v, c, lastErr := test.runPreTesting(ctx, logger)
 
 	if len(test.ExpectedError) != 0 {
 		require.EqualError(t, lastErr, test.ExpectedError)
@@ -86,94 +133,56 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		require.NoError(t, lastErr)
 	}
 
+	network := &spectestingutils.TestingNetwork{}
+	var beaconNetwork *tests.TestingBeaconNodeWrapped
+	var committee []*spectypes.Operator
+
+	switch test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		var runnerInstance *runner.CommitteeRunner
+		for _, runner := range c.Runners {
+			runnerInstance = runner
+			break
+		}
+		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork = runnerInstance.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		committee = c.Operator.Committee
+	default:
+		network = v.Network.(*spectestingutils.TestingNetwork)
+		committee = v.Operator.Committee
+		beaconNetwork = test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+	}
+
 	// test output message
-	test.compareOutputMsgs(t, v)
+	spectestingutils.ComparePartialSignatureOutputMessages(t, test.OutputMessages, network.BroadcastedMsgs, committee)
 
 	// test beacon broadcasted msgs
-	test.compareBroadcastedBeaconMsgs(t)
+	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, beaconNetwork.GetBroadcastedRoots())
 
 	// post root
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
 
 	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
-		logger.Error("post runner state not equal", zap.String("state", cmp.Diff(test.Runner, test.PostDutyRunnerState, cmp.Exporter(func(p reflect.Type) bool { return true }))))
+		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
+		logger.Error("post runner state not equal", zap.String("state", diff))
 	}
 }
 
-func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-	broadcastedRoots := test.Runner.GetBeaconNode().(*spectestingutils.TestingBeaconNode).BroadcastedRoots
-	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
-	for _, r1 := range test.BeaconBroadcastedRoots {
-		found := false
-		for _, r2 := range broadcastedRoots {
-			if r1 == hex.EncodeToString(r2[:]) {
-				found = true
-				break
-			}
-		}
-		require.Truef(t, found, "broadcasted beacon root not found")
-	}
-}
-
-func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.Validator) {
-	filterPartialSigs := func(messages []*spectypes.SSVMessage) []*spectypes.SSVMessage {
-		ret := make([]*spectypes.SSVMessage, 0)
-		for _, msg := range messages {
-			if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
-				continue
-			}
-			ret = append(ret, msg)
-		}
-		return ret
-	}
-	broadcastedSignedMsgs := v.Network.(*spectestingutils.TestingNetwork).BroadcastedMsgs
-	require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, v.Operator.Committee))
-	broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
-	broadcastedMsgs = filterPartialSigs(broadcastedMsgs)
-	require.Len(t, broadcastedMsgs, len(test.OutputMessages))
-	index := 0
-	for _, msg := range broadcastedMsgs {
-		if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
-			continue
-		}
-
-		msg1 := &spectypes.PartialSignatureMessages{}
-		require.NoError(t, msg1.Decode(msg.Data))
-		msg2 := test.OutputMessages[index]
-		require.Len(t, msg1.Messages, len(msg2.Messages))
-
-		// messages are not guaranteed to be in order so we map them and then test all roots to be equal
-		roots := make(map[string]string)
-		for i, partialSigMsg2 := range msg2.Messages {
-			r2, err := partialSigMsg2.GetRoot()
-			require.NoError(t, err)
-			if _, found := roots[hex.EncodeToString(r2[:])]; !found {
-				roots[hex.EncodeToString(r2[:])] = ""
-			} else {
-				roots[hex.EncodeToString(r2[:])] = hex.EncodeToString(r2[:])
-			}
-
-			partialSigMsg1 := msg1.Messages[i]
-			r1, err := partialSigMsg1.GetRoot()
-			require.NoError(t, err)
-
-			if _, found := roots[hex.EncodeToString(r1[:])]; !found {
-				roots[hex.EncodeToString(r1[:])] = ""
-			} else {
-				roots[hex.EncodeToString(r1[:])] = hex.EncodeToString(r1[:])
-			}
-		}
-		for k, v := range roots {
-			require.EqualValues(t, k, v, "missing output msg")
-		}
-
-		// test that slot is correct in broadcasted msg
-		require.EqualValues(t, msg1.Slot, msg2.Slot, "incorrect broadcasted slot")
-
-		index++
-	}
-}
+//func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
+//	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
+//	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
+//	for _, r1 := range test.BeaconBroadcastedRoots {
+//		found := false
+//		for _, r2 := range broadcastedRoots {
+//			if r1 == hex.EncodeToString(r2[:]) {
+//				found = true
+//				break
+//			}
+//		}
+//		require.Truef(t, found, "broadcasted beacon root not found")
+//	}
+//}
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testType := reflect.TypeOf(test).String()
@@ -211,4 +220,160 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	require.NoError(t, err)
 
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
+}
+
+var baseCommitteeWithRunnerSample = func(
+	ctx context.Context,
+	logger *zap.Logger,
+	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
+	runnerSample *runner.CommitteeRunner,
+) *validator.Committee {
+
+	var keySetSample *spectestingutils.TestKeySet
+	for _, ks := range keySetMap {
+		keySetSample = ks
+		break
+	}
+
+	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
+	for valIdx, ks := range keySetMap {
+		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
+	}
+
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
+		return runner.NewCommitteeRunner(
+			networkconfig.TestNetwork,
+			shareMap,
+			controller.NewController(
+				runnerSample.BaseRunner.QBFTController.Identifier,
+				runnerSample.BaseRunner.QBFTController.CommitteeMember,
+				runnerSample.BaseRunner.QBFTController.GetConfig(),
+				spectestingutils.TestingOperatorSigner(keySetSample),
+				false,
+			),
+			runnerSample.GetBeaconNode(),
+			runnerSample.GetNetwork(),
+			runnerSample.GetSigner(),
+			runnerSample.GetOperatorSigner(),
+			runnerSample.GetValCheckF(),
+		).(*runner.CommitteeRunner)
+	}
+
+	c := validator.NewCommittee(
+		ctx,
+		logger,
+		runnerSample.GetBaseRunner().BeaconNetwork,
+		spectestingutils.TestingCommitteeMember(keySetSample),
+		createRunnerF,
+	)
+	c.Shares = shareMap
+
+	return c
+}
+
+// wrapSignedSSVMessageToDecodedSSVMessage - wraps a SignedSSVMessage to a DecodedSSVMessage to pass the queue.DecodedSSVMessage to ProcessMessage
+// In spec it accepts SignedSSVMessage, but in the protocol it accepts DecodedSSVMessage
+// Without handling nil case in tests we get a panic in decodeSignedSSVMessage
+func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*queue.SSVMessage, error) {
+	var dmsg *queue.SSVMessage
+	var err error
+
+	if msg.SSVMessage == nil {
+		dmsg = &queue.SSVMessage{
+			SignedSSVMessage: msg,
+			SSVMessage:       &spectypes.SSVMessage{},
+		}
+		dmsg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+	} else {
+		dmsg, err = queue.DecodeSignedSSVMessage(msg)
+	}
+
+	return dmsg, err
+}
+
+// Create alias without duty
+type MsgProcessingSpecTestAlias struct {
+	Name   string
+	Runner runner.Runner
+	// No duty from type types.Duty. Its interface
+	Messages                []*spectypes.SignedSSVMessage
+	DecidedSlashable        bool
+	PostDutyRunnerStateRoot string
+	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
+	OutputMessages          []*spectypes.PartialSignatureMessages
+	BeaconBroadcastedRoots  []string
+	DontStartDuty           bool // if set to true will not start a duty for the runner
+	ExpectedError           string
+	BeaconDuty              *spectypes.ValidatorDuty `json:"ValidatorDuty,omitempty"`
+	CommitteeDuty           *spectypes.CommitteeDuty `json:"CommitteeDuty,omitempty"`
+}
+
+func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
+	alias := &MsgProcessingSpecTestAlias{
+		Name:                    t.Name,
+		Runner:                  t.Runner,
+		Messages:                t.Messages,
+		DecidedSlashable:        t.DecidedSlashable,
+		PostDutyRunnerStateRoot: t.PostDutyRunnerStateRoot,
+		PostDutyRunnerState:     t.PostDutyRunnerState,
+		OutputMessages:          t.OutputMessages,
+		BeaconBroadcastedRoots:  t.BeaconBroadcastedRoots,
+		DontStartDuty:           t.DontStartDuty,
+		ExpectedError:           t.ExpectedError,
+	}
+
+	if t.Duty != nil {
+		if beaconDuty, ok := t.Duty.(*spectypes.ValidatorDuty); ok {
+			alias.BeaconDuty = beaconDuty
+		} else if committeeDuty, ok := t.Duty.(*spectypes.CommitteeDuty); ok {
+			alias.CommitteeDuty = committeeDuty
+		} else {
+			return nil, errors.New("can't marshal StartNewRunnerDutySpecTest because t.Duty isn't ValidatorDuty or CommitteeDuty")
+		}
+	}
+	byts, err := json.Marshal(alias)
+
+	return byts, err
+}
+
+func (t *MsgProcessingSpecTest) UnmarshalJSON(data []byte) error {
+	aux := &MsgProcessingSpecTestAlias{}
+	aux.Runner = &runner.CommitteeRunner{}
+	// Unmarshal the JSON data into the auxiliary struct
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	t.Name = aux.Name
+	t.Runner = aux.Runner
+	t.DecidedSlashable = aux.DecidedSlashable
+	t.Messages = aux.Messages
+	t.PostDutyRunnerStateRoot = aux.PostDutyRunnerStateRoot
+	t.PostDutyRunnerState = aux.PostDutyRunnerState
+	t.OutputMessages = aux.OutputMessages
+	t.BeaconBroadcastedRoots = aux.BeaconBroadcastedRoots
+	t.DontStartDuty = aux.DontStartDuty
+	t.ExpectedError = aux.ExpectedError
+
+	// Determine which type of duty was marshaled
+	if aux.BeaconDuty != nil {
+		t.Duty = aux.BeaconDuty
+	} else if aux.CommitteeDuty != nil {
+		t.Duty = aux.CommitteeDuty
+	}
+
+	return nil
+}
+
+// IsQBFTProposalMessage checks if the message is a QBFT proposal message
+func IsQBFTProposalMessage(msg *spectypes.SignedSSVMessage) bool {
+	if msg.SSVMessage.MsgType == spectypes.SSVConsensusMsgType {
+		qbftMsg := specqbft.Message{}
+		err := qbftMsg.Decode(msg.SSVMessage.Data)
+		if err != nil {
+			panic("could not decode message")
+		}
+		return qbftMsg.MsgType == specqbft.ProposalMsgType
+	}
+	return false
 }

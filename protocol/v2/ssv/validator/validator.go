@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -14,10 +15,11 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -28,14 +30,14 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.ValidatorDutyRunners
-	Network     specqbft.Network
+	NetworkConfig networkconfig.NetworkConfig
+	DutyRunners   runner.ValidatorDutyRunners
+	Network       specqbft.Network
 
-	Operator          *spectypes.Operator
-	Share             *types.SSVShare
-	Signer            spectypes.BeaconSigner
-	OperatorSigner    spectypes.OperatorSigner
-	SignatureVerifier spectypes.SignatureVerifier
+	Operator       *spectypes.CommitteeMember
+	Share          *ssvtypes.SSVShare
+	Signer         spectypes.BeaconSigner
+	OperatorSigner ssvtypes.OperatorSigner
 
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.RunnerRole]queueContainer
@@ -57,21 +59,21 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	v := &Validator{
-		mtx:               &sync.RWMutex{},
-		ctx:               pctx,
-		cancel:            cancel,
-		DutyRunners:       options.DutyRunners,
-		Network:           options.Network,
-		Storage:           options.Storage,
-		Operator:          options.Operator,
-		Share:             options.SSVShare,
-		Signer:            options.Signer,
-		OperatorSigner:    options.OperatorSigner,
-		SignatureVerifier: options.SignatureVerifier,
-		Queues:            make(map[spectypes.RunnerRole]queueContainer),
-		state:             uint32(NotStarted),
-		dutyIDs:           hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
-		messageValidator:  options.MessageValidator,
+		mtx:              &sync.RWMutex{},
+		ctx:              pctx,
+		cancel:           cancel,
+		NetworkConfig:    options.NetworkConfig,
+		DutyRunners:      options.DutyRunners,
+		Network:          options.Network,
+		Storage:          options.Storage,
+		Operator:         options.Operator,
+		Share:            options.SSVShare,
+		Signer:           options.Signer,
+		OperatorSigner:   options.OperatorSigner,
+		Queues:           make(map[spectypes.RunnerRole]queueContainer),
+		state:            uint32(NotStarted),
+		dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
+		messageValidator: options.MessageValidator,
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -98,7 +100,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
-	duty := iduty.(*spectypes.BeaconDuty) // TODO: err handling
+	duty := iduty.(*spectypes.ValidatorDuty) // TODO: err handling
 
 	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(duty.Type)]
 	if dutyRunner == nil {
@@ -117,19 +119,19 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
 	logger.Info("ℹ️ starting duty processing")
 
-	return dutyRunner.StartNewDuty(logger, duty)
+	return dutyRunner.StartNewDuty(logger, duty, v.Operator.GetQuorum())
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) error {
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid signed message")
+			return errors.Wrap(err, "invalid SignedSSVMessage")
 		}
 
 		// Verify SignedSSVMessage's signature
-		if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
+		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
 	}
@@ -154,6 +156,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
+		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height))
 
 		// Check signer consistency
 		if !msg.SignedSSVMessage.CommonSigners([]spectypes.OperatorID{msg.SignedSSVMessage.OperatorIDs[0]}) { // todo: array check
@@ -170,6 +173,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
+		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), signedMsg.Slot)
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")
@@ -194,7 +198,15 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 }
 
-func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
+func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole, slot phase0.Slot) *zap.Logger {
+	logger = logger.With(fields.Slot(slot))
+	if dutyID, ok := v.dutyIDs.Get(spectypes.RunnerRole(role)); ok {
+		return logger.With(fields.DutyID(dutyID))
+	}
+	return logger
+}
+
+func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}

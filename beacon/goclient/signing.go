@@ -14,7 +14,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
 	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
 	if err != nil {
 		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
@@ -66,7 +66,7 @@ func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	return domain, nil
 }
 
-func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
@@ -102,7 +102,7 @@ func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 //	       object_root=hash_tree_root(ssz_object),
 //	       domain=domain,
 //	   ))
-func (gc *goClient) ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error) {
+func (gc *GoClient) ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error) {
 	if object == nil {
 		return [32]byte{}, errors.New("cannot compute signing root of nil")
 	}
@@ -116,7 +116,7 @@ func (gc *goClient) ComputeSigningRoot(object interface{}, domain phase0.Domain)
 
 // signingData Computes the signing data by utilising the provided root function and then
 // returning the signing data of the container object.
-func (gc *goClient) signingData(rootFunc func() ([32]byte, error), domain []byte) ([32]byte, error) {
+func (gc *GoClient) signingData(rootFunc func() ([32]byte, error), domain []byte) ([32]byte, error) {
 	objRoot, err := rootFunc()
 	if err != nil {
 		return [32]byte{}, err

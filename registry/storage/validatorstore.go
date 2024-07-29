@@ -45,6 +45,7 @@ type Committee struct {
 	ID         spectypes.CommitteeID
 	Operators  []spectypes.OperatorID
 	Validators []*types.SSVShare
+	Indices    []phase0.ValidatorIndex
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
@@ -261,15 +262,18 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 		return
 	}
 	validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
+	indices := make([]phase0.ValidatorIndex, 0, len(committee.Validators)-1)
 	for _, validator := range committee.Validators {
 		if validator.ValidatorPubKey != pk {
 			validators = append(validators, validator)
+			indices = append(indices, validator.ValidatorIndex)
 		}
 	}
 	if len(validators) == 0 {
 		delete(c.byCommitteeID, committee.ID)
 	} else {
 		committee.Validators = validators
+		committee.Indices = indices
 	}
 
 	// Update byOperatorID
@@ -303,9 +307,13 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 
 	// Update byCommitteeID
 	for _, committee := range c.byCommitteeID {
+		if committee.ID != share.CommitteeID() {
+			continue
+		}
 		for i, validator := range committee.Validators {
 			if validator.ValidatorPubKey == share.ValidatorPubKey {
 				committee.Validators[i] = share
+				committee.Indices[i] = share.ValidatorIndex
 				break
 			}
 		}
@@ -336,6 +344,7 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		ID:         shares[0].CommitteeID(),
 		Operators:  make([]spectypes.OperatorID, 0, len(shares)),
 		Validators: shares,
+		Indices:    make([]phase0.ValidatorIndex, 0, len(shares)),
 	}
 
 	seenOperators := make(map[spectypes.OperatorID]struct{})
@@ -344,6 +353,7 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		for _, shareMember := range share.Committee {
 			seenOperators[shareMember.Signer] = struct{}{}
 		}
+		committee.Indices = append(committee.Indices, share.ValidatorIndex)
 	}
 
 	committee.Operators = maps.Keys(seenOperators)

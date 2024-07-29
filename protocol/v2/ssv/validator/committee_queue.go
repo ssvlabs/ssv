@@ -20,7 +20,7 @@ import (
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
+func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -115,7 +115,7 @@ func (v *Committee) ConsumeQueue(
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {
 			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.DecodedSSVMessage) bool {
+			filter = func(m *queue.SSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
 					return false
@@ -125,7 +125,7 @@ func (v *Committee) ConsumeQueue(
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
-			filter = func(m *queue.DecodedSSVMessage) bool {
+			filter = func(m *queue.SSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return true
@@ -168,7 +168,7 @@ func (v *Committee) ConsumeQueue(
 	return nil
 }
 
-func (v *Committee) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, withFields ...zap.Field) {
+func (v *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:

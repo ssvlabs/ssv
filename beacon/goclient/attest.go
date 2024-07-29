@@ -14,7 +14,7 @@ import (
 )
 
 // AttesterDuties returns attester duties for a given epoch.
-func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
 	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
@@ -29,7 +29,7 @@ func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	return resp.Data, nil
 }
 
-func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
+func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
 	attDataReqStart := time.Now()
 	resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 		Slot:           slot,
@@ -47,22 +47,26 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	return resp.Data, spec.DataVersionPhase0, nil
 }
 
-// SubmitAttestation implements Beacon interface
-func (gc *goClient) SubmitAttestation(attestation *phase0.Attestation) error {
-	signingRoot, err := gc.getSigningRoot(attestation.Data)
-	if err != nil {
-		return errors.Wrap(err, "failed to get signing root")
+// SubmitAttestations implements Beacon interface
+func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error {
+
+	// TODO: better way to return error and not stop sending other attestations
+	for _, attestation := range attestations {
+		signingRoot, err := gc.getSigningRoot(attestation.Data)
+		if err != nil {
+			return errors.Wrap(err, "failed to get signing root")
+		}
+
+		if err := gc.slashableAttestationCheck(gc.ctx, signingRoot); err != nil {
+			return errors.Wrap(err, "failed attestation slashing protection check")
+		}
 	}
 
-	if err := gc.slashableAttestationCheck(gc.ctx, signingRoot); err != nil {
-		return errors.Wrap(err, "failed attestation slashing protection check")
-	}
-
-	return gc.client.SubmitAttestations(gc.ctx, []*phase0.Attestation{attestation})
+	return gc.client.SubmitAttestations(gc.ctx, attestations)
 }
 
 // getSigningRoot returns signing root
-func (gc *goClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, error) {
+func (gc *GoClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(data.Slot)
 	domain, err := gc.DomainData(epoch, spectypes.DomainAttester)
 	if err != nil {

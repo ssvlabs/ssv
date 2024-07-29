@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/golang/mock/gomock"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
@@ -37,14 +37,23 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 		currentSlot.SetSlot(32)
 	}
 
+	beaconNetwork := spectypes.HoleskyNetwork // it must be something known by ekm
+
 	mockBeaconNetwork := mocknetwork.NewMockBeaconNetwork(ctrl)
-	mockBeaconNetwork.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
+	mockBeaconNetwork.EXPECT().GetBeaconNetwork().Return(beaconNetwork).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
+		func() phase0.Epoch {
+			return phase0.Epoch(currentSlot.GetSlot() / 32)
+		},
+	).AnyTimes()
 
 	mockBeaconNetwork.EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
 			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
+
 	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
 			return phase0.Epoch(slot / 32)

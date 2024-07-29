@@ -9,11 +9,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
 type ExitDescriptor struct {
+	OwnValidator   bool
 	PubKey         phase0.BLSPubKey
 	ValidatorIndex phase0.ValidatorIndex
 	BlockNumber    uint64
@@ -21,15 +23,17 @@ type ExitDescriptor struct {
 
 type VoluntaryExitHandler struct {
 	baseHandler
+	duties          *dutystore.VoluntaryExitDuties
 	validatorExitCh <-chan ExitDescriptor
-	dutyQueue       []*spectypes.BeaconDuty
+	dutyQueue       []*spectypes.ValidatorDuty
 	blockSlots      map[uint64]phase0.Slot
 }
 
-func NewVoluntaryExitHandler(validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
+func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
 	return &VoluntaryExitHandler{
+		duties:          duties,
 		validatorExitCh: validatorExitCh,
-		dutyQueue:       make([]*spectypes.BeaconDuty, 0),
+		dutyQueue:       make([]*spectypes.ValidatorDuty, 0),
 		blockSlots:      map[uint64]phase0.Slot{},
 	}
 }
@@ -42,17 +46,19 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			currentSlot := h.ticker.Slot()
+			next = h.ticker.Next()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
 
-			var dutiesForExecution, pendingDuties []*spectypes.BeaconDuty
+			var dutiesForExecution, pendingDuties []*spectypes.ValidatorDuty
 
 			for _, duty := range h.dutyQueue {
 				if duty.Slot <= currentSlot {
@@ -63,9 +69,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			}
 
 			h.dutyQueue = pendingDuties
+			h.duties.RemoveSlot(currentSlot - phase0.Slot(h.network.SlotsPerEpoch()))
 
 			if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-				h.executeDuties(h.logger, dutiesForExecution)
+				h.dutiesExecutor.ExecuteDuties(h.logger, dutiesForExecution)
 				h.logger.Debug("executed voluntary exit duties",
 					fields.Slot(currentSlot),
 					fields.Count(dutyCount))
@@ -85,11 +92,16 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
-			duty := &spectypes.BeaconDuty{
+			duty := &spectypes.ValidatorDuty{
 				Type:           spectypes.BNRoleVoluntaryExit,
 				PubKey:         exitDescriptor.PubKey,
 				Slot:           dutySlot,
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
+			}
+
+			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
+			if !exitDescriptor.OwnValidator {
+				continue
 			}
 
 			h.dutyQueue = append(h.dutyQueue, duty)

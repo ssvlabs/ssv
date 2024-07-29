@@ -3,8 +3,12 @@ package api
 import (
 	"encoding/hex"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // Message represents an exporter message
@@ -17,92 +21,67 @@ type Message struct {
 	Data interface{} `json:"data,omitempty"`
 }
 
-type SignedMessageAPI struct {
-	Signature types.Signature
-	Signers   []types.OperatorID
-	Message   specqbft.Message
-
-	FullData *types.ConsensusData
+type ParticipantsAPI struct {
+	Signers     []spectypes.OperatorID
+	Slot        phase0.Slot
+	Identifier  []byte
+	ValidatorPK string
+	Role        string
+	Message     specqbft.Message
+	FullData    *spectypes.ValidatorConsensusData
 }
 
-// NewDecidedAPIMsg creates a new message from the given message
-// TODO: avoid converting to v0 once explorer is upgraded
-func NewDecidedAPIMsg(msgs ...*types.SignedSSVMessage) Message {
-	data, err := DecidedAPIData(msgs...)
+// NewParticipantsAPIMsg creates a new message in a new format from the given message.
+func NewParticipantsAPIMsg(msg qbftstorage.ParticipantsRangeEntry) Message {
+	data, err := ParticipantsAPIData(msg)
 	if err != nil {
 		return Message{
-			Type: TypeDecided,
+			Type: TypeParticipants,
 			Data: []string{},
 		}
 	}
+	identifier := specqbft.ControllerIdToMessageID(msg.Identifier[:])
+	pkv := identifier.GetDutyExecutorID()
 
-	decMsg, err := specqbft.DecodeMessage(msgs[0].SSVMessage.Data)
-	if err != nil {
-		return Message{
-			Type: TypeDecided,
-			Data: []string{},
-		}
-	}
-	decMsg2, err := specqbft.DecodeMessage(msgs[len(msgs)-1].SSVMessage.Data)
-	if err != nil {
-		return Message{
-			Type: TypeDecided,
-			Data: []string{},
-		}
-	}
-
-	identifier := specqbft.ControllerIdToMessageID(decMsg.Identifier)
-	// #TODO fixme. its not always pk, it can be a CommitteeID if CommitteeRole or Validator PubKey
-	dutyExecutorID := identifier.GetDutyExecutorID()
-	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
-			PublicKey: hex.EncodeToString(dutyExecutorID),
-			From:      uint64(decMsg.Height),
-			To:        uint64(decMsg2.Height),
-			Role:      role.String(),
+			PublicKey: hex.EncodeToString(pkv),
+			From:      uint64(msg.Slot),
+			To:        uint64(msg.Slot),
+			Role:      msg.Identifier.GetRoleType().String(),
 		},
 		Data: data,
 	}
 }
 
-// DecidedAPIData creates a new message from the given message
-func DecidedAPIData(msgs ...*types.SignedSSVMessage) (interface{}, error) {
-	//if len(msgs) == 0 {
-	//	return nil, errors.New("no messages")
-	//}
-	//
-	//apiMsgs := make([]*SignedMessageAPI, 0)
-	//for _, msg := range msgs {
-	//	if msg == nil {
-	//		return nil, errors.New("nil message")
-	//	}
-	//
-	//	decMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//
-	//	apiMsg := &SignedMessageAPI{
-	//		Signature: decMsg.sog,
-	//		Signers:   decMsg.Signers,
-	//		Message:   msg.Message,
-	//	}
-	//
-	//	if msg.FullData != nil {
-	//		var cd types.ConsensusData
-	//		if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
-	//			return nil, errors.Wrap(err, "failed to unmarshal consensus data")
-	//		}
-	//		apiMsg.FullData = &cd
-	//	}
-	//
-	//	apiMsgs = append(apiMsgs, apiMsg)
-	//}
-	//
-	//return apiMsgs, nil
-	return nil, nil
+// ParticipantsAPIData creates a new message from the given message in a new format.
+func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
+	if len(msgs) == 0 {
+		return nil, errors.New("no messages")
+	}
+
+	apiMsgs := make([]*ParticipantsAPI, 0)
+	for _, msg := range msgs {
+		apiMsg := &ParticipantsAPI{
+			Signers:     msg.Signers,
+			Slot:        msg.Slot,
+			Identifier:  msg.Identifier[:],
+			ValidatorPK: hex.EncodeToString(msg.Identifier.GetDutyExecutorID()),
+			Role:        msg.Identifier.GetRoleType().String(),
+			Message: specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.Height(msg.Slot),
+				Identifier: msg.Identifier[:],
+				Round:      specqbft.FirstRound,
+			},
+			FullData: &spectypes.ValidatorConsensusData{Duty: spectypes.ValidatorDuty{Slot: msg.Slot}},
+		}
+
+		apiMsgs = append(apiMsgs, apiMsg)
+	}
+
+	return apiMsgs, nil
 }
 
 // MessageFilter is a criteria for query in request messages and projection in responses
@@ -129,4 +108,6 @@ const (
 	TypeDecided MessageType = "decided"
 	// TypeError is an enum for error type messages
 	TypeError MessageType = "error"
+	// TypeParticipants is an enum for participants type messages
+	TypeParticipants MessageType = "participants"
 )
