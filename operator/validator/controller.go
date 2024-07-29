@@ -1327,7 +1327,7 @@ func SetupCommitteeRunners(
 			Domain:       options.NetworkConfig.DomainType(),
 			ValueCheckF:  nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := specqbft.RoundRobinProposer(state, round)
+				leader := ssvtypes.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
@@ -1346,7 +1346,7 @@ func SetupCommitteeRunners(
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		valCheck := specssv.BeaconVoteValueCheckF(options.Signer, slot, slashableValidators, epoch)
+		valCheck := ssvtypes.BeaconVoteValueCheckF(options.Signer, slot, slashableValidators, epoch)
 		crunner := runner.NewCommitteeRunner(
 			options.NetworkConfig,
 			shares,
@@ -1387,7 +1387,7 @@ func SetupRunners(
 			Domain:       options.NetworkConfig.DomainType(),
 			ValueCheckF:  nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := specqbft.RoundRobinProposer(state, round)
+				leader := ssvtypes.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
