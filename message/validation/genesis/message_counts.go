@@ -62,8 +62,6 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 				err.got = fmt.Sprintf("decided, having %v", c.String())
 				return err
 			}
-		} else {
-			return ErrNoSigners
 		}
 	case specqbft.RoundChangeMsgType:
 		if c.RoundChange >= limits.RoundChange {
