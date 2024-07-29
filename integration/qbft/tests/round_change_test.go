@@ -12,6 +12,8 @@ import (
 )
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {
+	t.Skip("tests in this package are stuck")
+
 	t.SkipNow() // TODO: test is flakey
 
 	roundChange := &Scenario{
