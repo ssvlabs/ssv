@@ -104,7 +104,6 @@ var (
 	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications      = Error{text: "malformed round change justifications", reject: true}
 	ErrUnexpectedRoundChangeJustifications     = Error{text: "round change justifications unexpected for this message type", reject: true}
-	ErrDeserializePublicKey                    = Error{text: "deserialize public key", reject: true}
 	ErrNoPartialSignatureMessages              = Error{text: "no partial signature messages", reject: true}
 	ErrNoValidators                            = Error{text: "no validators for this committee ID", reject: true}
 	ErrNoSignatures                            = Error{text: "no signatures", reject: true}
