@@ -1,6 +1,7 @@
 package beacon
 
 import (
+	"github.com/ssvlabs/ssv/logging/fields"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -87,8 +88,8 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 		if onUpdated != nil {
 			onUpdated(pk, meta)
 		}
-		//logger.Debug("💾️ successfully updated validator metadata",
-		//	fields.PubKey(pk[:]), zap.Any("metadata", meta))
+		logger.Debug("💾️ successfully updated validator metadata",
+			fields.PubKey(pk[:]), zap.Any("metadata", meta))
 	}
 	return nil
 }
