@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
 )
 
@@ -37,12 +36,10 @@ func (td *TestDomainTypeProvider) DomainTypeAtEpoch(epoch phase0.Epoch) spectype
 }
 
 func TestCheckPeer(t *testing.T) {
-	t.Skip("need to fix failing test")
-
 	var (
 		ctx          = context.Background()
 		logger       = zap.NewNop()
-		myDomainType = networkconfig.TestNetwork.AlanDomainType
+		myDomainType = spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
 		mySubnets    = mockSubnets(1, 2, 3)
 		tests        = []*checkPeerTest{
 			{
