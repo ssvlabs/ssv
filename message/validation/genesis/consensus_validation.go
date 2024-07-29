@@ -131,6 +131,9 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.Reset(msgRound)
 		}
 
+		// Allow to change the state only by proposal to avoid an attack
+		// where any node can send an RC message that changes message validation state.
+		// We could allow proposal or round change quorum, but it's more complex to implement, so just proposal is fine.
 		if signedMsg.Message.MsgType == genesisspecqbft.ProposalMsgType {
 			if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
 				signerState.ProposalData = signedMsg.FullData
