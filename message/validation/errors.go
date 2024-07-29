@@ -99,7 +99,7 @@ var (
 	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
 	ErrDecidedNotEnoughSigners                 = Error{text: "not enough signers in decided message", reject: true}
-	ErrDuplicatedProposalWithDifferentData     = Error{text: "duplicated proposal with different data", reject: true}
+	ErrDifferentProposalData                   = Error{text: "different proposal data", reject: true}
 	ErrMalformedPrepareJustifications          = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications      = Error{text: "malformed round change justifications", reject: true}
