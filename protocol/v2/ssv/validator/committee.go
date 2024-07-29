@@ -88,11 +88,13 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
+	q, queueFound := c.Queues[duty.Slot]
+	if !queueFound {
+		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+	}
 
 	// required to stop the queue consumer when timeout message is received by handler
 	queueCtx, cancelF := context.WithCancel(c.ctx)
-
-	q, _ := c.Queues[duty.Slot]
 	q.StopQueueF = cancelF
 
 	r := c.Runners[duty.Slot]
@@ -102,7 +104,6 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 	go func() {
 		// Setting the cancel function separately due the queue could be created in HandleMessage
-
 
 		logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 
