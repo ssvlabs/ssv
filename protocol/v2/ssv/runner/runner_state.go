@@ -90,11 +90,7 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 		} else if committeeDuty, ok := pcs.StartingDuty.(*spectypes.CommitteeDuty); ok {
 			alias.CommitteeDuty = committeeDuty
 		} else {
-<<<<<<< HEAD
 			return nil, errors.New("can't marshal because BaseRunner.State.StartingDuty isn't ValidatorDuty or CommitteeDuty")
-=======
-			return nil, errors.New("can't marshal because BaseState.StartingDuty isn't BeaconDuty or CommitteeDuty")
->>>>>>> d313a2884 (added PartialSigContainer wrapper)
 		}
 	}
 	byts, err := json.Marshal(alias)

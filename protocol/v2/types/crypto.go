@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
@@ -26,12 +27,7 @@ func init() {
 	}
 }
 
-func ReconstructSignature(
-	ps *PartialSigContainer,
-	root [32]byte,
-	validatorPubKey []byte,
-	validatorIndex phase0.ValidatorIndex,
-) ([]byte, error) {
+func ReconstructSignature(ps *PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
 	if ps.Signatures[validatorIndex] == nil {
 		return nil, errors.New("no signatures for the given validator index")
