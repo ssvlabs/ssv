@@ -13,6 +13,7 @@ var HoleskyStage = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
 	Domain:               [4]byte{0x00, 0x00, 0x31, 0x12},
 	GenesisEpoch:         1,
+	AlanForkEpoch:        0,
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
 	RegistryContractAddr: "0x0d33801785340072C452b994496B19f196b7eE15",
 	Bootnodes: []string{
