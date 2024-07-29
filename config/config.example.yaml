@@ -19,10 +19,6 @@ eth2:
   # HTTP URL of the Beacon node to connect to.
   BeaconNodeAddr: http://example.url:5052
 
-  ValidatorOptions:
-    # Whether to enable MEV block production. Requires the connected Beacon node to be MEV-enabled.
-    BuilderProposals: false
-
 eth1:
   # WebSocket URL of the Eth1 node to connect to.
   ETH1Addr: ws://example.url:8546/ws

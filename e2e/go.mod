@@ -3,11 +3,11 @@ module github.com/bloxapp/ssv/e2e
 go 1.20
 
 require (
-	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
+	github.com/attestantio/go-eth2-client v0.21.9
 	github.com/bloxapp/ssv v1.2.1-0.20240204104853-e3a662984cac
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/pkg/errors v0.9.1
-	github.com/rs/zerolog v1.31.0
+	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	go.uber.org/zap v1.26.0
 )
@@ -17,17 +17,17 @@ require (
 	github.com/ferranbt/fastssz v0.1.3 // indirect
 	github.com/goccy/go-yaml v1.11.0 // indirect
 	github.com/holiman/uint256 v1.2.4 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/mattn/go-colorable v0.1.13
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20210809151128-385d8c5e3fb7 // indirect
+	github.com/prysmaticlabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e // indirect
 	github.com/r3labs/sse/v2 v2.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.18.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/sys v0.16.0 // indirect
+	golang.org/x/crypto v0.23.0 // indirect
+	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
@@ -116,7 +116,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.16.0 // indirect
 	go.opentelemetry.io/otel/trace v1.16.0 // indirect
 	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/text v0.15.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
@@ -125,5 +125,3 @@ require (
 	gotest.tools/v3 v3.5.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
-
-replace github.com/attestantio/go-eth2-client => github.com/moshe-blox/go-eth2-client v0.7.2-0.20240204094454-17f5c145f39f

@@ -38,7 +38,6 @@ const (
 	FieldBlockHash           = "block_hash"
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
-	FieldBuilderProposals    = "builder_proposals"
 	FieldClusterIndex        = "cluster_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
@@ -315,10 +314,6 @@ func ToBlock(val uint64) zap.Field {
 
 func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
-}
-
-func BuilderProposals(v bool) zap.Field {
-	return zap.Bool(FieldBuilderProposals, v)
 }
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
