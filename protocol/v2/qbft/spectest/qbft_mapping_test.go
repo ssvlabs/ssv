@@ -74,7 +74,7 @@ func TestQBFTMapping(t *testing.T) {
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
-				typedTest.Run(t)
+				typedTest.RunCreateMsg(t)
 			})
 		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
 			byts, err := json.Marshal(test)
