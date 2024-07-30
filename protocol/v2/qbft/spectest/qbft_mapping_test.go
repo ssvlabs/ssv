@@ -2,11 +2,12 @@ package qbft
 
 import (
 	"encoding/json"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
@@ -68,12 +69,12 @@ func TestQBFTMapping(t *testing.T) {
 		case reflect.TypeOf(&spectests.CreateMsgSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &spectests.CreateMsgSpecTest{}
+			typedTest := &CreateMsgSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
-				RunCreateMsg(t, typedTest)
+				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
 			byts, err := json.Marshal(test)

@@ -157,14 +157,6 @@ func SyncCommitteeContributionValueCheckF(
 			return errors.Wrap(err, "duty invalid")
 		}
 
-		//contributions, _ := cd.GetSyncCommitteeContributions()
-		//
-		//for _, c := range contributions {
-		//	// TODO check we have selection proof for contribution
-		//	// TODO check slot == duty slot
-		//	// TODO check beacon block root somehow? maybe all beacon block roots should be equal?
-		//
-		//}
 		return nil
 	}
 }
