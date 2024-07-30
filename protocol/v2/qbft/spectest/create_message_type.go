@@ -2,12 +2,15 @@ package qbft
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
@@ -74,15 +77,8 @@ func (test *CreateMsgSpecTest) Run(t *testing.T) {
 		require.Fail(t, "post state not equal", "")
 	}
 	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r[:]))
-	specMsg := &types.SignedSSVMessage{}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
-	require.NoError(t, err)
 
-	strType := strings.Replace(reflect.TypeOf(test).String(), "qbft.", "tests.", 1)
-	name := fmt.Sprintf("qbft create message %s", test.Name)
-
-	specMsg, err = typescomparable.UnmarshalStateComparison(specDir, name, strType, specMsg)
-	require.NoError(t, err)
+	CompareWithJson(t, test, test.TestName(), reflect.TypeOf(test).String())
 }
 
 func (test *CreateMsgSpecTest) createCommit() (*types.SignedSSVMessage, error) {
@@ -153,4 +149,54 @@ func (test *CreateMsgSpecTest) TestName() string {
 
 func (test *CreateMsgSpecTest) GetPostState() (interface{}, error) {
 	return test, nil
+}
+
+func CompareWithJson(t *testing.T, test any, testName string, testType string) {
+	byts, err := json.Marshal(test)
+	require.NoError(t, err)
+	//unmarshal json into map
+	var testMap map[string]interface{}
+	err = json.Unmarshal(byts, &testMap)
+	require.NoError(t, err)
+
+	expectedTestMap, err := GetExpectedStateFromScFile(testName, testType)
+	require.NoError(t, err)
+
+	diff := cmp.Diff(testMap, expectedTestMap)
+	if diff != "" {
+		t.Errorf("%s inputs changed. %v", testName, diff)
+	}
+}
+
+func GetExpectedStateFromScFile(testName string, testType string) (map[string]interface{}, error) {
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
+	if err != nil {
+		return nil, err
+	}
+	expectedState, err := readStateComparison(specDir, testName, testType)
+	if err != nil {
+		return nil, err
+	}
+	return expectedState, nil
+}
+
+// readStateComparison reads a json derived from 'testName' and unmarshals it into a json object
+func readStateComparison(basedir string, testName string, testType string) (map[string]interface{}, error) {
+	basedir = filepath.Join(basedir, "generate")
+	strType := strings.Replace(testType, "qbft.", "tests.", 1)
+	scDir := typescomparable.GetSCDir(basedir, strType)
+
+	path := filepath.Join(scDir, fmt.Sprintf("%s.json", testName))
+	byteValue, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	err = json.Unmarshal(byteValue, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
