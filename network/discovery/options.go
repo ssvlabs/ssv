@@ -4,14 +4,17 @@ import (
 	"crypto/ecdsa"
 	"net"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/network/commons"
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 )
+
+var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // DiscV5Options for creating a new discv5 listener
 type DiscV5Options struct {
@@ -83,7 +86,8 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 // DiscV5Cfg creates discv5 config from the options
 func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, error) {
 	dv5Cfg := discover.Config{
-		PrivateKey: opts.NetworkKey,
+		PrivateKey:   opts.NetworkKey,
+		V5ProtocolID: &SSVProtocolID,
 	}
 	if len(opts.Bootnodes) > 0 {
 		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)
