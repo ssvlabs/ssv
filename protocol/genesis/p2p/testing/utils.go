@@ -237,10 +237,6 @@ func (m *mockNetwork) GetHistory(logger *zap.Logger, mid genesisspectypes.Messag
 	return nil, 0, nil
 }
 
-func (m *mockNetwork) RegisterHandlers(logger *zap.Logger, handlers ...*protocolp2p.SyncHandler) {
-	// TODO?
-}
-
 func (m *mockNetwork) LastDecided(logger *zap.Logger, mid genesisspectypes.MessageID) ([]protocolp2p.SyncResult, error) {
 	return nil, nil
 }

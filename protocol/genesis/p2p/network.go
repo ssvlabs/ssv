@@ -159,7 +159,4 @@ type Network interface {
 	Subscriber
 	Broadcaster
 	ValidationReporting
-
-	// RegisterHandlers registers handler for the given protocol
-	RegisterHandlers(logger *zap.Logger, handlers ...*SyncHandler)
 }
