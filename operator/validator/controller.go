@@ -236,9 +236,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GenesisBeacon: options.GenesisBeacon,
 		Storage:       options.StorageMap,
 		//Share:   nil,  // set per validator
-		Signer:         options.BeaconSigner,
-		OperatorSigner: options.OperatorSigner,
-		//Mode: validator.ModeRW // set per validator
+		Signer:            options.BeaconSigner,
+		OperatorSigner:    options.OperatorSigner,
 		DutyRunners:       nil, // set per validator
 		NewDecidedHandler: options.NewDecidedHandler,
 		FullNode:          options.FullNode,
@@ -263,8 +262,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		BeaconNetwork:    options.NetworkConfig.Beacon,
 		Storage:          options.GenesisControllerOptions.StorageMap,
 		// SSVShare:   nil,  // set per validator
-		Signer: options.GenesisControllerOptions.KeyManager,
-		//Mode: validator.ModeRW // set per validator
+		Signer:            options.GenesisControllerOptions.KeyManager,
 		DutyRunners:       nil, // set per validator
 		NewDecidedHandler: options.GenesisControllerOptions.NewDecidedHandler,
 		FullNode:          options.FullNode,
