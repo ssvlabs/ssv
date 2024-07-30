@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv-spec/qbft"
@@ -71,7 +72,7 @@ func createCommit(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) 
 	}
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
-	return specqbft.CreateCommit(state, signer, test.Value)
+	return instance.CreateCommit(state, signer, test.Value)
 }
 
 func createPrepare(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
@@ -82,7 +83,7 @@ func createPrepare(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error)
 	}
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
-	return specqbft.CreatePrepare(state, signer, test.Round, test.Value)
+	return instance.CreatePrepare(state, signer, test.Round, test.Value)
 }
 
 func createProposal(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
@@ -93,7 +94,7 @@ func createProposal(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error
 	}
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
-	return specqbft.CreateProposal(state, signer, test.Value[:],
+	return instance.CreateProposal(state, signer, test.Value[:],
 		spectestingutils.ToProcessingMessages(test.RoundChangeJustifications),
 		spectestingutils.ToProcessingMessages(test.PrepareJustifications))
 }
@@ -123,5 +124,5 @@ func createRoundChange(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, er
 		}
 	}
 
-	return specqbft.CreateRoundChange(state, signer, 1, test.Value[:])
+	return instance.CreateRoundChange(state, signer, 1, test.Value[:])
 }
