@@ -9,8 +9,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 var (
@@ -29,25 +27,6 @@ type Subscriber interface {
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
 	Broadcast(id spectypes.MessageID, message *spectypes.SignedSSVMessage) error
-}
-
-// RequestHandler handles p2p requests
-type RequestHandler func(ssvMessage *spectypes.SSVMessage) (*spectypes.SSVMessage, error)
-
-// CombineRequestHandlers combines multiple handlers into a single handler
-func CombineRequestHandlers(handlers ...RequestHandler) RequestHandler {
-	return func(ssvMessage *spectypes.SSVMessage) (res *spectypes.SSVMessage, err error) {
-		for _, handler := range handlers {
-			res, err = handler(ssvMessage)
-			if err != nil {
-				return nil, err
-			}
-			if res != nil {
-				return res, nil
-			}
-		}
-		return
-	}
 }
 
 // SyncResult holds the result of a sync request, including the actual message and the sender
@@ -87,27 +66,6 @@ func (s SyncResults) String() string {
 	return strings.Join(v, ", ")
 }
 
-func (results SyncResults) ForEachSignedMessage(iterator func(message *spectypes.SignedSSVMessage) (stop bool)) {
-	for _, res := range results {
-		if res.Msg == nil {
-			continue
-		}
-		sm := &message.SyncMessage{}
-		err := sm.Decode(res.Msg.Data)
-		if err != nil {
-			continue
-		}
-		if sm == nil || sm.Status != message.StatusSuccess {
-			continue
-		}
-		for _, m := range sm.Data {
-			if iterator(m) {
-				return
-			}
-		}
-	}
-}
-
 // SyncProtocol represent the type of sync protocols
 type SyncProtocol int32
 
@@ -117,20 +75,6 @@ const (
 	// DecidedHistoryProtocol is the decided history protocol type
 	DecidedHistoryProtocol
 )
-
-// SyncHandler is a wrapper for RequestHandler, that enables to specify the protocol
-type SyncHandler struct {
-	Protocol SyncProtocol
-	Handler  RequestHandler
-}
-
-// WithHandler enables to inject an SyncHandler
-func WithHandler(protocol SyncProtocol, handler RequestHandler) *SyncHandler {
-	return &SyncHandler{
-		Protocol: protocol,
-		Handler:  handler,
-	}
-}
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme
 type MsgValidationResult int32
