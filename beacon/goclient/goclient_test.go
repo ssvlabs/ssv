@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -34,7 +35,7 @@ func TestTimeouts(t *testing.T) {
 			BaseDelay: commonTimeout * 2,
 		})
 		_, err := mockClient(t, ctx, undialableServer.URL, commonTimeout, longTimeout)
-		require.ErrorContains(t, err, "context deadline exceeded")
+		require.ErrorContains(t, err, "client is not active")
 	}
 
 	// Too slow to respond to the Validators request.
@@ -46,8 +47,15 @@ func TestTimeouts(t *testing.T) {
 		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
+		validators, err := client.(*goClient).GetValidatorData(nil) // Should call BeaconState internally.
 		require.NoError(t, err)
-		_, err = client.(*goClient).GetValidatorData(nil) // Shouldn't call BeaconState internally.
+
+		var validatorKeys []phase0.BLSPubKey
+		for _, v := range validators {
+			validatorKeys = append(validatorKeys, v.Validator.PublicKey)
+		}
+
+		_, err = client.(*goClient).GetValidatorData(validatorKeys) // Shouldn't call BeaconState internally.
 		require.ErrorContains(t, err, "context deadline exceeded")
 
 		duties, err := client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
