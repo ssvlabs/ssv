@@ -70,6 +70,35 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 	beaconBlock := proposalResp.Data
 
+	if beaconBlock.Blinded {
+		switch beaconBlock.Version {
+		case spec.DataVersionCapella:
+			if beaconBlock.CapellaBlinded == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block is nil")
+			}
+			if beaconBlock.CapellaBlinded.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block body is nil")
+			}
+			if beaconBlock.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block execution payload header is nil")
+			}
+			return beaconBlock.CapellaBlinded, beaconBlock.Version, nil
+		case spec.DataVersionDeneb:
+			if beaconBlock.DenebBlinded == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block contents is nil")
+			}
+			if beaconBlock.DenebBlinded.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block body is nil")
+			}
+			if beaconBlock.DenebBlinded.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
+			}
+			return beaconBlock.DenebBlinded, beaconBlock.Version, nil
+		default:
+			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
+		}
+	}
+
 	switch beaconBlock.Version {
 	case spec.DataVersionCapella:
 		if beaconBlock.Capella == nil {
@@ -96,7 +125,6 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
 		}
 		return beaconBlock.Deneb, beaconBlock.Version, nil
-
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
 	}

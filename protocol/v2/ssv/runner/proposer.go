@@ -447,16 +447,6 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)
 		}
 
-	case *api.VersionedBlindedProposal:
-		switch b.Version {
-		case spec.DataVersionCapella:
-			return summarizeBlock(b.Capella)
-		case spec.DataVersionDeneb:
-			return summarizeBlock(b.Deneb)
-		default:
-			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
-		}
-
 	case *capella.BeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
