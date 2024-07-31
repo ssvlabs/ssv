@@ -55,11 +55,18 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
 	return true
 }
 
+// TODO: REVERT!
+const DISABLE_IP_RATE_LIMIT = true
+
 // InterceptAccept is called as soon as a transport listener receives an
 // inbound connection request, before any upgrade takes place. Transports who
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
 func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+	if DISABLE_IP_RATE_LIMIT {
+		return true
+	}
+
 	remoteAddr := multiaddrs.RemoteMultiaddr()
 	if !n.validateDial(remoteAddr) {
 		// Yield this goroutine to allow others to run in-between connection attempts.
