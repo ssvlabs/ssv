@@ -25,11 +25,10 @@ import (
 type AttesterRunner struct {
 	BaseRunner *BaseRunner
 
-	domainTypeProvider networkconfig.DomainTypeProvider
-	beacon             genesisspecssv.BeaconNode
-	network            genesisspecssv.Network
-	signer             genesisspectypes.KeyManager
-	valCheck           genesisspecqbft.ProposedValueCheckF
+	beacon   genesisspecssv.BeaconNode
+	network  genesisspecssv.Network
+	signer   genesisspectypes.KeyManager
+	valCheck genesisspecqbft.ProposedValueCheckF
 
 	started time.Time
 	metrics metrics.ConsensusMetrics
@@ -120,7 +119,7 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesis
 
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.domainTypeProvider.DomainType()), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.BaseRunner.DomainTypeProvider.DomainType()), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
