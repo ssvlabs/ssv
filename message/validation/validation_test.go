@@ -1626,17 +1626,16 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		data, err := messages.Encode()
 		require.NoError(t, err)
 
-		msgID := spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, encodedCommitteeID, committeeRole)
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   msgID,
+			MsgID:   nonCommitteeIdentifier,
 			Data:    data,
 		}
 
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
 	})
