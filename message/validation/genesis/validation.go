@@ -388,13 +388,13 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 		err.want = maxMessageSize
 		return nil, descriptor, err
 	}
-	domain := mv.netCfg.DomainType()
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(domain[:])
-		return nil, descriptor, err
-	}
+	// domain := mv.netCfg.DomainType()
+	// if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
+	// 	err := ErrWrongDomain
+	// 	err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
+	// 	err.want = hex.EncodeToString(domain[:])
+	// 	return nil, descriptor, err
+	// }
 
 	validatorPK := ssvMessage.GetID().GetPubKey()
 	role := ssvMessage.GetID().GetRoleType()
