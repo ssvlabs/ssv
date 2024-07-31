@@ -476,9 +476,8 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			}
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-			// TODO fix this
-			//slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier, receivedAt)
-			descriptor.Slot = partialSignatureMessage.Message.Slot
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier, receivedAt)
+			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
 			}
