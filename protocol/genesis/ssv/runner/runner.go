@@ -11,6 +11,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 )
 
@@ -46,12 +47,13 @@ type Runner interface {
 }
 
 type BaseRunner struct {
-	mtx            sync.RWMutex
-	State          *State
-	Share          *genesisspectypes.Share
-	QBFTController *controller.Controller
-	BeaconNetwork  genesisspectypes.BeaconNetwork
-	BeaconRoleType genesisspectypes.BeaconRole
+	mtx                sync.RWMutex
+	State              *State
+	Share              *genesisspectypes.Share
+	QBFTController     *controller.Controller
+	DomainTypeProvider networkconfig.DomainTypeProvider
+	BeaconNetwork      genesisspectypes.BeaconNetwork
+	BeaconRoleType     genesisspectypes.BeaconRole
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`

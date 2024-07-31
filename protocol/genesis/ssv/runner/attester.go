@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
@@ -24,16 +25,18 @@ import (
 type AttesterRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   genesisspecssv.BeaconNode
-	network  genesisspecssv.Network
-	signer   genesisspectypes.KeyManager
-	valCheck genesisspecqbft.ProposedValueCheckF
+	domainTypeProvider networkconfig.DomainTypeProvider
+	beacon             genesisspecssv.BeaconNode
+	network            genesisspecssv.Network
+	signer             genesisspectypes.KeyManager
+	valCheck           genesisspecqbft.ProposedValueCheckF
 
 	started time.Time
 	metrics metrics.ConsensusMetrics
 }
 
 func NewAttesterRunnner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
@@ -46,6 +49,7 @@ func NewAttesterRunnner(
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType:     genesisspectypes.BNRoleAttester,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -116,7 +120,7 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesis
 
 	msgToBroadcast := &genesisspectypes.SSVMessage{
 		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.domainTypeProvider.DomainType()), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 

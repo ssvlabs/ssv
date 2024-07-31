@@ -1484,7 +1484,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		case genesisspectypes.BNRoleAttester:
 			valCheck := genesisspecssv.AttesterValueCheckF(options.GenesisOptions.Signer, genesisBeaconNetwork, options.SSVShare.Share.ValidatorPubKey[:], options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(genesisspectypes.BNRoleAttester, valCheck)
-			runners[role] = genesisrunner.NewAttesterRunnner(genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, valCheck, 0)
+			runners[role] = genesisrunner.NewAttesterRunnner(options.NetworkConfig, genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, valCheck, 0)
 		case genesisspectypes.BNRoleProposer:
 			proposedValueCheck := genesisspecssv.ProposerValueCheckF(options.GenesisOptions.Signer, genesisBeaconNetwork, options.SSVShare.Share.ValidatorPubKey[:], options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(genesisspectypes.BNRoleProposer, proposedValueCheck)
