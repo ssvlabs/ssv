@@ -51,7 +51,7 @@ type BaseRunner struct {
 	State              *State
 	Share              *genesisspectypes.Share
 	QBFTController     *controller.Controller
-	DomainTypeProvider networkconfig.DomainTypeProvider
+	DomainTypeProvider networkconfig.DomainTypeProvider `json:"-"`
 	BeaconNetwork      genesisspectypes.BeaconNetwork
 	BeaconRoleType     genesisspectypes.BeaconRole
 
