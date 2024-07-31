@@ -213,7 +213,8 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	if mv.selfAccept && peerID == mv.selfPID {
+	// if mv.selfAccept && peerID == mv.selfPID {
+	if true {
 		signedSSVMsg := &spectypes.SignedSSVMessage{}
 		if err := signedSSVMsg.Decode(pmsg.GetData()); err != nil {
 			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
