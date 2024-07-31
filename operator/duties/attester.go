@@ -75,8 +75,18 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
+			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+
+			if h.network.PastAlanForkAtEpoch(epoch) {
+				h.logger.Debug("🛠 ticker event",
+					zap.String("period_epoch_slot_pos", buildStr),
+					zap.String("status", "alan forked"),
+				)
+				continue
+			}
+
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			h.processExecution(currentEpoch, slot)

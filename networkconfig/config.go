@@ -62,6 +62,9 @@ func (n NetworkConfig) PastAlanFork() bool {
 }
 
 func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
+	println("<<<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	println(epoch >= n.AlanForkEpoch)
+	println("<<<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 	return epoch >= n.AlanForkEpoch
 }
 

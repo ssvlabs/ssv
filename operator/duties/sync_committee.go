@@ -80,6 +80,14 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			if h.network.PastAlanForkAtEpoch(epoch) {
+				h.logger.Debug("🛠 ticker event",
+					zap.String("period_epoch_slot_pos", buildStr),
+					zap.String("status", "alan forked"),
+				)
+				continue
+			}
+
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
