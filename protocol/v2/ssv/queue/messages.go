@@ -14,7 +14,6 @@ import (
 
 var (
 	ErrUnknownMessageType = fmt.Errorf("unknown message type")
-	ErrDecodeNetworkMsg   = fmt.Errorf("could not decode data into an SSVMessage")
 )
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
