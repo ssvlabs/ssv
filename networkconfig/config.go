@@ -58,13 +58,13 @@ func (n NetworkConfig) String() string {
 }
 
 func (n NetworkConfig) PastAlanFork() bool {
+	println("<<<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	println(n.Beacon.EstimatedCurrentEpoch() >= n.AlanForkEpoch)
+	println("<<<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 	return n.Beacon.EstimatedCurrentEpoch() >= n.AlanForkEpoch
 }
 
 func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
-	println("<<<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-	println(epoch >= n.AlanForkEpoch)
-	println("<<<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 	return epoch >= n.AlanForkEpoch
 }
 
