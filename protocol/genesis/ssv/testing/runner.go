@@ -8,6 +8,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 )
@@ -86,6 +87,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 	switch role {
 	case genesisspectypes.BNRoleAttester:
 		return runner.NewAttesterRunnner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			contr,
@@ -97,6 +99,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 		)
 	case genesisspectypes.BNRoleAggregator:
 		return runner.NewAggregatorRunner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			contr,
@@ -108,6 +111,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 		)
 	case genesisspectypes.BNRoleProposer:
 		return runner.NewProposerRunner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			contr,
@@ -119,6 +123,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 		)
 	case genesisspectypes.BNRoleSyncCommittee:
 		return runner.NewSyncCommitteeRunner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			contr,
@@ -130,6 +135,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 		)
 	case genesisspectypes.BNRoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			contr,
@@ -141,6 +147,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 		)
 	case genesisspectypes.BNRoleValidatorRegistration:
 		return runner.NewValidatorRegistrationRunner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			contr,
@@ -150,6 +157,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 		)
 	case genesisspectypes.BNRoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			spectestingutils.NewTestingBeaconNode(),
@@ -158,6 +166,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 		)
 	case spectestingutils.UnknownDutyType:
 		ret := runner.NewAttesterRunnner(
+			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
 			contr,
