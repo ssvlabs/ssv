@@ -28,10 +28,3 @@ func WithFullNode() Option {
 		eh.fullNode = true
 	}
 }
-
-// WithGraffiti add custom graffiti to block
-func WithGraffiti(graffiti []byte) Option {
-	return func(eh *EventHandler) {
-		eh.graffiti = graffiti
-	}
-}

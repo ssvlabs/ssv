@@ -87,7 +87,7 @@ spec:
           - name: SHARE_CONFIG
             value: "./data1/share.yaml"
           - name: GRAFFITI
-            value: "ssv.network"
+            value: "ssv.network 3"
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
