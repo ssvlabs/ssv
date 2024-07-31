@@ -4,6 +4,7 @@ package validation
 // validator.go contains main code for validation and most of the rule checks.
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
