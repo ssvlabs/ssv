@@ -352,6 +352,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrEmptyPubSubMessage
 	}
 
+	// Check if the message was sent on the right topic.
 	currentTopic := pMsg.GetTopic()
 	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
 	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
