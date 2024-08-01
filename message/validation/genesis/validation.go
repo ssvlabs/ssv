@@ -364,7 +364,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		}
 	}
 	if !topicFound {
-		mv.logger.Debug("XXX message topic not found", zap.String("topic", currentTopic), zap.String("message_id", hex.EncodeToString(msg.GetID().GetPubKey())))
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
 
