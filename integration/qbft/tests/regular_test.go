@@ -11,7 +11,7 @@ import (
 )
 
 func TestRegular4CommitteeScenario(t *testing.T) {
-	t.Skip("test causes stuck package tests")
+	t.Skip("tests in this package are stuck")
 
 	regular := &Scenario{
 		Committee: 4,
@@ -37,7 +37,7 @@ func TestRegular4CommitteeScenario(t *testing.T) {
 }
 
 func TestRegular7CommitteeScenario(t *testing.T) {
-	t.Skip("test causes stuck package tests")
+	t.Skip("tests in this package are stuck")
 
 	regular := &Scenario{
 		Committee: 7,
@@ -69,7 +69,7 @@ func TestRegular7CommitteeScenario(t *testing.T) {
 }
 
 func TestRegular10CommitteeScenario(t *testing.T) {
-	t.Skip("test causes stuck package tests")
+	t.Skip("tests in this package are stuck")
 
 	regular := &Scenario{
 		Committee: 10,

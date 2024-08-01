@@ -33,7 +33,6 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -333,12 +332,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	msg, err := genesisqueue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
-		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
+		if errors.Is(err, genesisqueue.ErrUnknownMessageType) {
 			e := ErrMalformedPubSubMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
-		if errors.Is(err, queue.ErrUnknownMessageType) {
+		if errors.Is(err, genesisqueue.ErrUnknownMessageType) {
 			e := ErrUnknownSSVMessageType
 			e.innerErr = err
 			return nil, Descriptor{}, e
@@ -478,7 +477,7 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 			// TODO fix this
-			//slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
+			//slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier, receivedAt)
 			descriptor.Slot = partialSignatureMessage.Message.Slot
 			if err != nil {
 				return nil, descriptor, err
@@ -489,6 +488,9 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 
 		case spectypes.DKGMsgType:
 			return nil, descriptor, ErrDKGMessage
+
+		default:
+			return nil, descriptor, ErrUnknownSSVMessageType
 		}
 	}
 
