@@ -23,6 +23,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
@@ -41,6 +42,7 @@ type ProposerRunner struct {
 }
 
 func NewProposerRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
@@ -53,6 +55,7 @@ func NewProposerRunner(
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType:     genesisspectypes.BNRoleProposer,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,

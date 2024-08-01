@@ -7,14 +7,6 @@ variables:
   IMAGE_NAME: ssv-node
   DOCKER_BUILDKIT: 1
 
-  #STAGE
-  ACCOUNT_ID_INFRA_STAGE: 121827225315
-  AWS_REGION_INFRA_STAGE: "us-west-2"
-  DOCKER_REPO_INFRA_STAGE: $ACCOUNT_ID_INFRA_STAGE.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
-  APP_REPLICAS_INFRA_STAGE: "1"
-  ECRLOGIN_INFRA_STAGE: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_STAGE --region $AWS_REGION_INFRA_STAGE --no-include-email"
-  STAGE_HEALTH_CHECK_IMAGE: 121827225315.dkr.ecr.us-west-2.amazonaws.com/infra-stage-repo:ubuntu20
-
   #PRODUCTION
   ACCOUNT_ID_INFRA_PROD: 764289642555
   AWS_REGION_INFRA_PROD: "us-west-2"
@@ -22,86 +14,6 @@ variables:
   APP_REPLICAS_INFRA_PROD: "1"
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
   PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
-
-# +-------+
-# | STAGE |
-# +-------+
-Build stage Docker image:
-  image: docker:20.10.23
-  stage: build
-  tags:
-    - blox-infra-stage
-  script:
-    - apk add --no-cache py-pip
-    - pip install pyyaml==5.3.1
-    - pip install awscli
-    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHA -f Dockerfile .
-    - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
-    - docker tag $IMAGE_NAME:$CI_COMMIT_SHA $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
-    - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
-  only:
-    - alan/no-fork
-
-
-# +---------------------+
-# | STAGE HETZNER NODES |
-# +---------------------+
-
-
-Deploy nodes to hetzner stage:
-  stage: deploy
-  tags:
-    - hetzner-k8s-stage
-  image: bitnami/kubectl:1.27.5
-  script:
-    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
-    - export SSV_NODES_CPU_LIMIT=$HETZNER_STAGE_SSV_NODES_CPU_LIMIT
-    - export SSV_NODES_MEM_LIMIT=$HETZNER_STAGE_SSV_NODES_MEM_LIMIT
-    - echo $HETZNER_KUBECONFIG | base64 -d > kubeconfig
-    - mv kubeconfig ~/.kube/
-    - export KUBECONFIG=~/.kube/kubeconfig
-    - kubectl config get-contexts
-    #
-    # +--------------------+
-    # |  Deploy SSV nodes  |
-    # +--------------------+
-    - .k8/hetzner-stage/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-5--8.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-9--12.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-13--16.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-17--20.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-21--24.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-25--28.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-29--32.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-33--36.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-37--40.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-41--44.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-45--48.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-49--52.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-53--56.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-57--60.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-61--64.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-65--68.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/hetzner-stage/scripts/deploy-cluster-69--72.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-  only:
-    - alan/no-fork
-
-Deploy exporter to hetzner stage:
-  stage: deploy
-  tags:
-    - hetzner-k8s-stage
-  image: bitnami/kubectl:1.27.5
-  script:
-    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
-    - export SSV_EXPORTER_CPU_LIMIT=$STAGE_SSV_EXPORTER_CPU_LIMIT
-    - export SSV_EXPORTER_MEM_LIMIT=$STAGE_SSV_EXPORTER_MEM_LIMIT
-    - echo $HETZNER_KUBECONFIG | base64 -d > kubeconfig
-    - mv kubeconfig ~/.kube/
-    - export KUBECONFIG=~/.kube/kubeconfig
-    - kubectl config get-contexts
-    - .k8/hetzner-stage/scripts/deploy-holesky-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
-  only:
-    - alan/no-fork
 
 # +---------------+
 # |     Prod      |

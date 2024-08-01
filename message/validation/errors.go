@@ -155,10 +155,3 @@ func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMes
 
 	return pubsub.ValidationAccept
 }
-
-// func (mv *messageValidator) handleGenesisValidationSuccess(decodedMessage *genesisqueue.GenesisSSVMessage) pubsub.ValidationResult {
-// 	// loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
-// 	// mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
-
-// 	return pubsub.ValidationAccept
-// }

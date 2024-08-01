@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
@@ -32,6 +33,7 @@ type SyncCommitteeRunner struct {
 }
 
 func NewSyncCommitteeRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
@@ -44,6 +46,7 @@ func NewSyncCommitteeRunner(
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType:     genesisspectypes.BNRoleSyncCommittee,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
