@@ -87,7 +87,6 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	logger.Info("Starting committee consume queue")
 	r := c.Runners[duty.Slot]
 	if r == nil {
 		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
