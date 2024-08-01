@@ -216,6 +216,12 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
+
+	duty := r.GetState().DecidedValue.Duty
+	logger = logger.With(fields.Slot(duty.Slot))
+	logger.Debug("🧩 got partial signatures",
+		zap.Uint64("signer", signedMsg.Signer))
+
 	if !quorum {
 		return nil
 	}
@@ -234,6 +240,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
+		logger.Debug("🧩 reconstructed partial signatures",
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)))
+
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		start := time.Now()
@@ -247,7 +256,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-
+				logger.Error("❌ could not submit to Beacon chain reconstructed signed blinded Beacon block", zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
@@ -259,7 +268,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-
+				logger.Error("❌ could not submit to Beacon chain reconstructed signed Beacon block", zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
