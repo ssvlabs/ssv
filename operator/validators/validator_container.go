@@ -2,6 +2,7 @@ package validators
 
 import (
 	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
+	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
@@ -32,4 +33,16 @@ func (vc *ValidatorContainer) Stop() {
 
 func (vc *ValidatorContainer) Share() *types.SSVShare {
 	return vc.Validator.Share
+}
+
+func (vc *ValidatorContainer) UpdateValidatorShare(updateFunc func(*types.SSVShare)) {
+	if vc.Validator != nil {
+		updateFunc(vc.Validator.Share)
+	}
+}
+
+func (vc *ValidatorContainer) UpdateGenesisShare(updateFunc func(*genesistypes.SSVShare)) {
+	if vc.GenesisValidator != nil {
+		updateFunc(vc.GenesisValidator.Share)
+	}
 }
