@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
 
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/discovery"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"

@@ -6,11 +6,11 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv-spec/p2p"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
@@ -31,6 +31,7 @@ type Subscriber interface {
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
 	Broadcast(id spectypes.MessageID, message *spectypes.SignedSSVMessage) error
+	BroadcastRaw([]string, []byte) error
 }
 
 // RequestHandler handles p2p requests

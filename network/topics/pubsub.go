@@ -8,11 +8,11 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"

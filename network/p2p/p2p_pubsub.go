@@ -106,6 +106,23 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	return nil
 }
 
+func (n *p2pNetwork) BroadcastRaw(topics []string, encodedMsg []byte) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+
+	if !n.operatorDataStore.OperatorIDReady() {
+		return fmt.Errorf("operator ID is not ready")
+	}
+
+	for _, topic := range topics {
+		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
+			return fmt.Errorf("could not broadcast msg: %w", err)
+		}
+	}
+	return nil
+}
+
 func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady

@@ -11,9 +11,9 @@ import (
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
