@@ -279,11 +279,14 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 					break
 				}
 				if i == len(validOrders)-1 {
-					require.Fail(t, "invalid order", "node %d", node.Index)
+					require.Fail(t, "invalid order", "node %d, peers %v", node.Index, peers)
 				}
 			}
 		}()
 	}
+
+	time.Sleep(1 * time.Second)
+
 	defer fmt.Println()
 }
 
