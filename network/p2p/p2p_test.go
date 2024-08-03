@@ -337,10 +337,6 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 	return id, signedSSVMsg
 }
 
-func dummySignSSVMessage(_ *spectypes.SSVMessage) ([]byte, error) {
-	return []byte{}, nil
-}
-
 type dummyRouter struct {
 	count uint64
 	i     int
