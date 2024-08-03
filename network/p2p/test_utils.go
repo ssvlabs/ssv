@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -26,7 +24,6 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -150,29 +147,22 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		return nil, err
 	}
 
-	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
-			},
-			Liquidated: false,
-		},
-	}
-
-	if err := nodeStorage.Shares().Save(nil, share); err != nil {
-		return nil, err
-	}
-
-	for _, sm := range share.Committee {
-		_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
-			ID:           sm.Signer,
-			PublicKey:    operatorPubkey,
-			OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
-		})
-		if err != nil {
+	for _, share := range options.Shares {
+		if err := nodeStorage.Shares().Save(nil, share); err != nil {
 			return nil, err
+		}
+	}
+
+	for _, share := range options.Shares {
+		for _, sm := range share.Committee {
+			_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
+				ID:           sm.Signer,
+				PublicKey:    operatorPubkey,
+				OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
+			})
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -244,6 +234,7 @@ type LocalNetOptions struct {
 	TotalValidators, ActiveValidators, MyValidators int
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
+	Shares                                          []*ssvtypes.SSVShare
 }
 
 // NewLocalNet creates a new mdns network
