@@ -152,8 +152,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if err != nil {
 		return errors.Wrap(err, "could not get domain type")
 	}
-	if nodeDomainType != dvs.domainType.DomainType() &&
-		nodeDomainType != dvs.domainType.NextDomainType() {
+	if nodeDomainType != dvs.domainType.DomainType() && nodeDomainType != dvs.domainType.NextDomainType() {
 		return errors.New("domain type mismatch")
 	}
 

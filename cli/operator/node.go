@@ -242,6 +242,7 @@ var StartNodeCmd = &cobra.Command{
 			messageValidator = alanMsgValidator
 		} else {
 			messageValidator = &validation.ForkingMessageValidation{
+				Logger:        logger,
 				NetworkConfig: networkConfig,
 				Alan:          alanMsgValidator,
 				Genesis: genesisvalidation.New(
