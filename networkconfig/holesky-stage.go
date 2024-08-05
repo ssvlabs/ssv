@@ -11,7 +11,7 @@ import (
 var HoleskyStage = NetworkConfig{
 	Name:                 "holesky-stage",
 	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
-	GenesisDomainType:    [4]byte{0x00, 0x00, 0x31, 0x12},
+	GenesisDomainType:    [4]byte{0x00, 0x00, 0x31, 0x11},
 	AlanDomainType:       [4]byte{0x00, 0x00, 0x31, 0x13},
 	GenesisEpoch:         1,
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
