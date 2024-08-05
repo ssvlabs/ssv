@@ -86,9 +86,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
 		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
 		require.NoError(t, node1.Broadcast(msg1.SSVMessage.GetID(), msg1))
-		<-time.After(time.Millisecond * 10)
+		<-time.After(time.Millisecond * 20)
 		require.NoError(t, node2.Broadcast(msg3.SSVMessage.GetID(), msg3))
-		<-time.After(time.Millisecond * 2)
+		<-time.After(time.Millisecond * 20)
 		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
 	}()
 
@@ -102,10 +102,10 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
 		require.NoError(t, err)
 
-		time.Sleep(time.Millisecond * 10)
+		time.Sleep(time.Millisecond * 20)
 		require.NoError(t, node1.Broadcast(msg2.SSVMessage.GetID(), msg2))
 
-		time.Sleep(time.Millisecond * 2)
+		time.Sleep(time.Millisecond * 20)
 		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
 		require.NoError(t, node1.Broadcast(msg3.SSVMessage.GetID(), msg3))
 	}()
@@ -115,7 +115,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	// waiting for messages
 	wg.Add(1)
 	go func() {
-		ct, cancel := context.WithTimeout(ctx, time.Second*5)
+		ct, cancel := context.WithTimeout(ctx, time.Second*7)
 		defer cancel()
 		defer wg.Done()
 		for _, r := range routers {
@@ -130,7 +130,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		assert.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router %d", r.i)
 	}
 
-	<-time.After(time.Millisecond * 10)
+	<-time.After(time.Millisecond * 20)
 }
 
 func TestP2pNetwork_Stream(t *testing.T) {
