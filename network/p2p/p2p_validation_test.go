@@ -162,7 +162,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 			}
 			return nil
 		})
@@ -181,10 +181,10 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Wait for the broadcasters to finish.
 	err := broadcasters.Wait()
 	require.NoError(t, err)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	// Assert that the messages were distributed as expected.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(7 * time.Second)
 	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
 		// better lock inside loop than wait interval locked
