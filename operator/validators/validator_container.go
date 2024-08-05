@@ -1,6 +1,8 @@
 package validators
 
 import (
+	"sync"
+
 	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
 	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -11,6 +13,7 @@ import (
 type ValidatorContainer struct {
 	Validator        *validator.Validator
 	GenesisValidator *genesisvalidator.Validator
+	mtx              sync.Mutex
 }
 
 func (vc *ValidatorContainer) Start(logger *zap.Logger) (started bool, err error) {
@@ -35,14 +38,17 @@ func (vc *ValidatorContainer) Share() *types.SSVShare {
 	return vc.Validator.Share
 }
 
-func (vc *ValidatorContainer) UpdateValidatorShare(updateFunc func(*types.SSVShare)) {
-	if vc.Validator != nil {
-		updateFunc(vc.Validator.Share)
-	}
-}
-
-func (vc *ValidatorContainer) UpdateGenesisShare(updateFunc func(*genesistypes.SSVShare)) {
-	if vc.GenesisValidator != nil {
-		updateFunc(vc.GenesisValidator.Share)
+func (vc *ValidatorContainer) UpdateShare(updateFunc func(*genesistypes.SSVShare, *types.SSVShare)) {
+	vc.mtx.Lock()
+	defer vc.mtx.Unlock()
+	switch {
+	case vc.GenesisValidator != nil && vc.Validator != nil:
+		updateFunc(vc.GenesisValidator.Share, vc.Validator.Share)
+	case vc.GenesisValidator != nil:
+		updateFunc(vc.GenesisValidator.Share, nil)
+	case vc.Validator != nil:
+		updateFunc(nil, vc.Validator.Share)
+	default:
+		updateFunc(nil, nil)
 	}
 }
