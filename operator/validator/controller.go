@@ -967,15 +967,16 @@ func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconpro
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
 		if !v.Share().BeaconMetadata.Equals(meta) {
-			v.UpdateShare(func(share *types.SSVShare) {
-				share.BeaconMetadata.Status = meta.Status
-				share.BeaconMetadata.Balance = meta.Balance
-				share.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
-			},
-				func(share *genesistypes.SSVShare) {
-					share.BeaconMetadata.Status = meta.Status
-					share.BeaconMetadata.Balance = meta.Balance
-					share.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
+			v.UpdateShare(
+				func(s *types.SSVShare) {
+					s.BeaconMetadata.Status = meta.Status
+					s.BeaconMetadata.Balance = meta.Balance
+					s.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
+				},
+				func(s *genesistypes.SSVShare) {
+					s.BeaconMetadata.Status = meta.Status
+					s.BeaconMetadata.Balance = meta.Balance
+					s.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
 				},
 			)
 			logger.Debug("metadata was updated")

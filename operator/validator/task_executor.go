@@ -92,11 +92,13 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 
 	c.validatorsMap.ForEachValidator(func(v *validators.ValidatorContainer) bool {
 		if v.Share().OwnerAddress == owner {
-			v.UpdateShare(func(share *types.SSVShare) {
-				share.FeeRecipientAddress = recipient
-			}, func(share *genesistypes.SSVShare) {
-				share.FeeRecipientAddress = recipient
-			})
+			v.UpdateShare(
+				func(s *types.SSVShare) {
+					s.FeeRecipientAddress = recipient
+				}, func(s *genesistypes.SSVShare) {
+					s.FeeRecipientAddress = recipient
+				},
+			)
 
 			logger.Debug("updated recipient address")
 		}
