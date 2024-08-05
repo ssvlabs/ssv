@@ -30,6 +30,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/multiformats/go-multiaddr v0.12.1
+	github.com/multiformats/go-multistream v0.4.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.16.0
@@ -38,7 +39,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
-	github.com/ssvlabs/ssv-spec v0.3.10-0.20240714102935-0cbc8252c0fe
+	github.com/ssvlabs/ssv-spec v0.3.11-0.20240714201559-ccf408d1ecd8
 	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240725052506-c48532da6a63
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
@@ -167,7 +168,6 @@ require (
 	github.com/multiformats/go-multibase v0.2.0 // indirect
 	github.com/multiformats/go-multicodec v0.9.0 // indirect
 	github.com/multiformats/go-multihash v0.2.2 // indirect
-	github.com/multiformats/go-multistream v0.4.1 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.7 // indirect
@@ -232,6 +232,3 @@ replace github.com/attestantio/go-eth2-client => github.com/moshe-blox/go-eth2-c
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-// TODO (Alan) fix spec tests by mergeing builder proposals removing into the main spec
-//replace github.com/ssvlabs/ssv-spec => github.com/ssvlabs/ssv-spec v0.3.10-0.20240519135356-bf5598c26211
