@@ -200,7 +200,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 
 	filters := func() []connections.HandshakeFilter {
 		return []connections.HandshakeFilter{
-			connections.NetworkIDFilter(domain),
+			connections.NetworkIDFilter(n.cfg.Network),
 		}
 	}
 
