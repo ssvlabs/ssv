@@ -157,7 +157,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				roleBroadcasts[role]++
 				mu.Unlock()
 
-				//msgID, msg := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
 				msgID, msg := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
 				err := node.Broadcast(msgID, msg)
 				if err != nil {
@@ -210,7 +209,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		time.Sleep(interval)
 	}
 
-	time.Sleep(1 * time.Second)
+	//time.Sleep(1 * time.Second)
 
 	// Assert that each node scores it's peers according to the following order:
 	// - node 0, (node 1 OR 3), (node 1 OR 3), node 2
