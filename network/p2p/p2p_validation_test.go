@@ -209,8 +209,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		time.Sleep(interval)
 	}
 
-	//time.Sleep(1 * time.Second)
-
 	// Assert that each node scores it's peers according to the following order:
 	// - node 0, (node 1 OR 3), (node 1 OR 3), node 2
 	// (after excluding itself from this list)
