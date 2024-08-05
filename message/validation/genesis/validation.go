@@ -247,6 +247,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	}
 
 	f := append(descriptor.Fields(), fields.PeerID(peerID))
+	f = append(f, zap.String("pmsg.id", pmsg.ID))
 
 	if err != nil {
 		var valErr Error

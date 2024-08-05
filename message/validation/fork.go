@@ -19,16 +19,16 @@ type ForkingMessageValidation struct {
 
 func (f *ForkingMessageValidation) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if f.NetworkConfig.PastAlanFork() {
-		f.Logger.Warn("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PastAlanFork (Validate)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+		f.Logger.Warn("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PastAlanFork (Validate)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", zap.String("pmsg.ID", pmsg.ID))
 		return f.Alan.Validate(ctx, p, pmsg)
 	}
-	f.Logger.Warn("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PreAlanFork (Validate)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	f.Logger.Warn("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PreAlanFork (Validate)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", zap.String("pmsg.ID", pmsg.ID))
 	return f.Genesis.Validate(ctx, p, pmsg)
 }
 
 func (f *ForkingMessageValidation) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if f.NetworkConfig.PastAlanFork() {
-		f.Logger.Warn("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PastAlanFork (ValidatorForTopic)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+		f.Logger.Warn("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PreAlanFork (ValidatorForTopic)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 		return f.Alan.ValidatorForTopic(topic)
 	}
 	f.Logger.Warn("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PreAlanFork (ValidatorForTopic)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
