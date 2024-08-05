@@ -52,5 +52,4 @@ func (vc *ValidatorContainer) UpdateShare(updateAlan func(*types.SSVShare), upda
 	if vc.GenesisValidator != nil {
 		updateGenesis(vc.GenesisValidator.Share)
 	}
-	return nil
 }
