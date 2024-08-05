@@ -70,6 +70,8 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
 
+	time.Sleep(3 * time.Second)
+
 	defer func() {
 		for _, node := range ln.Nodes {
 			require.NoError(t, node.(*p2pNetwork).Close())
@@ -115,7 +117,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	// waiting for messages
 	wg.Add(1)
 	go func() {
-		ct, cancel := context.WithTimeout(ctx, time.Second*15)
+		ct, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		defer wg.Done()
 		for _, r := range routers {
@@ -129,8 +131,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	for _, r := range routers {
 		assert.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router %d", r.i)
 	}
-
-	<-time.After(time.Millisecond * 3)
 }
 
 func TestP2pNetwork_Stream(t *testing.T) {
