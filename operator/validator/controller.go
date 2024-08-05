@@ -748,11 +748,11 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
 			v.UpdateShare(
-				func(share *types.SSVShare) {
-					share.BeaconMetadata = share.BeaconMetadata
-					share.ValidatorIndex = share.ValidatorIndex
-				}, func(share *genesistypes.SSVShare) {
-					share.BeaconMetadata = share.BeaconMetadata
+				func(s *types.SSVShare) {
+					s.BeaconMetadata = share.BeaconMetadata
+					s.ValidatorIndex = share.ValidatorIndex
+				}, func(s *genesistypes.SSVShare) {
+					s.BeaconMetadata = share.BeaconMetadata
 				},
 			)
 			_, err := c.startValidator(v)
