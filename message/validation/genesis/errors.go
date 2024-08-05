@@ -61,7 +61,7 @@ var (
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrDecodedPubSubMessageHasEmptyData    = Error{text: "pub-sub decoded message has empty data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
-	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
+	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed (genesis)", reject: true}
 	ErrEmptyPubSubMessage                  = Error{text: "pub-sub message is empty", reject: true}
 	ErrTopicNotFound                       = Error{text: "topic not found", reject: true}
 	ErrSSVDataTooBig                       = Error{text: "ssv message data too big", reject: true}

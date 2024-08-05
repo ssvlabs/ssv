@@ -74,7 +74,7 @@ var (
 	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
 	ErrPubSubMessageHasNoData                  = Error{text: "pub-sub message has no data", reject: true}
-	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed", reject: true}
+	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed (alan)", reject: true}
 	ErrNilSignedSSVMessage                     = Error{text: "signed ssv message is nil", reject: true}
 	ErrNilSSVMessage                           = Error{text: "ssv message is nil", reject: true}
 	ErrSSVDataTooBig                           = Error{text: "ssv message data too big", reject: true}

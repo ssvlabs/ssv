@@ -18,6 +18,7 @@ type ForkingMessageValidation struct {
 }
 
 func (f *ForkingMessageValidation) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	f.Logger.Info("<<<<<<<<<<<<<<<<<<<<<<<<<<<<Validate>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 	if f.NetworkConfig.PastAlanFork() {
 		f.Logger.Info("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PastAlanFork (Validate)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", zap.String("pmsg.ID", pmsg.ID))
 		return f.Alan.Validate(ctx, p, pmsg)
@@ -27,6 +28,7 @@ func (f *ForkingMessageValidation) Validate(ctx context.Context, p peer.ID, pmsg
 }
 
 func (f *ForkingMessageValidation) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	f.Logger.Info("<<<<<<<<<<<<<<<<<<<<<<<<<<<<ValidatorForTopic>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 	if f.NetworkConfig.PastAlanFork() {
 		f.Logger.Info("<<<<<<<<<<<<<<<<<<<<<<<<<<<<PreAlanFork (ValidatorForTopic)>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 		return f.Alan.ValidatorForTopic(topic)
