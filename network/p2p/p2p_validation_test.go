@@ -165,7 +165,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				time.Sleep(20 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 			}
 			return nil
 		})
