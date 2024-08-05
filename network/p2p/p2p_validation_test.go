@@ -139,9 +139,12 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex int) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
+
 	defer func() {
 		require.NoError(t, vNet.Close())
 	}()
+
+	time.Sleep(3 * time.Second)
 
 	// Prepare a pool of broadcasters.
 	mu := sync.Mutex{}
