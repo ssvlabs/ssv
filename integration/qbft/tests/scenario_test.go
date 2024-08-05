@@ -73,14 +73,14 @@ func (s *Scenario) Run(t *testing.T, role spectypes.RunnerRole) {
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
 
 				var ssvMsg *spectypes.SSVMessage
-				switch duty.(type) {
+				switch d := duty.(type) {
 				case *spectypes.ValidatorDuty:
-					msg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.ValidatorDuty), pk[:], networkconfig.TestNetwork.DomainType())
+					msg, err := validator.CreateDutyExecuteMsg(d, pk[:], networkconfig.TestNetwork.DomainType())
 					require.NoError(t, err)
 
 					ssvMsg = msg
 				case *spectypes.CommitteeDuty:
-					msg, err := validator.CreateCommitteeDutyExecuteMsg(duty.(*spectypes.CommitteeDuty), spectypes.CommitteeID(pk[16:]), networkconfig.TestNetwork.DomainType())
+					msg, err := validator.CreateCommitteeDutyExecuteMsg(d, spectypes.CommitteeID(pk[16:]), networkconfig.TestNetwork.DomainType())
 					require.NoError(t, err)
 
 					ssvMsg = msg
