@@ -215,73 +215,71 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	for _, node := range vNet.Nodes {
 		node := node
 
-		func() { // for defer
-			// Prepare the valid orders, excluding the node itself.
-			validOrders := [][]NodeIndex{
-				{0, 1, 3, 2},
-				{0, 3, 1, 2},
-			}
-			for i, validOrder := range validOrders {
-				for j, index := range validOrder {
-					if index == node.Index {
-						validOrders[i] = append(validOrders[i][:j], validOrders[i][j+1:]...)
-						break
-					}
-				}
-			}
-
-			// Sort peers by their scores.
-			type peerScore struct {
-				index NodeIndex
-				score float64
-			}
-			peers := make([]peerScore, 0, node.PeerScores.Len())
-			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
-				peers = append(peers, peerScore{index, snapshot.Score})
-				return true
-			})
-			sort.Slice(peers, func(i, j int) bool {
-				return peers[i].score > peers[j].score
-			})
-
-			// Print a pretty table of each node's peers and their scores.
-			defer func() {
-				tbl := table.New(os.Stdout)
-				tbl.SetHeaders("Peer", "Score", "Accepted", "Ignored", "Rejected")
-				mtx.Lock()
-				for _, peer := range peers {
-					tbl.AddRow(
-						fmt.Sprintf("%d", peer.index),
-						fmt.Sprintf("%.2f", peer.score),
-						fmt.Sprintf("%d", messageValidators[node.Index].Accepted[peer.index]),
-						fmt.Sprintf("%d", messageValidators[node.Index].Ignored[peer.index]),
-						fmt.Sprintf("%d", messageValidators[node.Index].Rejected[peer.index]),
-					)
-				}
-				mtx.Unlock()
-				fmt.Println()
-				fmt.Printf("Peer Scores (Node %d)\n", node.Index)
-				tbl.Render()
-			}()
-
-			// Assert that the peers are in one of the valid orders.
-			require.Equal(t, len(vNet.Nodes)-1, len(peers), "node %d", node.Index)
-			for i, validOrder := range validOrders {
-				valid := true
-				for j, peer := range peers {
-					if peer.index != validOrder[j] {
-						valid = false
-						break
-					}
-				}
-				if valid {
+		// Prepare the valid orders, excluding the node itself.
+		validOrders := [][]NodeIndex{
+			{0, 1, 3, 2},
+			{0, 3, 1, 2},
+		}
+		for i, validOrder := range validOrders {
+			for j, index := range validOrder {
+				if index == node.Index {
+					validOrders[i] = append(validOrders[i][:j], validOrders[i][j+1:]...)
 					break
 				}
-				if i == len(validOrders)-1 {
-					require.Fail(t, "invalid order", "node %d, peers %v", node.Index, peers)
+			}
+		}
+
+		// Sort peers by their scores.
+		type peerScore struct {
+			index NodeIndex
+			score float64
+		}
+		peers := make([]peerScore, 0, node.PeerScores.Len())
+		node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
+			peers = append(peers, peerScore{index, snapshot.Score})
+			return true
+		})
+		sort.Slice(peers, func(i, j int) bool {
+			return peers[i].score > peers[j].score
+		})
+
+		// Print a pretty table of each node's peers and their scores.
+		defer func() {
+			tbl := table.New(os.Stdout)
+			tbl.SetHeaders("Peer", "Score", "Accepted", "Ignored", "Rejected")
+			mtx.Lock()
+			for _, peer := range peers {
+				tbl.AddRow(
+					fmt.Sprintf("%d", peer.index),
+					fmt.Sprintf("%.2f", peer.score),
+					fmt.Sprintf("%d", messageValidators[node.Index].Accepted[peer.index]),
+					fmt.Sprintf("%d", messageValidators[node.Index].Ignored[peer.index]),
+					fmt.Sprintf("%d", messageValidators[node.Index].Rejected[peer.index]),
+				)
+			}
+			mtx.Unlock()
+			fmt.Println()
+			fmt.Printf("Peer Scores (Node %d)\n", node.Index)
+			tbl.Render()
+		}()
+
+		// Assert that the peers are in one of the valid orders.
+		require.Equal(t, len(vNet.Nodes)-1, len(peers), "node %d", node.Index)
+		for i, validOrder := range validOrders {
+			valid := true
+			for j, peer := range peers {
+				if peer.index != validOrder[j] {
+					valid = false
+					break
 				}
 			}
-		}()
+			if valid {
+				break
+			}
+			if i == len(validOrders)-1 {
+				require.Fail(t, "invalid order", "node %d, peers %v", node.Index, peers)
+			}
+		}
 	}
 
 	defer fmt.Println()
