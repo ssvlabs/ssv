@@ -38,17 +38,19 @@ func (vc *ValidatorContainer) Share() *types.SSVShare {
 	return vc.Validator.Share
 }
 
-func (vc *ValidatorContainer) UpdateShare(updateFunc func(*genesistypes.SSVShare, *types.SSVShare)) {
+func (vc *ValidatorContainer) UpdateShare(updateAlan func(*types.SSVShare), updateGenesis func(*genesistypes.SSVShare)) {
+	if updateAlan == nil || updateGenesis == nil {
+		panic("both updateAlan and updateGenesis must be provided")
+	}
+
 	vc.mtx.Lock()
 	defer vc.mtx.Unlock()
-	switch {
-	case vc.GenesisValidator != nil && vc.Validator != nil:
-		updateFunc(vc.GenesisValidator.Share, vc.Validator.Share)
-	case vc.GenesisValidator != nil:
-		updateFunc(vc.GenesisValidator.Share, nil)
-	case vc.Validator != nil:
-		updateFunc(nil, vc.Validator.Share)
-	default:
-		updateFunc(nil, nil)
+
+	if vc.Validator != nil {
+		updateAlan(vc.Validator.Share)
 	}
+	if vc.GenesisValidator != nil {
+		updateGenesis(vc.GenesisValidator.Share)
+	}
+	return nil
 }
