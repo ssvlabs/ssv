@@ -42,5 +42,9 @@ func (c *Committee) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error
 		return fmt.Errorf("could not start committee consume queue: %w", err)
 	}
 
+	if err := c.StopOldRunners(logger, executeDutyData.Duty.Slot); err != nil {
+		return fmt.Errorf("could not start committee duty: %w", err)
+	}
+
 	return nil
 }

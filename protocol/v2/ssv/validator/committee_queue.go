@@ -75,28 +75,24 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler MessageHandler, runner *runner.CommitteeRunner) error {
-	if runner == nil {
-		return fmt.Errorf("could not get duty runner for slot %d", slot)
-	}
-
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
-	var q queueContainer
-
-	err := func() error {
-		v.mtx.RLock() // read v.Queues
-		defer v.mtx.RUnlock()
-		var ok bool
-		q, ok = v.Queues[slot]
-		if !ok {
-			return errors.New(fmt.Sprintf("queue not found for slot %d", slot))
+func (v *Committee) ConsumeQueue(
+	ctx context.Context,
+	q queueContainer,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	handler MessageHandler,
+	runner *runner.CommitteeRunner,
+) error {
+	// in case of any error try to call the ctx.cancel to prevent the ctx leak
+	defer func() {
+		if q.StopQueueF == nil {
+			logger.Error("⚠️ committee queue consumer StopQueueF is nil", fields.Slot(slot))
+			return
 		}
-		return nil
+		q.StopQueueF()
 	}()
-	if err != nil {
-		return err
+	if runner == nil {
+		return errors.New(fmt.Sprintf("duty runner for slot %d is nil", slot))
 	}
 
 	state := *q.queueState

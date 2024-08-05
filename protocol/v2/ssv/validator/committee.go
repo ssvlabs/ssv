@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -19,6 +20,10 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+)
+
+var (
+	maxRunnerAgeSlot = phase0.Slot(32)
 )
 
 type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner
@@ -88,13 +93,24 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
+	// Setting the cancel function separately due the queue could be created in HandleMessage
+	q, found := c.Queues[duty.Slot]
+	if !found {
+		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+	}
+
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+maxRunnerAgeSlot), 0))
+	q.StopQueueF = cancelF // DO we still need this?
+
 	r := c.Runners[duty.Slot]
 	if r == nil {
 		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
 	}
 
 	go func() {
-		err := c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, r)
+		defer cancelF()
+		err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r)
 		logger.Error("failed consuming queue", zap.Error(err))
 	}()
 	return nil
@@ -292,6 +308,60 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 	}
 	return nil
 
+}
+func (c *Committee) StopOldRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
+	// TODO: Should we keep this check to prevent overflow case for uint64? Guess no, but lets discuss.
+	if maxRunnerAgeSlot > currentSlot { //
+		return nil
+	}
+
+	firstTooOldSlot := currentSlot - maxRunnerAgeSlot
+	var oldRunnersIds []phase0.Slot
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for slot, q := range c.Queues {
+		if slot <= firstTooOldSlot {
+			if q.StopQueueF == nil {
+				c.logger.Error("⚠️ can't stop committee queue StopQueueF is nil",
+					fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+					fields.Slot(slot),
+				)
+				continue
+			}
+			logger.Info("stopping old runner queue", zap.Uint64("slot", uint64(slot)))
+			q.StopQueueF()
+			oldRunnersIds = append(oldRunnersIds, slot)
+		}
+	}
+
+	//time.Sleep(100 * time.Millisecond) // TODO: if we deleting the runners, should we do a time.sleep call here to make sure the ProcessMessage finished it work?
+	//												+ If yes, then should we unlock the mtx?
+
+	// TODO: Should we iterate through the Runners map also and delete the old ones from there? Otherwise we get the memory leak issue
+	for _, slot := range oldRunnersIds {
+		logger.Info("stopping old runner", zap.Uint64("slot", uint64(slot)))
+		delete(c.Runners, slot)
+	}
+
+	return nil
+}
+
+func (c *Committee) Stop() {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for slot, q := range c.Queues {
+		if q.StopQueueF == nil {
+			c.logger.Error("⚠️ can't stop committee queue StopQueueF is nil",
+				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+				fields.Slot(slot),
+			)
+			continue
+		}
+		q.StopQueueF()
+	}
 }
 
 func (c *Committee) Encode() ([]byte, error) {

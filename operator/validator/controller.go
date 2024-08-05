@@ -1001,7 +1001,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 				)
 				return
 			}
-			// TODO: (Alan) stop committee runners queues consumption
+			deletedCommittee.Stop()
 		}
 	}
 }
