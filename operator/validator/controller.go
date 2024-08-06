@@ -46,6 +46,7 @@ import (
 	genesisrunner "github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
@@ -57,6 +58,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -682,9 +684,14 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	// Start validator (if not already started).
 	// TODO: why its in the map if not started?
 	if v, found := c.validatorsMap.GetValidator(pk); found {
-		//TODO: replace all metadata update occurrences with a function instead
-		v.Share().BeaconMetadata = metadata
-		v.Share().ValidatorIndex = share.ValidatorIndex
+		v.UpdateShare(
+			func(s *types.SSVShare) {
+				s.BeaconMetadata = share.BeaconMetadata
+				s.ValidatorIndex = share.ValidatorIndex
+			}, func(s *genesistypes.SSVShare) {
+				s.BeaconMetadata = share.BeaconMetadata
+			},
+		)
 		_, err := c.startValidator(v)
 		if err != nil {
 			c.logger.Warn("could not start validator", zap.Error(err))
@@ -740,8 +747,14 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		// Start validator (if not already started).
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			v.Share().BeaconMetadata = share.BeaconMetadata
-			v.Share().ValidatorIndex = share.ValidatorIndex
+			v.UpdateShare(
+				func(s *types.SSVShare) {
+					s.BeaconMetadata = share.BeaconMetadata
+					s.ValidatorIndex = share.ValidatorIndex
+				}, func(s *genesistypes.SSVShare) {
+					s.BeaconMetadata = share.BeaconMetadata
+				},
+			)
 			_, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
@@ -952,9 +965,18 @@ func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconpro
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
 		if !v.Share().BeaconMetadata.Equals(meta) {
-			v.Share().BeaconMetadata.Status = meta.Status
-			v.Share().BeaconMetadata.Balance = meta.Balance
-			v.Share().BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
+			v.UpdateShare(
+				func(s *types.SSVShare) {
+					s.BeaconMetadata.Status = meta.Status
+					s.BeaconMetadata.Balance = meta.Balance
+					s.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
+				},
+				func(s *genesistypes.SSVShare) {
+					s.BeaconMetadata.Status = meta.Status
+					s.BeaconMetadata.Balance = meta.Balance
+					s.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
+				},
+			)
 			logger.Debug("metadata was updated")
 		}
 		_, err := c.startValidator(v)
