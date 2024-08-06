@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -68,7 +69,7 @@ var baseInstance = func(share *types.CommitteeMember, keySet *testingutils.TestK
 
 func NewTestingQBFTController(
 	keySet *testingutils.TestKeySet,
-	identifier []byte,
+	identifier func() spectypes.DomainType,
 	share *types.CommitteeMember,
 	config qbft.IConfig,
 	fullNode bool,

@@ -418,7 +418,7 @@ func fixInstanceForRun(t *testing.T, ks *spectestingutils.TestKeySet, inst *inst
 	newInst := instance.NewInstance(
 		contr.GetConfig(),
 		share,
-		contr.Identifier,
+		contr.GetIdentifier(),
 		contr.Height,
 		signer,
 	)

@@ -57,11 +57,10 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 }
 
 func generateController(logger *zap.Logger) *controller.Controller {
-	identifier := []byte{1, 2, 3, 4}
 	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), convert.RoleCommittee)
 	return qbfttesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
-		identifier[:],
+		func() spectypes.DomainType { return spectypes.DomainType{1, 2, 3, 4} },
 		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
 		config,
 		false,
@@ -158,8 +157,9 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 	if err := testProcessMsg(t, logger, contr, contr.GetConfig().(*qbft.Config), runData); err != nil {
 		lastErr = err
 	}
+	domainType := contr.GetIdentifier()
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), domainType, runData, contr.CommitteeMember.Committee)
 
 	// test root
 	r, err := contr.GetRoot()
