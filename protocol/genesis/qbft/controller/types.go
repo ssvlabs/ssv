@@ -44,16 +44,24 @@ func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 			break
 		}
 	}
-	*i = insertAtIndex(*i, indexToInsert, instance)
-}
 
-func insertAtIndex(arr []*instance.Instance, index int, value *instance.Instance) InstanceContainer {
-	if len(arr) == index { // nil or empty slice or after last element
-		return append(arr, value)
+	if indexToInsert == len(*i) {
+		// Append the new instance, only if there's free space for it.
+		if len(*i) < cap(*i) {
+			*i = append(*i, instance)
+		}
+	} else {
+		if len(*i) == cap(*i) {
+			// Shift the instances to the right and insert the new instance.
+			copy((*i)[indexToInsert+1:], (*i)[indexToInsert:])
+			(*i)[indexToInsert] = instance
+		} else {
+			// Shift the instances to the right and append the new instance.
+			*i = append(*i, nil)
+			copy((*i)[indexToInsert+1:], (*i)[indexToInsert:])
+			(*i)[indexToInsert] = instance
+		}
 	}
-	arr = append(arr[:index+1], arr[index:]...) // index < len(a)
-	arr[index] = value
-	return arr
 }
 
 // reset will remove all instances from the container, perserving the underlying slice's capacity.
