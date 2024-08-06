@@ -1110,6 +1110,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 			Buffer:       100,
 		}),
 		metadataLastUpdated: opts.metadataLastUpdated,
+		networkConfig:       networkconfig.TestNetwork,
 	}
 }
 
