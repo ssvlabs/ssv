@@ -127,6 +127,7 @@ type Controller interface {
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validators.ValidatorContainer, bool)
 	UpdateValidatorMetaDataLoop()
+	ForkMonitor(logger *zap.Logger)
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
@@ -1034,13 +1035,17 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
 		alanValidator := validator.NewValidator(ctx, cancel, opts)
 
-		genesisOpts := c.genesisValidatorOptions
 		// TODO: (Alan) share mutations such as metadata changes and fee recipient updates aren't reflected in genesis shares
 		// because shares are duplicated.
-		genesisOpts.SSVShare = genesisssvtypes.ConvertToAlanShare(share, operator)
-		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
-		genesisValidator := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
+		var genesisValidator *genesisvalidator.Validator
+		if !c.networkConfig.PastAlanFork() {
+			genesisOpts := c.genesisValidatorOptions
+			genesisOpts.SSVShare = genesisssvtypes.ConvertToAlanShare(share, operator)
+			genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
+
+			genesisValidator = genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
+		}
 
 		v = &validators.ValidatorContainer{Validator: alanValidator, GenesisValidator: genesisValidator}
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
@@ -1213,6 +1218,30 @@ func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
 	//}
 
 	return true, nil
+}
+
+func (c *controller) ForkMonitor(logger *zap.Logger) {
+	for {
+		select {
+		case <-c.context.Done():
+			return
+		case <-time.After(c.networkConfig.SlotDurationSec()):
+			if !c.networkConfig.PastAlanFork() {
+				continue
+			}
+			logger.Info("Stopping genesis validators after alan fork")
+			c.CleanGenesisValidators()
+		}
+	}
+}
+
+func (c *controller) CleanGenesisValidators() {
+	c.validatorsMap.ForEachValidator(func(v *validators.ValidatorContainer) bool {
+		if v.GenesisValidator != nil {
+			v.GenesisValidator.Stop()
+		}
+		return true
+	})
 }
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval

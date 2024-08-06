@@ -90,7 +90,6 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("fee_recipient", recipient.String()))
 
 	c.validatorsMap.ForEachValidator(func(v *validators.ValidatorContainer) bool {
-		// TODO: (Alan) update genesis shares? see https://github.com/ssvlabs/ssv/issues/1525
 		if v.Share().OwnerAddress == owner {
 			v.Share().FeeRecipientAddress = recipient
 

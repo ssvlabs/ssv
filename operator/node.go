@@ -153,6 +153,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	go n.feeRecipientCtrl.Start(logger)
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+	go n.validatorsCtrl.ForkMonitor(logger)
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))
