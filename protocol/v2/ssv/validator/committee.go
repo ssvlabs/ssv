@@ -194,6 +194,13 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
+	// Stop all old committee runners, when new runner is created
+	go func() {
+		if err := c.StopOldRunners(logger, duty.Slot); err != nil {
+			logger.Error("couldn't stop old committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
+		}
+	}()
+
 	runnerLogger := c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 
 	logger.Info("ℹ️ starting duty processing")
