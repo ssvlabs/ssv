@@ -199,6 +199,8 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	filters := func() []connections.HandshakeFilter {
+		newDomain := n.cfg.Network.DomainType()
+		domain := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(domain),
 		}
