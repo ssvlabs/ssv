@@ -23,7 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -232,17 +231,10 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
-	if err != nil {
-		e := ErrDeserializePublicKey
-		e.innerErr = err
-		return CommitteeInfo{}, e
-	}
-
-	validator := mv.validatorStore.Validator(publicKey.Serialize())
+	validator := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
 	if validator == nil {
 		e := ErrUnknownValidator
-		e.got = publicKey.SerializeToHexStr()
+		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
 		return CommitteeInfo{}, e
 	}
 

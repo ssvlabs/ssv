@@ -104,32 +104,3 @@ func (d GenesisLoggerFields) AsZapFields() []zapcore.Field {
 
 	return result
 }
-
-// func (mv *messageValidator) buildGenesisLoggerFields(decodedMessage *genesisqueue.GenesisSSVMessage) *GenesisLoggerFields {
-// 	descriptor := &GenesisLoggerFields{
-// 		Consensus: &ConsensusFields{},
-// 	}
-
-// 	if decodedMessage == nil {
-// 		return descriptor
-// 	}
-
-// 	descriptor.DutyExecutorID = decodedMessage.GetID().GetPubKey()
-// 	descriptor.Role = decodedMessage.GetID().GetRoleType()
-// 	descriptor.SSVMessageType = decodedMessage.GetType()
-
-// 	switch m := decodedMessage.Body.(type) {
-// 	case *specqbft.Message:
-// 		if m != nil {
-// 			descriptor.Slot = phase0.Slot(m.Height)
-// 			descriptor.Consensus.Round = m.Round
-// 			descriptor.Consensus.QBFTMessageType = m.MsgType
-// 		}
-// 	case *spectypes.PartialSignatureMessages:
-// 		if m != nil {
-// 			descriptor.Slot = m.Slot
-// 		}
-// 	}
-
-// 	return descriptor
-// }
