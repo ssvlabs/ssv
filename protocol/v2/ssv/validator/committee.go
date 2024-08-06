@@ -101,7 +101,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 	// required to stop the queue consumer when timeout message is received by handler
 	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+maxRunnerAgeSlot), 0))
-	q.StopQueueF = cancelF // DO we still need this?
+	q.Stop = cancelF // DO we still need this?
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
@@ -321,15 +321,16 @@ func (c *Committee) StopOldRunners(logger *zap.Logger, currentSlot phase0.Slot) 
 		return nil
 	}
 
-	firstTooOldSlot := currentSlot - maxRunnerAgeSlot
+	minValidSlot := currentSlot - maxRunnerAgeSlot
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	for slot := range c.Runners {
-		if slot <= firstTooOldSlot {
+		if slot <= minValidSlot {
 			logger.Info("stopping old committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)
+			delete(c.Queues, slot)
 		}
 	}
 
@@ -341,14 +342,14 @@ func (c *Committee) Stop() {
 	defer c.mtx.Unlock()
 
 	for slot, q := range c.Queues {
-		if q.StopQueueF == nil {
-			c.logger.Error("⚠️ can't stop committee queue StopQueueF is nil",
+		if q.Stop == nil {
+			c.logger.Error("⚠️ can't stop committee queue Stop is nil",
 				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
 				fields.Slot(slot),
 			)
 			continue
 		}
-		q.StopQueueF()
+		q.Stop()
 	}
 }
 

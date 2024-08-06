@@ -2,10 +2,8 @@ package validator
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -84,16 +82,7 @@ func (v *Committee) ConsumeQueue(
 	runner *runner.CommitteeRunner,
 ) error {
 	// in case of any error try to call the ctx.cancel to prevent the ctx leak
-	defer func() {
-		if q.StopQueueF == nil {
-			logger.Error("⚠️ committee queue consumer StopQueueF is nil", fields.Slot(slot))
-			return
-		}
-		q.StopQueueF()
-	}()
-	if runner == nil {
-		return errors.New(fmt.Sprintf("duty runner for slot %d is nil", slot))
-	}
+	defer q.Stop()
 
 	state := *q.queueState
 
