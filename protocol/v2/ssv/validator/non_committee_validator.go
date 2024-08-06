@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -11,7 +12,6 @@ import (
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"

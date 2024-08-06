@@ -47,16 +47,7 @@ const (
 )
 
 var (
-	maxPayloadDataSize = max(maxConsensusMsgSize, maxPartialSignatureMsgsSize) // not const because of max TODO: const after Go 1.21
+	maxPayloadDataSize = max(maxConsensusMsgSize, maxPartialSignatureMsgsSize)
 	maxSignedMsgSize   = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + maxFullDataSize
 	maxEncodedMsgSize  = maxSignedMsgSize + maxSignedMsgSize/10 // 10% for encoding overhead
 )
-
-// TODO: delete after updating to Go 1.21
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-
-	return b
-}
