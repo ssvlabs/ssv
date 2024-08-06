@@ -1253,6 +1253,7 @@ func (c *controller) ForkMonitor(logger *zap.Logger) {
 			}
 			logger.Info("Stopping genesis validators after alan fork")
 			c.CleanGenesisValidators()
+			return
 		}
 	}
 }
