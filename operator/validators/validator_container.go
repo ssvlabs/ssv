@@ -1,7 +1,10 @@
 package validators
 
 import (
+	"sync"
+
 	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
+	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
@@ -10,6 +13,7 @@ import (
 type ValidatorContainer struct {
 	Validator        *validator.Validator
 	GenesisValidator *genesisvalidator.Validator
+	mtx              sync.Mutex
 }
 
 func (vc *ValidatorContainer) Start(logger *zap.Logger) (started bool, err error) {
@@ -32,4 +36,20 @@ func (vc *ValidatorContainer) Stop() {
 
 func (vc *ValidatorContainer) Share() *types.SSVShare {
 	return vc.Validator.Share
+}
+
+func (vc *ValidatorContainer) UpdateShare(updateAlan func(*types.SSVShare), updateGenesis func(*genesistypes.SSVShare)) {
+	if updateAlan == nil || updateGenesis == nil {
+		panic("both updateAlan and updateGenesis must be provided")
+	}
+
+	vc.mtx.Lock()
+	defer vc.mtx.Unlock()
+
+	if vc.Validator != nil {
+		updateAlan(vc.Validator.Share)
+	}
+	if vc.GenesisValidator != nil {
+		updateGenesis(vc.GenesisValidator.Share)
+	}
 }
