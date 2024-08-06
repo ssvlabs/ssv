@@ -310,39 +310,20 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 }
 func (c *Committee) StopOldRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
-	// TODO: Should we keep this check to prevent overflow case for uint64? Guess no, but lets discuss.
-	if maxRunnerAgeSlot > currentSlot { //
+	if maxRunnerAgeSlot > currentSlot {
 		return nil
 	}
 
 	firstTooOldSlot := currentSlot - maxRunnerAgeSlot
-	var oldRunnersIds []phase0.Slot
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	for slot, q := range c.Queues {
+	for slot := range c.Runners {
 		if slot <= firstTooOldSlot {
-			if q.StopQueueF == nil {
-				c.logger.Error("⚠️ can't stop committee queue StopQueueF is nil",
-					fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-					fields.Slot(slot),
-				)
-				continue
-			}
-			logger.Info("stopping old runner queue", zap.Uint64("slot", uint64(slot)))
-			q.StopQueueF()
-			oldRunnersIds = append(oldRunnersIds, slot)
+			logger.Info("stopping old committee runner", zap.Uint64("slot", uint64(slot)))
+			delete(c.Runners, slot)
 		}
-	}
-
-	//time.Sleep(100 * time.Millisecond) // TODO: if we deleting the runners, should we do a time.sleep call here to make sure the ProcessMessage finished it work?
-	//												+ If yes, then should we unlock the mtx?
-
-	// TODO: Should we iterate through the Runners map also and delete the old ones from there? Otherwise we get the memory leak issue
-	for _, slot := range oldRunnersIds {
-		logger.Info("stopping old runner", zap.Uint64("slot", uint64(slot)))
-		delete(c.Runners, slot)
 	}
 
 	return nil
