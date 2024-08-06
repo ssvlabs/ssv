@@ -3,26 +3,19 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -109,120 +102,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}
 
 	<-time.After(time.Millisecond * 10)
-}
-
-func TestP2pNetwork_Stream(t *testing.T) {
-	t.Skip("test gets stuck")
-
-	n := 12
-	ctx, cancel := context.WithCancel(context.Background())
-	logger := logging.TestLogger(t)
-	defer cancel()
-
-	pkHex := "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
-	ln, _, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
-		Nodes:        n,
-		MinConnected: n/2 - 1,
-		UseDiscv5:    false,
-	}, pkHex)
-
-	defer func() {
-		for _, node := range ln.Nodes {
-			require.NoError(t, node.(*p2pNetwork).Close())
-		}
-	}()
-	require.NoError(t, err)
-	require.Len(t, ln.Nodes, n)
-
-	pk, err := hex.DecodeString(pkHex)
-	require.NoError(t, err)
-
-	mid := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.RoleCommittee)
-	rounds := []specqbft.Round{
-		1, 1, 1,
-		1, 2, 2,
-		3, 3, 1,
-		1, 1, 1,
-	}
-	heights := []specqbft.Height{
-		0, 0, 2,
-		10, 20, 20,
-		23, 23, 1,
-		1, 1, 1,
-	}
-	msgCounter := int64(0)
-	errors := make(chan error, len(ln.Nodes))
-	for i, node := range ln.Nodes {
-		registerHandler(logger, node, mid, heights[i], rounds[i], &msgCounter, errors)
-	}
-
-	<-time.After(time.Second)
-
-	node := ln.Nodes[0]
-	res, err := node.(*p2pNetwork).LastDecided(logger, mid)
-	require.NoError(t, err)
-	select {
-	case err := <-errors:
-		require.NoError(t, err)
-	default:
-	}
-	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
-	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
-	require.GreaterOrEqual(t, msgCounter, int64(2))
-
-}
-
-func TestWaitSubsetOfPeers(t *testing.T) {
-	logger, _ := zap.NewProduction()
-
-	tests := []struct {
-		name             string
-		minPeers         int
-		maxPeers         int
-		timeout          time.Duration
-		expectedPeersLen int
-		expectedErr      string
-	}{
-		{"Valid input", 5, 5, time.Millisecond * 30, 5, ""},
-		{"Zero minPeers", 0, 10, time.Millisecond * 30, 0, ""},
-		{"maxPeers less than minPeers", 10, 5, time.Millisecond * 30, 0, "minPeers should not be greater than maxPeers"},
-		{"Negative minPeers", -1, 10, time.Millisecond * 30, 0, "minPeers and maxPeers should not be negative"},
-		{"Negative timeout", 10, 50, time.Duration(-1), 0, "timeout should be positive"},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			vpk := spectypes.ValidatorPK{} // replace with a valid value
-			// The mock function increments the number of peers by 1 for each call, up to maxPeers
-			peersCount := 0
-			start := time.Now()
-			mockGetSubsetOfPeers := func(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
-				if tt.minPeers == 0 {
-					return []peer.ID{}, nil
-				}
-
-				peersCount++
-				if peersCount > maxPeers || time.Since(start) > (tt.timeout-tt.timeout/5) {
-					peersCount = maxPeers
-				}
-				peers = make([]peer.ID, peersCount)
-				return peers, nil
-			}
-
-			peers, err := waitSubsetOfPeers(logger, mockGetSubsetOfPeers, vpk[:], tt.minPeers, tt.maxPeers, tt.timeout, nil)
-			if err != nil && err.Error() != tt.expectedErr {
-				t.Errorf("waitSubsetOfPeers() error = %v, wantErr %v", err, tt.expectedErr)
-				return
-			}
-
-			if len(peers) != tt.expectedPeersLen {
-				t.Errorf("waitSubsetOfPeers() len(peers) = %v, want %v", len(peers), tt.expectedPeersLen)
-			}
-		})
-	}
 }
 
 func dummyMsgCommittee(t *testing.T, pkHex string, height int) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
@@ -335,87 +214,4 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 
 	return ln, routers, nil
-}
-
-func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
-	const (
-		minPeers = 3
-		waitTime = time.Second * 24
-	)
-	if !n.isReady() {
-		return nil, p2pprotocol.ErrNetworkIsNotReady
-	}
-	pid, maxPeers := commons.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetDutyExecutorID(), minPeers, maxPeers, waitTime, allPeersFilter)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get subset of peers")
-	}
-	return n.makeSyncRequest(logger, peers, mid, pid, &message.SyncMessage{
-		Params: &message.SyncParams{
-			Identifier: mid,
-		},
-		Protocol: message.LastDecidedType,
-	})
-}
-
-// getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
-	var ps []peer.ID
-	seen := make(map[peer.ID]struct{})
-	topics := commons.ValidatorTopicID(senderID)
-	for _, topic := range topics {
-		ps, err = n.topicsCtrl.Peers(topic)
-		if err != nil {
-			continue
-		}
-		for _, p := range ps {
-			if _, ok := seen[p]; !ok && filter(p) {
-				peers = append(peers, p)
-				seen[p] = struct{}{}
-			}
-		}
-	}
-	// if we seen some peers, ignore the error
-	if err != nil && len(seen) == 0 {
-		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(senderID))
-	}
-	if len(peers) == 0 {
-		return nil, nil
-	}
-	if maxPeers > len(peers) {
-		maxPeers = len(peers)
-	} else {
-		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
-	}
-	return peers[:maxPeers], nil
-}
-
-func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
-	node.RegisterHandlers(logger, &p2pprotocol.SyncHandler{
-		Protocol: p2pprotocol.LastDecidedProtocol,
-		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
-			atomic.AddInt64(counter, 1)
-			sm := genesisspecqbft.SignedMessage{
-				Signature: make([]byte, 96),
-				Signers:   []spectypes.OperatorID{1, 2, 3},
-				Message: genesisspecqbft.Message{
-					MsgType:    genesisspecqbft.CommitMsgType,
-					Height:     genesisspecqbft.Height(height),
-					Round:      genesisspecqbft.Round(round),
-					Identifier: mid[:],
-					Root:       [32]byte{1, 2, 3},
-				},
-			}
-			data, err := sm.Encode()
-			if err != nil {
-				errors <- err
-				return nil, err
-			}
-			return &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   mid,
-				Data:    data,
-			}, nil
-		},
-	})
 }

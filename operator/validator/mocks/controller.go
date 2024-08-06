@@ -19,7 +19,6 @@ import (
 	network "github.com/ssvlabs/ssv/network"
 	duties "github.com/ssvlabs/ssv/operator/duties"
 	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
@@ -482,23 +481,6 @@ func (m *MockP2PNetwork) Peers(pk types.ValidatorPK) ([]peer.ID, error) {
 func (mr *MockP2PNetworkMockRecorder) Peers(pk any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Peers", reflect.TypeOf((*MockP2PNetwork)(nil).Peers), pk)
-}
-
-// RegisterHandlers mocks base method.
-func (m *MockP2PNetwork) RegisterHandlers(logger *zap.Logger, handlers ...*protocolp2p.SyncHandler) {
-	m.ctrl.T.Helper()
-	varargs := []any{logger}
-	for _, a := range handlers {
-		varargs = append(varargs, a)
-	}
-	m.ctrl.Call(m, "RegisterHandlers", varargs...)
-}
-
-// RegisterHandlers indicates an expected call of RegisterHandlers.
-func (mr *MockP2PNetworkMockRecorder) RegisterHandlers(logger any, handlers ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{logger}, handlers...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterHandlers", reflect.TypeOf((*MockP2PNetwork)(nil).RegisterHandlers), varargs...)
 }
 
 // SubscribeRandoms mocks base method.
