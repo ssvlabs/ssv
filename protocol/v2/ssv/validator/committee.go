@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	maxRunnerAgeSlot = phase0.Slot(32)
+	runnerExpirySlots = phase0.Slot(32)
 )
 
 type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner
@@ -100,7 +100,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+maxRunnerAgeSlot), 0))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
 	q.Stop = cancelF // DO we still need this?
 
 	r := c.Runners[duty.Slot]
@@ -194,9 +194,9 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
-	// Stop all old committee runners, when new runner is created
+	// Stop all expired committee runners, when new runner is created
 	go func() {
-		if err := c.StopOldRunners(logger, duty.Slot); err != nil {
+		if err := c.stopExpiredRunners(logger, duty.Slot); err != nil {
 			logger.Error("couldn't stop old committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
 		}
 	}()
@@ -316,19 +316,19 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 	return nil
 
 }
-func (c *Committee) StopOldRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
-	if maxRunnerAgeSlot > currentSlot {
+func (c *Committee) stopExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
+	if runnerExpirySlots > currentSlot {
 		return nil
 	}
 
-	minValidSlot := currentSlot - maxRunnerAgeSlot
+	minValidSlot := currentSlot - runnerExpirySlots
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
-			logger.Info("stopping old committee runner", zap.Uint64("slot", uint64(slot)))
+			logger.Info("stopping expired committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)
 			delete(c.Queues, slot)
 		}
@@ -342,13 +342,10 @@ func (c *Committee) Stop() {
 	defer c.mtx.Unlock()
 
 	for slot, q := range c.Queues {
-		if q.Stop == nil {
-			c.logger.Error("⚠️ can't stop committee queue Stop is nil",
-				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-				fields.Slot(slot),
-			)
-			continue
-		}
+		c.logger.Error("stopping committee queue",
+			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+			fields.Slot(slot),
+		)
 		q.Stop()
 	}
 }
