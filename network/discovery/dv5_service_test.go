@@ -9,10 +9,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
@@ -95,27 +95,30 @@ func TestCheckPeer(t *testing.T) {
 
 	// Create the LocalNode instances for the tests.
 	for _, test := range tests {
-		// Create a random network key.
-		priv, err := utils.ECDSAPrivateKey(logger, "")
-		require.NoError(t, err)
-
-		// Create a temporary directory for storage.
-		tempDir := t.TempDir()
-		defer os.RemoveAll(tempDir)
-
-		localNode, err := records.CreateLocalNode(priv, tempDir, net.ParseIP("127.0.0.1"), 12000, 13000)
-		require.NoError(t, err)
-
-		if test.domainType != nil {
-			err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
+		test := test
+		t.Run(test.name+":setup", func(t *testing.T) {
+			// Create a random network key.
+			priv, err := utils.ECDSAPrivateKey(logger, "")
 			require.NoError(t, err)
-		}
-		if test.subnets != nil {
-			err := records.SetSubnetsEntry(localNode, test.subnets)
-			require.NoError(t, err)
-		}
 
-		test.localNode = localNode
+			// Create a temporary directory for storage.
+			tempDir := t.TempDir()
+			defer os.RemoveAll(tempDir)
+
+			localNode, err := records.CreateLocalNode(priv, tempDir, net.ParseIP("127.0.0.1"), 12000, 13000)
+			require.NoError(t, err)
+
+			if test.domainType != nil {
+				err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
+				require.NoError(t, err)
+			}
+			if test.subnets != nil {
+				err := records.SetSubnetsEntry(localNode, test.subnets)
+				require.NoError(t, err)
+			}
+
+			test.localNode = localNode
+		})
 	}
 
 	// Run the tests.
@@ -129,14 +132,17 @@ func TestCheckPeer(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		err := dvs.checkPeer(logger, PeerEvent{
-			Node: test.localNode.Node(),
+		test := test
+		t.Run(test.name+":run", func(t *testing.T) {
+			err := dvs.checkPeer(logger, PeerEvent{
+				Node: test.localNode.Node(),
+			})
+			if test.expectedError != nil {
+				require.ErrorContains(t, err, test.expectedError.Error(), test.name)
+			} else {
+				require.NoError(t, err, test.name)
+			}
 		})
-		if test.expectedError != nil {
-			require.ErrorContains(t, err, test.expectedError.Error(), test.name)
-		} else {
-			require.NoError(t, err, test.name)
-		}
 	}
 }
 

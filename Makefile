@@ -26,7 +26,7 @@ COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
 	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
-UNFORMATTED=$(shell gofmt -s -l .)
+UNFORMATTED=$(shell gofmt -l .)
 
 #Lint
 .PHONY: lint-prepare

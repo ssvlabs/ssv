@@ -2,6 +2,7 @@ package storage
 
 import (
 	"github.com/cornelk/hashmap"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"

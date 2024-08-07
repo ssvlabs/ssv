@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -100,12 +99,11 @@ var (
 	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
 	ErrDecidedNotEnoughSigners                 = Error{text: "not enough signers in decided message", reject: true}
-	ErrDuplicatedProposalWithDifferentData     = Error{text: "duplicated proposal with different data", reject: true}
+	ErrDifferentProposalData                   = Error{text: "different proposal data", reject: true}
 	ErrMalformedPrepareJustifications          = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications      = Error{text: "malformed round change justifications", reject: true}
 	ErrUnexpectedRoundChangeJustifications     = Error{text: "round change justifications unexpected for this message type", reject: true}
-	ErrDeserializePublicKey                    = Error{text: "deserialize public key", reject: true}
 	ErrNoPartialSignatureMessages              = Error{text: "no partial signature messages", reject: true}
 	ErrNoValidators                            = Error{text: "no validators for this committee ID", reject: true}
 	ErrNoSignatures                            = Error{text: "no signatures", reject: true}
@@ -154,43 +152,6 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
-
-	return pubsub.ValidationAccept
-}
-
-func (mv *messageValidator) handleGenesisValidationError(peerID peer.ID, decodedMessage *genesisqueue.GenesisSSVMessage, err error) pubsub.ValidationResult {
-	loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
-
-	logger := mv.logger.
-		With(loggerFields.AsZapFields()...).
-		With(fields.PeerID(peerID))
-
-	var valErr Error
-	if !errors.As(err, &valErr) {
-		// mv.metrics.MessageIgnored(err.Error(), loggerFields, loggerFields.Consensus.Round)
-		logger.Debug("ignoring invalid message", zap.Error(err))
-		return pubsub.ValidationIgnore
-	}
-
-	if !valErr.Reject() {
-		if !valErr.Silent() {
-			logger.Debug("ignoring invalid message", zap.Error(valErr))
-		}
-		// mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
-		return pubsub.ValidationIgnore
-	}
-
-	if !valErr.Silent() {
-		logger.Debug("rejecting invalid message", zap.Error(valErr))
-	}
-
-	// mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
-	return pubsub.ValidationReject
-}
-
-func (mv *messageValidator) handleGenesisValidationSuccess(decodedMessage *genesisqueue.GenesisSSVMessage) pubsub.ValidationResult {
-	// loggerFields := mv.buildGenesisLoggerFields(decodedMessage)
-	// mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 
 	return pubsub.ValidationAccept
 }

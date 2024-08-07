@@ -7,7 +7,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -177,28 +176,28 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	if duties == nil {
 		return
 	}
-	h.logger.Debug("🔧 executing duties", zap.Any("duties #", len(duties)))
-	// if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-	toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
+
+	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
+		for _, d := range duties {
+			if h.shouldExecute(d) {
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
+			}
+		}
+
+		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+		return
+	}
+
+	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
-			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
+			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
 
-	h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-	// return
-	// }
-
-	// toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
-	// for _, d := range duties {
-	// 	if h.shouldExecute(d) {
-	// 		toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
-	// 	}
-	// }
-
-	// h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
@@ -215,7 +214,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
 
-	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
+	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
@@ -247,8 +246,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	return nil
 }
 
-func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
-	return &spectypes.BeaconDuty{
+func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,
@@ -263,10 +262,10 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
 	return &genesisspectypes.Duty{
 		Type:                    role,
-		PubKey:                  genesisphase0.BLSPubKey(duty.PubKey),
-		Slot:                    genesisphase0.Slot(duty.Slot),
-		ValidatorIndex:          genesisphase0.ValidatorIndex(duty.ValidatorIndex),
-		CommitteeIndex:          genesisphase0.CommitteeIndex(duty.CommitteeIndex),
+		PubKey:                  duty.PubKey,
+		Slot:                    duty.Slot,
+		ValidatorIndex:          duty.ValidatorIndex,
+		CommitteeIndex:          duty.CommitteeIndex,
 		CommitteeLength:         duty.CommitteeLength,
 		CommitteesAtSlot:        duty.CommitteesAtSlot,
 		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,

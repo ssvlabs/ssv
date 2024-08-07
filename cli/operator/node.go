@@ -10,16 +10,19 @@ import (
 	"os"
 	"time"
 
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
+
+	"github.com/ssvlabs/ssv/logging"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -34,12 +37,14 @@ import (
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
 	"github.com/ssvlabs/ssv/exporter/convert"
+
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
+
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
+	"github.com/ssvlabs/ssv/message/signatureverifier"
+	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -218,32 +223,40 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		// signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 		validatorStore := nodeStorage.ValidatorStore()
-		// validatorStore = newValidatorStore(...) // TODO
 
-		// New msg validation that should be dynamically switched
-		// messageValidator := validation.New(
-		// 	networkConfig,
-		// 	validatorStore,
-		// 	dutyStore,
-		// 	signatureVerifier,
-		// 	validation.WithLogger(logger),
-		// 	validation.WithMetrics(metricsReporter),
-		// )
+		var messageValidator validation.MessageValidator
 
-		genesisMessageValidator := genesisvalidation.New(
+		alanMsgValidator := validation.New(
 			networkConfig,
-			genesisvalidation.WithNodeStorage(nodeStorage),
-			genesisvalidation.WithLogger(logger),
-			genesisvalidation.WithMetrics(metricsReporter),
-			genesisvalidation.WithDutyStore(dutyStore),
+			validatorStore,
+			dutyStore,
+			signatureVerifier,
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
 		)
 
+		if networkConfig.PastAlanFork() {
+			messageValidator = alanMsgValidator
+		} else {
+			messageValidator = &validation.ForkingMessageValidation{
+				NetworkConfig: networkConfig,
+				Alan:          alanMsgValidator,
+				Genesis: genesisvalidation.New(
+					networkConfig,
+					genesisvalidation.WithNodeStorage(nodeStorage),
+					genesisvalidation.WithLogger(logger),
+					genesisvalidation.WithMetrics(metricsReporter),
+					genesisvalidation.WithDutyStore(dutyStore),
+				),
+			}
+		}
+
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
-		cfg.P2pNetworkConfig.MessageValidator = genesisMessageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = genesisMessageValidator
+		cfg.P2pNetworkConfig.MessageValidator = messageValidator
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db, metricsReporter)
 
@@ -600,7 +613,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2p) {
+func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2P) {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -608,7 +621,8 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	return p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	n := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	return n, p2pv1.GenesisP2P{Network: n}
 }
 
 func setupConsensusClient(

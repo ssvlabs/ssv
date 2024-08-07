@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
 
@@ -30,6 +31,7 @@ type ValidatorRegistrationRunner struct {
 }
 
 func NewValidatorRegistrationRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	beacon genesisspecssv.BeaconNode,
@@ -38,9 +40,10 @@ func NewValidatorRegistrationRunner(
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: genesisspectypes.BNRoleValidatorRegistration,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			BeaconRoleType:     genesisspectypes.BNRoleValidatorRegistration,
+			DomainTypeProvider: domainTypeProvider,
+			BeaconNetwork:      beaconNetwork,
+			Share:              share,
 		},
 
 		beacon:  beacon,

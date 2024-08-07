@@ -104,7 +104,7 @@ func TestController_StopValidator(t *testing.T) {
 	}}
 
 	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t)
-	genesisStorageMap, genesisKm := setupGenesisTestComponents(t)
+	genesisStorageMap := setupGenesisQBFTStorage(t)
 
 	defer ctrl.Finish()
 
@@ -125,7 +125,6 @@ func TestController_StopValidator(t *testing.T) {
 		validatorsMap:     mockValidatorsMap,
 		validatorOptions: validator.Options{GenesisOptions: validator.GenesisOptions{
 			Storage: genesisStorageMap,
-			Signer:  genesisKm,
 		}},
 		metrics:             validator.NopMetrics{},
 		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
@@ -160,7 +159,7 @@ func TestController_StopValidator(t *testing.T) {
 
 func TestController_ReactivateCluster(t *testing.T) {
 	storageMap := ibftstorage.NewStores()
-	genesisStorageMap, genesisKm := setupGenesisTestComponents(t)
+	genesisStorageMap := setupGenesisQBFTStorage(t)
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
@@ -185,7 +184,6 @@ func TestController_ReactivateCluster(t *testing.T) {
 			NetworkConfig: networkconfig.TestNetwork,
 			GenesisOptions: validator.GenesisOptions{
 				Storage: genesisStorageMap,
-				Signer:  genesisKm,
 			},
 		},
 		metrics:             validator.NopMetrics{},

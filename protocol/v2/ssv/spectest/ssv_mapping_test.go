@@ -21,12 +21,13 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/exporter/convert"
 	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
@@ -224,17 +225,17 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 			panic("cant unmarshal committee duty")
 		}
 		testDuty = committeeDuty
-	} else if _, ok := m["BeaconDuty"]; ok {
-		byts, err := json.Marshal(m["BeaconDuty"])
+	} else if _, ok := m["ValidatorDuty"]; ok {
+		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
 			panic("cant marshal beacon duty")
 		}
-		beaconDuty := &spectypes.BeaconDuty{}
-		err = json.Unmarshal(byts, beaconDuty)
+		validatorDuty := &spectypes.ValidatorDuty{}
+		err = json.Unmarshal(byts, validatorDuty)
 		if err != nil {
 			panic("cant unmarshal beacon duty")
 		}
-		testDuty = beaconDuty
+		testDuty = validatorDuty
 	} else {
 		panic("no beacon or committee duty")
 	}
@@ -290,15 +291,15 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 			panic("cant unmarshal committee duty")
 		}
 		duty = committeeDuty
-	} else if _, ok := m["BeaconDuty"]; ok {
-		byts, err := json.Marshal(m["BeaconDuty"])
+	} else if _, ok := m["ValidatorDuty"]; ok {
+		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
-			panic("cant marshal beacon duty")
+			panic("cant marshal validator duty")
 		}
-		beaconDuty := &spectypes.BeaconDuty{}
+		beaconDuty := &spectypes.ValidatorDuty{}
 		err = json.Unmarshal(byts, beaconDuty)
 		if err != nil {
-			panic("cant unmarshal beacon duty")
+			panic("cant unmarshal validator duty")
 		}
 		duty = beaconDuty
 	} else {
@@ -366,6 +367,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
+	base.DomainTypeProvider = networkconfig.TestNetwork
 
 	logger := logging.TestLogger(t)
 
@@ -376,7 +378,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		if ret.GetBaseRunner().State != nil {
 			if ret.GetBaseRunner().State.RunningInstance != nil {
 				operator := spectestingutils.TestingCommitteeMember(ks)
-				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
+				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ks, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
 			}
 		}
 	}
@@ -389,12 +391,13 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 }
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
-	config := qbfttesting.TestingConfig(logger, ks, spectypes.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, ks, convert.RoleCommittee)
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.CommitteeMember,
 		config,
+		spectestingutils.NewOperatorSigner(ks, 1),
 		false,
 	)
 	newContr.Height = contr.Height
@@ -405,17 +408,20 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 			continue
 		}
 		operator := spectestingutils.TestingCommitteeMember(ks)
-		newContr.StoredInstances[i] = fixInstanceForRun(t, inst, newContr, operator)
+		newContr.StoredInstances[i] = fixInstanceForRun(t, ks, inst, newContr, operator)
 	}
 	return newContr
 }
 
-func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
+func fixInstanceForRun(t *testing.T, ks *spectestingutils.TestKeySet, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
+	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	newInst := instance.NewInstance(
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
-		contr.Height)
+		contr.Height,
+		signer,
+	)
 
 	newInst.State.DecidedValue = inst.State.DecidedValue
 	newInst.State.Decided = inst.State.Decided
@@ -492,7 +498,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 			continue
 		}
 
-		beaconDuty := &spectypes.BeaconDuty{}
+		beaconDuty := &spectypes.ValidatorDuty{}
 		err = getDecoder().Decode(&beaconDuty)
 		if err == nil {
 			inputs = append(inputs, beaconDuty)
@@ -549,8 +555,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		logger,
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,
-		testingutils.NewTestingVerifier(),
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
+		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
 			return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
 		},
 	)

@@ -1,19 +1,20 @@
 package p2pv1
 
 import (
-	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
@@ -96,37 +97,57 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 	}
 }
 
-// getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
-	var ps []peer.ID
-	seen := make(map[peer.ID]struct{})
-	// TODO: fork support
-	topics := commons.CommitteeTopicID(spectypes.CommitteeID(senderID[16:]))
-	for _, topic := range topics {
-		ps, err = n.topicsCtrl.Peers(topic)
+func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
+	var results []p2pprotocol.SyncResult
+	data, err := syncMsg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not encode sync message")
+	}
+
+	msg := &spectypes.SSVMessage{
+		MsgType: message.SSVSyncMsgType,
+		MsgID:   mid,
+		Data:    data,
+	}
+	encoded, err := commons.EncodeNetworkMsg(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	logger = logger.With(zap.String("protocol", string(protocol)))
+	msgID := commons.MsgID()
+	distinct := make(map[string]struct{})
+	for _, pid := range peers {
+		logger := logger.With(fields.PeerID(pid))
+
+		raw, err := n.streamCtrl.Request(logger, pid, protocol, encoded)
 		if err != nil {
+			// TODO: is this how to check for ErrNotSupported?
+			var e multistream.ErrNotSupported[libp2p_protocol.ID]
+			if !errors.Is(err, e) {
+				logger.Debug("could not make stream request", zap.Error(err))
+			}
 			continue
 		}
-		for _, p := range ps {
-			if _, ok := seen[p]; !ok && filter(p) {
-				peers = append(peers, p)
-				seen[p] = struct{}{}
-			}
+
+		mid := msgID(raw)
+		if _, ok := distinct[mid]; ok {
+			continue
 		}
+		distinct[mid] = struct{}{}
+
+		res, err := commons.DecodeNetworkMsg(raw)
+		if err != nil {
+			logger.Debug("could not decode stream response", zap.Error(err))
+			continue
+		}
+
+		results = append(results, p2pprotocol.SyncResult{
+			Msg:    res,
+			Sender: pid.String(),
+		})
 	}
-	// if we seen some peers, ignore the error
-	if err != nil && len(seen) == 0 {
-		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(senderID))
-	}
-	if len(peers) == 0 {
-		return nil, nil
-	}
-	if maxPeers > len(peers) {
-		maxPeers = len(peers)
-	} else {
-		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
-	}
-	return peers[:maxPeers], nil
+	return results, nil
 }
 
 // peersWithProtocolsFilter is used to accept peers that supports the given protocols

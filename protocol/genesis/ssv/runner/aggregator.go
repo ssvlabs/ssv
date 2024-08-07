@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	postforkphase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -14,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
@@ -31,6 +31,7 @@ type AggregatorRunner struct {
 var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
@@ -43,6 +44,7 @@ func NewAggregatorRunner(
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType:     genesisspectypes.BNRoleAggregator,
+			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -91,7 +93,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *ge
 
 	logger.Debug("🧩 got partial signature quorum",
 		zap.Any("signer", signedMsg.Signer),
-		fields.Slot(postforkphase0.Slot(duty.Slot)),
+		fields.Slot(duty.Slot),
 	)
 
 	r.metrics.PauseDutyFullFlow()

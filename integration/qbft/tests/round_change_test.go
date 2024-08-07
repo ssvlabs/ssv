@@ -12,6 +12,8 @@ import (
 )
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {
+	t.Skip("tests in this package are stuck")
+
 	t.SkipNow() // TODO: test is flakey
 
 	roundChange := &Scenario{
@@ -48,8 +50,8 @@ func roundChangeValidator() func(t *testing.T, committee int, actual *protocolst
 
 		require.Contains(t, actual.State.ProposeContainer.Msgs, qbft.Round(2), "no propose messages for round 2") // TODO: all tests fail on this assertion
 		require.Len(t, actual.State.ProposeContainer.Msgs[qbft.Round(2)], 1, "propose container for round 2 contains more/less than 1 messages")
-		require.Len(t, actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].Signatures, 1, "first message in propose container for round 2 contains more/less than 1 signer")
-		require.Equal(t, int(spectypes.OperatorID(2)), int(actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].OperatorIDs[0]), "on second round proposer is not 2")
+		require.Len(t, actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].SignedMessage.Signatures, 1, "first message in propose container for round 2 contains more/less than 1 signer")
+		require.Equal(t, int(spectypes.OperatorID(2)), int(actual.State.ProposeContainer.Msgs[qbft.Round(2)][0].SignedMessage.OperatorIDs[0]), "on second round proposer is not 2")
 	}
 }
 

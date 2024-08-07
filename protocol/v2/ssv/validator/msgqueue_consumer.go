@@ -32,12 +32,11 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
-	role := msg.MsgID.GetRoleType()
-	logger.Debug("📬 handling SSV message",
-		zap.Uint64("type", uint64(msg.MsgType)),
-		fields.Role(msg.MsgID.GetRoleType()))
+	// logger.Debug("📬 handling SSV message",
+	// 	zap.Uint64("type", uint64(msg.MsgType)),
+	// 	fields.Role(msg.MsgID.GetRoleType()))
 
-	if q, ok := v.Queues[role]; ok {
+	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
@@ -46,7 +45,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(role))
+		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
 	}
 }
 
@@ -172,7 +171,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 			zap.Int64("msg_height", int64(qbftMsg.Height)),
 			zap.Int64("msg_round", int64(qbftMsg.Round)),
 			zap.Int64("consensus_msg_type", int64(qbftMsg.MsgType)),
-			zap.Any("signers", msg.SignedSSVMessage.GetOperatorIDs()),
+			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)

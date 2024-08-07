@@ -14,7 +14,6 @@ import (
 
 var (
 	ErrUnknownMessageType = fmt.Errorf("unknown message type")
-	ErrDecodeNetworkMsg   = fmt.Errorf("could not decode data into an SSVMessage")
 )
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
@@ -25,6 +24,8 @@ type SSVMessage struct {
 	// Body is the decoded Data.
 	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
 }
+
+func (d *SSVMessage) DecodedSSVMessage() {}
 
 func (d *SSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {

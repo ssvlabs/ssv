@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
@@ -264,7 +265,9 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
-	base := &runner.BaseRunner{}
+	base := &runner.BaseRunner{
+		DomainTypeProvider: networkconfig.TestNetwork,
+	}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 

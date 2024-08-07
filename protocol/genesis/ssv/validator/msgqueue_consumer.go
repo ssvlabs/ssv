@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -27,7 +26,6 @@ type queueContainer struct {
 	Q          genesisqueue.Queue
 	queueState *genesisqueue.State
 }
-
 
 // HandleMessage handles a genesisspectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
@@ -179,7 +177,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessa
 		psm := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		baseFields = []zap.Field{
 			zap.Int64("signer", int64(psm.Signer)),
-			fields.Slot(phase0.Slot(psm.Message.Slot)),
+			fields.Slot(psm.Message.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)

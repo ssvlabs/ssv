@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"

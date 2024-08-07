@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,7 +16,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -58,8 +58,9 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), convert.RoleCommittee)
 	return qbfttesting.NewTestingQBFTController(
+		spectestingutils.Testing4SharesSet(),
 		identifier[:],
 		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
 		config,

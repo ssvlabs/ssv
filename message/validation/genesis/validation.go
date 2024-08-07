@@ -4,6 +4,7 @@ package validation
 // validator.go contains main code for validation and most of the rule checks.
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -26,13 +27,13 @@ import (
 	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -332,12 +333,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	msg, err := genesisqueue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
-		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
+		if errors.Is(err, genesisqueue.ErrDecodeNetworkMsg) {
 			e := ErrMalformedPubSubMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
-		if errors.Is(err, queue.ErrUnknownMessageType) {
+		if errors.Is(err, genesisqueue.ErrUnknownMessageType) {
 			e := ErrUnknownSSVMessageType
 			e.innerErr = err
 			return nil, Descriptor{}, e
@@ -351,22 +352,21 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrEmptyPubSubMessage
 	}
 
-	// TODO Alan - revert it back once we have dual subnets
 	// Check if the message was sent on the right topic.
-	// currentTopic := pMsg.GetTopic()
-	// currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
-	// topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
+	currentTopic := pMsg.GetTopic()
+	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
+	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
 
-	// topicFound := false
-	// for _, tp := range topics {
-	// 	if tp == currentTopicBaseName {
-	// 		topicFound = true
-	// 		break
-	// 	}
-	// }
-	// if !topicFound {
-	// 	return nil, Descriptor{}, ErrTopicNotFound
-	// }
+	topicFound := false
+	for _, tp := range topics {
+		if tp == currentTopicBaseName {
+			topicFound = true
+			break
+		}
+	}
+	if !topicFound {
+		return nil, Descriptor{}, ErrTopicNotFound
+	}
 
 	mv.metrics.GenesisSSVMessageType(msg.MsgType)
 
@@ -387,13 +387,13 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 		err.want = maxMessageSize
 		return nil, descriptor, err
 	}
-	// domain := mv.netCfg.DomainType()
-	// if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
-	// 	err := ErrWrongDomain
-	// 	err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-	// 	err.want = hex.EncodeToString(domain[:])
-	// 	return nil, descriptor, err
-	// }
+	domain := mv.netCfg.DomainType()
+	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
+		err.want = hex.EncodeToString(domain[:])
+		return nil, descriptor, err
+	}
 
 	validatorPK := ssvMessage.GetID().GetPubKey()
 	role := ssvMessage.GetID().GetRoleType()
@@ -447,10 +447,10 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 	defer mutex.Unlock()
 	mv.validationMutex.Unlock()
 
-	descriptor.SSVMessageType = spectypes.MsgType(ssvMessage.MsgType)
+	descriptor.SSVMessageType = ssvMessage.MsgType
 
 	if mv.nodeStorage != nil {
-		switch spectypes.MsgType(ssvMessage.MsgType) {
+		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if len(ssvMessage.Data) > maxConsensusMsgSize {
 				e := ErrSSVDataTooBig
@@ -476,8 +476,8 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			}
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-			// slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
-			descriptor.Slot = partialSignatureMessage.Message.Slot
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier, receivedAt)
+			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
 			}
@@ -487,6 +487,9 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 
 		case spectypes.DKGMsgType:
 			return nil, descriptor, ErrDKGMessage
+
+		default:
+			return nil, descriptor, ErrUnknownSSVMessageType
 		}
 	}
 

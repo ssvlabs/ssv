@@ -48,7 +48,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	signature := signedSSVMessage.Signatures[0]
-	signer := signedSSVMessage.GetOperatorIDs()[0]
+	signer := signedSSVMessage.OperatorIDs[0]
 	if err := mv.signatureVerifier.VerifySignature(signer, ssvMessage, signature); err != nil {
 		e := ErrSignatureVerification
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", signer, err)
@@ -68,7 +68,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	// Rule: Partial Signature message must have 1 signer
-	signers := signedSSVMessage.GetOperatorIDs()
+	signers := signedSSVMessage.OperatorIDs
 	if len(signers) != 1 {
 		return ErrPartialSigOneSigner
 	}
@@ -104,6 +104,8 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	}
 
 	for _, message := range partialSignatureMessages.Messages {
+		// Rule: Partial signature must have expected length. Already enforced by ssz.
+
 		// Rule: Partial signature signer must be consistent
 		if message.Signer != signer {
 			err := ErrInconsistentSigners
@@ -112,12 +114,16 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 			return err
 		}
 
-		// Rule: Validator index must match with validatorPK or one of CommitteeID's validators
-		if !slices.Contains(validatorIndices, message.ValidatorIndex) {
-			e := ErrValidatorIndexMismatch
-			e.got = message.ValidatorIndex
-			e.want = validatorIndices
-			return e
+		// Rule: (only for Validator duties) Validator index must match with validatorPK
+		// For Committee duties, we don't assume that operators are synced on the validators set
+		// So, we can't make this assertion
+		if !mv.committeeRole(signedSSVMessage.SSVMessage.GetID().GetRoleType()) {
+			if !slices.Contains(validatorIndices, message.ValidatorIndex) {
+				e := ErrValidatorIndexMismatch
+				e.got = message.ValidatorIndex
+				e.want = validatorIndices
+				return e
+			}
 		}
 	}
 
@@ -133,7 +139,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
-	signer := signedSSVMessage.GetOperatorIDs()[0]
+	signer := signedSSVMessage.OperatorIDs[0]
 	signerStateBySlot := state.GetOrCreate(signer)
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.

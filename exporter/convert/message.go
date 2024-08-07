@@ -3,6 +3,7 @@ package convert
 import (
 	"encoding/binary"
 	"encoding/hex"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -31,11 +32,11 @@ func (msg MessageID) GetRoleType() RunnerRole {
 	return RunnerRole(binary.LittleEndian.Uint32(roleByts))
 }
 
-func NewMsgID(domain spectypes.DomainType, pk []byte, role RunnerRole) MessageID {
+func NewMsgID(domain spectypes.DomainType, dutyExecutorID []byte, role RunnerRole) MessageID {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))
 
-	return newMessageID(domain[:], pk, roleByts)
+	return newMessageID(domain[:], roleByts, dutyExecutorID)
 }
 
 func (msgID MessageID) String() string {
@@ -53,7 +54,7 @@ func MessageIDFromBytes(mid []byte) MessageID {
 	)
 }
 
-func newMessageID(domain, dutyExecutorID, roleByts []byte) MessageID {
+func newMessageID(domain, roleByts, dutyExecutorID []byte) MessageID {
 	mid := MessageID{}
 	copy(mid[domainStartPos:domainStartPos+domainSize], domain[:])
 	copy(mid[roleTypeStartPos:roleTypeStartPos+roleTypeSize], roleByts)

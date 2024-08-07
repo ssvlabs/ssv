@@ -45,15 +45,13 @@ const (
 	FieldCommitteeID         = "committee_id"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
-	FieldConsensusTime       = "consensus_time"
+	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldPostConsensusTime   = "post_consensus_time"
+	FieldConsensusTime       = "consensus_time"
 	FieldBlockTime           = "block_time"
 	FieldBeaconDataTime      = "beacon_data_time"
-	FieldBlockRootTime       = "block_root_time"
-	FieldBroadcastTime       = "broadcast_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
-	FieldDecidedTime         = "decided_time"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
 	FieldDuties              = "duties"
@@ -78,7 +76,6 @@ const (
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
 	FieldPeerScore           = "peer_score"
-	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
 	FieldQuorumTime          = "quorum_time"
@@ -87,6 +84,7 @@ const (
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubmissionTime      = "submission_time"
+	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "sync_offset"
 	FieldSyncResults         = "sync_results"
@@ -292,19 +290,11 @@ func PreConsensusTime(val time.Duration) zap.Field {
 }
 
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, FormatDuration(val))
+	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
 }
 
 func PostConsensusTime(val time.Duration) zap.Field {
 	return zap.String(FieldPostConsensusTime, FormatDuration(val))
-}
-
-func QuorumTime(val time.Duration) zap.Field {
-	return zap.String(FieldQuorumTime, FormatDuration(val))
-}
-
-func DecidedTime(val time.Duration) zap.Field {
-	return zap.String(FieldDecidedTime, FormatDuration(val))
 }
 
 func BlockTime(val time.Duration) zap.Field {
@@ -315,16 +305,11 @@ func BeaconDataTime(val time.Duration) zap.Field {
 	return zap.String(FieldBeaconDataTime, FormatDuration(val))
 }
 
-func BlockRootTime(val time.Duration) zap.Field {
-	return zap.String(FieldBlockRootTime, FormatDuration(val))
-}
-
 func SubmissionTime(val time.Duration) zap.Field {
 	return zap.String(FieldSubmissionTime, FormatDuration(val))
 }
-
-func BroadcastTime(val time.Duration) zap.Field {
-	return zap.String(FieldBroadcastTime, FormatDuration(val))
+func TotalConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldTotalConsensusTime, FormatDuration(val))
 }
 
 func DutyID(val string) zap.Field {
@@ -367,9 +352,10 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.ValidatorDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
+
 func GenesisFormatDutyID(epoch phase0.Epoch, duty *genesisspectypes.Duty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
@@ -390,7 +376,7 @@ func FormatCommitteeDutyID(operators []*spectypes.Operator, epoch phase0.Epoch, 
 	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
+func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {
@@ -403,6 +389,9 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 
 func Root(r [32]byte) zap.Field {
 	return zap.String("root", hex.EncodeToString(r[:]))
+}
+func BlockRoot(r [32]byte) zap.Field {
+	return zap.String("block_root", hex.EncodeToString(r[:]))
 }
 
 func Config(val fmt.Stringer) zap.Field {

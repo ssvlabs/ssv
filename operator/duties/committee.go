@@ -112,7 +112,7 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 	return committeeMap
 }
 
-func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, beaconDuty *spectypes.BeaconDuty) {
+func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, beaconDuty *spectypes.ValidatorDuty) {
 	committeeID, ok := h.validatorCommitteeIDs[beaconDuty.ValidatorIndex]
 	if !ok {
 		h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
@@ -121,15 +121,15 @@ func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, beaconDuty *sp
 
 	if _, ok := m[committeeID]; !ok {
 		m[committeeID] = &spectypes.CommitteeDuty{
-			Slot:         beaconDuty.Slot,
-			BeaconDuties: make([]*spectypes.BeaconDuty, 0),
+			Slot:            beaconDuty.Slot,
+			ValidatorDuties: make([]*spectypes.ValidatorDuty, 0),
 		}
 	}
-	m[committeeID].BeaconDuties = append(m[committeeID].BeaconDuties, beaconDuty)
+	m[committeeID].ValidatorDuties = append(m[committeeID].ValidatorDuties, beaconDuty)
 }
 
-func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
-	return &spectypes.BeaconDuty{
+func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,
@@ -141,12 +141,12 @@ func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spec
 	}
 }
 
-func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.BeaconDuty {
+func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
 	indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
 	for i, index := range duty.ValidatorSyncCommitteeIndices {
 		indices[i] = uint64(index)
 	}
-	return &spectypes.BeaconDuty{
+	return &spectypes.ValidatorDuty{
 		Type:                          role,
 		PubKey:                        duty.PubKey,
 		Slot:                          slot, // in order for the duty scheduler to execute

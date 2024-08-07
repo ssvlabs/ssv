@@ -15,7 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -29,11 +29,10 @@ type Options struct {
 	Beacon            beacon.BeaconNode
 	GenesisBeacon     genesisbeacon.BeaconNode
 	Storage           *storage.QBFTStores
-	SSVShare          *types.SSVShare
+	SSVShare          *ssvtypes.SSVShare
 	Operator          *spectypes.CommitteeMember
 	Signer            spectypes.BeaconSigner
-	OperatorSigner    spectypes.OperatorSigner
-	SignatureVerifier spectypes.SignatureVerifier
+	OperatorSigner    ssvtypes.OperatorSigner
 	DutyRunners       runner.ValidatorDutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool

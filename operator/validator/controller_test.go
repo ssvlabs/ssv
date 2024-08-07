@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -106,6 +107,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
+	operatorStore, done := newOperatorStorageForTest(zap.NewNop())
+	defer done()
+
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		2: {
 			Balance: 0,
@@ -202,8 +206,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
-			operatorStore, done := newOperatorStorageForTest(logger)
-			defer done()
+
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(context.TODO())
 
@@ -230,7 +233,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
 					sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(data map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error {
 						for _, share := range tc.shareStorageListResponse {
-							if metadata, ok := data[spectypes.ValidatorPK(share.Share.ValidatorPubKey)]; ok {
+							if metadata, ok := data[share.Share.ValidatorPubKey]; ok {
 								share.Metadata.BeaconMetadata = metadata
 							}
 						}
@@ -238,6 +241,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 					}).Times(1)
 					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				}
+				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
@@ -281,17 +285,17 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg network.SSVMessageInterface) error {
+	ctr.messageWorker.UseHandler(func(msg network.DecodedSSVMessage) error {
 		wg.Done()
 		return nil
 	})
 
-	wg.Add(4)
+	wg.Add(3)
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
 			Data:    generateDecidedMessage(t, identifier),
@@ -299,7 +303,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
 			Data:    generateChangeRoundMsg(t, identifier),
@@ -315,8 +319,8 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+			MsgType: spectypes.DKGMsgType,
 			MsgID:   identifier,
 			Data:    []byte("data"),
 		},
@@ -658,7 +662,7 @@ func TestSetupValidators(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			genesisStorageMap, genesisKm := setupGenesisTestComponents(t)
+			genesisStorageMap := setupGenesisQBFTStorage(t)
 			defer ctrl.Finish()
 			bc := beacon.NewMockBeaconNode(ctrl)
 			storageMap := ibftstorage.NewStores()
@@ -697,7 +701,6 @@ func TestSetupValidators(t *testing.T) {
 					Storage:       storageMap,
 					GenesisOptions: validator.GenesisOptions{
 						Storage: genesisStorageMap,
-						Signer:  genesisKm,
 					},
 				},
 				metadataLastUpdated: metadataLastMap,
@@ -981,7 +984,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
 
-		actualFeeRecipient := testValidator.GetShare().FeeRecipientAddress[:]
+		actualFeeRecipient := testValidator.Share().FeeRecipientAddress[:]
 		require.Equal(t, secondFeeRecipientBytes, actualFeeRecipient, "Fee recipient address did not update correctly")
 	})
 
@@ -997,7 +1000,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
 
-		actualFeeRecipient := testValidator.GetShare().FeeRecipientAddress[:]
+		actualFeeRecipient := testValidator.Share().FeeRecipientAddress[:]
 		require.Equal(t, firstFeeRecipientBytes, actualFeeRecipient, "Fee recipient address should not have changed")
 	})
 }
@@ -1217,7 +1220,7 @@ func decodeHex(t *testing.T, hexStr string, errMsg string) []byte {
 func buildOperatorData(id uint64, ownerAddress string) *registrystorage.OperatorData {
 	return &registrystorage.OperatorData{
 		ID:           id,
-		PublicKey:    []byte("samplePublicKey"),
+		PublicKey:    []byte(base64.StdEncoding.EncodeToString([]byte("samplePublicKey"))),
 		OwnerAddress: common.BytesToAddress([]byte(ownerAddress)),
 	}
 }
@@ -1258,7 +1261,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }
 
-func setupGenesisTestComponents(t *testing.T) (*genesisibftstorage.QBFTStores, *ekm.GenesisKeyManagerAdapter) {
+func setupGenesisQBFTStorage(t *testing.T) *genesisibftstorage.QBFTStores {
 	logger := logging.TestLogger(t)
 	// ctrl := gomock.NewController(t)
 	// network := mocks.NewMockP2PNetwork(ctrl)
@@ -1282,11 +1285,8 @@ func setupGenesisTestComponents(t *testing.T) (*genesisibftstorage.QBFTStores, *
 		genesisStorageMap.Add(storageRole, genesisibftstorage.New(db, "genesis_"+storageRole.String()))
 	}
 
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
-	genesisKeyManager := &ekm.GenesisKeyManagerAdapter{KeyManager: km}
-
 	require.NoError(t, err)
-	return genesisStorageMap, genesisKeyManager
+	return genesisStorageMap
 }
 
 func buildOperators(t *testing.T) []*spectypes.ShareMember {

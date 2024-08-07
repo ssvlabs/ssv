@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -99,7 +98,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(duty.Type, fields.GenesisFormatDutyID(phase0.Epoch(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot)), duty))
+	v.dutyIDs.Set(duty.Type, fields.GenesisFormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
 	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
 
 	// Log with height.

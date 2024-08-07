@@ -15,6 +15,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	genesisssvmessage "github.com/ssvlabs/ssv/protocol/genesis/message"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
@@ -388,7 +389,7 @@ func (m *metricsReporter) SSVMessageType(msgType spectypes.MsgType) {
 }
 
 func (m *metricsReporter) GenesisSSVMessageType(msgType genesisspectypes.MsgType) {
-	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(spectypes.MsgType(msgType))).Inc()
+	messageValidationSSVType.WithLabelValues(genesisssvmessage.MsgTypeToString(msgType)).Inc()
 }
 func (m *metricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
 	messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()

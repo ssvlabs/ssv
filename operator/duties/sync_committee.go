@@ -8,7 +8,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesiseth2phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -84,10 +83,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-
-			if !h.network.PastAlanFork() {
-				h.processExecution(period, slot)
-			}
+			h.processExecution(period, slot)
 			h.processFetching(ctx, period, true)
 			cancel()
 
@@ -100,11 +96,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-			if !h.network.PastAlanFork() {
-				// last slot of period
-				if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-					h.duties.Reset(period - 1)
-				}
+			// last slot of period
+			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+				h.duties.Reset(period - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -187,7 +181,7 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 		return
 	}
 
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
+	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
@@ -274,19 +268,19 @@ func (h *SyncCommitteeHandler) toGenesisSpecDuty(duty *eth2apiv1.SyncCommitteeDu
 	}
 	return &genesisspectypes.Duty{
 		Type:                          role,
-		PubKey:                        genesiseth2phase0.BLSPubKey(duty.PubKey),
-		Slot:                          genesiseth2phase0.Slot(slot), // in order for the duty scheduler to execute
-		ValidatorIndex:                genesiseth2phase0.ValidatorIndex(duty.ValidatorIndex),
+		PubKey:                        duty.PubKey,
+		Slot:                          slot, // in order for the duty scheduler to execute
+		ValidatorIndex:                duty.ValidatorIndex,
 		ValidatorSyncCommitteeIndices: indices,
 	}
 }
 
-func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.BeaconDuty {
+func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
 	indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
 	for i, index := range duty.ValidatorSyncCommitteeIndices {
 		indices[i] = uint64(index)
 	}
-	return &spectypes.BeaconDuty{
+	return &spectypes.ValidatorDuty{
 		Type:                          role,
 		PubKey:                        duty.PubKey,
 		Slot:                          slot, // in order for the duty scheduler to execute

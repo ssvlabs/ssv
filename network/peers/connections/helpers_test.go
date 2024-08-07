@@ -11,6 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 )
 
@@ -52,7 +53,15 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	nii := mock.NodeInfoIndex{
-		MockNodeInfo:   nil,
+		MockNodeInfo: &records.NodeInfo{
+			NetworkID: "test-network-id",
+			Metadata: &records.NodeMetadata{
+				NodeVersion:   "test-node-version",
+				ExecutionNode: "test-execution-node",
+				ConsensusNode: "test-consensus-node",
+				Subnets:       "test-subnets",
+			},
+		},
 		MockSelfSealed: []byte("something"),
 	}
 	ns := peers.NewPeerInfoIndex()
@@ -80,13 +89,14 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:       context.Background(),
-		nodeInfos: nii,
-		peerInfos: ns,
-		ids:       ids,
-		net:       net,
-		streams:   sc,
-		filters:   func() []HandshakeFilter { return []HandshakeFilter{} },
+		ctx:                context.Background(),
+		nodeInfos:          nii,
+		peerInfos:          ns,
+		ids:                ids,
+		net:                net,
+		streams:            sc,
+		filters:            func() []HandshakeFilter { return []HandshakeFilter{} },
+		domainTypeProvider: networkconfig.TestNetwork,
 	}
 
 	mockConn := mock.Conn{

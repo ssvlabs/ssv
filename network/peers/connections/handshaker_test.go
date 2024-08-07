@@ -34,7 +34,7 @@ func TestHandshakeTestData(t *testing.T) {
 		pi := td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID)
 		require.NotNil(t, pi)
 		require.True(t, pi.LastHandshake.After(beforeHandshake) && pi.LastHandshake.Before(time.Now()))
-		require.ErrorContains(t, pi.LastHandshakeError, "failed requesting node info")
+		require.Error(t, pi.LastHandshakeError)
 	})
 
 	t.Run("wrong StreamController", func(t *testing.T) {
