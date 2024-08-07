@@ -15,47 +15,29 @@ func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.Committee
 
 	genesisShare := &genesisspectypes.Share{
 		OperatorID:          operator.OperatorID,
-		SharePubKey:         share.SharePubKey,
+		SharePubKey:         make([]byte, len(share.SharePubKey)),
 		ValidatorPubKey:     key,
 		Committee:           make([]*genesisspectypes.Operator, 0, len(share.Committee)),
 		Quorum:              q,
 		PartialQuorum:       pc,
 		DomainType:          genesisspectypes.DomainType(share.DomainType),
 		FeeRecipientAddress: share.FeeRecipientAddress,
-		Graffiti:            share.Graffiti,
+		Graffiti:            make([]byte, len(share.Graffiti)),
 	}
 
+	copy(genesisShare.SharePubKey, share.SharePubKey)
+	copy(genesisShare.Graffiti, share.Graffiti)
+
 	for _, c := range share.Committee {
-		genesisShare.Committee = append(genesisShare.Committee, &genesisspectypes.Operator{
+		newMember := &genesisspectypes.Operator{
 			OperatorID: c.Signer,
-			PubKey:     c.SharePubKey,
-		})
+			PubKey:     make([]byte, len(c.SharePubKey)),
+		}
+		copy(newMember.PubKey, c.SharePubKey)
+		genesisShare.Committee = append(genesisShare.Committee, newMember)
 	}
 
 	return genesisShare
-}
-
-func ConvertFromGenesisShare(genesisShare *genesisspectypes.Share) *spectypes.Share {
-	var key spectypes.ValidatorPK
-	copy(key[:], genesisShare.ValidatorPubKey[:])
-
-	share := &spectypes.Share{
-		ValidatorPubKey:     key,
-		SharePubKey:         genesisShare.SharePubKey,
-		Committee:           make([]*spectypes.ShareMember, 0, len(genesisShare.Committee)),
-		DomainType:          spectypes.DomainType(genesisShare.DomainType),
-		FeeRecipientAddress: genesisShare.FeeRecipientAddress,
-		Graffiti:            genesisShare.Graffiti,
-	}
-
-	for _, c := range genesisShare.Committee {
-		share.Committee = append(share.Committee, &spectypes.ShareMember{
-			SharePubKey: c.PubKey,
-			Signer:      c.OperatorID,
-		})
-	}
-
-	return share
 }
 
 // ConvertToGenesisSSVShare converts an Alan share to a genesis SSV share.

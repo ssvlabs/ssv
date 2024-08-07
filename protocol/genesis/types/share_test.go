@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 )
@@ -28,27 +29,26 @@ func TestConvertShare(t *testing.T) {
 	genesisShare := ConvertToGenesisShare(originalShare, &spectypes.CommitteeMember{OperatorID: 1})
 
 	// Step 3: Convert share back to Alan share
-	convertedBackShare := ConvertFromGenesisShare(genesisShare)
+	convertedBackShare := convertFromGenesisShare(genesisShare)
 
 	// Step 4: Expect equality with original share
 	require.True(t, sharesEqual(originalShare, convertedBackShare), "The converted back share should be equal to the original share")
 
 	// Step 5: Modify final share and expect inequality
-	modifiedShare := deepCopyShare(convertedBackShare)
-	modifiedShare.Graffiti[0] = 200
-	require.False(t, sharesEqual(originalShare, modifiedShare), "The modified converted back share should not be equal to the original share")
+	convertedBackShare.Graffiti[0] = 200
+	require.False(t, sharesEqual(originalShare, convertedBackShare), "The modified converted back share should not be equal to the original share")
 
 	// Step 6: Modify original share in the same way and expect equality again
 	originalShare.Graffiti[0] = 200
-	require.True(t, sharesEqual(originalShare, modifiedShare), "The modified original share should be equal to the modified converted back share")
+	require.True(t, sharesEqual(originalShare, convertedBackShare), "The modified original share should be equal to the modified converted back share")
 
 	// Step 7: Modify committee member's signer in the final share and expect inequality
-	modifiedShare.Committee[0].Signer = 420
-	require.False(t, sharesEqual(originalShare, modifiedShare), "The modified converted back share with changed committee signer should not be equal to the original share")
+	convertedBackShare.Committee[0].Signer = 420
+	require.False(t, sharesEqual(originalShare, convertedBackShare), "The modified converted back share with changed committee signer should not be equal to the original share")
 
 	// Step 8: Modify original share's committee member signer in the same way and expect equality again
 	originalShare.Committee[0].Signer = 420
-	require.True(t, sharesEqual(originalShare, modifiedShare), "The modified original share with changed committee signer should be equal to the modified converted back share")
+	require.True(t, sharesEqual(originalShare, convertedBackShare), "The modified original share with changed committee signer should be equal to the modified converted back share")
 
 }
 
@@ -82,26 +82,30 @@ func sharesEqual(share1, share2 *spectypes.Share) bool {
 	return true
 }
 
-func deepCopyShare(share *spectypes.Share) *spectypes.Share {
-	newShare := &spectypes.Share{
-		ValidatorPubKey:     share.ValidatorPubKey,
-		SharePubKey:         make([]byte, len(share.SharePubKey)),
-		Committee:           make([]*spectypes.ShareMember, len(share.Committee)),
-		DomainType:          share.DomainType,
-		FeeRecipientAddress: share.FeeRecipientAddress,
-		Graffiti:            make([]byte, len(share.Graffiti)),
+func convertFromGenesisShare(genesisShare *genesisspectypes.Share) *spectypes.Share {
+	var key spectypes.ValidatorPK
+	copy(key[:], genesisShare.ValidatorPubKey[:])
+
+	share := &spectypes.Share{
+		ValidatorPubKey:     key,
+		SharePubKey:         make([]byte, len(genesisShare.SharePubKey)),
+		Committee:           make([]*spectypes.ShareMember, 0, len(genesisShare.Committee)),
+		DomainType:          spectypes.DomainType(genesisShare.DomainType),
+		FeeRecipientAddress: genesisShare.FeeRecipientAddress,
+		Graffiti:            make([]byte, len(genesisShare.Graffiti)),
 	}
 
-	copy(newShare.SharePubKey, share.SharePubKey)
-	for i, member := range share.Committee {
+	copy(share.SharePubKey, genesisShare.SharePubKey)
+	copy(share.Graffiti, genesisShare.Graffiti)
+
+	for _, c := range genesisShare.Committee {
 		newMember := &spectypes.ShareMember{
-			SharePubKey: make([]byte, len(member.SharePubKey)),
-			Signer:      member.Signer,
+			SharePubKey: make([]byte, len(c.PubKey)),
+			Signer:      c.OperatorID,
 		}
-		copy(newMember.SharePubKey, member.SharePubKey)
-		newShare.Committee[i] = newMember
+		copy(newMember.SharePubKey, c.PubKey)
+		share.Committee = append(share.Committee, newMember)
 	}
-	copy(newShare.Graffiti, share.Graffiti)
 
-	return newShare
+	return share
 }
