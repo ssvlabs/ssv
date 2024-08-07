@@ -46,7 +46,7 @@ const (
 	maxFullDataSize   = 5243144 // from spectypes.SignedSSVMessage
 )
 
-var (
+const (
 	maxPayloadDataSize = max(maxConsensusMsgSize, maxPartialSignatureMsgsSize)
 	maxSignedMsgSize   = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + maxFullDataSize
 	maxEncodedMsgSize  = maxSignedMsgSize + maxSignedMsgSize/10 // 10% for encoding overhead
