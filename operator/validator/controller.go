@@ -1358,10 +1358,11 @@ func SetupCommitteeRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		qbftCtrl := qbftcontroller.NewController(func() []byte {
+		identifier := func() []byte {
 			identifier := spectypes.NewMsgID(options.NetworkConfig.AlanDomainType, options.Operator.CommitteeID[:], role)
 			return identifier[:]
-		}, options.Operator, config, options.OperatorSigner, options.FullNode)
+		}
+		qbftCtrl := qbftcontroller.NewController(identifier, options.Operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
 
@@ -1419,11 +1420,11 @@ func SetupRunners(
 			CutOffRound: specqbft.Round(specqbft.CutoffRound),
 		}
 		config.ValueCheckF = valueCheckF
-
-		qbftCtrl := qbftcontroller.NewController(func() []byte {
+		identifier := func() []byte {
 			identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType(), options.SSVShare.Share.ValidatorPubKey[:], role)
 			return identifier[:]
-		}, options.Operator, config, options.OperatorSigner, options.FullNode)
+		}
+		qbftCtrl := qbftcontroller.NewController(identifier, options.Operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
 
