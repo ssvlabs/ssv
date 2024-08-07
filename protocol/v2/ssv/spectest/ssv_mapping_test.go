@@ -2,7 +2,6 @@ package spectest
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -46,10 +45,6 @@ func TestSSVMapping(t *testing.T) {
 	for name, test := range untypedTests {
 		name, test := name, test
 
-		//if strings.Split(name, "_")[1] != "post consensus too many roots" {
-		//	continue
-		//}
-
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
@@ -68,8 +63,6 @@ type runnable struct {
 func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}) *runnable {
 	testName := strings.Split(name, "_")[1]
 	testType := strings.Split(name, "_")[0]
-
-	fmt.Println(testType, testName)
 
 	switch testType {
 	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():

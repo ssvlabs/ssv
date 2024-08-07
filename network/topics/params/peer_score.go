@@ -26,12 +26,11 @@ const (
 	appSpecificWeight = 0
 
 	// P6
-	// TODO: REVERT!
-	ipColocationFactorThreshold = 1000
+	ipColocationFactorThreshold = 10
 	ipColocationFactorWeight    = -topicScoreCap
 
 	// P7
-	behaviourPenaltyThreshold = 60000 // TODO: revert
+	behaviourPenaltyThreshold = 6
 )
 
 // PeerScoreThresholds returns the thresholds to use for peer scoring
@@ -57,7 +56,6 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipWhilelist ...*net.
 	targetVal, _ := decayConvergence(behaviourPenaltyDecay, maxAllowedRatePerDecayInterval)
 	targetVal = targetVal - behaviourPenaltyThreshold
 	behaviourPenaltyWeight := gossipThreshold / (targetVal * targetVal)
-	behaviourPenaltyWeight = 0 // TODO: revert
 
 	return &pubsub.PeerScoreParams{
 		Topics: make(map[string]*pubsub.TopicScoreParams),
