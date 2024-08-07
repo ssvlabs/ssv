@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
 
@@ -32,6 +33,7 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
+	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	beacon genesisspecssv.BeaconNode,
@@ -40,9 +42,10 @@ func NewVoluntaryExitRunner(
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: genesisspectypes.BNRoleVoluntaryExit,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			BeaconRoleType:     genesisspectypes.BNRoleVoluntaryExit,
+			DomainTypeProvider: domainTypeProvider,
+			BeaconNetwork:      beaconNetwork,
+			Share:              share,
 		},
 
 		beacon:  beacon,
