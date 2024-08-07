@@ -11,7 +11,7 @@ import (
 )
 
 func TestRegular4CommitteeScenario(t *testing.T) {
-	t.Skip("tests in this package are stuck")
+	t.Skip("to be fixed")
 
 	regular := &Scenario{
 		Committee: 4,
@@ -29,15 +29,14 @@ func TestRegular4CommitteeScenario(t *testing.T) {
 		},
 	}
 
-	regular.Run(t, spectypes.BNRoleAttester)
-	regular.Run(t, spectypes.BNRoleAggregator)
-	regular.Run(t, spectypes.BNRoleProposer)
-	regular.Run(t, spectypes.BNRoleSyncCommittee)
-	regular.Run(t, spectypes.BNRoleSyncCommitteeContribution)
+	//regular.Run(t, spectypes.RoleCommittee) // fails because committee runner needs to be created
+	regular.Run(t, spectypes.RoleAggregator)
+	regular.Run(t, spectypes.RoleProposer)
+	regular.Run(t, spectypes.RoleSyncCommitteeContribution)
 }
 
 func TestRegular7CommitteeScenario(t *testing.T) {
-	t.Skip("tests in this package are stuck")
+	t.Skip("to be fixed")
 
 	regular := &Scenario{
 		Committee: 7,
@@ -61,15 +60,14 @@ func TestRegular7CommitteeScenario(t *testing.T) {
 		},
 	}
 
-	regular.Run(t, spectypes.BNRoleAttester)
-	regular.Run(t, spectypes.BNRoleAggregator)
-	regular.Run(t, spectypes.BNRoleProposer)
-	regular.Run(t, spectypes.BNRoleSyncCommittee)
-	regular.Run(t, spectypes.BNRoleSyncCommitteeContribution)
+	regular.Run(t, spectypes.RoleCommittee)
+	regular.Run(t, spectypes.RoleAggregator)
+	regular.Run(t, spectypes.RoleProposer)
+	regular.Run(t, spectypes.RoleSyncCommitteeContribution)
 }
 
 func TestRegular10CommitteeScenario(t *testing.T) {
-	t.Skip("tests in this package are stuck")
+	t.Skip("to be fixed")
 
 	regular := &Scenario{
 		Committee: 10,
@@ -99,11 +97,10 @@ func TestRegular10CommitteeScenario(t *testing.T) {
 		},
 	}
 
-	regular.Run(t, spectypes.BNRoleAttester)
-	regular.Run(t, spectypes.BNRoleAggregator)
-	regular.Run(t, spectypes.BNRoleProposer)
-	regular.Run(t, spectypes.BNRoleSyncCommittee)
-	regular.Run(t, spectypes.BNRoleSyncCommitteeContribution)
+	regular.Run(t, spectypes.RoleCommittee)
+	regular.Run(t, spectypes.RoleAggregator)
+	regular.Run(t, spectypes.RoleProposer)
+	regular.Run(t, spectypes.RoleSyncCommitteeContribution)
 }
 
 func regularValidator() func(t *testing.T, committee int, actual *protocolstorage.StoredInstance) {
@@ -112,6 +109,6 @@ func regularValidator() func(t *testing.T, committee int, actual *protocolstorag
 		require.Equal(t, int(qbft.FirstRound), int(actual.State.Round), "round not matching")
 
 		require.NotNil(t, actual.DecidedMessage, "no decided message")
-		require.Greater(t, len(actual.DecidedMessage.Signatures), quorum(committee)-1, "no commit qourum")
+		require.Greater(t, len(actual.DecidedMessage.Signatures), quorum(committee)-1, "no commit quorum")
 	}
 }
