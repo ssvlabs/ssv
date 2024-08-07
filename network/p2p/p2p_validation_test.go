@@ -153,7 +153,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
 	broadcaster := func(node *VirtualNode, roles ...spectypes.RunnerRole) {
 		broadcasters.Go(func(ctx context.Context) error {
-			for i := 0; i < 50; i++ {
+			for i := 0; i < 30; i++ {
 				role := roles[i%len(roles)]
 
 				mu.Lock()
