@@ -290,6 +290,10 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 		}
 	}
 
+	if len(share.ValidatorPubKey) != phase0.PublicKeyLength {
+		return nil, fmt.Errorf("invalid ValidatorPubKey length: got %v, expected 48", len(share.ValidatorPubKey))
+	}
+
 	var validatorPubKey spectypes.ValidatorPK
 	copy(validatorPubKey[:], share.ValidatorPubKey)
 
