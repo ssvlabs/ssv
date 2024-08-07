@@ -1,0 +1,16 @@
+goos: linux
+goarch: amd64
+pkg: github.com/bloxapp/ssv/message/validation
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkVerifyRSASignature-4   	   47982	     25221 ns/op	     122 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47494	     25150 ns/op	     135 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47000	     25187 ns/op	     148 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47370	     25306 ns/op	     163 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47505	     25305 ns/op	     178 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47313	     25347 ns/op	     193 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47538	     25256 ns/op	     208 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47529	     25439 ns/op	     221 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47506	     25205 ns/op	     236 B/op	       4 allocs/op
+BenchmarkVerifyRSASignature-4   	   47318	     25435 ns/op	     251 B/op	       4 allocs/op
+PASS
+ok  	github.com/bloxapp/ssv/message/validation	26.661s

@@ -1,0 +1,19 @@
+DefaultSecOpDelta: 5.0
+DefaultBOpDelta: 5.0
+DefaultAllocOpDelta: 5.0
+Packages:
+  - Path: "./message/validation"
+    Tests:
+      - Name: "VerifyRSASignature"
+        OpDelta: 10
+  - Path: "./protocol/v2/types"
+    Tests:
+      - Name: "VerifyBLS"
+        OpDelta: 6.0
+      - Name: "VerifyPKCS1v15"
+        OpDelta: 4.0
+      - Name: "VerifyPKCS1v15FastHash"
+        OpDelta: 6.0
+      - Name: "VerifyPSS"
+      - Name: "BenchmarkVerifyPKCS1v15OpenSSL"
+      - Name: "BenchmarkSignPKCS1v15OpenSSL"
