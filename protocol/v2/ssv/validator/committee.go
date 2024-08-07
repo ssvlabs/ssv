@@ -23,7 +23,8 @@ import (
 )
 
 var (
-	runnerExpirySlots = phase0.Slot(32)
+	// runnerExpirySlots - Committee messages are allowed up to 34 slots in the future. All runners that are older can be stopped.
+	runnerExpirySlots = phase0.Slot(34)
 )
 
 type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner
