@@ -1,7 +1,9 @@
 package p2pv1
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"math/rand"
 	"sync"
@@ -9,11 +11,15 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -21,8 +27,10 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -35,21 +43,34 @@ func TestGetMaxPeers(t *testing.T) {
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
-	t.Skip("need to implement validator store")
-
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pks := []string{"8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"}
+	shares := []*ssvtypes.SSVShare{
+		{
+			Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
+				},
+				Liquidated: false,
+			},
+		},
+	}
+
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
 		Nodes:        n,
 		MinConnected: n/2 - 1,
 		UseDiscv5:    false,
-	}, pks...)
+		Shares:       shares,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
+
+	time.Sleep(3 * time.Second)
 
 	defer func() {
 		for _, node := range ln.Nodes {
@@ -64,28 +85,31 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		msgID1, msg1 := dummyMsgCommittee(t, pks[0], 1)
-		msgID3, msg3 := dummyMsgCommittee(t, pks[0], 3)
-		require.NoError(t, node1.Broadcast(msgID1, msg1))
-		<-time.After(time.Millisecond * 10)
-		require.NoError(t, node2.Broadcast(msgID3, msg3))
-		<-time.After(time.Millisecond * 2)
-		require.NoError(t, node2.Broadcast(msgID1, msg1))
+		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
+		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
+		require.NoError(t, node1.Broadcast(msg1.SSVMessage.GetID(), msg1))
+		<-time.After(time.Millisecond * 20)
+		require.NoError(t, node2.Broadcast(msg3.SSVMessage.GetID(), msg3))
+		<-time.After(time.Millisecond * 20)
+		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
 	}()
 
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		msgID1, msg1 := dummyMsgCommittee(t, pks[0], 1)
-		msgID2, msg2 := dummyMsgCommittee(t, pks[1], 2)
-		msgID3, msg3 := dummyMsgCommittee(t, pks[0], 3)
+
+		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
+		msg2 := generateMsg(spectestingutils.Testing4SharesSet(), 2)
+		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
 		require.NoError(t, err)
-		time.Sleep(time.Millisecond * 10)
-		require.NoError(t, node1.Broadcast(msgID2, msg2))
-		time.Sleep(time.Millisecond * 2)
-		require.NoError(t, node2.Broadcast(msgID1, msg1))
-		require.NoError(t, node1.Broadcast(msgID3, msg3))
+
+		time.Sleep(time.Millisecond * 20)
+		require.NoError(t, node1.Broadcast(msg2.SSVMessage.GetID(), msg2))
+
+		time.Sleep(time.Millisecond * 20)
+		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
+		require.NoError(t, node1.Broadcast(msg3.SSVMessage.GetID(), msg3))
 	}()
 
 	wg.Wait()
@@ -105,26 +129,37 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	wg.Wait()
 
 	for _, r := range routers {
-		require.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router", r.i)
+		assert.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router %d", r.i)
 	}
-
-	<-time.After(time.Millisecond * 10)
 }
 
 func TestP2pNetwork_Stream(t *testing.T) {
-	t.Skip("test gets stuck")
+	t.Skip("will be removed in https://github.com/ssvlabs/ssv/pull/1544")
 
 	n := 12
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
 	defer cancel()
 
-	pkHex := "8e80066551a81b318258709edaf7dd1f63cd686a0e4db8b29bbb7acfe65608677af5a527d9448ee47835485e02b50bc0"
+	shares := []*ssvtypes.SSVShare{
+		{
+			Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
+				},
+				Liquidated: false,
+			},
+		},
+	}
+
 	ln, _, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
 		Nodes:        n,
 		MinConnected: n/2 - 1,
 		UseDiscv5:    false,
-	}, pkHex)
+		Shares:       shares,
+	})
 
 	defer func() {
 		for _, node := range ln.Nodes {
@@ -134,10 +169,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ln.Nodes, n)
 
-	pk, err := hex.DecodeString(pkHex)
-	require.NoError(t, err)
-
-	mid := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.RoleCommittee)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), shares[0].ValidatorPubKey[:], spectypes.RoleCommittee)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -225,47 +257,84 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 	}
 }
 
-func dummyMsgCommittee(t *testing.T, pkHex string, height int) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
-	return dummyMsg(t, pkHex, height, spectypes.RoleCommittee)
+func generateMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
+	netCfg := networkconfig.TestNetwork
+	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
+
+	share := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
+			},
+			Liquidated: false,
+		},
+	}
+	committeeID := share.CommitteeID()
+
+	fullData := spectestingutils.TestingQBFTFullData
+
+	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType(), encodedCommitteeID, spectypes.RoleCommittee)
+
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
+		Height:     height,
+		Round:      round,
+		Identifier: committeeIdentifier[:],
+		Root:       sha256.Sum256(fullData),
+
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+
+	leader := roundLeader(ks, height, round)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+	signedSSVMessage.FullData = fullData
+
+	return signedSSVMessage
+}
+
+func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) types.OperatorID {
+	share := spectestingutils.TestingShare(ks, 1)
+
+	firstRoundIndex := 0
+	if height != specqbft.FirstHeight {
+		firstRoundIndex += int(height) % len(share.Committee)
+	}
+
+	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(share.Committee)
+	return share.Committee[index].Signer
 }
 
 func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, role)
-	signedMsg := &genesisspecqbft.SignedMessage{
-		Message: genesisspecqbft.Message{
-			MsgType:    genesisspecqbft.CommitMsgType,
-			Round:      2,
-			Identifier: id[:],
-			Height:     genesisspecqbft.Height(height),
-			Root:       [32]byte{0x1, 0x2, 0x3},
-		},
-		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv"),
-		Signers:   []spectypes.OperatorID{1, 3, 4},
-	}
-	data, err := signedMsg.Encode()
-	require.NoError(t, err)
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   id,
-		Data:    data,
+
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Height:     specqbft.Height(height),
+		Round:      2,
+		Identifier: id[:],
+		Root:       [32]byte{0x1, 0x2, 0x3},
 	}
 
-	sig, err := dummySignSSVMessage(ssvMsg)
+	encodedQBFTMessage, err := qbftMessage.Encode()
 	require.NoError(t, err)
 
 	signedSSVMsg := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{1},
-		SSVMessage:  ssvMsg,
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   id,
+			Data:    encodedQBFTMessage,
+		},
+		Signatures:  [][]byte{[]byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv")},
+		OperatorIDs: []spectypes.OperatorID{1, 3, 4},
 	}
 
 	return id, signedSSVMsg
-}
-
-func dummySignSSVMessage(_ *spectypes.SSVMessage) ([]byte, error) {
-	return []byte{}, nil
 }
 
 type dummyRouter struct {
@@ -277,7 +346,7 @@ func (r *dummyRouter) Route(_ context.Context, _ network.DecodedSSVMessage) {
 	atomic.AddUint64(&r.count, 1)
 }
 
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions, pks ...string) (*LocalNet, []*dummyRouter, error) {
+func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions) (*LocalNet, []*dummyRouter, error) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
@@ -301,11 +370,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	logger.Debug("subscribing to topics")
 
 	var wg sync.WaitGroup
-	for _, pk := range pks {
-		vpk, err := hex.DecodeString(pk)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "could not decode validator public key")
-		}
+	for _, share := range options.Shares {
 		for _, node := range ln.Nodes {
 			wg.Add(1)
 			go func(node network.P2PNetwork, vpk spectypes.ValidatorPK) {
@@ -313,7 +378,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 				if err := node.Subscribe(vpk); err != nil {
 					logger.Warn("could not subscribe to topic", zap.Error(err))
 				}
-			}(node, spectypes.ValidatorPK(vpk))
+			}(node, share.ValidatorPubKey)
 		}
 	}
 	wg.Wait()
