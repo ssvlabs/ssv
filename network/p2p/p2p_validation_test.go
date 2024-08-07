@@ -144,7 +144,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		require.NoError(t, vNet.Close())
 	}()
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Prepare a pool of broadcasters.
 	mu := sync.Mutex{}
