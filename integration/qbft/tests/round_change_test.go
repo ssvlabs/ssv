@@ -12,7 +12,7 @@ import (
 )
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {
-	t.Skip("tests in this package are stuck")
+	t.Skip("to be fixed")
 
 	t.SkipNow() // TODO: test is flakey
 
@@ -32,10 +32,9 @@ func TestRoundChange4CommitteeScenario(t *testing.T) {
 		},
 	}
 
-	roundChange.Run(t, spectypes.BNRoleAttester)
+	roundChange.Run(t, spectypes.RoleCommittee)
 	//roundChange.Run(t, spectypes.BNRoleAggregator) todo implement aggregator role support
 	//roundChange.Run(t, spectypes.BNRoleProposer) todo implement proposer role support
-	roundChange.Run(t, spectypes.BNRoleSyncCommittee)
 	//roundChange.Run(t, spectypes.BNRoleSyncCommitteeContribution) todo implement sync committee contribution role support
 }
 
