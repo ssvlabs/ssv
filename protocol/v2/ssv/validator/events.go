@@ -43,6 +43,7 @@ func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.SSVMessage
 		if err != nil {
 			return err
 		}
+		c.mtx.Lock()
 		dutyRunner, found := c.Runners[slot]
 		c.mtx.Unlock()
 
