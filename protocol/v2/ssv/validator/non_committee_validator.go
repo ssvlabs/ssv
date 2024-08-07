@@ -59,7 +59,9 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 
 	// TODO: does the specific operator matters?
 
-	ctrl := qbftcontroller.NewController(opts.NetworkConfig.DomainType, opts.Operator, config, opts.OperatorSigner, opts.FullNode)
+	ctrl := qbftcontroller.NewController(func() []byte {
+		return identifier[:]
+	}, opts.Operator, config, opts.OperatorSigner, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		opts.Logger.Debug("❗ failed to load highest instance", zap.Error(err))
