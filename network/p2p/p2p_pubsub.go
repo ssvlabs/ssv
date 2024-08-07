@@ -7,8 +7,6 @@ import (
 	"math/rand"
 	"time"
 
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -19,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
