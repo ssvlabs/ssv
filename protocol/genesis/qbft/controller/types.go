@@ -81,6 +81,10 @@ func (i *InstanceContainer) String() string {
 
 // UnmarshalJSON implements the json.Unmarshaler interface for InstanceContainer
 func (c *InstanceContainer) UnmarshalJSON(data []byte) error {
+	// InstanceContainer must always have correct capacity on initialization
+	// because addition to instance container doesn't grow beyond cap removing values that don't fit.
+	// Therefore, we need to initialize it properly on unmarshalling
+	// to allow spec tests grow StoredInstances as much as they need to.
 	instances := make([]*instance.Instance, 0, InstanceContainerTestCapacity)
 	if cap(*c) != 0 {
 		instances = *c
