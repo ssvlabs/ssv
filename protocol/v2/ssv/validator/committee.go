@@ -111,8 +111,9 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 	go func() {
 		defer cancelF()
-		err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r)
-		logger.Error("failed consuming queue", zap.Error(err))
+		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
+			logger.Error("❗failed consuming committee queue", zap.Error(err))
+		}
 	}()
 	return nil
 }
