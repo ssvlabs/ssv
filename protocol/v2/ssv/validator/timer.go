@@ -92,6 +92,10 @@ func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 		//	return
 		//}
 		dr := v.Runners[phase0.Slot(height)]
+		if dr == nil {
+			logger.Warn("❗no committee runner found for slot", fields.Slot(phase0.Slot(height)))
+			return
+		}
 		hasDuty := dr.HasRunningDuty()
 		if !hasDuty {
 			return
