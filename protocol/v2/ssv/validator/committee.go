@@ -197,7 +197,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// Stop all expired committee runners, when new runner is created
 	go func() {
 		if err := c.stopExpiredRunners(logger, duty.Slot); err != nil {
-			logger.Error("couldn't stop old committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
+			logger.Error("couldn't stop expired committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
 		}
 	}()
 
@@ -317,6 +317,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 }
 func (c *Committee) stopExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
+	logger.Debug("👀👀👀 stopping expired committee runners", zap.Uint64("current_slot", uint64(currentSlot)))
 	if runnerExpirySlots > currentSlot {
 		return nil
 	}
