@@ -364,15 +364,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectestingutils.TestKeySet) runner.Runner {
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
-	base := &runner.BaseRunner{
-		QBFTController: &controller.Controller{
-			// StoredInstances must always have correct capacity on initialization
-			// because addition to instance container doesn't grow beyond cap removing values that don't fit.
-			// Therefore, we need to initialize it properly to allow spec tests grow StoredInstances as much as they need to.
-			// TODO: Put this logic into UnmarshalJSON of BaseRunner or InstanceContainer
-			StoredInstances: make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity),
-		},
-	}
+	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 	base.DomainTypeProvider = networkconfig.TestNetwork

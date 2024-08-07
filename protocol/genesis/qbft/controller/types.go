@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -76,4 +77,18 @@ func (i *InstanceContainer) String() string {
 		heights[index] = fmt.Sprint(inst.GetHeight())
 	}
 	return fmt.Sprintf("Instances(len=%d, cap=%d, heights=(%s))", len(*i), cap(*i), strings.Join(heights, ", "))
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface for InstanceContainer
+func (c *InstanceContainer) UnmarshalJSON(data []byte) error {
+	instances := make([]*instance.Instance, 0, InstanceContainerTestCapacity)
+	if cap(*c) != 0 {
+		instances = *c
+	}
+
+	if err := json.Unmarshal(data, &instances); err != nil {
+		return err
+	}
+	*c = instances
+	return nil
 }
