@@ -17,6 +17,8 @@ mtypes.One
 mqbft.Two
 typesm.One
 qbftm.Two
+types, One, spectypes, Two
+types+One, spectypes+Two
 types.One qbft.Two`
 	expected :=
 		`One
@@ -28,6 +30,8 @@ mtypes.One
 mqbft.Two
 typesm.One
 qbftm.Two
+types, One, spectypes, Two
+types+One, spectypes+Two
 One qbft.Two`
 	actual := NoPackageNames([]string{"types", "qbft"})(input)
 	require.Equal(t, expected, actual)
