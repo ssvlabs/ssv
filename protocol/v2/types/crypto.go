@@ -49,7 +49,7 @@ func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, valida
 	validatorPubKeyCopy := make([]byte, len(validatorPubKey))
 	copy(validatorPubKeyCopy, validatorPubKey)
 
-	if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
+	if err := VerifyReconstructedSignature(signature, validatorPubKeyCopy, root); err != nil {
 		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
 	}
 	return signature.Serialize(), nil
