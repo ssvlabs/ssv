@@ -32,7 +32,7 @@ const (
 
 	// Client timeouts.
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 10 // For long requests.
+	DefaultLongTimeout   = time.Second * 60 // For long requests.
 )
 
 type beaconNodeStatus int32
@@ -119,8 +119,6 @@ type Client interface {
 	eth2client.NodeSyncingProvider
 	eth2client.ProposalProvider
 	eth2client.ProposalSubmitter
-	eth2client.BlindedProposalProvider
-	eth2client.V3ProposalProvider
 	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
 	eth2client.SyncCommitteeMessagesSubmitter
@@ -182,6 +180,7 @@ func New(
 		// LogLevel supplies the level of logging to carry out.
 		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
 		eth2clienthttp.WithTimeout(commonTimeout),
+		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)

@@ -29,11 +29,11 @@ type Options struct {
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool
 	Exporter          bool
-	BuilderProposals  bool
 	QueueSize         int
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator
 	Metrics           Metrics
+	Graffiti          []byte
 }
 
 func (o *Options) defaults() {
