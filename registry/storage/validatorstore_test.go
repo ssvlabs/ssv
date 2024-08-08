@@ -434,6 +434,6 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 			randomShares[j] = shares[pubKeys[(first+j)%len(pubKeys)]]
 		}
 
-		store.handleShareUpdated_Optimized(randomShares...)
+		store.handleShareUpdated(randomShares...)
 	}
 }
