@@ -1,7 +1,10 @@
 package storage
 
 import (
+	"encoding/binary"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -338,4 +341,99 @@ func TestSelfValidatorStore_NilOperatorID(t *testing.T) {
 	require.Nil(t, selfStore.SelfParticipatingValidators(201))
 	require.Nil(t, selfStore.SelfParticipatingCommittees(99))
 	require.Nil(t, selfStore.SelfParticipatingCommittees(201))
+}
+
+func BenchmarkValidatorStore_Update(b *testing.B) {
+	shares := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+
+	const (
+		totalOperators  = 500
+		totalValidators = 50_000
+	)
+
+	var validatorIndex atomic.Int64
+	createShare := func(operators []spectypes.OperatorID) *ssvtypes.SSVShare {
+		index := validatorIndex.Add(1)
+
+		var pk spectypes.ValidatorPK
+		binary.LittleEndian.PutUint64(pk[:], uint64(index))
+
+		var committee []*spectypes.ShareMember
+		for _, signer := range operators {
+			committee = append(committee, &spectypes.ShareMember{Signer: signer})
+		}
+
+		return &ssvtypes.SSVShare{
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Index: phase0.ValidatorIndex(index),
+				},
+			},
+			Share: spectypes.Share{
+				ValidatorIndex:      phase0.ValidatorIndex(index),
+				ValidatorPubKey:     pk,
+				SharePubKey:         pk[:],
+				Committee:           committee,
+				FeeRecipientAddress: [20]byte{10, 20, 30},
+				Graffiti:            []byte("example"),
+			},
+		}
+	}
+
+	for i := 0; i < totalValidators; i++ {
+		committee := make([]spectypes.OperatorID, 4)
+		if rand.Float64() < 0.02 {
+			// 2% chance of a purely random committee.
+			for i, id := range rand.Perm(totalOperators)[:4] {
+				committee[i] = spectypes.OperatorID(id)
+			}
+		} else {
+			// 98% chance to form big committees.
+			first := rand.Intn(totalOperators * 0.2) // 20% of the operators.
+			for i := range committee {
+				committee[i] = spectypes.OperatorID((first + i) % totalOperators)
+			}
+		}
+		share := createShare(committee)
+		shares[share.ValidatorPubKey] = share
+	}
+
+	// Print table of committees and validator counts for debugging.
+	// committees := map[[4]spectypes.OperatorID]int{}
+	// for _, share := range shares {
+	// 	committee := [4]spectypes.OperatorID{}
+	// 	for i, member := range share.Committee {
+	// 		committee[i] = member.Signer
+	// 	}
+	// 	committees[committee]++
+	// }
+	// tbl := table.New(os.Stdout)
+	// tbl.SetHeaders("Committee", "Validators")
+	// for committee, count := range committees {
+	// 	tbl.AddRow(fmt.Sprintf("%v", committee), fmt.Sprintf("%d", count))
+	// }
+	// tbl.Render()
+
+	// b.Logf("Total committees: %d", len(committees))
+
+	store := newValidatorStore(
+		func() []*ssvtypes.SSVShare { return maps.Values(shares) },
+		func(pubKey []byte) *ssvtypes.SSVShare {
+			return shares[spectypes.ValidatorPK(pubKey)]
+		},
+	)
+	store.handleSharesAdded(maps.Values(shares)...)
+
+	pubKeys := maps.Keys(shares)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		randomShares := make([]*ssvtypes.SSVShare, 500)
+		first := rand.Intn(len(pubKeys))
+		for j := 0; j < 500; j++ {
+			randomShares[j] = shares[pubKeys[(first+j)%len(pubKeys)]]
+		}
+
+		store.handleShareUpdated_Optimized(randomShares...)
+	}
 }
