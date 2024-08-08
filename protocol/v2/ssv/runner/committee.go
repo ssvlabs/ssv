@@ -544,7 +544,7 @@ func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
 func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{}, spectypes.DomainAttester, nil
+	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
 }
 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (

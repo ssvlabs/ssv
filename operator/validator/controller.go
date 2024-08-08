@@ -1056,7 +1056,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		genesisOpts := c.genesisValidatorOptions
 		// TODO: (Alan) share mutations such as metadata changes and fee recipient updates aren't reflected in genesis shares
 		// because shares are duplicated.
-		genesisOpts.SSVShare = genesisssvtypes.ConvertToAlanShare(share, operator)
+		genesisOpts.SSVShare = genesisssvtypes.ConvertToGenesisSSVShare(share, operator)
 		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
 		genesisValidator := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
