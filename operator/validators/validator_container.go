@@ -16,12 +16,14 @@ type ValidatorContainer struct {
 	mtx              sync.Mutex
 }
 
-func (vc *ValidatorContainer) Start(logger *zap.Logger) (started bool, err error) {
+func (vc *ValidatorContainer) Start(logger *zap.Logger, isForked func() bool) (started bool, err error) {
 	started, err = vc.Validator.Start(logger)
 	if !started || err != nil {
 		return
 	}
-	started, err = vc.GenesisValidator.Start(logger)
+	if vc.GenesisValidator != nil && !isForked() {
+		started, err = vc.GenesisValidator.Start(logger)
+	}
 	return
 }
 

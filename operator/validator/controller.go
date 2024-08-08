@@ -1201,7 +1201,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 
 func (c *controller) validatorStart(validator *validators.ValidatorContainer) (bool, error) {
 	if c.validatorStartFunc == nil {
-		return validator.Start(c.logger)
+		return validator.Start(c.logger, c.networkConfig.PastAlanFork)
 	}
 	return c.validatorStartFunc(validator)
 }
@@ -1243,11 +1243,20 @@ func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
 }
 
 func (c *controller) ForkMonitor(logger *zap.Logger) {
+	if c.networkConfig.PastAlanFork() {
+		return
+	}
+
+	bn := c.beacon.GetBeaconNetwork()
+
+	forkTime := time.Unix(bn.EstimatedTimeAtSlot(bn.FirstSlotAtEpoch(c.networkConfig.AlanForkEpoch)), 0)
+	timeUntilFork := time.Until(forkTime)
+
 	for {
 		select {
 		case <-c.context.Done():
 			return
-		case <-time.After(c.networkConfig.SlotDurationSec()):
+		case <-time.After(timeUntilFork):
 			if !c.networkConfig.PastAlanFork() {
 				continue
 			}
