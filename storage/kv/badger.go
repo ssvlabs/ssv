@@ -249,11 +249,13 @@ func (b *BadgerDB) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
 
 	opt := badger.DefaultIteratorOptions
 	opt.Prefix = prefix
+	opt.PrefetchValues = false
+
 	it := txn.NewIterator(opt)
 	defer it.Close()
+
 	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-		item := it.Item()
-		keys = append(keys, item.KeyCopy(nil))
+		keys = append(keys, it.Item().KeyCopy(nil))
 	}
 
 	return keys
