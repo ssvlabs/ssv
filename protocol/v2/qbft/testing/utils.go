@@ -67,7 +67,7 @@ var baseInstance = func(share *types.CommitteeMember, keySet *testingutils.TestK
 
 func NewTestingQBFTController(
 	keySet *testingutils.TestKeySet,
-	identifier func() []byte,
+	identifier []byte,
 	share *types.CommitteeMember,
 	config qbft.IConfig,
 	fullNode bool,

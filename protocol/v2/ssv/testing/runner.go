@@ -62,10 +62,8 @@ var baseRunner = func(
 	keySet *spectestingutils.TestKeySet,
 ) runner.Runner {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := func() []byte {
-		messageID := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
-		return messageID[:]
-	}
+	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
+
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
@@ -100,7 +98,7 @@ var baseRunner = func(
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
-		identifier,
+		identifier[:],
 		operator,
 		config,
 		false,
@@ -295,10 +293,7 @@ var baseRunnerWithShareMap = func(
 		ownerID = spectestingutils.TestingValidatorPubKey[:]
 	}
 
-	identifier := func() []byte {
-		messageID := spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
-		return messageID[:]
-	}
+	identifier := spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
 
 	net := spectestingutils.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
 
@@ -334,7 +329,7 @@ var baseRunnerWithShareMap = func(
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
-		identifier,
+		identifier[:],
 		committeeMember,
 		config,
 		false,
