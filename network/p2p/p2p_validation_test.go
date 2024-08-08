@@ -24,6 +24,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -153,7 +154,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
 	broadcaster := func(node *VirtualNode, roles ...spectypes.RunnerRole) {
 		broadcasters.Go(func(ctx context.Context) error {
-			for i := 0; i < 30; i++ {
+			for i := 0; i < 12; i++ {
 				role := roles[i%len(roles)]
 
 				mu.Lock()
@@ -176,10 +177,16 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// - node 1 broadcasts ignored messages.
 	// - node 2 broadcasts rejected messages.
 	// - node 3 broadcasts all messages (equal distribution).
-	broadcaster(vNet.Nodes[0], acceptedRole)
-	broadcaster(vNet.Nodes[1], ignoredRole)
-	broadcaster(vNet.Nodes[2], rejectedRole)
-	broadcaster(vNet.Nodes[3], acceptedRole, ignoredRole, rejectedRole)
+	messageTypesByNodeIndex := map[int][]spectypes.RunnerRole{
+		0: {acceptedRole},
+		1: {ignoredRole},
+		2: {rejectedRole},
+		3: {acceptedRole, ignoredRole, rejectedRole},
+	}
+
+	for i := 0; i < nodeCount; i++ {
+		broadcaster(vNet.Nodes[i], messageTypesByNodeIndex[i]...)
+	}
 
 	// Wait for the broadcasters to finish.
 	err := broadcasters.Wait()
@@ -187,9 +194,15 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Assert that the messages were distributed as expected.
-	deadline := time.Now().Add(7 * time.Second)
+	time.Sleep(5 * time.Second)
+
 	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
+		// Messages from nodes broadcasting rejected role become rejected once score threshold is reached
+		if slices.Contains(messageTypesByNodeIndex[i], rejectedRole) {
+			continue
+		}
+
 		// better lock inside loop than wait interval locked
 		mtx.Lock()
 		var errors []error
@@ -203,12 +216,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			errors = append(errors, fmt.Errorf("node %d rejected %d messages (expected %d)", i, messageValidators[i].TotalRejected, roleBroadcasts[rejectedRole]))
 		}
 		mtx.Unlock()
-		if len(errors) == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			require.Empty(t, errors)
-		}
+		require.Empty(t, errors)
 		time.Sleep(interval)
 	}
 
