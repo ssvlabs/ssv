@@ -5,41 +5,37 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
-
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/validation"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestTopicManager(t *testing.T) {
-	t.Skip("the test gets stuck, needs to be fixed")
-
+	// TODO: reduce running time of this test, use channels instead of long timeouts
 	logger := logging.TestLogger(t)
 
 	// TODO: rework this test to use message validation
@@ -174,16 +170,27 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 			wg.Add(1)
 			go func(p *P, pk string) {
 				defer wg.Done()
-				require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
+
+				topic := validatorTopic(pk)
+				topicFullName := commons.GetTopicFullName(topic)
+
+				err := p.tm.Unsubscribe(logger, topic, false)
+				require.NoError(t, err)
+
 				go func(p *P) {
 					<-time.After(time.Millisecond)
-					require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
+
+					err := p.tm.Unsubscribe(logger, topic, false)
+					require.ErrorContains(t, err, fmt.Sprintf("failed to unsubscribe from topic %s: not subscribed", topicFullName))
 				}(p)
+
 				wg.Add(1)
 				go func(p *P) {
 					defer wg.Done()
 					<-time.After(time.Millisecond * 50)
-					require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
+
+					err := p.tm.Unsubscribe(logger, topic, false)
+					require.ErrorContains(t, err, fmt.Sprintf("failed to unsubscribe from topic %s: not subscribed", topicFullName))
 				}(p)
 			}(p, pks[i])
 		}
