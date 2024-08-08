@@ -307,10 +307,8 @@ func (c *validatorStore) handleShareUpdated(shares ...*types.SSVShare) {
 		}
 
 		// Update byCommitteeID
-		for _, committee := range c.byCommitteeID {
-			if committee.ID != share.CommitteeID() {
-				continue
-			}
+		committee, ok := c.byCommitteeID[share.CommitteeID()]
+		if ok {
 			for i, validator := range committee.Validators {
 				if validator.ValidatorPubKey == share.ValidatorPubKey {
 					committee.Validators[i] = share
@@ -321,7 +319,8 @@ func (c *validatorStore) handleShareUpdated(shares ...*types.SSVShare) {
 		}
 
 		// Update byOperatorID
-		for _, data := range c.byOperatorID {
+		for _, operatorID := range share.Committee {
+			data := c.byOperatorID[operatorID.Signer]
 			for i, s := range data.shares {
 				if s.ValidatorPubKey == share.ValidatorPubKey {
 					data.shares[i] = share
