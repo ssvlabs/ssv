@@ -300,32 +300,44 @@ func (c *validatorStore) handleShareUpdated(shares ...*types.SSVShare) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	sharesByPubKey := make(map[spectypes.ValidatorPK]*types.SSVShare, len(shares))
+	sharesByCommitteeID := make(map[spectypes.CommitteeID]struct{}, len(shares))
+	sharesByOperatorID := make(map[spectypes.OperatorID]int, len(shares))
+
 	for _, share := range shares {
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.BeaconMetadata.Index] = share
 		}
+		sharesByPubKey[share.ValidatorPubKey] = share
+		sharesByCommitteeID[share.CommitteeID()] = struct{}{}
+		for _, operator := range share.Committee {
+			sharesByOperatorID[operator.Signer]++
+		}
+	}
 
-		// Update byCommitteeID
-		for _, committee := range c.byCommitteeID {
-			if committee.ID != share.CommitteeID() {
-				continue
-			}
+	// Update byCommitteeID
+	for committeeID := range sharesByCommitteeID {
+		if committee, ok := c.byCommitteeID[committeeID]; ok {
 			for i, validator := range committee.Validators {
-				if validator.ValidatorPubKey == share.ValidatorPubKey {
+				if share, ok := sharesByPubKey[validator.ValidatorPubKey]; ok {
 					committee.Validators[i] = share
 					committee.Indices[i] = share.ValidatorIndex
-					break
 				}
 			}
 		}
+	}
 
-		// Update byOperatorID
-		for _, data := range c.byOperatorID {
+	// Update byOperatorID
+	for operatorID, numOfShares := range sharesByOperatorID {
+		if data, ok := c.byOperatorID[operatorID]; ok {
 			for i, s := range data.shares {
-				if s.ValidatorPubKey == share.ValidatorPubKey {
+				if share, ok := sharesByPubKey[s.ValidatorPubKey]; ok {
 					data.shares[i] = share
-					break
+					numOfShares--
+					if numOfShares == 0 {
+						break
+					}
 				}
 			}
 		}
