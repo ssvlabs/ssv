@@ -207,7 +207,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 	return &storageShare{
 		Share: Share{
 			OperatorID:          1,
-			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
+			ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
 			Quorum:              quorum,

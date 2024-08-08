@@ -3,10 +3,10 @@ package types
 import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	typesv2 "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// TODO: (Alan) write tests with all fields and equality checks
 func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.CommitteeMember) *genesisspectypes.Share {
 	q, pc := ComputeQuorumAndPartialQuorum(len(share.Committee))
 
@@ -15,53 +15,44 @@ func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.Committee
 
 	genesisShare := &genesisspectypes.Share{
 		OperatorID:          operator.OperatorID,
-		SharePubKey:         share.SharePubKey,
+		SharePubKey:         make([]byte, len(share.SharePubKey)),
 		ValidatorPubKey:     key,
 		Committee:           make([]*genesisspectypes.Operator, 0, len(share.Committee)),
 		Quorum:              q,
 		PartialQuorum:       pc,
 		DomainType:          genesisspectypes.DomainType(share.DomainType),
 		FeeRecipientAddress: share.FeeRecipientAddress,
-		Graffiti:            share.Graffiti,
+		Graffiti:            make([]byte, len(share.Graffiti)),
 	}
 
+	copy(genesisShare.SharePubKey, share.SharePubKey)
+	copy(genesisShare.Graffiti, share.Graffiti)
+
 	for _, c := range share.Committee {
-		genesisShare.Committee = append(genesisShare.Committee, &genesisspectypes.Operator{
+		newMember := &genesisspectypes.Operator{
 			OperatorID: c.Signer,
-			PubKey:     c.SharePubKey,
-		})
+			PubKey:     make([]byte, len(c.SharePubKey)),
+		}
+		copy(newMember.PubKey, c.SharePubKey)
+		genesisShare.Committee = append(genesisShare.Committee, newMember)
 	}
 
 	return genesisShare
 }
 
-// TODO: (Alan) write tests with all fields and equality checks
-func ConvertToAlanShare(alanShare *typesv2.SSVShare, operator *spectypes.CommitteeMember) *SSVShare {
-	q, pc := ComputeQuorumAndPartialQuorum(len(alanShare.Committee))
+// ConvertToGenesisSSVShare converts an Alan share to a genesis SSV share.
+func ConvertToGenesisSSVShare(alanSSVShare *typesv2.SSVShare, operator *spectypes.CommitteeMember) *SSVShare {
+	genesisShare := ConvertToGenesisShare(&alanSSVShare.Share, operator)
 
-	key := make([]byte, len(alanShare.ValidatorPubKey))
-	copy(key, alanShare.ValidatorPubKey[:])
-
-	share := &SSVShare{
-		Share: genesisspectypes.Share{
-			OperatorID:          operator.OperatorID,
-			ValidatorPubKey:     key, // Ensure this is necessary; remove if ValidatorPubKey is already a slice.
-			SharePubKey:         alanShare.SharePubKey,
-			Committee:           make([]*genesisspectypes.Operator, 0, len(alanShare.Committee)),
-			Quorum:              q,
-			PartialQuorum:       pc,
-			DomainType:          genesisspectypes.DomainType(alanShare.DomainType),
-			FeeRecipientAddress: alanShare.FeeRecipientAddress,
-			Graffiti:            alanShare.Graffiti,
-		},
+	convertedMetadata := Metadata{
+		BeaconMetadata: alanSSVShare.Metadata.BeaconMetadata,
+		OwnerAddress:   alanSSVShare.Metadata.OwnerAddress,
+		Liquidated:     alanSSVShare.Metadata.Liquidated,
+		// lastUpdated field is not converted because it's unexported
 	}
 
-	for _, c := range alanShare.Committee {
-		share.Committee = append(share.Committee, &genesisspectypes.Operator{
-			OperatorID: c.Signer,
-			PubKey:     c.SharePubKey,
-		})
+	return &SSVShare{
+		Share:    *genesisShare,
+		Metadata: convertedMetadata,
 	}
-
-	return share
 }
