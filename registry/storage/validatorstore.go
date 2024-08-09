@@ -301,6 +301,7 @@ func (c *validatorStore) handleShareUpdated(shares ...*types.SSVShare) {
 	defer c.mu.Unlock()
 
 	for _, share := range shares {
+
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.BeaconMetadata.Index] = share
