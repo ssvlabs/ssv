@@ -27,7 +27,7 @@ func init() {
 	}
 }
 
-func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+func ReconstructSignature(ps *PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
 	if ps.Signatures[validatorIndex] == nil {
 		return nil, errors.New("no signatures for the given validator index")
