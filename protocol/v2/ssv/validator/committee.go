@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -19,6 +20,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+)
+
+var (
+	// runnerExpirySlots - Committee messages are allowed up to 34 slots in the future. All runners that are older can be stopped.
+	runnerExpirySlots = phase0.Slot(34)
 )
 
 type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner
@@ -88,14 +94,26 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
+	// Setting the cancel function separately due the queue could be created in HandleMessage
+	q, found := c.Queues[duty.Slot]
+	if !found {
+		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+	}
+
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	q.Stop = cancelF // DO we still need this?
+
 	r := c.Runners[duty.Slot]
 	if r == nil {
 		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
 	}
 
 	go func() {
-		err := c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, r)
-		logger.Error("failed consuming queue", zap.Error(err))
+		defer cancelF()
+		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
+			logger.Error("❗failed consuming committee queue", zap.Error(err))
+		}
 	}()
 	return nil
 }
@@ -177,6 +195,13 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		}
 
 	}
+
+	// Stop all expired committee runners, when new runner is created
+	go func() {
+		if err := c.stopExpiredRunners(logger, duty.Slot); err != nil {
+			logger.Error("couldn't stop expired committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
+		}
+	}()
 
 	runnerLogger := c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 
@@ -292,6 +317,40 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 	}
 	return nil
 
+}
+func (c *Committee) stopExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
+	logger.Debug("👀👀👀 stopping expired committee runners", zap.Uint64("current_slot", uint64(currentSlot)))
+	if runnerExpirySlots > currentSlot {
+		return nil
+	}
+
+	minValidSlot := currentSlot - runnerExpirySlots
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for slot := range c.Runners {
+		if slot <= minValidSlot {
+			logger.Info("stopping expired committee runner", zap.Uint64("slot", uint64(slot)))
+			delete(c.Runners, slot)
+			delete(c.Queues, slot)
+		}
+	}
+
+	return nil
+}
+
+func (c *Committee) Stop() {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for slot, q := range c.Queues {
+		c.logger.Error("stopping committee queue",
+			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+			fields.Slot(slot),
+		)
+		q.Stop()
+	}
 }
 
 func (c *Committee) Encode() ([]byte, error) {
