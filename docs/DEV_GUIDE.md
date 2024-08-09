@@ -158,7 +158,7 @@ This section details the steps to run a local network of operator nodes.
 In order to run a local environment, install the following:
 
 - git
-- go (1.20)
+- go (1.22)
 - docker
 - make
 - yq

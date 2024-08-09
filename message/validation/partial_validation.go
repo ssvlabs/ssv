@@ -4,13 +4,13 @@ package validation
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"golang.org/x/exp/slices"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
@@ -270,13 +270,4 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	default:
 		return false
 	}
-}
-
-// TODO: delete after updating to Go 1.21
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-
-	return b
 }

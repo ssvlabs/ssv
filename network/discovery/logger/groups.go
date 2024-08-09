@@ -1,7 +1,8 @@
 package compatible_logger
 
 import (
-	"golang.org/x/exp/slices"
+	"slices"
+
 	"golang.org/x/exp/slog"
 )
 

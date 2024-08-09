@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"golang.org/x/exp/slices"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )

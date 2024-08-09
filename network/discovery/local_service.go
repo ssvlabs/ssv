@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging"
 )
 
@@ -66,7 +67,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 	return func(e PeerEvent) {
 		ctns := host.Network().Connectedness(e.AddrInfo.ID)
 		switch ctns {
-		case libp2pnetwork.CannotConnect, libp2pnetwork.Connected:
+		case libp2pnetwork.Connected:
 		default:
 			go handler(e)
 		}

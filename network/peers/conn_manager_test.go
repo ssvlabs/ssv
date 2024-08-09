@@ -8,10 +8,11 @@ import (
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/network/records"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 func TestTagBestPeers(t *testing.T) {
@@ -101,6 +102,10 @@ func (m mockConnManager) Unprotect(id peer.ID, tag string) (protected bool) {
 func (m mockConnManager) IsProtected(id peer.ID, tag string) (protected bool) {
 	_, ok := m.tags[id]
 	return ok
+}
+
+func (m mockConnManager) CheckLimit(l connmgrcore.GetConnLimiter) error {
+	return nil
 }
 
 func (m mockConnManager) Close() error {

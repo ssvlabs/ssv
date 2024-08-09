@@ -3,10 +3,9 @@ package types
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"slices"
 	"sort"
 	"time"
-
-	"golang.org/x/exp/slices"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
