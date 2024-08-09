@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -14,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
 
@@ -33,7 +33,7 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
-	domainTypeProvider networkconfig.DomainTypeProvider,
+	domainType spectypes.DomainType,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	beacon genesisspecssv.BeaconNode,
@@ -42,10 +42,10 @@ func NewVoluntaryExitRunner(
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType:     genesisspectypes.BNRoleVoluntaryExit,
-			DomainTypeProvider: domainTypeProvider,
-			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			BeaconRoleType: genesisspectypes.BNRoleVoluntaryExit,
+			DomainType:     domainType,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
 		},
 
 		beacon:  beacon,
