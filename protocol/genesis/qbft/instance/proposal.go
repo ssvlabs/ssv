@@ -78,10 +78,8 @@ func isValidProposal(
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if config.VerifySignatures() {
-		if err := genesisssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	if err := genesisssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
 	}
 	if !signedProposal.MatchedSigners([]genesisspectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
 		return errors.New("proposal leader invalid")

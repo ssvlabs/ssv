@@ -260,10 +260,8 @@ func validRoundChangeForData(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	if err := signedMsg.Message.Validate(); err != nil {

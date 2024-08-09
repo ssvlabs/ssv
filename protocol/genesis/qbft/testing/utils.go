@@ -34,10 +34,9 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 			return 1
 		},
-		Storage:               TestingStores(logger).Get(role),
-		Network:               testingutils.NewTestingNetwork(),
-		Timer:                 roundtimer.NewTestingTimer(),
-		SignatureVerification: true,
+		Storage: TestingStores(logger).Get(role),
+		Network: testingutils.NewTestingNetwork(),
+		Timer:   roundtimer.NewTestingTimer(),
 	}
 }
 

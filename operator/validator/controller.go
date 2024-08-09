@@ -1486,10 +1486,9 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 				leader := genesisspecqbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Storage:               options.GenesisOptions.Storage.Get(role),
-			Network:               options.GenesisOptions.Network,
-			Timer:                 genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			SignatureVerification: true,
+			Storage: options.GenesisOptions.Storage.Get(role),
+			Network: options.GenesisOptions.Network,
+			Timer:   genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 		}
 		config.ValueCheckF = valueCheckF
 		identifier := genesisspectypes.NewMsgID(genesisssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
@@ -1525,8 +1524,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			qbftCtrl := buildController(genesisspectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = genesisrunner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, syncCommitteeContributionValueCheckF, 0)
 		case genesisspectypes.BNRoleValidatorRegistration:
-			qbftCtrl := buildController(genesisspectypes.BNRoleValidatorRegistration, nil)
-			runners[role] = genesisrunner.NewValidatorRegistrationRunner(options.NetworkConfig, genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
+			runners[role] = genesisrunner.NewValidatorRegistrationRunner(options.NetworkConfig, genesisBeaconNetwork, share, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
 		case genesisspectypes.BNRoleVoluntaryExit:
 			runners[role] = genesisrunner.NewVoluntaryExitRunner(options.NetworkConfig, genesisBeaconNetwork, share, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
 		}

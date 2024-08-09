@@ -27,20 +27,17 @@ type IConfig interface {
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
-	// VerifySignatures returns if signature is checked
-	VerifySignatures() bool
 }
 
 type Config struct {
-	Signer                genesisspectypes.SSVSigner
-	SigningPK             []byte
-	Domain                genesisspectypes.DomainType
-	ValueCheckF           genesisspecqbft.ProposedValueCheckF
-	ProposerF             genesisspecqbft.ProposerF
-	Storage               qbftstorage.QBFTStore
-	Network               genesisspecqbft.Network
-	Timer                 roundtimer.Timer
-	SignatureVerification bool
+	Signer      genesisspectypes.SSVSigner
+	SigningPK   []byte
+	Domain      genesisspectypes.DomainType
+	ValueCheckF genesisspecqbft.ProposedValueCheckF
+	ProposerF   genesisspecqbft.ProposerF
+	Storage     qbftstorage.QBFTStore
+	Network     genesisspecqbft.Network
+	Timer       roundtimer.Timer
 }
 
 // GetSigner returns a Signer instance
@@ -81,8 +78,4 @@ func (c *Config) GetStorage() qbftstorage.QBFTStore {
 // GetTimer returns round timer
 func (c *Config) GetTimer() roundtimer.Timer {
 	return c.Timer
-}
-
-func (c *Config) VerifySignatures() bool {
-	return c.SignatureVerification
 }
