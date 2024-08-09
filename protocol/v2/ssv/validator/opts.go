@@ -5,6 +5,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	genesisqbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 
@@ -46,7 +47,6 @@ type Options struct {
 }
 
 type GenesisOptions struct {
-	BuilderProposals  bool
 	Network           genesisspecqbft.Network
 	Storage           *genesisstorage.QBFTStores
 	Signer            genesisspectypes.KeyManager
