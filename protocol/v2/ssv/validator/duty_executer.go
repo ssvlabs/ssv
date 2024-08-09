@@ -34,6 +34,8 @@ func (c *Committee) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error
 		return fmt.Errorf("failed to get execute committee duty data: %w", err)
 	}
 
+	logger = logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(executeDutyData.Duty.Slot), executeDutyData.Duty.Slot)))
+
 	if err := c.StartDuty(logger, executeDutyData.Duty); err != nil {
 		return fmt.Errorf("could not start committee duty: %w", err)
 	}
