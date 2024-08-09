@@ -1257,11 +1257,9 @@ func (c *controller) ForkMonitor(logger *zap.Logger) {
 		case <-c.context.Done():
 			return
 		case <-time.After(timeUntilFork):
-			if !c.networkConfig.PastAlanFork() {
-				continue
-			}
 			logger.Info("Stopping genesis validators after alan fork")
 			c.CleanGenesisValidators()
+			logger.Info("✅Successfully stopped genesis validators")
 			return
 		}
 	}
