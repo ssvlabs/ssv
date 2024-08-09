@@ -24,8 +24,10 @@ func (f *ForkingMessageValidation) Validate(ctx context.Context, p peer.ID, pmsg
 }
 
 func (f *ForkingMessageValidation) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	if f.NetworkConfig.PastAlanFork() {
-		return f.Alan.ValidatorForTopic(topic)
+	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+		if f.NetworkConfig.PastAlanFork() {
+			return f.Alan.ValidatorForTopic(topic)(ctx, p, pmsg)
+		}
+		return f.Genesis.ValidatorForTopic(topic)(ctx, p, pmsg)
 	}
-	return f.Genesis.ValidatorForTopic(topic)
 }

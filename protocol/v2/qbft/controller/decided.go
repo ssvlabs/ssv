@@ -29,7 +29,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMes
 	save := true
 
 	if inst == nil {
-		i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, msg.QBFTMessage.Height, c.OperatorSigner)
+		i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier(), msg.QBFTMessage.Height, c.OperatorSigner)
 		i.State.Round = msg.QBFTMessage.Round
 		i.State.Decided = true
 		i.State.DecidedValue = msg.SignedMessage.FullData

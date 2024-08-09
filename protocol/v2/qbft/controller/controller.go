@@ -25,8 +25,8 @@ type NewDecidedHandler func(msg qbftstorage.ParticipantsRangeEntry)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
-	Identifier []byte
 	Height     specqbft.Height // incremental Height for InstanceContainer
+	Identifier func() []byte   `json:"-"`
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
 	CommitteeMember   *spectypes.CommitteeMember
@@ -37,14 +37,14 @@ type Controller struct {
 }
 
 func NewController(
-	identifier []byte,
+	Identifier func() []byte,
 	committeeMember *spectypes.CommitteeMember,
 	config qbft.IConfig,
 	signer ssvtypes.OperatorSigner,
 	fullNode bool,
 ) *Controller {
 	return &Controller{
-		Identifier:      identifier,
+		Identifier:      Identifier,
 		Height:          specqbft.FirstHeight,
 		CommitteeMember: committeeMember,
 		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
@@ -161,7 +161,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 // BaseMsgValidation returns error if msg is invalid (base validation)
 func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	// verify msg belongs to controller
-	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
+	if !bytes.Equal(c.Identifier(), msg.QBFTMessage.Identifier) {
 		return errors.New("message doesn't belong to Identifier")
 	}
 
@@ -178,7 +178,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if !c.fullNode {
 		return nil
 	}
-	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
+	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier(), height)
 	if err != nil {
 		logger.Debug("❗ could not load instance from storage",
 			fields.Height(height),
@@ -189,14 +189,14 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier, storedInst.State.Height, c.OperatorSigner)
+	inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier(), storedInst.State.Height, c.OperatorSigner)
 	inst.State = storedInst.State
 	return inst
 }
 
 // GetIdentifier returns QBFT Identifier, used to identify messages
 func (c *Controller) GetIdentifier() []byte {
-	return c.Identifier
+	return c.Identifier()
 }
 
 // isFutureMessage returns true if message height is from a future instance.
@@ -211,7 +211,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) (bool, err
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier(), c.Height, c.OperatorSigner)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

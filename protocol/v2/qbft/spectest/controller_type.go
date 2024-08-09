@@ -57,11 +57,13 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 }
 
 func generateController(logger *zap.Logger) *controller.Controller {
-	identifier := []byte{1, 2, 3, 4}
+	identifier := func() []byte {
+		return []byte{1, 2, 3, 4}
+	}
 	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), convert.RoleCommittee)
 	return qbfttesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
-		identifier[:],
+		identifier,
 		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
 		config,
 		false,
@@ -109,7 +111,7 @@ func testProcessMsg(
 func testBroadcastedDecided(
 	t *testing.T,
 	config *qbft.Config,
-	identifier []byte,
+	identifier func() []byte,
 	runData *spectests.RunInstanceData,
 	committee []*spectypes.Operator,
 ) {
@@ -123,7 +125,7 @@ func testBroadcastedDecided(
 
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
 			msgID := spectypes.MessageID{}
-			copy(msgID[:], identifier)
+			copy(msgID[:], identifier())
 
 			if !bytes.Equal(msgID[:], msg.SSVMessage.MsgID[:]) {
 				continue
@@ -158,7 +160,6 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 	if err := testProcessMsg(t, logger, contr, contr.GetConfig().(*qbft.Config), runData); err != nil {
 		lastErr = err
 	}
-
 	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
 
 	// test root

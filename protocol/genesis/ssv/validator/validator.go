@@ -106,7 +106,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 		logger = logger.With(fields.Height(specqbft.Height(baseRunner.QBFTController.Height)))
 	}
 
-	logger.Info("ℹ️ starting duty processing")
+	logger.Info("ℹ️ starting duty processing (genesis)")
 
 	return dutyRunner.StartNewDuty(logger, duty)
 }

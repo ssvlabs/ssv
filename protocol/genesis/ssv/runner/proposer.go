@@ -362,7 +362,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.
 		return errors.Wrap(err, "can't broadcast partial randao sig")
 	}
 
-	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
+	logger.Debug("🔏 signed & broadcasted partial RANDAO signature (genesis)")
 
 	return nil
 }

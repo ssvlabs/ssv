@@ -62,7 +62,10 @@ var baseRunner = func(
 	keySet *spectestingutils.TestKeySet,
 ) runner.Runner {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
+	identifier := func() []byte {
+		messageID := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
+		return messageID[:]
+	}
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
@@ -86,7 +89,7 @@ var baseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(role))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
@@ -97,7 +100,7 @@ var baseRunner = func(
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
-		identifier[:],
+		identifier,
 		operator,
 		config,
 		false,
@@ -291,7 +294,11 @@ var baseRunnerWithShareMap = func(
 	} else {
 		ownerID = spectestingutils.TestingValidatorPubKey[:]
 	}
-	identifier := spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
+
+	identifier := func() []byte {
+		messageID := spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
+		return messageID[:]
+	}
 
 	net := spectestingutils.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
 
@@ -317,7 +324,7 @@ var baseRunnerWithShareMap = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(role))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
@@ -327,7 +334,7 @@ var baseRunnerWithShareMap = func(
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
-		identifier[:],
+		identifier,
 		committeeMember,
 		config,
 		false,

@@ -2,7 +2,6 @@ package testing
 
 import (
 	"bytes"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -68,7 +67,7 @@ var baseInstance = func(share *types.CommitteeMember, keySet *testingutils.TestK
 
 func NewTestingQBFTController(
 	keySet *testingutils.TestKeySet,
-	identifier []byte,
+	identifier func() []byte,
 	share *types.CommitteeMember,
 	config qbft.IConfig,
 	fullNode bool,
