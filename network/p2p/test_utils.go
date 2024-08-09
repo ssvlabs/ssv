@@ -155,13 +155,20 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 
 	for _, share := range options.Shares {
 		for _, sm := range share.Committee {
-			_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
-				ID:           sm.Signer,
-				PublicKey:    operatorPubkey,
-				OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
-			})
+			_, ok, err := nodeStorage.GetOperatorData(nil, sm.Signer)
 			if err != nil {
 				return nil, err
+			}
+
+			if !ok {
+				_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
+					ID:           sm.Signer,
+					PublicKey:    operatorPubkey,
+					OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
+				})
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
