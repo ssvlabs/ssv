@@ -168,26 +168,59 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.ValidatorDuty, executeDutiesCallSize)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
-			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
-			executeDutiesBuffer <- duty
+	if s.network.PastAlanFork() {
+		s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+			func(logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
+				logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+				executeDutiesBuffer <- duty
 
-			// Check if all expected duties have been received
-			if len(executeDutiesBuffer) == executeDutiesCallSize {
-				// Build the array of duties
-				var duties []*spectypes.ValidatorDuty
-				for i := 0; i < executeDutiesCallSize; i++ {
-					d := <-executeDutiesBuffer
-					duties = append(duties, d)
+				// Check if all expected duties have been received
+				if len(executeDutiesBuffer) == executeDutiesCallSize {
+					// Build the array of duties
+					var duties []*spectypes.ValidatorDuty
+					for i := 0; i < executeDutiesCallSize; i++ {
+						d := <-executeDutiesBuffer
+						duties = append(duties, d)
+					}
+
+					// Send the array of duties to executeDutiesCall
+					executeDutiesCall <- duties
+				}
+				return nil
+			},
+		).AnyTimes()
+	} else {
+		s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteGenesisDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+			func(logger *zap.Logger, duty *genesisspectypes.Duty) error {
+				logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+				executeDutiesBuffer <- &spectypes.ValidatorDuty{
+					Type:                          spectypes.BeaconRole(duty.Type),
+					PubKey:                        duty.PubKey,
+					Slot:                          duty.Slot,
+					ValidatorIndex:                duty.ValidatorIndex,
+					CommitteeIndex:                duty.CommitteeIndex,
+					CommitteeLength:               duty.CommitteeLength,
+					CommitteesAtSlot:              duty.CommitteesAtSlot,
+					ValidatorCommitteeIndex:       duty.ValidatorCommitteeIndex,
+					ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
 				}
 
-				// Send the array of duties to executeDutiesCall
-				executeDutiesCall <- duties
-			}
-			return nil
-		},
-	).AnyTimes()
+				// Check if all expected duties have been received
+				if len(executeDutiesBuffer) == executeDutiesCallSize {
+					// Build the array of duties
+					var duties []*spectypes.ValidatorDuty
+					for i := 0; i < executeDutiesCallSize; i++ {
+						d := <-executeDutiesBuffer
+						duties = append(duties, d)
+					}
+
+					// Send the array of duties to executeDutiesCall
+					executeDutiesCall <- duties
+				}
+				return nil
+			},
+		).AnyTimes()
+	}
 }
 
 func setExecuteGenesisDutyFunc(s *Scheduler, executeDutiesCall chan []*genesisspectypes.Duty, executeDutiesCallSize int) {
