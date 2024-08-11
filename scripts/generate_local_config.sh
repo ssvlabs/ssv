@@ -19,7 +19,7 @@ function create_operators() {
   mkdir -p config
 
   for ((i=1;i<=OP_SIZE;i++)); do
-    docker run --rm -it 'ssvlabs/ssv-node:latest' /go/bin/ssvnode generate-operator-keys > tmp.log
+    docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode generate-operator-keys > tmp.log
     PUB="$(extract_pubkey "tmp.log")"
     val="$PUB" yq e '.publicKeys += [env(val)]' -i "./operators.yaml"
     PRIV="$(extract_privkey "tmp.log")"
