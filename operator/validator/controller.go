@@ -1387,6 +1387,8 @@ func SetupRunners(
 	logger *zap.Logger,
 	options validator.Options,
 ) runner.ValidatorDutyRunners {
+	alanDomainType := options.NetworkConfig.AlanDomainType
+
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{} // TODO need to find better way to fix it
@@ -1418,7 +1420,6 @@ func SetupRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		alanDomainType := options.NetworkConfig.AlanDomainType
 		identifier := spectypes.NewMsgID(alanDomainType, options.SSVShare.Share.ValidatorPubKey[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
@@ -1428,7 +1429,6 @@ func SetupRunners(
 	shareMap[options.SSVShare.ValidatorIndex] = &options.SSVShare.Share
 
 	runners := runner.ValidatorDutyRunners{}
-	alanDomainType := options.NetworkConfig.AlanDomainType
 	for _, role := range runnersType {
 		switch role {
 		//case spectypes.BNRoleAttester:
@@ -1461,6 +1461,8 @@ func SetupRunners(
 }
 
 func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options validator.Options) genesisrunner.DutyRunners {
+	genesisDomainType := options.NetworkConfig.GenesisDomainType
+
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return genesisrunner.DutyRunners{} // TODO need to find better way to fix it
@@ -1502,7 +1504,6 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 	genesisBeaconNetwork := genesisspectypes.BeaconNetwork(options.NetworkConfig.Beacon.GetBeaconNetwork())
 
 	runners := genesisrunner.DutyRunners{}
-	genesisDomainType := options.NetworkConfig.GenesisDomainType
 	for _, role := range runnersType {
 		switch role {
 		case genesisspectypes.BNRoleAttester:
