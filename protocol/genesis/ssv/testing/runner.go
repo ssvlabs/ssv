@@ -150,7 +150,6 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 			networkconfig.TestNetwork,
 			genesisspectypes.BeaconTestNetwork,
 			share,
-			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
