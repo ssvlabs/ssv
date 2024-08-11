@@ -6,6 +6,8 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"time"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -146,6 +148,7 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
 		return
 	}
+
 	// range over duties and execute
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
