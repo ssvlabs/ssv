@@ -247,7 +247,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndPostConsensus()
 		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
 			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
-			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()))
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.Round(r.GetState().RunningInstance.State.Round))
 		endSubmission := r.metrics.StartBeaconSubmission()
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
