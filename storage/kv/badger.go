@@ -3,6 +3,7 @@ package kv
 import (
 	"bytes"
 	"context"
+	errors2 "errors"
 	"sync"
 	"time"
 
@@ -162,12 +163,9 @@ func (b *BadgerDB) Delete(prefix []byte, key []byte) error {
 func (b *BadgerDB) DeletePrefix(prefix []byte) (int, error) {
 	count := 0
 	err := b.db.Update(func(txn *badger.Txn) error {
-		rawKeys := b.listRawKeys(prefix, txn)
-		for _, k := range rawKeys {
-			if err := txn.Delete(k); err != nil {
-				return err
-			}
-			count++
+		errs := b.DeleteAllPrefixKeys(prefix, txn)
+		if errs != nil {
+			return errors2.Join(errs...)
 		}
 		return nil
 	})
@@ -242,6 +240,24 @@ func (b *BadgerDB) periodicallyReport(interval time.Duration) {
 			return
 		}
 	}
+}
+
+func (b *BadgerDB) DeleteAllPrefixKeys(prefix []byte, txn *badger.Txn) []error {
+	var errs []error
+	opt := badger.DefaultIteratorOptions
+	opt.Prefix = prefix
+	opt.PrefetchValues = false
+
+	it := txn.NewIterator(opt)
+	defer it.Close()
+
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		if err := txn.Delete(it.Item().KeyCopy(nil)); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
 }
 
 func (b *BadgerDB) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
