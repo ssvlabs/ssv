@@ -1387,7 +1387,6 @@ func SetupRunners(
 	logger *zap.Logger,
 	options validator.Options,
 ) runner.ValidatorDutyRunners {
-	alanDomainType := options.NetworkConfig.AlanDomainType
 
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
@@ -1464,8 +1463,6 @@ func SetupRunners(
 }
 
 func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options validator.Options) genesisrunner.DutyRunners {
-	genesisDomainType := options.NetworkConfig.GenesisDomainType
-
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return genesisrunner.DutyRunners{} // TODO need to find better way to fix it
