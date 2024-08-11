@@ -29,7 +29,7 @@ to run validators in a decentralized and trustless way.
 ## Information
 
 ### General SSV information (Semi technical read)
-* Article by [Blox](https://medium.com/bloxstaking/an-introduction-to-secret-shared-validators-ssv-for-ethereum-2-0-faf49efcabee)
+* Article by [ssv](https://medium.com/bloxstaking/an-introduction-to-secret-shared-validators-ssv-for-ethereum-2-0-faf49efcabee)
 
 ### Technical iBFT and SSV read
 * [iBFT Paper](https://arxiv.org/pdf/2002.03613.pdf)
