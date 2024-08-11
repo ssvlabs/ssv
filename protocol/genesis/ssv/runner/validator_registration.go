@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
