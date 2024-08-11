@@ -36,6 +36,7 @@ type ProposerRunner struct {
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	metrics        metrics.ConsensusMetrics
+	Graffiti       []byte
 }
 
 func NewProposerRunner(
@@ -49,6 +50,7 @@ func NewProposerRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	graffiti []byte,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
@@ -65,8 +67,8 @@ func NewProposerRunner(
 		signer:         signer,
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
-
-		metrics: metrics.NewConsensusMetrics(spectypes.RoleProposer),
+		Graffiti:       graffiti,
+		metrics:        metrics.NewConsensusMetrics(spectypes.RoleProposer),
 	}
 }
 
@@ -111,7 +113,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.Graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get blinded beacon block",
 			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),

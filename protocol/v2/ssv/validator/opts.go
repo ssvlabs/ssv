@@ -41,7 +41,7 @@ type Options struct {
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator
 	Metrics           Metrics
-
+	Graffiti          []byte
 	GenesisOptions
 }
 

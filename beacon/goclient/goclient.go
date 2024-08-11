@@ -146,7 +146,6 @@ type GoClient struct {
 	client               Client
 	nodeVersion          string
 	nodeClient           NodeClient
-	graffiti             []byte
 	gasLimit             uint64
 	operatorDataStore    operatordatastore.OperatorDataStore
 	registrationMu       sync.Mutex
@@ -191,7 +190,6 @@ func New(
 		ctx:               opt.Context,
 		network:           opt.Network,
 		client:            httpClient.(*eth2clienthttp.Service),
-		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
 		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
