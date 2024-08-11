@@ -16,7 +16,7 @@ type SignerState struct {
 	Slot          phase0.Slot
 	Round         specqbft.Round
 	MessageCounts MessageCounts
-	ProposalData  []byte
+	ProposalData  []byte // used only to check different proposal data
 	EpochDuties   int
 }
 

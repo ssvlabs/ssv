@@ -20,28 +20,30 @@ type DutyProperties struct {
 	Delay          time.Duration
 }
 
-func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spectypes.BeaconRole) spectypes.Duty {
+func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spectypes.RunnerRole) spectypes.Duty {
 	var pkBytes [48]byte
 	copy(pkBytes[:], pk)
 
 	var testingDuty spectypes.ValidatorDuty
+	var beaconRole spectypes.BeaconRole
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.RoleCommittee:
 		return spectestingutils.TestingCommitteeAttesterDuty(slot, []int{int(idx)})
-	case spectypes.BNRoleAggregator:
+	case spectypes.RoleAggregator:
 		testingDuty = spectestingutils.TestingAggregatorDuty
-	case spectypes.BNRoleProposer:
+		beaconRole = spectypes.BNRoleAggregator
+	case spectypes.RoleProposer:
 		testingDuty = *spectestingutils.TestingProposerDutyV(spec.DataVersionCapella)
-	case spectypes.BNRoleSyncCommittee:
-		return spectestingutils.TestingCommitteeSyncCommitteeDuty(slot, []int{int(idx)})
-	case spectypes.BNRoleSyncCommitteeContribution:
+		beaconRole = spectypes.BNRoleProposer
+	case spectypes.RoleSyncCommitteeContribution:
 		testingDuty = spectestingutils.TestingSyncCommitteeContributionDuty
+		beaconRole = spectypes.BNRoleSyncCommitteeContribution
 	default:
 		panic("unknown role")
 	}
 
 	return &spectypes.ValidatorDuty{
-		Type:                          role,
+		Type:                          beaconRole,
 		PubKey:                        pkBytes,
 		Slot:                          slot,
 		ValidatorIndex:                idx,

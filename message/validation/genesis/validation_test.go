@@ -13,21 +13,21 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/stretchr/testify/require"
-	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	"go.uber.org/zap/zaptest"
-
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	alanspectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/storage"
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -1052,6 +1052,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 								Signer:           1,
 							},
 						},
+						Slot: slot,
 					}
 
 					sig, err := spectestingutils.NewTestingKeyManager().SignRoot(innerMsg, spectypes.PartialSignatureType, ks.Shares[1].GetPublicKey().Serialize())
@@ -1759,7 +1760,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
-		expectedErr := ErrDuplicatedProposalWithDifferentData
+		expectedErr := ErrDifferentProposalData
 		require.ErrorIs(t, err, expectedErr)
 	})
 

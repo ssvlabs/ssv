@@ -290,7 +290,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		return nil
 	})
 
-	wg.Add(4)
+	wg.Add(3)
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
 

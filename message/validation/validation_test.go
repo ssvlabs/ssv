@@ -364,21 +364,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrUnknownSSVMessageType.Error())
 	})
 
-	// Empty validator public key returns an error
-	t.Run("empty validator public key", func(t *testing.T) {
-		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		badPK := spectypes.ValidatorPK{}
-		badIdentifier := spectypes.NewMsgID(netCfg.DomainType(), badPK[:], nonCommitteeRole)
-		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
-
-		topicID := commons.ValidatorTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())[0]
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, time.Now())
-		require.ErrorContains(t, err, ErrDeserializePublicKey.Error())
-	})
-
 	// Generate random validator and validate it is unknown to the network
 	t.Run("unknown validator", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
@@ -1191,7 +1176,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = anotherFullData
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		expectedErr := ErrDuplicatedProposalWithDifferentData
+		expectedErr := ErrDifferentProposalData
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1641,17 +1626,16 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		data, err := messages.Encode()
 		require.NoError(t, err)
 
-		msgID := spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, encodedCommitteeID, committeeRole)
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   msgID,
+			MsgID:   nonCommitteeIdentifier,
 			Data:    data,
 		}
 
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
 	})

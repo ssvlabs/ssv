@@ -13,17 +13,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cornelk/hashmap"
-	"github.com/libp2p/go-libp2p/core/peer"
-
 	"github.com/aquasecurity/table"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/stretchr/testify/require"
-
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/validation"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // TestP2pNetwork_MessageValidation tests p2pNetwork would score peers according
@@ -34,8 +40,6 @@ import (
 // and finally asserts that each node scores it's peers according to their
 // played role (accepted > ignored > rejected).
 func TestP2pNetwork_MessageValidation(t *testing.T) {
-	t.Skip("test gets stuck")
-
 	const (
 		nodeCount      = 4
 		validatorCount = 20
@@ -46,13 +50,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	defer cancel()
 
 	// Create 20 fake validator public keys.
-	validators := make([]string, validatorCount)
-	for i := 0; i < validatorCount; i++ {
-		var validator [48]byte
-		cryptorand.Read(validator[:])
-		validators[i] = hex.EncodeToString(validator[:])
-	}
-	var mtx sync.Mutex
+	shares := generateShares(t, validatorCount)
+
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
 		acceptedRole = spectypes.RoleProposer
@@ -60,13 +59,93 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
+	var mtx sync.Mutex
+	for i := 0; i < nodeCount; i++ {
+		i := i
+		messageValidators[i] = &MockMessageValidator{
+			Accepted: make([]int, nodeCount),
+			Ignored:  make([]int, nodeCount),
+			Rejected: make([]int, nodeCount),
+		}
+		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+			signedSSVMessage := &spectypes.SignedSSVMessage{}
+			if err := signedSSVMessage.Decode(pmsg.GetData()); err != nil {
+				return pubsub.ValidationReject
+			}
+
+			ssvMessage := signedSSVMessage.SSVMessage
+
+			var body any
+
+			switch ssvMessage.MsgType {
+			case spectypes.SSVConsensusMsgType:
+				var qbftMsg specqbft.Message
+				if err := qbftMsg.Decode(ssvMessage.Data); err != nil {
+					return pubsub.ValidationReject
+				}
+
+				body = qbftMsg
+
+			case spectypes.SSVPartialSignatureMsgType:
+				var psm spectypes.PartialSignatureMessages
+				if err := psm.Decode(ssvMessage.Data); err != nil {
+					return pubsub.ValidationReject
+				}
+
+				body = psm
+			default:
+				return pubsub.ValidationReject
+			}
+
+			pmsg.ValidatorData = &queue.SSVMessage{
+				SignedSSVMessage: signedSSVMessage,
+				SSVMessage:       ssvMessage,
+				Body:             body,
+			}
+
+			peer := vNet.NodeByPeerID(p)
+
+			mtx.Lock()
+			// Validation according to role.
+			var validation pubsub.ValidationResult
+			switch ssvMessage.MsgID.GetRoleType() {
+			case acceptedRole:
+				messageValidators[i].Accepted[peer.Index]++
+				messageValidators[i].TotalAccepted++
+				validation = pubsub.ValidationAccept
+			case ignoredRole:
+				messageValidators[i].Ignored[peer.Index]++
+				messageValidators[i].TotalIgnored++
+				validation = pubsub.ValidationIgnore
+			case rejectedRole:
+				messageValidators[i].Rejected[peer.Index]++
+				messageValidators[i].TotalRejected++
+				validation = pubsub.ValidationReject
+			default:
+				panic("unsupported role")
+			}
+			mtx.Unlock()
+
+			// Always accept messages from self to make libp2p propagate them,
+			// while still counting them by their role.
+			if p == vNet.Nodes[i].Network.Host().ID() {
+				return pubsub.ValidationAccept
+			}
+
+			return validation
+		}
+	}
+
 	// Create a VirtualNet with 4 nodes.
-	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
+	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex int) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
+
 	defer func() {
 		require.NoError(t, vNet.Close())
 	}()
+
+	time.Sleep(1 * time.Second)
 
 	// Prepare a pool of broadcasters.
 	mu := sync.Mutex{}
@@ -75,19 +154,19 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
 	broadcaster := func(node *VirtualNode, roles ...spectypes.RunnerRole) {
 		broadcasters.Go(func(ctx context.Context) error {
-			for i := 0; i < 50; i++ {
+			for i := 0; i < 12; i++ {
 				role := roles[i%len(roles)]
 
 				mu.Lock()
 				roleBroadcasts[role]++
 				mu.Unlock()
 
-				msgID, msg := dummyMsg(t, validators[rand.Intn(len(validators))], int(height.Add(1)), role)
+				msgID, msg := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
 				err := node.Broadcast(msgID, msg)
 				if err != nil {
 					return err
 				}
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 			}
 			return nil
 		})
@@ -98,20 +177,32 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// - node 1 broadcasts ignored messages.
 	// - node 2 broadcasts rejected messages.
 	// - node 3 broadcasts all messages (equal distribution).
-	broadcaster(vNet.Nodes[0], acceptedRole)
-	broadcaster(vNet.Nodes[1], ignoredRole)
-	broadcaster(vNet.Nodes[2], rejectedRole)
-	broadcaster(vNet.Nodes[3], acceptedRole, ignoredRole, rejectedRole)
+	messageTypesByNodeIndex := map[int][]spectypes.RunnerRole{
+		0: {acceptedRole},
+		1: {ignoredRole},
+		2: {rejectedRole},
+		3: {acceptedRole, ignoredRole, rejectedRole},
+	}
+
+	for i := 0; i < nodeCount; i++ {
+		broadcaster(vNet.Nodes[i], messageTypesByNodeIndex[i]...)
+	}
 
 	// Wait for the broadcasters to finish.
 	err := broadcasters.Wait()
 	require.NoError(t, err)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	// Assert that the messages were distributed as expected.
-	deadline := time.Now().Add(5 * time.Second)
+	time.Sleep(7 * time.Second)
+
 	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
+		// Messages from nodes broadcasting rejected role become rejected once score threshold is reached
+		if slices.Contains(messageTypesByNodeIndex[i], rejectedRole) {
+			continue
+		}
+
 		// better lock inside loop than wait interval locked
 		mtx.Lock()
 		var errors []error
@@ -125,12 +216,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			errors = append(errors, fmt.Errorf("node %d rejected %d messages (expected %d)", i, messageValidators[i].TotalRejected, roleBroadcasts[rejectedRole]))
 		}
 		mtx.Unlock()
-		if len(errors) == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			require.Empty(t, errors)
-		}
+		require.Empty(t, errors)
 		time.Sleep(interval)
 	}
 
@@ -202,10 +288,11 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				break
 			}
 			if i == len(validOrders)-1 {
-				require.Fail(t, "invalid order", "node %d", node.Index)
+				require.Fail(t, "invalid order", "node %d, peers %v", node.Index, peers)
 			}
 		}
 	}
+
 	defer fmt.Println()
 }
 
@@ -249,7 +336,7 @@ func CreateVirtualNet(
 	t *testing.T,
 	ctx context.Context,
 	nodes int,
-	validatorPubKeys []string,
+	shares []*ssvtypes.SSVShare,
 	messageValidatorProvider func(int) validation.MessageValidator,
 ) *VirtualNet {
 	var doneSetup atomic.Bool
@@ -287,7 +374,8 @@ func CreateVirtualNet(
 
 		},
 		PeerScoreInspectorInterval: time.Millisecond * 5,
-	}, validatorPubKeys...)
+		Shares:                     shares,
+	})
 
 	require.NoError(t, err)
 	require.NotNil(t, routers)
@@ -322,4 +410,34 @@ func (vn *VirtualNet) Close() error {
 		}
 	}
 	return nil
+}
+
+func generateShares(t *testing.T, count int) []*ssvtypes.SSVShare {
+	var shares []*ssvtypes.SSVShare
+
+	for i := 0; i < count; i++ {
+		validatorIndex := phase0.ValidatorIndex(i)
+		specShare := *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), validatorIndex)
+
+		var pk spectypes.ValidatorPK
+		_, err := cryptorand.Read(pk[:])
+		require.NoError(t, err)
+
+		specShare.ValidatorPubKey = pk
+
+		share := &ssvtypes.SSVShare{
+			Share: specShare,
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Index:  validatorIndex,
+				},
+				Liquidated: false,
+			},
+		}
+
+		shares = append(shares, share)
+	}
+
+	return shares
 }
