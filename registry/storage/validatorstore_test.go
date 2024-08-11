@@ -162,7 +162,7 @@ func TestValidatorStore(t *testing.T) {
 	})
 
 	shareMap[share2.ValidatorPubKey] = updatedShare2
-	store.handleShareUpdated(updatedShare2)
+	store.handleSharesUpdated(updatedShare2)
 
 	// TODO: updatedShare2 now only changes Quorum field, which doesn't affect any indices. If handleShareUpdated expects to receive shares where indexes field are updated, this needs to be tested.
 
@@ -437,6 +437,6 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 			randomShares[j] = shares[pubKeys[(first+j)%len(pubKeys)]]
 		}
 
-		store.handleShareUpdated(randomShares...)
+		store.handleSharesUpdated(randomShares...)
 	}
 }

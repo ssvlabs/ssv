@@ -255,7 +255,7 @@ func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVSha
 		s.shares[key] = share
 	}
 
-	s.validatorStore.handleShareUpdated(updateShares...)
+	s.validatorStore.handleSharesUpdated(updateShares...)
 	s.validatorStore.handleSharesAdded(addShares...)
 
 	return nil

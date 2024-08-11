@@ -296,7 +296,7 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 	}
 }
 
-func (c *validatorStore) handleShareUpdated(shares ...*types.SSVShare) {
+func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
