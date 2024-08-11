@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -33,7 +32,7 @@ type ValidatorRegistrationRunner struct {
 }
 
 func NewValidatorRegistrationRunner(
-	domainTypeProvider networkconfig.DomainTypeProvider,
+	domainType spectypes.DomainType,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
@@ -43,10 +42,10 @@ func NewValidatorRegistrationRunner(
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleValidatorRegistration,
-			DomainTypeProvider: domainTypeProvider,
-			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			RunnerRoleType: spectypes.RoleValidatorRegistration,
+			DomainType:     domainType,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
 		},
 
 		beacon:         beacon,
@@ -154,7 +153,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spect
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return err
