@@ -16,7 +16,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
 
@@ -35,7 +34,6 @@ func NewValidatorRegistrationRunner(
 	domainTypeProvider networkconfig.DomainTypeProvider,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
-	qbftController *controller.Controller,
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
@@ -46,7 +44,6 @@ func NewValidatorRegistrationRunner(
 			DomainTypeProvider: domainTypeProvider,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
-			QBFTController:     qbftController,
 		},
 
 		beacon:  beacon,
