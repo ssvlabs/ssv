@@ -26,6 +26,12 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 		return nil // uponPrepare was already called
 	}
 
+	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
+	logger.Debug("📬 got prepare message",
+		fields.Round(i.State.Round),
+		zap.Any("prepare-signers", i.State.ProposalAcceptedForCurrentRound.SignedMessage.OperatorIDs),
+		fields.Root(proposedRoot))
+
 	if hasQuorumBefore {
 		return nil // already moved to commit stage
 	}
@@ -33,13 +39,6 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 	if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
-
-	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
-
-	logger.Debug("📬 got prepare message",
-		fields.Round(i.State.Round),
-		zap.Any("prepare-signers", i.State.ProposalAcceptedForCurrentRound.SignedMessage.OperatorIDs),
-		fields.Root(proposedRoot))
 
 	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData
 	i.State.LastPreparedRound = i.State.Round
