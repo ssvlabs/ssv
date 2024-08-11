@@ -2,11 +2,14 @@ package storage
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math/rand"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/aquasecurity/table"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -399,22 +402,22 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 	}
 
 	// Print table of committees and validator counts for debugging.
-	// committees := map[[4]spectypes.OperatorID]int{}
-	// for _, share := range shares {
-	// 	committee := [4]spectypes.OperatorID{}
-	// 	for i, member := range share.Committee {
-	// 		committee[i] = member.Signer
-	// 	}
-	// 	committees[committee]++
-	// }
-	// tbl := table.New(os.Stdout)
-	// tbl.SetHeaders("Committee", "Validators")
-	// for committee, count := range committees {
-	// 	tbl.AddRow(fmt.Sprintf("%v", committee), fmt.Sprintf("%d", count))
-	// }
-	// tbl.Render()
+	committees := map[[4]spectypes.OperatorID]int{}
+	for _, share := range shares {
+		committee := [4]spectypes.OperatorID{}
+		for i, member := range share.Committee {
+			committee[i] = member.Signer
+		}
+		committees[committee]++
+	}
+	tbl := table.New(os.Stdout)
+	tbl.SetHeaders("Committee", "Validators")
+	for committee, count := range committees {
+		tbl.AddRow(fmt.Sprintf("%v", committee), fmt.Sprintf("%d", count))
+	}
+	// tbl.Render() // Uncomment to print.
 
-	// b.Logf("Total committees: %d", len(committees))
+	b.Logf("Total committees: %d", len(committees))
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shares) },

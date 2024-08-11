@@ -320,8 +320,8 @@ func (c *validatorStore) handleShareUpdated(shares ...*types.SSVShare) {
 		}
 
 		// Update byOperatorID
-		for _, operatorID := range share.Committee {
-			data := c.byOperatorID[operatorID.Signer]
+		for _, shareMember := range share.Committee {
+			data := c.byOperatorID[shareMember.Signer]
 			for i, s := range data.shares {
 				if s.ValidatorPubKey == share.ValidatorPubKey {
 					data.shares[i] = share
