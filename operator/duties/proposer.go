@@ -3,8 +3,9 @@ package duties
 import (
 	"context"
 	"fmt"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"time"
+
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -136,7 +137,7 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	}
 
 	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
+		toExecute := make([]*genesisspectypes.Duty, 0, len(duties))
 		for _, d := range duties {
 			if h.shouldExecute(d) {
 				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleProposer))
@@ -146,6 +147,7 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
 		return
 	}
+
 	// range over duties and execute
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
