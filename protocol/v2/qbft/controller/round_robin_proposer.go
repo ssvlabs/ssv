@@ -1,4 +1,4 @@
-package types
+package controller
 
 import (
 	"github.com/ssvlabs/ssv-spec/qbft"

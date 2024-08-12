@@ -7,7 +7,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
@@ -71,16 +71,16 @@ var baseRunner = func(
 	var valCheck specqbft.ProposedValueCheckF
 	switch role {
 	case spectypes.RoleCommittee:
-		valCheck = types.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
+		valCheck = validator.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
 			[]spectypes.ShareValidatorPK{share.SharePubKey}, spectestingutils.TestingDutyEpoch)
 	case spectypes.RoleProposer:
-		valCheck = types.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = validator.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, share.SharePubKey)
 	case spectypes.RoleAggregator:
-		valCheck = types.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = validator.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	case spectypes.RoleSyncCommitteeContribution:
-		valCheck = types.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = validator.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	default:
 		valCheck = nil
@@ -302,16 +302,16 @@ var baseRunnerWithShareMap = func(
 	var valCheck specqbft.ProposedValueCheckF
 	switch role {
 	case spectypes.RoleCommittee:
-		valCheck = types.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
+		valCheck = validator.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
 			sharePubKeys, spectestingutils.TestingDutyEpoch)
 	case spectypes.RoleProposer:
-		valCheck = types.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = validator.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
 			shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, shareInstance.SharePubKey)
 	case spectypes.RoleAggregator:
-		valCheck = types.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = validator.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
 			shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 	case spectypes.RoleSyncCommitteeContribution:
-		valCheck = types.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = validator.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
 			shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 	default:
 		valCheck = nil
