@@ -12,6 +12,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/paulbellamy/ratecounter"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
@@ -128,6 +129,8 @@ type Scheduler struct {
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
+
+	delayCounter *ratecounter.AvgRateCounter
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
@@ -159,6 +162,8 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
+
+		delayCounter: ratecounter.NewAvgRateCounter(60 * time.Second),
 	}
 
 	return s
@@ -399,9 +404,16 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Valida
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+
+		s.delayCounter.Incr(slotDelay.Milliseconds())
+
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
+
+		avgDelay := s.delayCounter.Rate()
+		logger.Debug("Average duty execution delay", zap.Float64("avg_delay_ms", avgDelay))
+
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
