@@ -121,7 +121,7 @@ ifdef DEBUG_PORT
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 else
 	@echo "Running node on address: ${HOST_ADDRESS})"
-	GODEBUG=gctrace=1 @${BUILD_PATH} start-node ${NODE_COMMAND}
+	GODEBUG=gctrace=1 ${BUILD_PATH}/start-node ${NODE_COMMAND}
 endif
 
 .PHONY: docker
