@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
+	genesisType "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -163,7 +164,7 @@ func (s *sharesStorage) load() error {
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
-
+		val.DomainType = spectypes.DomainType(genesisType.GetDefaultDomain())
 		share, err := s.storageShareToSpecShare(val)
 		if err != nil {
 			return fmt.Errorf("failed to convert storage share to spec share: %w", err)
