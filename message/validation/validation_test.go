@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"

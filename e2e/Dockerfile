@@ -1,7 +1,7 @@
 #
 # Prepare stage.
 #
-FROM golang:1.20-alpine AS prepare
+FROM golang:1.22-alpine AS prepare
 WORKDIR /app
 
 # Copy the go.mod and go.sum first and download the dependencies. 
