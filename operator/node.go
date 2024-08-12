@@ -148,12 +148,12 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	}
 	go n.net.UpdateSubnets(logger)
 	go n.net.UpdateScoreParams(logger)
+	go n.validatorsCtrl.ForkListener(logger)
 	n.validatorsCtrl.StartValidators()
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
-	go n.validatorsCtrl.ForkListener(logger)
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))

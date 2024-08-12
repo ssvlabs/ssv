@@ -1280,12 +1280,16 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 		case <-next:
 			next = slotTicker.Next()
 			if c.networkConfig.PastAlanFork() {
+				// Cancel genesis context to stop the genesis validators.
 				c.cancelGenesisCtx()
 
+				// Unset genesis validators to free up memory.
 				c.validatorsMap.ForEachValidator(func(validator *validators.ValidatorContainer) bool {
 					validator.UnsetGenesisValidator()
 					return true
 				})
+
+				logger.Info("stopped genesis validators on fork")
 				return
 			}
 		}
