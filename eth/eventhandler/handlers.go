@@ -361,25 +361,25 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return emptyPK, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := convert.NewMsgID(eh.networkConfig.DomainType(), share.ValidatorPubKey[:], role)
-		return store.CleanAllInstances(logger, messageID[:])
-	}
-	err := eh.storageMap.Each(removeDecidedMessages)
-	if err != nil {
-		return emptyPK, fmt.Errorf("could not clean all decided messages: %w", err)
-	}
-
 	if err := eh.nodeStorage.Shares().Delete(txn, share.ValidatorPubKey[:]); err != nil {
 		return emptyPK, fmt.Errorf("could not remove validator share: %w", err)
 	}
 
 	isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 	if isOperatorShare || eh.fullNode {
+		removeDecidedMessages := func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
+			messageID := convert.NewMsgID(eh.networkConfig.DomainType(), share.ValidatorPubKey[:], role)
+			return store.CleanAllInstances(logger, messageID[:])
+		}
+		err := eh.storageMap.Each(removeDecidedMessages)
+		if err != nil {
+			return emptyPK, fmt.Errorf("could not clean all decided messages: %w", err)
+		}
+
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err = eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
