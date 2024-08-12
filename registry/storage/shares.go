@@ -240,18 +240,24 @@ func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVSha
 		return err
 	}
 
+	updateShares := make([]*types.SSVShare, 0, len(shares))
+	addShares := make([]*types.SSVShare, 0, len(shares))
+
 	for _, share := range shares {
 		key := hex.EncodeToString(share.ValidatorPubKey[:])
 
 		// Update validatorStore indices.
 		if _, ok := s.shares[key]; ok {
-			s.validatorStore.handleShareUpdated(share)
+			updateShares = append(updateShares, share)
 		} else {
-			s.validatorStore.handleSharesAdded(share)
+			addShares = append(addShares, share)
 		}
-
 		s.shares[key] = share
 	}
+
+	s.validatorStore.handleSharesUpdated(updateShares...)
+	s.validatorStore.handleSharesAdded(addShares...)
+
 	return nil
 }
 

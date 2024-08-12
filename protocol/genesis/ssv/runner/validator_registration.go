@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,7 +16,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
 
@@ -31,7 +31,7 @@ type ValidatorRegistrationRunner struct {
 }
 
 func NewValidatorRegistrationRunner(
-	domainTypeProvider networkconfig.DomainTypeProvider,
+	domainType spectypes.DomainType,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	beacon genesisspecssv.BeaconNode,
@@ -40,10 +40,10 @@ func NewValidatorRegistrationRunner(
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType:     genesisspectypes.BNRoleValidatorRegistration,
-			DomainTypeProvider: domainTypeProvider,
-			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			BeaconRoleType: genesisspectypes.BNRoleValidatorRegistration,
+			DomainType:     domainType,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
 		},
 
 		beacon:  beacon,
