@@ -59,5 +59,3 @@ bin/
 /scripts/spec_align_report/ssv-spec
 .vscode/
 patches/
-
-differ

@@ -45,9 +45,7 @@ type Scenario struct {
 	validators          map[spectypes.OperatorID]*protocolvalidator.Validator
 }
 
-func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
-	t.Skip("tests in this package are stuck")
-
+func (s *Scenario) Run(t *testing.T, role spectypes.RunnerRole) {
 	t.Run(role.String(), func(t *testing.T) {
 		//preparing resources
 		ctx, cancel := context.WithCancel(context.Background())
@@ -73,18 +71,31 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.ValidatorDuty), pk[:], networkconfig.TestNetwork.DomainType())
-				require.NoError(t, err)
+
+				var ssvMsg *spectypes.SSVMessage
+				switch d := duty.(type) {
+				case *spectypes.ValidatorDuty:
+					msg, err := validator.CreateDutyExecuteMsg(d, pk[:], networkconfig.TestNetwork.DomainType())
+					require.NoError(t, err)
+
+					ssvMsg = msg
+				case *spectypes.CommitteeDuty:
+					msg, err := validator.CreateCommitteeDutyExecuteMsg(d, spectypes.CommitteeID(pk[16:]), networkconfig.TestNetwork.DomainType())
+					require.NoError(t, err)
+
+					ssvMsg = msg
+				}
+
 				dec, err := queue.DecodeSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
-				s.validators[id].Queues[spectypes.MapDutyToRunnerRole(role)].Q.Push(dec)
+				s.validators[id].Queues[role].Q.Push(dec)
 			}(id, dutyProp)
 		}
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
+			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
@@ -164,12 +175,14 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 	storageMap := qbftstorage.NewStores()
 
 	roles := []convert.RunnerRole{
-		convert.RoleCommittee,
-		convert.RoleProposer,
+		convert.RoleAttester,
 		convert.RoleAggregator,
+		convert.RoleProposer,
 		convert.RoleSyncCommitteeContribution,
+		convert.RoleSyncCommittee,
 		convert.RoleValidatorRegistration,
 		convert.RoleVoluntaryExit,
+		convert.RoleCommittee,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(db, role.String()))
@@ -202,8 +215,9 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 				Liquidated:   false,
 			},
 		},
-		Beacon: NewTestingBeaconNodeWrapped(),
-		Signer: km,
+		Beacon:   NewTestingBeaconNodeWrapped(),
+		Signer:   km,
+		Operator: spectestingutils.TestingCommitteeMember(keySet),
 	}
 
 	options.DutyRunners = validator.SetupRunners(ctx, logger, options)

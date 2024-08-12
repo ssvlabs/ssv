@@ -30,8 +30,8 @@ func NoPackageNames(packages []string) Transformer {
 	if len(packages) == 0 {
 		return NopTransformer()
 	}
-	expr := regexp.MustCompile(`\b(?:` + strings.Join(packages, "|") + `)\.([a-zA-Z_][a-zA-Z0-9_]*)\b`)
-	return func(code string) string { return expr.ReplaceAllString(code, "$1") }
+	expr := regexp.MustCompile(`(?m)([ \t()\[\]\{\}*&]|^)(?:` + strings.Join(packages, "|") + `)\.([a-zA-Z_][a-zA-Z0-9_]*)([ \t()\[\]\{\}*&,:]|$)`)
+	return func(code string) string { return expr.ReplaceAllString(code, "$1$2$3") }
 }
 
 func NoEmptyLines() Transformer {

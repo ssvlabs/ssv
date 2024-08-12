@@ -99,8 +99,6 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
 
-	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
-
 	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
 		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
 		require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]), fmt.Sprintf("post runner state not equal\n%s\n", diff))

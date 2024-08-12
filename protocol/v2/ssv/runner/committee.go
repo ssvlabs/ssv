@@ -59,11 +59,11 @@ func NewCommitteeRunner(
 ) Runner {
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleCommittee,
-			DomainTypeProvider: networkConfig,
-			BeaconNetwork:      networkConfig.Beacon.GetBeaconNetwork(),
-			Share:              share,
-			QBFTController:     qbftController,
+			RunnerRoleType: spectypes.RoleCommittee,
+			DomainType:     networkConfig.AlanDomainType,
+			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
+			Share:          share,
+			QBFTController: qbftController,
 		},
 		beacon:            beacon,
 		network:           network,
@@ -250,7 +250,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(
-			cr.BaseRunner.DomainTypeProvider.DomainType(),
+			cr.BaseRunner.DomainType,
 			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
@@ -544,7 +544,7 @@ func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
 func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{}, spectypes.DomainAttester, nil
+	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
 }
 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (

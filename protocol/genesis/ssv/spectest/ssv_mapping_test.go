@@ -266,8 +266,9 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
 	base := &runner.BaseRunner{
-		DomainTypeProvider: networkconfig.TestNetwork,
+		DomainType: networkconfig.TestNetwork.GenesisDomainType,
 	}
+
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
