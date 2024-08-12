@@ -40,6 +40,10 @@ func (vc *ValidatorContainer) GenesisValidator() (*genesisvalidator.Validator, b
 	return v, true
 }
 
+func (vc *ValidatorContainer) UnsetGenesisValidator() {
+	vc.genesisValidator.Store(nil)
+}
+
 func (vc *ValidatorContainer) Start(logger *zap.Logger) (started bool, err error) {
 	started, err = vc.Validator().Start(logger)
 	if !started || err != nil {

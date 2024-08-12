@@ -1281,6 +1281,11 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 			next = slotTicker.Next()
 			if c.networkConfig.PastAlanFork() {
 				c.cancelGenesisCtx()
+
+				c.validatorsMap.ForEachValidator(func(validator *validators.ValidatorContainer) bool {
+					validator.UnsetGenesisValidator()
+					return true
+				})
 				return
 			}
 		}
