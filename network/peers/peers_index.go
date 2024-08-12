@@ -81,8 +81,6 @@ func (pi *peersIndex) CanConnect(id peer.ID) bool {
 	switch cntd {
 	case libp2pnetwork.Connected:
 		fallthrough
-	case libp2pnetwork.CannotConnect: // recently failed to connect
-		return false
 	default:
 	}
 	return true

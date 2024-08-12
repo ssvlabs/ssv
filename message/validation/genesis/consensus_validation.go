@@ -5,13 +5,13 @@ package validation
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"

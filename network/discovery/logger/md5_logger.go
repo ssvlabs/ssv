@@ -4,10 +4,9 @@ import (
 	"context"
 	"runtime"
 
-	"golang.org/x/exp/slog"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/exp/slog"
 )
 
 type Option struct {
