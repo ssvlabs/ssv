@@ -408,7 +408,9 @@ func (c *controller) handleRouterMessages() {
 
 				pk := m.GetID().GetPubKey()
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk[:])); ok {
-					v.GenesisValidator.HandleMessage(c.logger, m)
+					if genesisValidator, ok := v.GenesisValidator(); ok {
+						genesisValidator.HandleMessage(c.logger, m)
+					}
 				}
 				// TODO: (Alan) make exporter work with genesis message as well
 				// } else if c.validatorOptions.Exporter {
@@ -430,7 +432,7 @@ func (c *controller) handleRouterMessages() {
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.Validator.HandleMessage(c.logger, m)
+					v.Validator().HandleMessage(c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(c.logger, m)
 				} else if c.validatorOptions.Exporter {
@@ -814,8 +816,10 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.GenesisValidator.Queues[duty.Type].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		if genesisValidator, ok := v.GenesisValidator(); ok {
+			if pushed := genesisValidator.Queues[duty.Type].Q.TryPush(dec); !pushed {
+				logger.Warn("dropping ExecuteDuty message because the queue is full")
+			}
 		}
 	} else {
 		logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
@@ -839,7 +843,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDu
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.Validator.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+		if pushed := v.Validator().Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
@@ -1069,20 +1073,22 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 		var genesisValidator *genesisvalidator.Validator
 		if !c.networkConfig.PastAlanFork() {
-			// Share context with both the validator and the runners,
-			// so that when the validator is stopped, the runners are stopped as well.
-			validatorCtx, validatorCancel := context.WithCancel(c.genesisCtx)
+			// Create a validator context based on genesis context.
+			genesisValidatorCtx, validatorCancel := context.WithCancel(c.genesisCtx)
 
 			genesisOpts := c.genesisValidatorOptions
 			genesisOpts.SSVShare = genesisssvtypes.ConvertToGenesisSSVShare(share, operator)
-			genesisOpts.DutyRunners = SetupGenesisRunners(validatorCtx, c.logger, opts)
+			genesisOpts.DutyRunners = SetupGenesisRunners(genesisValidatorCtx, c.logger, opts)
 
-			genesisValidator = genesisvalidator.NewValidator(validatorCtx, validatorCancel, genesisOpts)
+			genesisValidator = genesisvalidator.NewValidator(genesisValidatorCtx, validatorCancel, genesisOpts)
 		}
 
-		v = &validators.ValidatorContainer{
-			Validator:        alanValidator,
-			GenesisValidator: genesisValidator,
+		v, err = validators.NewValidatorContainer(
+			alanValidator,
+			genesisValidator,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not create validator container: %w", err)
 		}
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
@@ -1215,7 +1221,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 
 func (c *controller) validatorStart(validator *validators.ValidatorContainer) (bool, error) {
 	if c.validatorStartFunc == nil {
-		return validator.Start(c.logger, c.networkConfig.PastAlanFork)
+		return validator.Start(c.logger)
 	}
 	return c.validatorStartFunc(validator)
 }
