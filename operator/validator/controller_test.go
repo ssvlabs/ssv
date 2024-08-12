@@ -1098,7 +1098,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		sharesStorage:           opts.sharesStorage,
 		operatorsStorage:        opts.operatorStorage,
 		validatorsMap:           opts.validatorsMap,
-		context:                 context.Background(),
+		ctx:                     context.Background(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
 		messageRouter:           newMessageRouter(logger),
