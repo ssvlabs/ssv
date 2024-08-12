@@ -113,7 +113,6 @@ type ControllerOptions struct {
 
 type GenesisControllerOptions struct {
 	Network           genesisspecqbft.Network
-	BuilderProposals  bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	KeyManager        genesisspectypes.KeyManager
 	StorageMap        *genesisstorage.QBFTStores
 	NewDecidedHandler genesisqbftcontroller.NewDecidedHandler
@@ -251,7 +250,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 		GenesisOptions: validator.GenesisOptions{
 			Network:           options.GenesisControllerOptions.Network,
-			BuilderProposals:  options.BuilderProposals,
 			Signer:            options.GenesisControllerOptions.KeyManager,
 			Storage:           options.GenesisControllerOptions.StorageMap,
 			NewDecidedHandler: options.GenesisControllerOptions.NewDecidedHandler,
@@ -260,10 +258,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	//TODO
 	genesisValidatorOptions := genesisvalidator.Options{
-		Network:          options.GenesisControllerOptions.Network,
-		BuilderProposals: options.BuilderProposals,
-		BeaconNetwork:    options.NetworkConfig.Beacon,
-		Storage:          options.GenesisControllerOptions.StorageMap,
+		Network:       options.GenesisControllerOptions.Network,
+		BeaconNetwork: options.NetworkConfig.Beacon,
+		Storage:       options.GenesisControllerOptions.StorageMap,
 		// SSVShare:   nil,  // set per validator
 		Signer:            options.GenesisControllerOptions.KeyManager,
 		DutyRunners:       nil, // set per validator
@@ -1514,7 +1511,6 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			proposedValueCheck := genesisspecssv.ProposerValueCheckF(options.GenesisOptions.Signer, genesisBeaconNetwork, options.SSVShare.Share.ValidatorPubKey[:], options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(genesisspectypes.BNRoleProposer, proposedValueCheck)
 			runners[role] = genesisrunner.NewProposerRunner(genesisDomainType, genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, proposedValueCheck, 0)
-			runners[role].(*genesisrunner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
 		case genesisspectypes.BNRoleAggregator:
 			aggregatorValueCheckF := genesisspecssv.AggregatorValueCheckF(options.GenesisOptions.Signer, genesisBeaconNetwork, options.SSVShare.Share.ValidatorPubKey[:], options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(genesisspectypes.BNRoleAggregator, aggregatorValueCheckF)
