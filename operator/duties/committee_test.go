@@ -387,10 +387,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for committee duties to be executed
-	currentSlot.Set(phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
-	committeeMap := commHandler.buildCommitteeDuties([]*eth2apiv1.AttesterDuty{aDuties[2]}, nil, 0, currentSlot.Get())
+	const executionSlot = phase0.Slot(2)
+	committeeMap := commHandler.buildCommitteeDuties([]*eth2apiv1.AttesterDuty{aDuties[2]}, nil, 0, executionSlot)
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+	currentSlot.Set(executionSlot)
 
 	startTime := time.Now()
 	ticker.Send(currentSlot.Get())
