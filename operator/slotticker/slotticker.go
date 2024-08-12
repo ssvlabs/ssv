@@ -61,8 +61,11 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 // Note: This function is not thread-safe and should be called in a serialized fashion.
 // Make sure no concurrent calls happen, as it can result in unexpected behavior.
 func (s *slotTicker) Next() <-chan time.Time {
+	startTime := time.Now()
+
 	timeSinceGenesis := time.Since(s.genesisTime)
 	if timeSinceGenesis < 0 {
+		s.logger.Debug("Next: Time since genesis negative", zap.Duration("duration", time.Since(startTime)))
 		return s.timer.C()
 	}
 	if !s.timer.Stop() {
@@ -72,15 +75,20 @@ func (s *slotTicker) Next() <-chan time.Time {
 		default:
 		}
 	}
+	s.logger.Debug("Next: Timer stopped", zap.Duration("duration", time.Since(startTime)))
+
 	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1
 	if nextSlot <= s.slot {
 		// We've already ticked for this slot, so we need to wait for the next one.
 		nextSlot = s.slot + 1
-		s.logger.Debug("double tick", zap.Uint64("slot", uint64(s.slot)))
+		s.logger.Debug("Next: Double tick", zap.Uint64("slot", uint64(s.slot)), zap.Duration("duration", time.Since(startTime)))
 	}
 	nextSlotStartTime := s.genesisTime.Add(time.Duration(nextSlot) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
 	s.slot = nextSlot
+
+	s.logger.Debug("Next: Slot updated", zap.Uint64("slot", uint64(s.slot)), zap.Duration("duration", time.Since(startTime)))
+
 	return s.timer.C()
 }
 
