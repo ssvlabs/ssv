@@ -14,10 +14,8 @@ import (
 
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -367,15 +365,6 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 
 	isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 	if isOperatorShare || eh.fullNode {
-		removeDecidedMessages := func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
-			messageID := convert.NewMsgID(eh.networkConfig.DomainType(), share.ValidatorPubKey[:], role)
-			return store.CleanAllInstances(logger, messageID[:])
-		}
-		err := eh.storageMap.Each(removeDecidedMessages)
-		if err != nil {
-			return emptyPK, fmt.Errorf("could not clean all decided messages: %w", err)
-		}
-
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
