@@ -191,33 +191,45 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Wait for the broadcasters to finish.
 	err := broadcasters.Wait()
 	require.NoError(t, err)
-	time.Sleep(1 * time.Second)
 
 	// Assert that the messages were distributed as expected.
-	time.Sleep(7 * time.Second)
-
+	deadline := 30 * time.Second
 	interval := 100 * time.Millisecond
-	for i := 0; i < nodeCount; i++ {
-		// Messages from nodes broadcasting rejected role become rejected once score threshold is reached
-		if slices.Contains(messageTypesByNodeIndex[i], rejectedRole) {
-			continue
+	startedAt := time.Now()
+
+outer:
+	for {
+		var errors []error
+
+		for i := 0; i < nodeCount; i++ {
+			// Messages from nodes broadcasting rejected role become rejected once score threshold is reached
+			if slices.Contains(messageTypesByNodeIndex[i], rejectedRole) {
+				continue
+			}
+
+			// better lock inside loop than wait interval locked
+			mtx.Lock()
+			if roleBroadcasts[acceptedRole] != messageValidators[i].TotalAccepted {
+				errors = append(errors, fmt.Errorf("node %d accepted %d messages (expected %d)", i, messageValidators[i].TotalAccepted, roleBroadcasts[acceptedRole]))
+			}
+			if roleBroadcasts[ignoredRole] != messageValidators[i].TotalIgnored {
+				errors = append(errors, fmt.Errorf("node %d ignored %d messages (expected %d)", i, messageValidators[i].TotalIgnored, roleBroadcasts[ignoredRole]))
+			}
+			if roleBroadcasts[rejectedRole] != messageValidators[i].TotalRejected {
+				errors = append(errors, fmt.Errorf("node %d rejected %d messages (expected %d)", i, messageValidators[i].TotalRejected, roleBroadcasts[rejectedRole]))
+			}
+			mtx.Unlock()
+
+			time.Sleep(interval)
 		}
 
-		// better lock inside loop than wait interval locked
-		mtx.Lock()
-		var errors []error
-		if roleBroadcasts[acceptedRole] != messageValidators[i].TotalAccepted {
-			errors = append(errors, fmt.Errorf("node %d accepted %d messages (expected %d)", i, messageValidators[i].TotalAccepted, roleBroadcasts[acceptedRole]))
+		if len(errors) == 0 {
+			break outer
 		}
-		if roleBroadcasts[ignoredRole] != messageValidators[i].TotalIgnored {
-			errors = append(errors, fmt.Errorf("node %d ignored %d messages (expected %d)", i, messageValidators[i].TotalIgnored, roleBroadcasts[ignoredRole]))
+
+		if time.Since(startedAt) > deadline {
+			require.Empty(t, errors)
 		}
-		if roleBroadcasts[rejectedRole] != messageValidators[i].TotalRejected {
-			errors = append(errors, fmt.Errorf("node %d rejected %d messages (expected %d)", i, messageValidators[i].TotalRejected, roleBroadcasts[rejectedRole]))
-		}
-		mtx.Unlock()
-		require.Empty(t, errors)
-		time.Sleep(interval)
 	}
 
 	// Assert that each node scores it's peers according to the following order:
