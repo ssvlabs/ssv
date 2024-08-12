@@ -3,7 +3,6 @@ package kv
 import (
 	"bytes"
 	"context"
-	errors2 "errors"
 	"sync"
 	"time"
 
@@ -159,19 +158,6 @@ func (b *BadgerDB) Delete(prefix []byte, key []byte) error {
 	})
 }
 
-// DeletePrefix all items with this prefix
-func (b *BadgerDB) DeletePrefix(prefix []byte) (int, error) {
-	count := 0
-	err := b.db.Update(func(txn *badger.Txn) error {
-		errs := b.DeleteAllPrefixKeys(prefix, txn)
-		if errs != nil {
-			return errors2.Join(errs...)
-		}
-		return nil
-	})
-	return count, err
-}
-
 // GetAll returns all the items of a given collection
 func (b *BadgerDB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
 	// we got issues when reading more than 100 items with iterator (items get mixed up)
@@ -240,24 +226,6 @@ func (b *BadgerDB) periodicallyReport(interval time.Duration) {
 			return
 		}
 	}
-}
-
-func (b *BadgerDB) DeleteAllPrefixKeys(prefix []byte, txn *badger.Txn) []error {
-	var errs []error
-	opt := badger.DefaultIteratorOptions
-	opt.Prefix = prefix
-	opt.PrefetchValues = false
-
-	it := txn.NewIterator(opt)
-	defer it.Close()
-
-	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-		if err := txn.Delete(it.Item().KeyCopy(nil)); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	return errs
 }
 
 func (b *BadgerDB) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
