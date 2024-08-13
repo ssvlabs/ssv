@@ -331,7 +331,7 @@ func (c *Committee) stopExpiredRunners(logger *zap.Logger, currentSlot phase0.Sl
 
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
-			logger.Info("stopping expired committee runner", zap.Uint64("slot", uint64(slot)))
+			logger.Debug("stopping expired committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)
 			delete(c.Queues, slot)
 		}
@@ -345,7 +345,7 @@ func (c *Committee) Stop() {
 	defer c.mtx.Unlock()
 
 	for slot, q := range c.Queues {
-		c.logger.Error("stopping committee queue",
+		c.logger.Debug("stopping committee queue",
 			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
 			fields.Slot(slot),
 		)
