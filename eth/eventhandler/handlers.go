@@ -16,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/operator/duties"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -342,14 +341,14 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey, role)
-		return store.CleanAllInstances(logger, messageID[:])
-	}
-	err := eh.storageMap.Each(removeDecidedMessages)
-	if err != nil {
-		return nil, fmt.Errorf("could not clean all decided messages: %w", err)
-	}
+	// removeDecidedMessages := func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
+	// 	messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey, role)
+	// 	return store.CleanAllInstances(logger, messageID[:])
+	// }
+	// err := eh.storageMap.Each(removeDecidedMessages)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not clean all decided messages: %w", err)
+	// }
 
 	if err := eh.nodeStorage.Shares().Delete(txn, share.ValidatorPubKey); err != nil {
 		return nil, fmt.Errorf("could not remove validator share: %w", err)
@@ -360,7 +359,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
 	if isOperatorShare {
-		err = eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
 		if err != nil {
 			return nil, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
