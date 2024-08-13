@@ -102,16 +102,16 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
 	}
 
-	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
-	_ = cancelF
-
 	r := c.Runners[duty.Slot]
 	if r == nil {
 		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
 	}
 
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+
 	go func() {
+		defer cancelF()
 		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
 		}
