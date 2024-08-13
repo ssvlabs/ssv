@@ -316,7 +316,6 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 }
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
-	logger.Debug("👀👀👀 pruning expired committee runners", zap.Uint64("current_slot", uint64(currentSlot)))
 	if runnerExpirySlots > currentSlot {
 		return nil
 	}
