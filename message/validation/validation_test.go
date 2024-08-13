@@ -266,7 +266,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  bytes.Repeat([]byte{1}, 1+commons.MessageOffset),
+				Data:  []byte{1, 2, 3},
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
