@@ -539,6 +539,7 @@ func (c *controller) StartValidators() {
 	if c.validatorOptions.Exporter {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
+		c.logger.Info("starting exporter")
 	} else {
 		// Setup committee validators.
 		inited, committees := c.setupValidators(ownShares)
@@ -550,6 +551,7 @@ func (c *controller) StartValidators() {
 			}
 		}
 		close(c.committeeValidatorSetup)
+		c.logger.Info("validators setup done", zap.Int("validators", len(inited)), zap.Int("committees", len(committees)))
 
 		// Start validators.
 		c.startValidators(inited, committees)
@@ -941,6 +943,7 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
 	if afterInit {
 		<-c.committeeValidatorSetup
+		c.logger.Debug("all validators are initialized")
 	}
 	var indices []phase0.ValidatorIndex
 	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
@@ -949,6 +952,7 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 		}
 		return true
 	})
+	c.logger.Debug("all active indices", zap.Int("count", len(indices)))
 	return indices
 }
 

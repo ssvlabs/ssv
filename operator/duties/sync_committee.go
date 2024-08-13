@@ -143,6 +143,7 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	h.logger.Debug("🛠 fetching duties", zap.Any("period", period), zap.Any("waitForInitial", waitForInitial), zap.Any("fetchCurrentPeriod", h.fetchCurrentPeriod), zap.Any("fetchNextPeriod", h.fetchNextPeriod))
 
 	if h.fetchCurrentPeriod {
 		if err := h.fetchAndProcessDuties(ctx, period, waitForInitial); err != nil {
@@ -164,6 +165,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot) {
 	// range over duties and execute
 	duties := h.duties.CommitteePeriodDuties(period)
+	h.logger.Debug("🛠 executing duties", fields.Count(len(duties)), fields.Slot(slot))
 	if duties == nil {
 		return
 	}
@@ -200,7 +202,9 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
+	h.logger.Debug("fetchAndProcessDuties", zap.Any("period", period), zap.Any("firstEpoch", firstEpoch), zap.Any("lastEpoch", lastEpoch))
 	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
+	h.logger.Debug("all active indices", zap.Any("indices", allActiveIndices))
 	if len(allActiveIndices) == 0 {
 		h.logger.Debug("no active validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
 		return nil
