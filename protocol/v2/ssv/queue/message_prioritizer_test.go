@@ -255,7 +255,7 @@ type mockExecuteDutyMessage struct {
 }
 
 func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
-	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.BeaconDuty{
+	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.ValidatorDuty{
 		Type: m.Role,
 		Slot: m.Slot,
 	}})
@@ -311,10 +311,10 @@ func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage
 	}
 }
 
-type messageSlice []*DecodedSSVMessage
+type messageSlice []*SSVMessage
 
 func (m messageSlice) shuffle() messageSlice {
-	shuffled := make([]*DecodedSSVMessage, len(m))
+	shuffled := make([]*SSVMessage, len(m))
 	for i, j := range rand.Perm(len(m)) {
 		shuffled[i] = m[j]
 	}

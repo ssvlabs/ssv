@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -49,14 +50,23 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey[:])
-
-				h.dutiesExecutor.ExecuteDuties(h.logger, []*spectypes.BeaconDuty{{
-					Type:           spectypes.BNRoleValidatorRegistration,
-					ValidatorIndex: share.ValidatorIndex,
-					PubKey:         pk,
-					Slot:           slot,
-					// no need for other params
-				}})
+				if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+					h.dutiesExecutor.ExecuteGenesisDuties(h.logger, []*genesisspectypes.Duty{{
+						Type:           genesisspectypes.BNRoleValidatorRegistration,
+						ValidatorIndex: share.ValidatorIndex,
+						PubKey:         pk,
+						Slot:           slot,
+						// no need for other params
+					}})
+				} else {
+					h.dutiesExecutor.ExecuteDuties(h.logger, []*spectypes.ValidatorDuty{{
+						Type:           spectypes.BNRoleValidatorRegistration,
+						ValidatorIndex: share.ValidatorIndex,
+						PubKey:         pk,
+						Slot:           slot,
+						// no need for other params
+					}})
+				}
 
 				validators = append(validators, share.BeaconMetadata.Index)
 			}

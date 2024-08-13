@@ -338,8 +338,8 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 	}
 
 	// decode
-	slot := ssz.UnmarshallUint64(obj.Value)
-	return phase0.Slot(slot), found, nil
+	slot := phase0.Slot(ssz.UnmarshallUint64(obj.Value))
+	return slot, found, nil
 }
 
 func (s *storage) RemoveHighestProposal(pubKey []byte) error {

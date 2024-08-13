@@ -177,7 +177,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		return
 	}
 
-	if !h.network.AlanForked(slot) {
+	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
 		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
 		for _, d := range duties {
 			if h.shouldExecute(d) {
@@ -190,7 +190,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		return
 	}
 
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
+	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
@@ -214,7 +214,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
 
-	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
+	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
@@ -246,8 +246,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	return nil
 }
 
-func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
-	return &spectypes.BeaconDuty{
+func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,

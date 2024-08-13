@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -134,8 +135,20 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		return
 	}
 
+	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+		toExecute := make([]*genesisspectypes.Duty, 0, len(duties))
+		for _, d := range duties {
+			if h.shouldExecute(d) {
+				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleProposer))
+			}
+		}
+
+		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+		return
+	}
+
 	// range over duties and execute
-	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
+	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
@@ -166,7 +179,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	h.duties.ResetEpoch(epoch)
 
-	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
+	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		_, inCommitteeDuty := selfIndicesSet[d.ValidatorIndex]
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, inCommitteeDuty)
@@ -182,8 +195,17 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	return nil
 }
 
-func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
-	return &spectypes.BeaconDuty{
+func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
+		Type:           role,
+		PubKey:         duty.PubKey,
+		Slot:           duty.Slot,
+		ValidatorIndex: duty.ValidatorIndex,
+	}
+}
+
+func (h *ProposerHandler) toGenesisSpecDuty(duty *eth2apiv1.ProposerDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
+	return &genesisspectypes.Duty{
 		Type:           role,
 		PubKey:         duty.PubKey,
 		Slot:           duty.Slot,

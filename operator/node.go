@@ -33,6 +33,7 @@ type Node interface {
 type Options struct {
 	// NetworkName is the network name of this node
 	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
+	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override the SSV domain type. This is used to isolate the node from the rest of the network. Do not set unless you know what you are doing. Example: 0x01020304"`
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     *executionclient.ExecutionClient
@@ -92,6 +93,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
 			DutyStore:           opts.DutyStore,
 			SlotTickerProvider:  slotTickerProvider,
+			P2PNetwork:          opts.P2PNetwork,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,
@@ -177,7 +179,7 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.Domain)
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.DomainType())
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
 	default:

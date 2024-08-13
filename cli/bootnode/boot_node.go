@@ -2,8 +2,9 @@ package bootnode
 
 import (
 	"fmt"
-	"github.com/ssvlabs/ssv/utils/commons"
 	"log"
+
+	"github.com/ssvlabs/ssv/utils/commons"
 
 	"github.com/ssvlabs/ssv/logging"
 

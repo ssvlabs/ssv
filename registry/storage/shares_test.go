@@ -59,8 +59,6 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestMaxPossibleShareSize(t *testing.T) {
-	t.Skip("to be fixed once we agree on type of ValidatorPubKey")
-
 	s, err := generateMaxPossibleShare()
 	require.NoError(t, err)
 
@@ -209,12 +207,12 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 	return &storageShare{
 		Share: Share{
 			OperatorID:          1,
-			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
+			ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
 			Quorum:              quorum,
 			PartialQuorum:       partialQuorum,
-			DomainType:          networkconfig.TestNetwork.Domain,
+			DomainType:          networkconfig.TestNetwork.DomainType(),
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
@@ -256,7 +254,7 @@ func generateRandomValidatorSpecShare(splitKeys map[uint64]*bls.SecretKey) (*ssv
 			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
-			DomainType:          networkconfig.TestNetwork.Domain,
+			DomainType:          networkconfig.TestNetwork.DomainType(),
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},

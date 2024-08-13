@@ -23,9 +23,9 @@ func setupSyncCommitteeDutiesMock(
 	activeShares []*ssvtypes.SSVShare,
 	dutiesMap *hashmap.Map[uint64, []*v1.SyncCommitteeDuty],
 	waitForDuties *SafeValue[bool],
-) (chan struct{}, chan []*spectypes.BeaconDuty) {
+) (chan struct{}, chan []*spectypes.ValidatorDuty) {
 	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
@@ -77,10 +77,10 @@ func setupSyncCommitteeDutiesMock(
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.BeaconDuty {
-	expectedDuties := make([]*spectypes.BeaconDuty, 0)
+func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.ValidatorDuty {
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range duties {
-		if !handler.network.AlanForked(slot) {
+		if !handler.network.PastAlanForkAtEpoch(handler.network.Beacon.EstimatedEpochAtSlot(slot)) {
 			expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 		}
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))

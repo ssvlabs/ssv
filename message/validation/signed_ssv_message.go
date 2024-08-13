@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"golang.org/x/exp/slices"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
@@ -18,6 +18,12 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
+
+		// Ignore genesis messages in the first slot of the fork epoch
+		if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
+			e.reject = false
+		}
+
 		return nil, e
 	}
 
@@ -31,7 +37,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 	}
 
 	// Rule: Must have at least one signer
-	if len(signedSSVMessage.GetOperatorIDs()) == 0 {
+	if len(signedSSVMessage.OperatorIDs) == 0 {
 		return ErrNoSigners
 	}
 
@@ -50,12 +56,12 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 	}
 
 	// Rule: Signers must be sorted
-	if !slices.IsSorted(signedSSVMessage.GetOperatorIDs()) {
+	if !slices.IsSorted(signedSSVMessage.OperatorIDs) {
 		return ErrSignersNotSorted
 	}
 
 	var prevSigner spectypes.OperatorID
-	for _, signer := range signedSSVMessage.GetOperatorIDs() {
+	for _, signer := range signedSSVMessage.OperatorIDs {
 		// Rule: Signer can't be zero
 		if signer == 0 {
 			return ErrZeroSigner
@@ -70,9 +76,9 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 	}
 
 	// Rule: Len(Signers) must be equal to Len(Signatures)
-	if len(signedSSVMessage.GetOperatorIDs()) != len(signedSSVMessage.Signatures) {
+	if len(signedSSVMessage.OperatorIDs) != len(signedSSVMessage.Signatures) {
 		e := ErrSignersAndSignaturesWithDifferentLength
-		e.got = fmt.Sprintf("%d/%d", len(signedSSVMessage.GetOperatorIDs()), len(signedSSVMessage.Signatures))
+		e.got = fmt.Sprintf("%d/%d", len(signedSSVMessage.OperatorIDs), len(signedSSVMessage.Signatures))
 		return e
 	}
 
@@ -118,10 +124,11 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	// Rule: If domain is different then self domain
-	if !bytes.Equal(ssvMessage.GetID().GetDomain(), mv.netCfg.Domain[:]) {
+	domain := mv.netCfg.DomainType()
+	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		err.want = hex.EncodeToString(domain[:])
 		return err
 	}
 

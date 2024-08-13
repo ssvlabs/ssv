@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -18,7 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -278,13 +275,11 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 	var shareSecret *bls.SecretKey
 
-	operators := make([]*spectypes.Operator, 0)
-	committee := make([]*spectypes.CommitteeMember, 0)
 	shareMembers := make([]*spectypes.ShareMember, 0)
 
 	for i := range event.OperatorIds {
 		operatorID := event.OperatorIds[i]
-		od, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
+		_, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not get operator data: %w", err)
 		}
@@ -293,11 +288,6 @@ func (eh *EventHandler) validatorAddedEventToShare(
 				Err: fmt.Errorf("operator data not found: %w", err),
 			}
 		}
-
-		committee = append(committee, &spectypes.CommitteeMember{
-			OperatorID:        operatorID,
-			SSVOperatorPubKey: od.PublicKey,
-		})
 
 		shareMembers = append(shareMembers, &spectypes.ShareMember{
 			Signer:      operatorID,
@@ -328,16 +318,10 @@ func (eh *EventHandler) validatorAddedEventToShare(
 				Err: errors.New("share private key does not match public key"),
 			}
 		}
-
-		operators = append(operators, &spectypes.Operator{
-			OperatorID:        operatorID,
-			SSVOperatorPubKey: od.PublicKey,
-		})
 	}
 
-	validatorShare.DomainType = eh.networkConfig.Domain
+	validatorShare.DomainType = eh.networkConfig.DomainType()
 	validatorShare.Committee = shareMembers
-	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
 }
@@ -374,15 +358,6 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return emptyPK, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := convert.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
-		return store.CleanAllInstances(logger, messageID[:])
-	}
-	err := eh.storageMap.Each(removeDecidedMessages)
-	if err != nil {
-		return emptyPK, fmt.Errorf("could not clean all decided messages: %w", err)
-	}
-
 	if err := eh.nodeStorage.Shares().Delete(txn, share.ValidatorPubKey[:]); err != nil {
 		return emptyPK, fmt.Errorf("could not remove validator share: %w", err)
 	}
@@ -392,7 +367,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err = eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}

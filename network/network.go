@@ -4,16 +4,23 @@ import (
 	"context"
 	"io"
 
+	"github.com/libp2p/go-libp2p/core/peer"
+
 	"go.uber.org/zap"
 
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
+
+// DecodedSSVMessage serves as a marker interface for any SSV message types.
+type DecodedSSVMessage interface {
+	// DecodedSSVMessage is a dummy method to avoid type assertion mistakes.
+	DecodedSSVMessage()
+}
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(ctx context.Context, message *queue.DecodedSSVMessage)
+	Route(ctx context.Context, message DecodedSSVMessage)
 }
 
 // MessageRouting allows to register a MessageRouter
@@ -39,6 +46,9 @@ type P2PNetwork interface {
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	// UpdateScoreParams will update the scoring parameters of GossipSub
 	UpdateScoreParams(logger *zap.Logger)
+
+	// used for tests and api
+	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
 
 // GetValidatorStats returns stats of validators, including the following:

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +24,6 @@ import (
 	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -32,8 +32,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -227,7 +227,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 		}
 
 		// skipping the error check for testing simplifying
-		decMsg, _ := queue.DecodeGenesisSSVMessage(msg)
+		decMsg, _ := genesisqueue.DecodeGenesisSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
 	}
@@ -284,11 +284,11 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
-func (mv *messageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) ValidateSSVMessage(ssvMessage *genesisqueue.GenesisSSVMessage) (*genesisqueue.GenesisSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
-func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*genesisqueue.GenesisSSVMessage, Descriptor, error) {
 	topic := pMsg.GetTopic()
 
 	mv.metrics.ActiveMsgValidation(topic)
@@ -331,14 +331,14 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 
-	msg, err := queue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
+	msg, err := genesisqueue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
-		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
+		if errors.Is(err, genesisqueue.ErrDecodeNetworkMsg) {
 			e := ErrMalformedPubSubMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
-		if errors.Is(err, queue.ErrUnknownMessageType) {
+		if errors.Is(err, genesisqueue.ErrUnknownMessageType) {
 			e := ErrUnknownSSVMessageType
 			e.innerErr = err
 			return nil, Descriptor{}, e
@@ -355,7 +355,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	// Check if the message was sent on the right topic.
 	currentTopic := pMsg.GetTopic()
 	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
-	topics := commons.ValidatorTopicID(spectypes.MessageID(msg.GetID()).GetPubKey())
+	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
 
 	topicFound := false
 	for _, tp := range topics {
@@ -368,12 +368,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
 
-	mv.metrics.SSVMessageType(msg.MsgType)
+	mv.metrics.GenesisSSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*genesisqueue.GenesisSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 	ssvMessage := msg.SSVMessage
 
@@ -387,16 +387,16 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 		err.want = maxMessageSize
 		return nil, descriptor, err
 	}
-
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
+	domain := mv.netCfg.DomainType()
+	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		err.want = hex.EncodeToString(domain[:])
 		return nil, descriptor, err
 	}
 
-	validatorPK := spectypes.MessageID(ssvMessage.GetID()).GetPubKey()
-	role := spectypes.MessageID(ssvMessage.GetID()).GetRoleType()
+	validatorPK := ssvMessage.GetID().GetPubKey()
+	role := ssvMessage.GetID().GetRoleType()
 	descriptor.Role = role
 	descriptor.ValidatorPK = validatorPK
 
@@ -438,19 +438,19 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
-	mutex, ok := mv.validationLocks[spectypes.MessageID(msg.GetID())]
+	mutex, ok := mv.validationLocks[msg.GetID()]
 	if !ok {
 		mutex = &sync.Mutex{}
-		mv.validationLocks[spectypes.MessageID(msg.GetID())] = mutex
+		mv.validationLocks[msg.GetID()] = mutex
 	}
 	mutex.Lock()
 	defer mutex.Unlock()
 	mv.validationMutex.Unlock()
 
-	descriptor.SSVMessageType = spectypes.MsgType(ssvMessage.MsgType)
+	descriptor.SSVMessageType = ssvMessage.MsgType
 
 	if mv.nodeStorage != nil {
-		switch spectypes.MsgType(ssvMessage.MsgType) {
+		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if len(ssvMessage.Data) > maxConsensusMsgSize {
 				e := ErrSSVDataTooBig
@@ -460,7 +460,7 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 			}
 
 			signedMessage := msg.Body.(*specqbft.SignedMessage)
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, spectypes.MessageID(msg.GetID()), receivedAt, signatureVerifier)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -476,7 +476,7 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 			}
 
 			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, spectypes.MessageID(msg.GetID()), signatureVerifier)
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier, receivedAt)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
@@ -487,6 +487,9 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 
 		case spectypes.DKGMsgType:
 			return nil, descriptor, ErrDKGMessage
+
+		default:
+			return nil, descriptor, ErrUnknownSSVMessageType
 		}
 	}
 

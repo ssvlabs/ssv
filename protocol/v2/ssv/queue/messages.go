@@ -4,34 +4,30 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var (
 	ErrUnknownMessageType = fmt.Errorf("unknown message type")
-	ErrDecodeNetworkMsg   = fmt.Errorf("could not decode data into an SSVMessage")
 )
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
-// TODO: try to make it generic
-type DecodedSSVMessage struct {
-	SignedSSVMessage        *spectypes.SignedSSVMessage
-	GenesisSignedSSVMessage *genesisspectypes.SignedSSVMessage
+type SSVMessage struct {
+	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg | *genesisspecqbft.SignedMessage (TODO: remove post-fork) | *genesisspectypes.SignedPartialSignatureMessage (TODO: remove post-fork)
+	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
 }
 
-func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
+func (d *SSVMessage) DecodedSSVMessage() {}
+
+func (d *SSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {
 	case *specqbft.Message: // TODO: Or message.SSVDecidedMsgType?
 		return phase0.Slot(m.Height), nil
@@ -46,17 +42,13 @@ func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
 			return phase0.Slot(data.Height), nil
 		}
 		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
-	case *genesisspecqbft.SignedMessage: // TODO: remove post-fork
-		return phase0.Slot(m.Message.Height), nil
-	case *genesisspectypes.SignedPartialSignatureMessage: // TODO: remove post-fork
-		return m.Message.Slot, nil
 	default:
 		return 0, ErrUnknownMessageType
 	}
 }
 
-// DecodeSignedSSVMessage decodes a SignedSSVMessage into a DecodedSSVMessage.
-func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
+// DecodeSignedSSVMessage decodes a SignedSSVMessage into a SSVMessage.
+func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*SSVMessage, error) {
 	d, err := DecodeSSVMessage(sm.SSVMessage)
 	if err != nil {
 		return nil, err
@@ -65,14 +57,14 @@ func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage,
 	return d, nil
 }
 
-// DecodeSSVMessage decodes a SSVMessage into a DecodedSSVMessage.
-func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
+// DecodeSSVMessage decodes a SSVMessage into a SSVMessage.
+func DecodeSSVMessage(m *spectypes.SSVMessage) (*SSVMessage, error) {
 	body, err := ExtractMsgBody(m)
 	if err != nil {
 		return nil, err
 	}
 
-	return &DecodedSSVMessage{
+	return &SSVMessage{
 		SSVMessage: m,
 		Body:       body,
 	}, nil
@@ -106,71 +98,9 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 	return body, nil
 }
 
-// DecodeGenesisSSVMessage decodes a genesis SSVMessage into a DecodedSSVMessage.
-func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
-	body, err := ExtractGenesisMsgBody(m)
-	if err != nil {
-		return nil, err
-	}
-
-	return &DecodedSSVMessage{
-		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.MsgType(m.MsgType),
-			MsgID:   spectypes.MessageID(m.MsgID),
-			Data:    m.Data,
-		},
-		Body: body,
-	}, nil
-}
-
-// DecodeGenesisSignedSSVMessage decodes a genesis SignedSSVMessage into a DecodedSSVMessage.
-func DecodeGenesisSignedSSVMessage(sm *genesisspectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
-	m, err := commons.DecodeGenesisNetworkMsg(sm.GetData())
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrDecodeNetworkMsg, err)
-	}
-
-	d, err := DecodeGenesisSSVMessage(m)
-	if err != nil {
-		return nil, err
-	}
-
-	d.GenesisSignedSSVMessage = sm
-
-	return d, nil
-}
-
-func ExtractGenesisMsgBody(m *genesisspectypes.SSVMessage) (any, error) {
-	var body any
-	switch m.MsgType {
-	case genesisspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
-		sm := &genesisspecqbft.SignedMessage{}
-		if err := sm.Decode(m.Data); err != nil {
-			return nil, fmt.Errorf("failed to decode genesis SignedMessage: %w", err)
-		}
-		body = sm
-	case genesisspectypes.SSVPartialSignatureMsgType:
-		sm := &genesisspectypes.SignedPartialSignatureMessage{}
-		if err := sm.Decode(m.Data); err != nil {
-			return nil, fmt.Errorf("failed to decode genesis SignedPartialSignatureMessage: %w", err)
-		}
-		body = sm
-	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
-		msg := &ssvtypes.EventMsg{}
-		if err := msg.Decode(m.Data); err != nil {
-			return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
-		}
-		body = msg
-	default:
-		return nil, ErrUnknownMessageType
-	}
-
-	return body, nil
-}
-
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The result will be 0 if equal, -1 if lower, 1 if higher.
-func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
+func compareHeightOrSlot(state *State, m *SSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Height == state.Height {
 			return 0
@@ -191,7 +121,7 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
 // The result will be 0 if equal, -1 if lower, 1 if higher.
-func scoreRound(state *State, m *DecodedSSVMessage) int {
+func scoreRound(state *State, m *SSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Round == state.Round {
 			return 2
@@ -206,7 +136,7 @@ func scoreRound(state *State, m *DecodedSSVMessage) int {
 
 // scoreMessageType returns a score based on the top level message type,
 // where event type messages are prioritized over other types.
-func scoreMessageType(m *DecodedSSVMessage) int {
+func scoreMessageType(m *SSVMessage) int {
 	switch mm := m.Body.(type) {
 	case *ssvtypes.EventMsg:
 		switch mm.Type {
@@ -222,7 +152,7 @@ func scoreMessageType(m *DecodedSSVMessage) int {
 }
 
 // scoreMessageSubtype returns an integer score for the message's type.
-func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
+func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 	_, isConsensusMessage := m.Body.(*specqbft.Message)
 
 	var (
@@ -285,7 +215,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 
 // scoreConsensusType returns an integer score for the type of consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
-func scoreConsensusType(m *DecodedSSVMessage) int {
+func scoreConsensusType(m *SSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		switch qbftMsg.MsgType {
 		case specqbft.ProposalMsgType:
@@ -301,7 +231,7 @@ func scoreConsensusType(m *DecodedSSVMessage) int {
 	return 0
 }
 
-func isDecidedMessage(s *State, m *DecodedSSVMessage) bool {
+func isDecidedMessage(s *State, m *SSVMessage) bool {
 	consensusMessage, isConsensusMessage := m.Body.(*specqbft.Message)
 	if !isConsensusMessage {
 		return false
@@ -311,7 +241,7 @@ func isDecidedMessage(s *State, m *DecodedSSVMessage) bool {
 }
 
 // scoreCommitteeMessageSubtype returns an integer score for the message's type.
-func scoreCommitteeMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
+func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 	_, isConsensusMessage := m.Body.(*specqbft.Message)
 
 	var (
@@ -374,7 +304,7 @@ func scoreCommitteeMessageSubtype(state *State, m *DecodedSSVMessage, relativeHe
 
 // scoreCommitteeConsensusType returns an integer score for the type of committee consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
-func scoreCommitteeConsensusType(m *DecodedSSVMessage) int {
+func scoreCommitteeConsensusType(m *SSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		switch qbftMsg.MsgType {
 		case specqbft.CommitMsgType:

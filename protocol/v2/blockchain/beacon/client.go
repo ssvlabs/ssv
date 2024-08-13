@@ -63,7 +63,6 @@ type Options struct {
 	Context        context.Context
 	Network        Network
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	Graffiti       []byte
 	GasLimit       uint64
 	CommonTimeout  time.Duration // Optional.
 	LongTimeout    time.Duration // Optional.

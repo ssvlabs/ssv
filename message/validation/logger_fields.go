@@ -1,6 +1,7 @@
 package validation
 
 import (
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -47,7 +48,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 	return result
 }
 
-func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMessage) *LoggerFields {
+func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) *LoggerFields {
 	descriptor := &LoggerFields{
 		Consensus: &ConsensusFields{},
 	}
@@ -74,4 +75,32 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMe
 	}
 
 	return descriptor
+}
+
+// LoggerFields provides details about a message. It's used for logging and metrics.
+type GenesisLoggerFields struct {
+	DutyExecutorID []byte
+	Role           genesisspectypes.BeaconRole
+	SSVMessageType genesisspectypes.MsgType
+	Slot           phase0.Slot
+	Consensus      *ConsensusFields
+}
+
+// AsZapFields returns zap logging fields for the descriptor.
+func (d GenesisLoggerFields) AsZapFields() []zapcore.Field {
+	result := []zapcore.Field{
+		fields.DutyExecutorID(d.DutyExecutorID),
+		fields.BeaconRole(spectypes.BeaconRole(d.Role)),
+		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(spectypes.MsgType(d.SSVMessageType))),
+		fields.Slot(d.Slot),
+	}
+
+	if d.Consensus != nil {
+		result = append(result,
+			fields.Round(d.Consensus.Round),
+			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType)),
+		)
+	}
+
+	return result
 }

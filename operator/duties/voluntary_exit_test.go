@@ -14,7 +14,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
@@ -26,14 +25,14 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	currentSlot := &SafeValue[phase0.Slot]{}
 	currentSlot.Set(0)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, 0)
 	startFn()
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
 	assert1to1BlockSlotMapping(t, scheduler)
 	require.EqualValues(t, 1, blockByNumberCalls.Load())
 
-	executeDutiesCall := make(chan []*spectypes.BeaconDuty)
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
 	const blockNumber = uint64(1)
@@ -172,10 +171,10 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.EqualValues(t, blockNumber, slot)
 }
 
-func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.BeaconDuty {
-	expectedDuties := make([]*spectypes.BeaconDuty, 0)
+func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.ValidatorDuty {
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range descriptors {
-		expectedDuties = append(expectedDuties, &spectypes.BeaconDuty{
+		expectedDuties = append(expectedDuties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleVoluntaryExit,
 			PubKey:         d.PubKey,
 			Slot:           phase0.Slot(d.BlockNumber) + voluntaryExitSlotsToPostpone,

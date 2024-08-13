@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -23,7 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -104,7 +103,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	return mv.handleValidationSuccess(decodedMessage)
 }
 
-func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
 	if err := mv.validatePubSubMessage(pMsg); err != nil {
 		return nil, err
 	}
@@ -117,8 +116,8 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
 
-func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
-	decodedMessage := &queue.DecodedSSVMessage{
+func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.SSVMessage, error) {
+	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
 	}
 
@@ -170,7 +169,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 }
 
 func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committeeInfo.operatorIDs); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.operatorIDs); err != nil {
 		return err
 	}
 
@@ -232,17 +231,10 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
-	if err != nil {
-		e := ErrDeserializePublicKey
-		e.innerErr = err
-		return CommitteeInfo{}, e
-	}
-
-	validator := mv.validatorStore.Validator(publicKey.Serialize())
+	validator := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
 	if validator == nil {
 		e := ErrUnknownValidator
-		e.got = publicKey.SerializeToHexStr()
+		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
 		return CommitteeInfo{}, e
 	}
 

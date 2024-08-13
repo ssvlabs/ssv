@@ -130,9 +130,9 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 
 func (s *SlashingInterceptor) initializeEpochs(epoch phase0.Epoch) {
 	if !s.IsInterceptorInitialize() {
-		s.startEpoch = epoch
-		s.sleepEpoch = epoch + 1
-		s.endEpoch = epoch + 2
+		s.startEpoch = epoch + 1
+		s.sleepEpoch = epoch + 2
+		s.endEpoch = epoch + 3
 		s.logger.Debug("initialize slashing interceptor epochs",
 			zap.Any("start_epoch", s.startEpoch),
 			zap.Any("sleep_epoch", s.sleepEpoch),

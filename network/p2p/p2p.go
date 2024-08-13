@@ -2,7 +2,10 @@ package p2pv1
 
 import (
 	"context"
-	"encoding/hex"
+	"errors"
+	"fmt"
+	ma "github.com/multiformats/go-multiaddr"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -77,15 +81,20 @@ type p2pNetwork struct {
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
 	connGater    connmgr.ConnectionGater
+	trustedPeers []*peer.AddrInfo
 	metrics      Metrics
 
 	state int32
 
 	activeValidators *hashmap.Map[string, validatorStatus]
+	activeCommittees *hashmap.Map[string, validatorStatus]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
-	subnets          []byte
-	libConnManager   connmgrcore.ConnManager
+
+	fixedSubnets  []byte
+	activeSubnets []byte
+
+	libConnManager connmgrcore.ConnManager
 
 	nodeStorage             operatorstorage.Storage
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
@@ -94,12 +103,12 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	return &p2pNetwork{
+	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
@@ -109,12 +118,38 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeValidators:        hashmap.New[string, validatorStatus](),
+		activeCommittees:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
 		metrics:                 mr,
 	}
+	if err := n.parseTrustedPeers(); err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
+func (n *p2pNetwork) parseTrustedPeers() error {
+	if len(n.cfg.TrustedPeers) == 0 {
+		return nil // No trusted peers to parse, return early
+	}
+	// Group addresses by peer ID.
+	trustedPeers := map[peer.ID][]ma.Multiaddr{}
+	for _, mas := range n.cfg.TrustedPeers {
+		for _, ma := range strings.Split(mas, ",") {
+			addrInfo, err := peer.AddrInfoFromString(ma)
+			if err != nil {
+				return fmt.Errorf("could not parse trusted peer: %w", err)
+			}
+			trustedPeers[addrInfo.ID] = append(trustedPeers[addrInfo.ID], addrInfo.Addrs...)
+		}
+	}
+	for id, addrs := range trustedPeers {
+		n.trustedPeers = append(n.trustedPeers, &peer.AddrInfo{ID: id, Addrs: addrs})
+	}
+	return nil
 }
 
 // Host implements HostProvider
@@ -166,6 +201,27 @@ func (n *p2pNetwork) Close() error {
 	return n.host.Close()
 }
 
+func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
+	connector := make(chan peer.AddrInfo, connectorQueueSize)
+	go func() {
+		// Wait for own subnets to be subscribed to and updated.
+		// TODO: wait more intelligently with a channel.
+		time.Sleep(8 * time.Second)
+		ctx, cancel := context.WithCancel(n.ctx)
+		defer cancel()
+		n.backoffConnector.Connect(ctx, connector)
+	}()
+
+	// Connect to trusted peers first.
+	go func() {
+		for _, addrInfo := range n.trustedPeers {
+			connector <- *addrInfo
+		}
+	}()
+
+	return connector, nil
+}
+
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	logger = logger.Named(logging.NameP2PNetwork)
@@ -175,9 +231,28 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		return nil
 	}
 
-	logger.Info("starting")
+	connector, err := n.getConnector()
+	if err != nil {
+		return err
+	}
 
-	go n.startDiscovery(logger)
+	pAddrs, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
+		ID:    n.host.ID(),
+		Addrs: n.host.Addrs(),
+	})
+	if err != nil {
+		logger.Fatal("could not get my address", zap.Error(err))
+	}
+	maStrs := make([]string, len(pAddrs))
+	for i, ima := range pAddrs {
+		maStrs[i] = ima.String()
+	}
+	logger.Info("starting p2p",
+		zap.String("my_address", strings.Join(maStrs, ",")),
+		zap.Int("trusted_peers", len(n.trustedPeers)),
+	)
+
+	go n.startDiscovery(logger, connector)
 
 	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing(logger))
 	// don't report metrics in tests
@@ -208,7 +283,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		defer cancel()
 
 		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
-		mySubnets := records.Subnets(n.subnets).Clone()
+		mySubnets := records.Subnets(n.activeSubnets).Clone()
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
@@ -217,7 +292,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 // startDiscovery starts the required services
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
+func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
 	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
 		ctx, cancel := context.WithCancel(n.ctx)
@@ -230,7 +305,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
 				return
 			}
 			select {
-			case discoveredPeers <- e.AddrInfo:
+			case connector <- e.AddrInfo:
 			default:
 				logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
 			}
@@ -259,56 +334,88 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		// Compute the new subnets according to the active validators.
-		newSubnets := make([]byte, commons.Subnets())
-		copy(newSubnets, n.subnets)
-		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-			// TODO: alan - fork support
-			pbBytes, err := hex.DecodeString(pkHex)
-			if err != nil {
-				return false
-			}
-			// TODO: alan - optimization to get active committees only
-			share := n.nodeStorage.Shares().Get(nil, pbBytes)
-			if share == nil {
-				return false
-			}
-			cid := share.CommitteeID()
-			subnet := commons.CommitteeSubnet(cid)
-			newSubnets[subnet] = byte(1)
+		// Compute the new subnets according to the active committees/validators.
+		updatedSubnets := make([]byte, commons.Subnets())
+		copy(updatedSubnets, n.fixedSubnets)
+
+		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
+			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
+			updatedSubnets[subnet] = byte(1)
 			return true
 		})
-		n.subnets = newSubnets
+
+		if !n.cfg.Network.PastAlanFork() {
+			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
+				subnet := commons.ValidatorSubnet(pkHex)
+				updatedSubnets[subnet] = byte(1)
+				return true
+			})
+		}
+		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
-		unregisteredSubnets := make([]int, 0)
-		for subnet, active := range newSubnets {
+		addedSubnets := make([]int, 0)
+		for subnet, active := range updatedSubnets {
 			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				unregisteredSubnets = append(unregisteredSubnets, subnet)
+				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
-		registeredSubnets = newSubnets
 
-		if len(unregisteredSubnets) == 0 {
+		// Compute the not anymore registered subnets.
+		removedSubnets := make([]int, 0)
+		for subnet, active := range registeredSubnets {
+			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
+				removedSubnets = append(removedSubnets, subnet)
+			}
+		}
+
+		registeredSubnets = updatedSubnets
+
+		if len(addedSubnets) == 0 && len(removedSubnets) == 0 {
 			continue
 		}
 
-		self := n.idx.Self()
-		self.Metadata.Subnets = records.Subnets(n.subnets).String()
-		n.idx.UpdateSelfRecord(self)
+		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
+			self.Metadata.Subnets = records.Subnets(n.activeSubnets).String()
+			return self
+		})
 
-		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
-		if err != nil {
-			logger.Warn("could not register subnets", zap.Error(err))
-			continue
+		var errs error
+		if len(addedSubnets) > 0 {
+			err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+			if err != nil {
+				logger.Debug("could not register subnets", zap.Error(err))
+				errs = errors.Join(errs, err)
+			}
 		}
+		if len(removedSubnets) > 0 {
+			err := n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
+			if err != nil {
+				logger.Debug("could not unregister subnets", zap.Error(err))
+				errs = errors.Join(errs, err)
+			}
+
+			// Unsubscribe from the removed subnets.
+			for _, subnet := range removedSubnets {
+				if err := n.unsubscribeSubnet(logger, uint(subnet)); err != nil {
+					logger.Debug("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
+					errs = errors.Join(errs, err)
+				} else {
+					logger.Debug("unsubscribed from subnet", zap.Int("subnet", subnet))
+				}
+			}
+		}
+
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
+		subnetsList := records.SharedSubnets(allSubs, n.activeSubnets, 0)
 		logger.Debug("updated subnets",
-			zap.Any("added", unregisteredSubnets),
+			zap.Any("added", addedSubnets),
+			zap.Any("removed", removedSubnets),
 			zap.Any("subnets", subnetsList),
+			zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
 			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
+			zap.Error(errs),
 		)
 	}
 }
@@ -321,19 +428,30 @@ func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	// Create ticker
-	oneEpochDuration := n.cfg.Network.Beacon.SlotDurationSec() * time.Duration(n.cfg.Network.Beacon.SlotsPerEpoch())
-	ticker := time.NewTicker(oneEpochDuration)
-	defer ticker.Stop()
+	// function to get the starting time of the next epoch
+	nextEpochStartingTime := func() time.Time {
+		currEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+		nextEpoch := currEpoch + 1
+		return n.cfg.Network.Beacon.EpochStartTime(nextEpoch)
+	}
+
+	// Create timer that triggers on the beginning of the next epoch
+	timer := time.NewTimer(time.Until(nextEpochStartingTime()))
+	defer timer.Stop()
 
 	// Run immediately and then once every epoch
-	for ; true; <-ticker.C {
+	for ; true; <-timer.C {
+
+		// Update score parameters
 		err := n.topicsCtrl.UpdateScoreParams(logger)
 		if err != nil {
 			logger.Debug("score parameters update failed", zap.Error(err))
 		} else {
 			logger.Debug("updated score parameters successfully")
 		}
+
+		// Reset to trigger on the beginning of the next epoch
+		timer.Reset(time.Until(nextEpochStartingTime()))
 	}
 }
 

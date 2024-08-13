@@ -10,8 +10,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -42,7 +42,7 @@ type Options struct {
 	HostDNS     string
 
 	// DomainType is the SSV network domain of the node
-	DomainType spectypes.DomainType
+	DomainType networkconfig.DomainTypeProvider
 }
 
 // Service is the interface for discovery

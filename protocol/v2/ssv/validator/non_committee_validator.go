@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -19,10 +22,8 @@ import (
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 )
 
 type CommitteeObserver struct {
@@ -41,6 +42,7 @@ type CommitteeObserverOptions struct {
 	Network           specqbft.Network
 	Storage           *storage.QBFTStores
 	Operator          *spectypes.CommitteeMember
+	OperatorSigner    ssvtypes.OperatorSigner
 	NetworkConfig     networkconfig.NetworkConfig
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
@@ -49,15 +51,15 @@ type CommitteeObserverOptions struct {
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:                opts.NetworkConfig.Domain,
-		Storage:               opts.Storage.Get(identifier.GetRoleType()),
-		Network:               opts.Network,
-		SignatureVerification: true,
+		Domain:      opts.NetworkConfig.DomainType(),
+		Storage:     opts.Storage.Get(identifier.GetRoleType()),
+		Network:     opts.Network,
+		CutOffRound: specqbft.Round(specqbft.CutoffRound),
 	}
 
 	// TODO: does the specific operator matters?
 
-	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.FullNode)
+	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		opts.Logger.Debug("❗ failed to load highest instance", zap.Error(err))
@@ -74,7 +76,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 	}
 }
 
-func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) error {
+func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 	logger := ncv.logger.With(fields.CommitteeID(cid), fields.Role(msg.MsgID.GetRoleType()))
 
@@ -83,7 +85,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) error
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
-		return fmt.Errorf("not processing message type %s", partialSigMessages.Type)
+		return fmt.Errorf("not processing message type %d", partialSigMessages.Type)
 	}
 
 	slot := partialSigMessages.Slot
@@ -132,7 +134,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.DecodedSSVMessage) error
 	return nil
 }
 
-func (ncv *CommitteeObserver) getRole(msg *queue.DecodedSSVMessage, root [32]byte) convert.RunnerRole {
+func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		_, found := ncv.Roots[root]
 		if !found {
@@ -169,7 +171,7 @@ func (ncv *CommitteeObserver) processMessage(
 			container = specssv.NewPartialSigContainer(validator.Quorum())
 			ncv.postConsensusContainer[msg.ValidatorIndex] = container
 		}
-		if container.HasSigner(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
+		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			ncv.resolveDuplicateSignature(container, msg, validator)
 		} else {
 			container.AddSignature(msg)
@@ -194,7 +196,7 @@ func (ncv *CommitteeObserver) processMessage(
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *types.SSVShare) {
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
@@ -216,12 +218,12 @@ func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.Parti
 }
 
 // copied from BaseRunner
-func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte, share *types.SSVShare) error {
-	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
+func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte, share *ssvtypes.SSVShare) error {
+	ssvtypes.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	for _, n := range share.Committee {
 		if n.Signer == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
+			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
 				return fmt.Errorf("could not deserialized pk: %w", err)
 			}
@@ -240,7 +242,7 @@ func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signat
 	return fmt.Errorf("unknown signer")
 }
 
-func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.DecodedSSVMessage) error {
+func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	mssg := &specqbft.Message{}
 	if err := mssg.Decode(msg.SSVMessage.GetData()); err != nil {
 		ncv.logger.Debug("❗ failed to get decode ssv message", zap.Error(err))

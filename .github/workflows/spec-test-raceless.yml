@@ -20,7 +20,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.20.x"
+          go-version: "1.22.x"
 
-      - name: Run spec tests
-        run: make spec-test-raceless
+      - name: Run pre-fork spec tests
+        run: make pre-fork-spec-test-raceless
+
+      - name: Run post-fork spec tests
+        run: make post-fork-spec-test-raceless
+
+      - name: Run all spec tests
+        run: make all-spec-test-raceless

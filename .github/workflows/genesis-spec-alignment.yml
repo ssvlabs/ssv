@@ -1,0 +1,34 @@
+name: Genesis Spec Alignment
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22.x"
+
+      - name: Tidy up dependencies
+        run: go mod tidy
+
+      - name: Install Differ
+        run: cd ./scripts/differ && go install .
+
+      - name: Run Differ
+        run: cd ./scripts/spec-alignment && ./genesis_differ.sh
+
+      - name: Upload genesis_output.diff
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: genesis_output.diff
+          path: ./scripts/spec-alignment/genesis_output.diff

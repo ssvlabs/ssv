@@ -1,20 +1,22 @@
 package validation
 
-// partial_validation.go contains methods for validating partial signature messages
-
 import (
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+// partial_validation.go contains methods for validating partial signature messages
 
 func (mv *messageValidator) validatePartialSignatureMessage(
 	share *ssvtypes.SSVShare,
 	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
 	msgID genesisspectypes.MessageID,
 	signatureVerifier func() error,
+	receivedAt time.Time,
 ) (phase0.Slot, error) {
 	msgSlot := signedMsg.Message.Slot
 
@@ -30,6 +32,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	if err := mv.validatePartialMessages(share, signedMsg); err != nil {
+		return msgSlot, err
+	}
+
+	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return msgSlot, err
 	}
 
@@ -163,6 +169,10 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 	newDutyInSameEpoch := false
 	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
 		newDutyInSameEpoch = true
+	}
+
+	if err := mv.validateBeaconDuty(msgID.GetRoleType(), msgSlot, share); err != nil {
+		return err
 	}
 
 	if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {

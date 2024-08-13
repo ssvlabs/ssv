@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -25,7 +26,7 @@ type VoluntaryExitHandler struct {
 	baseHandler
 	duties          *dutystore.VoluntaryExitDuties
 	validatorExitCh <-chan ExitDescriptor
-	dutyQueue       []*spectypes.BeaconDuty
+	dutyQueue       []*spectypes.ValidatorDuty
 	blockSlots      map[uint64]phase0.Slot
 }
 
@@ -33,7 +34,7 @@ func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExi
 	return &VoluntaryExitHandler{
 		duties:          duties,
 		validatorExitCh: validatorExitCh,
-		dutyQueue:       make([]*spectypes.BeaconDuty, 0),
+		dutyQueue:       make([]*spectypes.ValidatorDuty, 0),
 		blockSlots:      map[uint64]phase0.Slot{},
 	}
 }
@@ -57,26 +58,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			next = h.ticker.Next()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-
-			var dutiesForExecution, pendingDuties []*spectypes.BeaconDuty
-
-			for _, duty := range h.dutyQueue {
-				if duty.Slot <= currentSlot {
-					dutiesForExecution = append(dutiesForExecution, duty)
-				} else {
-					pendingDuties = append(pendingDuties, duty)
-				}
-			}
-
-			h.dutyQueue = pendingDuties
-			h.duties.RemoveSlot(currentSlot - phase0.Slot(h.network.SlotsPerEpoch()))
-
-			if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-				h.dutiesExecutor.ExecuteDuties(h.logger, dutiesForExecution)
-				h.logger.Debug("executed voluntary exit duties",
-					fields.Slot(currentSlot),
-					fields.Count(dutyCount))
-			}
+			h.processExecution(currentSlot)
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
@@ -92,7 +74,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
-			duty := &spectypes.BeaconDuty{
+			duty := &spectypes.ValidatorDuty{
 				Type:           spectypes.BNRoleVoluntaryExit,
 				PubKey:         exitDescriptor.PubKey,
 				Slot:           dutySlot,
@@ -118,6 +100,52 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 		case <-h.reorg:
 			continue
 		}
+	}
+}
+
+func (h *VoluntaryExitHandler) processExecution(slot phase0.Slot) {
+	var dutiesForExecution, pendingDuties []*spectypes.ValidatorDuty
+
+	for _, duty := range h.dutyQueue {
+		if duty.Slot <= slot {
+			dutiesForExecution = append(dutiesForExecution, duty)
+		} else {
+			pendingDuties = append(pendingDuties, duty)
+		}
+	}
+
+	h.dutyQueue = pendingDuties
+	h.duties.RemoveSlot(slot - phase0.Slot(h.network.SlotsPerEpoch()))
+
+	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+		toExecute := make([]*genesisspectypes.Duty, 0, len(dutiesForExecution))
+		for _, d := range dutiesForExecution {
+			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleVoluntaryExit))
+		}
+
+		if dutyCount := len(dutiesForExecution); dutyCount != 0 {
+			h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+			h.logger.Debug("executed voluntary exit duties",
+				fields.Slot(slot),
+				fields.Count(dutyCount))
+		}
+		return
+	}
+
+	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
+		h.dutiesExecutor.ExecuteDuties(h.logger, dutiesForExecution)
+		h.logger.Debug("executed voluntary exit duties",
+			fields.Slot(slot),
+			fields.Count(dutyCount))
+	}
+}
+
+func (h *VoluntaryExitHandler) toGenesisSpecDuty(duty *spectypes.ValidatorDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
+	return &genesisspectypes.Duty{
+		Type:           role,
+		PubKey:         duty.PubKey,
+		Slot:           duty.Slot,
+		ValidatorIndex: duty.ValidatorIndex,
 	}
 }
 

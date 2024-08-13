@@ -14,7 +14,7 @@ import (
 )
 
 // AttesterDuties returns attester duties for a given epoch.
-func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
 	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
@@ -29,7 +29,7 @@ func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	return resp.Data, nil
 }
 
-func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
+func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
 	attDataReqStart := time.Now()
 	resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 		Slot:           slot,
@@ -48,7 +48,7 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 }
 
 // SubmitAttestations implements Beacon interface
-func (gc *goClient) SubmitAttestations(attestations []*phase0.Attestation) error {
+func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error {
 
 	// TODO: better way to return error and not stop sending other attestations
 	for _, attestation := range attestations {
@@ -66,7 +66,7 @@ func (gc *goClient) SubmitAttestations(attestations []*phase0.Attestation) error
 }
 
 // getSigningRoot returns signing root
-func (gc *goClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, error) {
+func (gc *GoClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(data.Slot)
 	domain, err := gc.DomainData(epoch, spectypes.DomainAttester)
 	if err != nil {

@@ -5,13 +5,13 @@ package validation
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -131,8 +131,13 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.Reset(msgRound)
 		}
 
-		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
-			signerState.ProposalData = signedMsg.FullData
+		// Allow to change the state only by proposal to avoid an attack
+		// where any node can send an RC message that changes message validation state.
+		// We could allow proposal or round change quorum, but it's more complex to implement, so just proposal is fine.
+		if signedMsg.Message.MsgType == genesisspecqbft.ProposalMsgType {
+			if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+				signerState.ProposalData = signedMsg.FullData
+			}
 		}
 
 		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
@@ -203,6 +208,8 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 ) error {
 	signerState := state.GetSignerState(signer)
 
+	// If signer state is nil, this is the first message for the signer and
+	// it's not necessary to check the next rules.
 	if signerState == nil {
 		return mv.validateJustifications(share, signedMsg)
 	}
@@ -241,7 +248,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			return ErrDuplicatedProposalWithDifferentData
+			return ErrDifferentProposalData
 		}
 
 		limits := maxMessageCounts(len(share.Committee))

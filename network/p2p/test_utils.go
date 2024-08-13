@@ -6,30 +6,32 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/format"
 )
+
+// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
@@ -122,16 +124,17 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 	}
 }
 
+type mockSignatureVerifier struct{}
+
+func (mockSignatureVerifier) VerifySignature(operatorID spectypes.OperatorID, message *spectypes.SSVMessage, signature []byte) error {
+	return nil
+}
+
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
 func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
 	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
-	}
-
-	hash, err := keys.OperatorKey.StorageHash()
-	if err != nil {
-		panic(err)
 	}
 
 	db, err := kv.NewInMemory(logger, basedb.Options{})
@@ -144,16 +147,39 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		return nil, err
 	}
 
+	for _, share := range options.Shares {
+		if err := nodeStorage.Shares().Save(nil, share); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, share := range options.Shares {
+		for _, sm := range share.Committee {
+			_, ok, err := nodeStorage.GetOperatorData(nil, sm.Signer)
+			if err != nil {
+				return nil, err
+			}
+
+			if !ok {
+				_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
+					ID:           sm.Signer,
+					PublicKey:    operatorPubkey,
+					OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
 	dutyStore := dutystore.New()
-	signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+	signatureVerifier := &mockSignatureVerifier{}
 
 	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
-	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
-	cfg.NodeStorage = mock.NodeStorage{
-		MockPrivateKeyHash:              hash,
-		RegisteredOperatorPublicKeyPEMs: []string{},
-	}
+	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
+	cfg.NodeStorage = nodeStorage
 	cfg.Metrics = nil
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
@@ -199,7 +225,10 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: spectypes.OperatorID(nodeIndex + 1)})
 
 	mr := metricsreporter.New()
-	p := New(logger, cfg, mr)
+	p, err := New(logger, cfg, mr)
+	if err != nil {
+		return nil, err
+	}
 	err = p.Setup(logger)
 	if err != nil {
 		return nil, err
@@ -215,6 +244,7 @@ type LocalNetOptions struct {
 	TotalValidators, ActiveValidators, MyValidators int
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
+	Shares                                          []*ssvtypes.SSVShare
 }
 
 // NewLocalNet creates a new mdns network
