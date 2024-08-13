@@ -143,6 +143,7 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
+			[]byte("graffiti"),
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
@@ -370,6 +371,7 @@ var baseRunnerWithShareMap = func(
 			opSigner,
 			valCheck,
 			TestingHighestDecidedSlot,
+			[]byte("graffiti"),
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(

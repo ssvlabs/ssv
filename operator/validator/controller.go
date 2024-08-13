@@ -101,6 +101,7 @@ type ControllerOptions struct {
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
+	Graffiti                   []byte
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -247,7 +248,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
 		Metrics:           options.Metrics,
-
+		Graffiti:          options.Graffiti,
 		GenesisOptions: validator.GenesisOptions{
 			Network:           options.GenesisControllerOptions.Network,
 			Signer:            options.GenesisControllerOptions.KeyManager,
@@ -1436,7 +1437,7 @@ func SetupRunners(
 		case spectypes.RoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
-			runners[role] = runner.NewProposerRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0)
+			runners[role] = runner.NewProposerRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
@@ -1510,7 +1511,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		case genesisspectypes.BNRoleProposer:
 			proposedValueCheck := genesisspecssv.ProposerValueCheckF(options.GenesisOptions.Signer, genesisBeaconNetwork, options.SSVShare.Share.ValidatorPubKey[:], options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(genesisspectypes.BNRoleProposer, proposedValueCheck)
-			runners[role] = genesisrunner.NewProposerRunner(genesisDomainType, genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, proposedValueCheck, 0)
+			runners[role] = genesisrunner.NewProposerRunner(genesisDomainType, genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, proposedValueCheck, 0, options.Graffiti)
 		case genesisspectypes.BNRoleAggregator:
 			aggregatorValueCheckF := genesisspecssv.AggregatorValueCheckF(options.GenesisOptions.Signer, genesisBeaconNetwork, options.SSVShare.Share.ValidatorPubKey[:], options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(genesisspectypes.BNRoleAggregator, aggregatorValueCheckF)

@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 )
 
+var TestingGraffiti = [32]byte{1}
 var TestingHighestDecidedSlot = phase0.Slot(0)
 
 var AttesterRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -109,6 +110,7 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 			km,
 			valCheck,
 			TestingHighestDecidedSlot,
+			TestingGraffiti[:],
 		)
 	case genesisspectypes.BNRoleSyncCommittee:
 		return runner.NewSyncCommitteeRunner(

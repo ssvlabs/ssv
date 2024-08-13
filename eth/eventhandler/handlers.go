@@ -324,7 +324,6 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 	validatorShare.DomainType = eh.networkConfig.DomainType()
 	validatorShare.Committee = shareMembers
-	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
 }
