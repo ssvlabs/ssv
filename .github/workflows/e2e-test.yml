@@ -11,7 +11,7 @@ on:
 
   pull_request:
     branches:
-      - main
+      - stage
 
   workflow_run:
     workflows: ["Lint", "Unit tests"]
