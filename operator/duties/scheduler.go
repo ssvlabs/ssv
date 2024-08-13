@@ -412,7 +412,10 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Valida
 		}
 
 		avgDelay := s.delayCounter.Rate()
-		logger.Debug("Average duty execution delay", zap.Float64("avg_delay_ms", avgDelay))
+		hits := s.delayCounter.Hits()
+		logger.Debug("Average duty execution delay",
+			zap.Float64("avg_delay_ms", avgDelay),
+			zap.Int64("hits", hits))
 
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
@@ -439,7 +442,10 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeD
 		}
 
 		avgDelay := s.delayCounter.Rate()
-		logger.Debug("Average duty execution delay", zap.Float64("avg_delay_ms", avgDelay))
+		hits := s.delayCounter.Hits()
+		logger.Debug("Average duty execution delay",
+			zap.Float64("avg_delay_ms", avgDelay),
+			zap.Int64("hits", hits))
 
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
