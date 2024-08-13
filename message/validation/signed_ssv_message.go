@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
@@ -16,13 +17,20 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	// Rule: Pubsub.Message.Message.Data decoding
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
+		genesisSignedSSVMsg := &genesisspectypes.SignedSSVMessage{}
+		if err := genesisSignedSSVMsg.Decode(pMsg.GetData()); err == nil {
+			e := ErrGenesisMessage
+
+			// Ignore genesis messages in the first slot of the fork epoch
+			if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
+				e.reject = false
+			}
+
+			return nil, e
+		}
+
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
-
-		// Ignore genesis messages in the first slot of the fork epoch
-		if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
-			e.reject = false
-		}
 
 		return nil, e
 	}
