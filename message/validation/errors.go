@@ -75,7 +75,7 @@ var (
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
 	ErrPubSubMessageHasNoData                  = Error{text: "pub-sub message has no data", reject: true}
 	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed", reject: true}
-	ErrGenesisMessage                          = Error{text: "genesis message", reject: true}
+	ErrGenesisMessage                          = Error{text: "received genesis message while running post-fork", reject: true}
 	ErrNilSignedSSVMessage                     = Error{text: "signed ssv message is nil", reject: true}
 	ErrNilSSVMessage                           = Error{text: "ssv message is nil", reject: true}
 	ErrSSVDataTooBig                           = Error{text: "ssv message data too big", reject: true}

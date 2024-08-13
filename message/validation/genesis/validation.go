@@ -334,6 +334,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	msg, err := genesisqueue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
 		if errors.Is(err, genesisqueue.ErrDecodeNetworkMsg) {
+			alanSignedSSVMsg := &alanspectypes.SignedSSVMessage{}
+			if err := alanSignedSSVMsg.Decode(pMsg.GetData()); err == nil {
+				e := ErrAlanMessage
+				return nil, e
+			}
+
 			e := ErrMalformedPubSubMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
