@@ -65,7 +65,6 @@ type EventHandler struct {
 	operatorDecrypter keys.OperatorDecrypter
 	keyManager        spectypes.KeyManager
 	beacon            beaconprotocol.BeaconNode
-	storageMap        *qbftstorage.QBFTStores
 
 	fullNode bool
 	logger   *zap.Logger
@@ -81,7 +80,6 @@ func New(
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager spectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,
-	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
 ) (*EventHandler, error) {
 	eh := &EventHandler{
@@ -93,7 +91,6 @@ func New(
 		operatorDecrypter: operatorDecrypter,
 		keyManager:        keyManager,
 		beacon:            beacon,
-		storageMap:        storageMap,
 		logger:            zap.NewNop(),
 		metrics:           nopMetrics{},
 	}

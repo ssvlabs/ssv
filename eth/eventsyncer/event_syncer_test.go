@@ -33,7 +33,6 @@ import (
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -137,8 +136,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 	})
 	require.NoError(t, err)
 
-	storageMap := ibftstorage.NewStores()
-
 	privateKey, err := keys.GeneratePrivateKey()
 	if err != nil {
 		logger.Fatal("failed generating operator key %v", zap.Error(err))
@@ -179,7 +176,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 		privateKey,
 		keyManager,
 		bc,
-		storageMap,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger))
 
