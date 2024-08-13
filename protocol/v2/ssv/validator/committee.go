@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -21,11 +22,17 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
+var (
+	// runnerExpirySlots - Committee messages are allowed up to 34 slots in the future. All runners that are older can be stopped.
+	runnerExpirySlots = phase0.Slot(34)
+)
+
 type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner
 
 type Committee struct {
 	logger *zap.Logger
 	ctx    context.Context
+	cancel context.CancelFunc
 
 	mtx           sync.RWMutex
 	BeaconNetwork spectypes.BeaconNetwork
@@ -48,6 +55,7 @@ type Committee struct {
 // NewCommittee creates a new cluster
 func NewCommittee(
 	ctx context.Context,
+	cancel context.CancelFunc,
 	logger *zap.Logger,
 	beaconNetwork spectypes.BeaconNetwork,
 	operator *spectypes.CommitteeMember,
@@ -58,10 +66,10 @@ func NewCommittee(
 		logger:        logger,
 		BeaconNetwork: beaconNetwork,
 		ctx:           ctx,
-		// TODO alan: drain maps
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:  make(map[phase0.ValidatorIndex]*spectypes.Share),
+		cancel:        cancel,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:        make(map[phase0.ValidatorIndex]*spectypes.Share),
 		//Shares:                  share,
 		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
 		Operator:                operator,
@@ -87,14 +95,26 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+
+	// Setting the cancel function separately due the queue could be created in HandleMessage
+	q, found := c.Queues[duty.Slot]
+	if !found {
+		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+	}
+
 	r := c.Runners[duty.Slot]
 	if r == nil {
 		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
 	}
 
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+
 	go func() {
-		err := c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage, r)
-		logger.Error("failed consuming queue", zap.Error(err))
+		defer cancelF()
+		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
+			logger.Error("❗failed consuming committee queue", zap.Error(err))
+		}
 	}()
 	return nil
 }
@@ -175,6 +195,11 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			},
 		}
 
+	}
+
+	// Prunes all expired committee runners, when new runner is created
+	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
+		logger.Error("couldn't prune expired committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
 	}
 
 	logger.Info("ℹ️ starting duty processing")
@@ -289,6 +314,27 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 	}
 	return nil
 
+}
+func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
+	if runnerExpirySlots > currentSlot {
+		return nil
+	}
+
+	minValidSlot := currentSlot - runnerExpirySlots
+
+	for slot := range c.Runners {
+		if slot <= minValidSlot {
+			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
+			delete(c.Runners, slot)
+			delete(c.Queues, slot)
+		}
+	}
+
+	return nil
+}
+
+func (c *Committee) Stop() {
+	c.cancel()
 }
 
 func (c *Committee) Encode() ([]byte, error) {

@@ -258,9 +258,11 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetValCheckF(),
 		).(*runner.CommitteeRunner)
 	}
+	ctx, cancel := context.WithCancel(ctx)
 
 	c := validator.NewCommittee(
 		ctx,
+		cancel,
 		logger,
 		runnerSample.GetBaseRunner().BeaconNetwork,
 		spectestingutils.TestingCommitteeMember(keySetSample),

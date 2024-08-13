@@ -550,8 +550,11 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	c := validator.NewCommittee(
 		ctx,
+		cancel,
 		logger,
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,
