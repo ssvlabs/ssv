@@ -32,7 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -254,7 +254,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 			if valErr.Reject() {
 				if !valErr.Silent() {
 					f = append(f, zap.Error(err))
-					mv.logger.Debug("rejecting invalid message", f...)
+					mv.logger.Debug("rejecting invalid message (genesis)", f...)
 				}
 
 				mv.metrics.GenesisMessageRejected(valErr.Text(), descriptor.Role, round)
@@ -263,7 +263,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 
 			if !valErr.Silent() {
 				f = append(f, zap.Error(err))
-				mv.logger.Debug("ignoring invalid message", f...)
+				mv.logger.Debug("ignoring invalid message (genesis)", f...)
 			}
 			mv.metrics.GenesisMessageIgnored(valErr.Text(), descriptor.Role, round)
 			return pubsub.ValidationIgnore
