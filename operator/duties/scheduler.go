@@ -385,9 +385,19 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 		duty := duty
 		logger := s.loggerWithGenesisDutyContext(logger, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+
+		s.delayCounter.Incr(slotDelay.Milliseconds())
+
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
+
+		avgDelay := s.delayCounter.Rate()
+		hits := s.delayCounter.Hits()
+		logger.Debug("Average duty execution delay",
+			zap.Float64("avg_delay_ms", avgDelay),
+			zap.Int64("hits", hits))
+
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
