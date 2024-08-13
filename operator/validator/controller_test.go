@@ -1032,16 +1032,6 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 	}
 }
 
-func newValidator(metaData *beacon.ValidatorMetadata) *validators.ValidatorContainer {
-	return &validators.ValidatorContainer{Validator: &validator.Validator{
-		Share: &types.SSVShare{
-			Metadata: types.Metadata{
-				BeaconMetadata: metaData,
-			},
-		},
-	}}
-}
-
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
 	msg := specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
