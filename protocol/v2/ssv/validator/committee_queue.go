@@ -81,9 +81,6 @@ func (v *Committee) ConsumeQueue(
 	handler MessageHandler,
 	runner *runner.CommitteeRunner,
 ) error {
-	// in case of any error try to call the ctx.cancel to prevent the ctx leak
-	defer q.Stop()
-
 	state := *q.queueState
 
 	logger.Debug("📬 queue consumer is running")

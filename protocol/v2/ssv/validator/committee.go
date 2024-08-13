@@ -32,6 +32,7 @@ type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex
 type Committee struct {
 	logger *zap.Logger
 	ctx    context.Context
+	cancel context.CancelFunc
 
 	mtx           sync.RWMutex
 	BeaconNetwork spectypes.BeaconNetwork
@@ -54,6 +55,7 @@ type Committee struct {
 // NewCommittee creates a new cluster
 func NewCommittee(
 	ctx context.Context,
+	cancel context.CancelFunc,
 	logger *zap.Logger,
 	beaconNetwork spectypes.BeaconNetwork,
 	operator *spectypes.CommitteeMember,
@@ -64,10 +66,10 @@ func NewCommittee(
 		logger:        logger,
 		BeaconNetwork: beaconNetwork,
 		ctx:           ctx,
-		// TODO alan: drain maps
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:  make(map[phase0.ValidatorIndex]*spectypes.Share),
+		cancel:        cancel,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:        make(map[phase0.ValidatorIndex]*spectypes.Share),
 		//Shares:                  share,
 		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
 		Operator:                operator,
@@ -102,7 +104,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 	// required to stop the queue consumer when timeout message is received by handler
 	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
-	q.Stop = cancelF // DO we still need this?
+	_ = cancelF
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
@@ -110,7 +112,6 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	}
 
 	go func() {
-		defer cancelF()
 		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
 		}
@@ -196,12 +197,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
-	// Stop all expired committee runners, when new runner is created
-	go func() {
-		if err := c.stopExpiredRunners(logger, duty.Slot); err != nil {
-			logger.Error("couldn't stop expired committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
-		}
-	}()
+	// Prunes all expired committee runners, when new runner is created
+	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
+		logger.Error("couldn't prune expired committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
+	}
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
@@ -316,20 +315,17 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 	return nil
 
 }
-func (c *Committee) stopExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
-	logger.Debug("👀👀👀 stopping expired committee runners", zap.Uint64("current_slot", uint64(currentSlot)))
+func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
+	logger.Debug("👀👀👀 pruning expired committee runners", zap.Uint64("current_slot", uint64(currentSlot)))
 	if runnerExpirySlots > currentSlot {
 		return nil
 	}
 
 	minValidSlot := currentSlot - runnerExpirySlots
 
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
-			logger.Debug("stopping expired committee runner", zap.Uint64("slot", uint64(slot)))
+			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)
 			delete(c.Queues, slot)
 		}
@@ -339,16 +335,7 @@ func (c *Committee) stopExpiredRunners(logger *zap.Logger, currentSlot phase0.Sl
 }
 
 func (c *Committee) Stop() {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	for slot, q := range c.Queues {
-		c.logger.Debug("stopping committee queue",
-			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-			fields.Slot(slot),
-		)
-		q.Stop()
-	}
+	c.cancel()
 }
 
 func (c *Committee) Encode() ([]byte, error) {
