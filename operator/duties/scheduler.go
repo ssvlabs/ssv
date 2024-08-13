@@ -431,9 +431,16 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeD
 		duty := duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committeeID, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+
+		s.delayCounter.Incr(slotDelay.Milliseconds())
+
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
+
+		avgDelay := s.delayCounter.Rate()
+		logger.Debug("Average duty execution delay", zap.Float64("avg_delay_ms", avgDelay))
+
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
