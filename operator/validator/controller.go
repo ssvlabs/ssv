@@ -48,7 +48,6 @@ import (
 	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -171,7 +170,6 @@ type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
-	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
 }
 
 // controller implements Controller
@@ -333,18 +331,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.committeesObservers.Start()
 
 	return &ctrl
-}
-
-// setupNetworkHandlers registers all the required handlers for sync protocols
-func (c *controller) setupNetworkHandlers() error {
-	syncHandlers := []*p2pprotocol.SyncHandler{}
-	c.logger.Debug("setting up network handlers",
-		zap.Int("count", len(syncHandlers)),
-		zap.Bool("full_node", c.validatorOptions.FullNode),
-		zap.Bool("exporter", c.validatorOptions.Exporter),
-		zap.Int("queue_size", c.validatorOptions.QueueSize))
-	c.network.RegisterHandlers(c.logger, syncHandlers...)
-	return nil
 }
 
 func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
@@ -647,10 +633,6 @@ func (c *controller) startValidators(validators []*validators.ValidatorContainer
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *controller) StartNetworkHandlers() {
-	// first, set stream handlers
-	if err := c.setupNetworkHandlers(); err != nil {
-		c.logger.Panic("could not register stream handlers", zap.Error(err))
-	}
 	c.network.UseMessageRouter(c.messageRouter)
 	for i := 0; i < networkRouterConcurrency; i++ {
 		go c.handleRouterMessages()
