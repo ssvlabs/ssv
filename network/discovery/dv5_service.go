@@ -154,7 +154,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	}
 	if nodeDomainType != dvs.domainType.DomainType() &&
 		nodeDomainType != dvs.domainType.NextDomainType() {
-		return errors.New("mismatched domain type: 01020305")
+		return fmt.Errorf("mismatched domain type: %s", nodeDomainType)
 	}
 
 	// Get the peer's subnets, skipping if it has none.

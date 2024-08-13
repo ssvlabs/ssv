@@ -132,17 +132,18 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 }
 
 func (n *p2pNetwork) parseTrustedPeers() error {
+	if len(n.cfg.TrustedPeers) == 0 {
+		return nil // No trusted peers to parse, return early
+	}
 	// Group addresses by peer ID.
 	trustedPeers := map[peer.ID][]ma.Multiaddr{}
-	if len(n.cfg.TrustedPeers) > 0 {
-		for _, mas := range n.cfg.TrustedPeers {
-			for _, ma := range strings.Split(mas, ",") {
-				addrInfo, err := peer.AddrInfoFromString(ma)
-				if err != nil {
-					return fmt.Errorf("could not parse trusted peer: %w", err)
-				}
-				trustedPeers[addrInfo.ID] = append(trustedPeers[addrInfo.ID], addrInfo.Addrs...)
+	for _, mas := range n.cfg.TrustedPeers {
+		for _, ma := range strings.Split(mas, ",") {
+			addrInfo, err := peer.AddrInfoFromString(ma)
+			if err != nil {
+				return fmt.Errorf("could not parse trusted peer: %w", err)
 			}
+			trustedPeers[addrInfo.ID] = append(trustedPeers[addrInfo.ID], addrInfo.Addrs...)
 		}
 	}
 	for id, addrs := range trustedPeers {
@@ -200,15 +201,7 @@ func (n *p2pNetwork) Close() error {
 	return n.host.Close()
 }
 
-// Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start(logger *zap.Logger) error {
-	logger = logger.Named(logging.NameP2PNetwork)
-
-	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
-		// return errors.New("could not setup network: in ready state")
-		return nil
-	}
-
+func (n *p2pNetwork) getConnector(logger *zap.Logger) (chan peer.AddrInfo, error) {
 	connector := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
 		// Wait for own subnets to be subscribed to and updated.
@@ -232,6 +225,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	})
 	if err != nil {
 		logger.Fatal("could not get my address", zap.Error(err))
+		return nil, err
 	}
 	maStrs := make([]string, len(ma))
 	for i, ima := range ma {
@@ -241,6 +235,22 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		zap.String("my_address", strings.Join(maStrs, ",")),
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
+	return connector, nil
+}
+
+// Start starts the discovery service, garbage collector (peer index), and reporting.
+func (n *p2pNetwork) Start(logger *zap.Logger) error {
+	logger = logger.Named(logging.NameP2PNetwork)
+
+	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
+		// return errors.New("could not setup network: in ready state")
+		return nil
+	}
+
+	connector, err := n.getConnector(logger)
+	if err != nil {
+		return err
+	}
 
 	go n.startDiscovery(logger, connector)
 
