@@ -201,7 +201,7 @@ func (n *p2pNetwork) Close() error {
 	return n.host.Close()
 }
 
-func (n *p2pNetwork) getConnector(logger *zap.Logger) (chan peer.AddrInfo, error) {
+func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 	connector := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
 		// Wait for own subnets to be subscribed to and updated.
@@ -219,22 +219,6 @@ func (n *p2pNetwork) getConnector(logger *zap.Logger) (chan peer.AddrInfo, error
 		}
 	}()
 
-	ma, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
-		ID:    n.host.ID(),
-		Addrs: n.host.Addrs(),
-	})
-	if err != nil {
-		logger.Fatal("could not get my address", zap.Error(err))
-		return nil, err
-	}
-	maStrs := make([]string, len(ma))
-	for i, ima := range ma {
-		maStrs[i] = ima.String()
-	}
-	logger.Info("starting p2p",
-		zap.String("my_address", strings.Join(maStrs, ",")),
-		zap.Int("trusted_peers", len(n.trustedPeers)),
-	)
 	return connector, nil
 }
 
@@ -247,10 +231,26 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		return nil
 	}
 
-	connector, err := n.getConnector(logger)
+	connector, err := n.getConnector()
 	if err != nil {
 		return err
 	}
+
+	pAddrs, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
+		ID:    n.host.ID(),
+		Addrs: n.host.Addrs(),
+	})
+	if err != nil {
+		logger.Fatal("could not get my address", zap.Error(err))
+	}
+	maStrs := make([]string, len(pAddrs))
+	for i, ima := range pAddrs {
+		maStrs[i] = ima.String()
+	}
+	logger.Info("starting p2p",
+		zap.String("my_address", strings.Join(maStrs, ",")),
+		zap.Int("trusted_peers", len(n.trustedPeers)),
+	)
 
 	go n.startDiscovery(logger, connector)
 
