@@ -31,7 +31,6 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
-		e.got = fmt.Sprintf("length %v, msg %v", len(pMsg.GetData()), hex.EncodeToString(pMsg.GetData()))
 
 		return nil, e
 	}
