@@ -56,9 +56,7 @@ func (vc *ValidatorContainer) Start(logger *zap.Logger) (started bool, err error
 }
 
 func (vc *ValidatorContainer) Stop() {
-	if v := vc.Validator(); v != nil {
-		v.Stop()
-	}
+	vc.Validator().Stop()
 	if v, ok := vc.GenesisValidator(); ok {
 		v.Stop()
 	}
@@ -76,9 +74,7 @@ func (vc *ValidatorContainer) UpdateShare(updateAlan func(*types.SSVShare), upda
 	vc.mtx.Lock()
 	defer vc.mtx.Unlock()
 
-	if v := vc.Validator(); v != nil {
-		updateAlan(v.Share)
-	}
+	updateAlan(vc.Validator().Share)
 	if v, ok := vc.GenesisValidator(); ok {
 		updateGenesis(v.Share)
 	}
