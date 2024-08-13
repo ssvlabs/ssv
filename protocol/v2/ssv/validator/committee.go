@@ -203,10 +203,8 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		}
 	}()
 
-	runnerLogger := c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
-
 	logger.Info("ℹ️ starting duty processing")
-	return c.Runners[duty.Slot].StartNewDuty(runnerLogger, duty, c.Operator.GetQuorum())
+	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
 }
 
 // NOT threadsafe

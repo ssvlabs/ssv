@@ -1324,7 +1324,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operator.privateKey,
 			keyManager,
 			bc,
-			storageMap,
 			WithFullNode(),
 			WithLogger(logger),
 			WithMetrics(nopMetrics{}),
@@ -1363,7 +1362,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operator.privateKey,
 		keyManager,
 		bc,
-		storageMap,
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {

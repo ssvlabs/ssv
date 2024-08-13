@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"

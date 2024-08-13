@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -23,7 +24,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
 )
@@ -38,11 +38,12 @@ type ProposerRunner struct {
 	signer   genesisspectypes.KeyManager
 	valCheck genesisspecqbft.ProposedValueCheckF
 
-	metrics metrics.ConsensusMetrics
+	metrics  metrics.ConsensusMetrics
+	graffiti []byte
 }
 
 func NewProposerRunner(
-	domainTypeProvider networkconfig.DomainTypeProvider,
+	domainType spectypes.DomainType,
 	beaconNetwork genesisspectypes.BeaconNetwork,
 	share *genesisspectypes.Share,
 	qbftController *controller.Controller,
@@ -51,11 +52,12 @@ func NewProposerRunner(
 	signer genesisspectypes.KeyManager,
 	valCheck genesisspecqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	graffiti []byte,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType:     genesisspectypes.BNRoleProposer,
-			DomainTypeProvider: domainTypeProvider,
+			DomainType:         domainType,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -66,6 +68,7 @@ func NewProposerRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
+		graffiti: graffiti,
 		metrics:  metrics.NewConsensusMetrics(genesisspectypes.BNRoleProposer),
 	}
 }
@@ -115,13 +118,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *gene
 	var start = time.Now()
 	if r.ProducesBlindedBlocks {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
 	} else {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get beacon block")
 		}
@@ -238,6 +241,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
+		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)))
+
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		start := time.Now()
@@ -251,7 +257,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-
+				logger.Error("❌ could not submit blinded Beacon block",
+					fields.SubmissionTime(time.Since(start)),
+					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
@@ -263,6 +271,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
+				logger.Error("❌ could not submit Beacon block",
+					fields.SubmissionTime(time.Since(start)),
+					zap.Error(err))
 
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}

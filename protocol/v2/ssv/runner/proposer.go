@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
@@ -36,10 +35,11 @@ type ProposerRunner struct {
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	metrics        metrics.ConsensusMetrics
+	graffiti       []byte
 }
 
 func NewProposerRunner(
-	domainTypeProvider networkconfig.DomainTypeProvider,
+	domainType spectypes.DomainType,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -49,11 +49,12 @@ func NewProposerRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
+	graffiti []byte,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
-			DomainTypeProvider: domainTypeProvider,
+			DomainType:         domainType,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -65,8 +66,8 @@ func NewProposerRunner(
 		signer:         signer,
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
-
-		metrics: metrics.NewConsensusMetrics(spectypes.RoleProposer),
+		graffiti:       graffiti,
+		metrics:        metrics.NewConsensusMetrics(spectypes.RoleProposer),
 	}
 }
 
@@ -111,7 +112,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get blinded beacon block",
 			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
@@ -195,7 +196,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
 		return err
@@ -247,7 +248,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndPostConsensus()
 		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
 			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
-			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()))
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.Round(r.GetState().RunningInstance.State.Round))
 		endSubmission := r.metrics.StartBeaconSubmission()
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
@@ -388,7 +390,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.DomainTypeProvider.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return err

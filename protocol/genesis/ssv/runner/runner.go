@@ -1,6 +1,7 @@
 package runner
 
 import (
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"sync"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -11,7 +12,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 )
 
@@ -47,13 +47,13 @@ type Runner interface {
 }
 
 type BaseRunner struct {
-	mtx                sync.RWMutex
-	State              *State
-	Share              *genesisspectypes.Share
-	QBFTController     *controller.Controller
-	DomainTypeProvider networkconfig.DomainTypeProvider `json:"-"`
-	BeaconNetwork      genesisspectypes.BeaconNetwork
-	BeaconRoleType     genesisspectypes.BeaconRole
+	mtx            sync.RWMutex
+	State          *State
+	Share          *genesisspectypes.Share
+	QBFTController *controller.Controller
+	DomainType     spectypes.DomainType `json:"-"`
+	BeaconNetwork  genesisspectypes.BeaconNetwork
+	BeaconRoleType genesisspectypes.BeaconRole
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
