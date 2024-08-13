@@ -337,7 +337,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			alanSignedSSVMsg := &alanspectypes.SignedSSVMessage{}
 			if err := alanSignedSSVMsg.Decode(pMsg.GetData()); err == nil {
 				e := ErrAlanMessage
-				return nil, e
+				return nil, Descriptor{}, e
 			}
 
 			e := ErrMalformedPubSubMessage
