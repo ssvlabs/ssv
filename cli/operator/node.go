@@ -3,11 +3,13 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
@@ -594,6 +596,25 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		return networkconfig.NetworkConfig{}, err
 	}
 
+	if cfg.SSVOptions.CustomDomainType != "" {
+		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
+		}
+		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
+		if err != nil {
+			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+		}
+		if len(byts) != 4 {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
+		}
+		networkConfig.GenesisDomainType = spectypes.DomainType(byts)
+		if networkConfig.PastAlanFork() {
+			logger.Info("custom domain type is ineffective now after Alan fork", fields.Domain(networkConfig.GenesisDomainType))
+		} else {
+			logger.Info("running with custom domain type", fields.Domain(networkConfig.GenesisDomainType))
+		}
+	}
+
 	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
 
 	nodeType := "light"
@@ -621,7 +642,10 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	n := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	n, err := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	if err != nil {
+		logger.Fatal("failed to setup p2p network", zap.Error(err))
+	}
 	return n, p2pv1.GenesisP2P{Network: n}
 }
 
