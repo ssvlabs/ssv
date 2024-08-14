@@ -88,8 +88,8 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 		if onUpdated != nil {
 			err := onUpdated(pk, meta)
 			if err != nil {
-				logger.Error("❗ failed to call onUpdated callback",
-					zap.Error(err))
+				logger.Warn("❗ failed to call UpdateValidatorsMetadata onUpdated callback",
+					zap.Error(err), fields.PubKey(pk[:]))
 			}
 		}
 		logger.Debug("💾️ successfully updated validator metadata",

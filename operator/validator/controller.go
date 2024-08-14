@@ -525,7 +525,6 @@ func (c *controller) StartValidators() {
 	if c.validatorOptions.Exporter {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
-		c.logger.Info("starting exporter")
 	} else {
 		// Setup committee validators.
 		inited, committees := c.setupValidators(ownShares)
@@ -537,7 +536,6 @@ func (c *controller) StartValidators() {
 			}
 		}
 		close(c.committeeValidatorSetup)
-		c.logger.Info("validators setup done", zap.Int("validators", len(inited)), zap.Int("committees", len(committees)), zap.Int("shares", len(ownShares)))
 
 		// Start validators.
 		c.startValidators(inited, committees)
@@ -669,14 +667,8 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 			func(s *types.SSVShare) {
 				s.BeaconMetadata = share.BeaconMetadata
 				s.ValidatorIndex = share.ValidatorIndex
-				s.BeaconMetadata.Status = metadata.Status
-				s.BeaconMetadata.Balance = metadata.Balance
-				s.BeaconMetadata.ActivationEpoch = metadata.ActivationEpoch
 			}, func(s *genesistypes.SSVShare) {
 				s.BeaconMetadata = share.BeaconMetadata
-				s.BeaconMetadata.Status = metadata.Status
-				s.BeaconMetadata.Balance = metadata.Balance
-				s.BeaconMetadata.ActivationEpoch = metadata.ActivationEpoch
 			},
 		)
 		_, err := c.startValidator(v)
@@ -929,7 +921,6 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
 	if afterInit {
 		<-c.committeeValidatorSetup
-		c.logger.Debug("all validators are initialized")
 	}
 	var indices []phase0.ValidatorIndex
 	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
@@ -938,7 +929,6 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 		}
 		return true
 	})
-	c.logger.Debug("all active indices", zap.Int("count", len(indices)))
 	return indices
 }
 
@@ -989,7 +979,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey)
-	c.logger.Debug("setup validator", fields.PubKey(share.ValidatorPubKey[:]), zap.Bool("found", found), zap.Bool("is not nill", v != nil))
 	if !found {
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
@@ -1222,7 +1211,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			for i, s := range shares {
 				pubKeys[i] = s.ValidatorPubKey[:]
 			}
-			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.UpdateValidatorMetadata)
+			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon)
 			if err != nil {
 				c.logger.Warn("failed to update validators metadata", zap.Error(err))
 				continue
@@ -1242,19 +1231,18 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
-func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, storage beaconprotocol.ValidatorMetadataStorage, beacon beaconprotocol.BeaconNode, onMetadataUpdated func(pk spectypes.ValidatorPK, meta *beaconprotocol.ValidatorMetadata) error) error {
+func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, storage beaconprotocol.ValidatorMetadataStorage, beacon beaconprotocol.BeaconNode) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
 	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
 
-	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, storage, beacon, onMetadataUpdated)
+	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, storage, beacon, c.UpdateValidatorMetadata)
 	if err != nil {
 		return errors.Wrap(err, "failed to update validators metadata")
 	}
 
 	// Refresh duties if there are any new active validators.
 	afterUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
-	c.logger.Debug("updated validators metadata", zap.Int("before", len(beforeUpdate)), zap.Int("after", len(afterUpdate)))
 	if c.recentlyStartedValidators > 0 || hasNewValidators(beforeUpdate, afterUpdate) {
 		c.logger.Debug("new validators found after metadata update",
 			zap.Int("before", len(beforeUpdate)),
