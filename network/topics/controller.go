@@ -131,7 +131,7 @@ func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf(errs)
+		return fmt.Errorf("%s", errs)
 	}
 	return nil
 }
