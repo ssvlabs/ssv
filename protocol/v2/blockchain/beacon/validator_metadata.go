@@ -67,7 +67,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 }
 
 // OnUpdated represents a function to be called once validator's metadata was updated
-type OnUpdated func(pk spectypes.ValidatorPK, meta *ValidatorMetadata)
+type OnUpdated func(pk spectypes.ValidatorPK, meta *ValidatorMetadata) error
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc BeaconNode, onUpdated OnUpdated) error {
@@ -86,7 +86,11 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 	}
 	for pk, meta := range results {
 		if onUpdated != nil {
-			onUpdated(pk, meta)
+			err := onUpdated(pk, meta)
+			if err != nil {
+				logger.Error("❗ failed to call onUpdated callback",
+					zap.Error(err))
+			}
 		}
 		logger.Debug("💾️ successfully updated validator metadata",
 			fields.PubKey(pk[:]), zap.Any("metadata", meta))

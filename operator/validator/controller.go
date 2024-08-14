@@ -553,7 +553,7 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
-		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.onMetadataUpdated)
+		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.UpdateValidatorMetadata)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
 				zap.Int("shares", len(allPubKeys)),
@@ -669,8 +669,14 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 			func(s *types.SSVShare) {
 				s.BeaconMetadata = share.BeaconMetadata
 				s.ValidatorIndex = share.ValidatorIndex
+				s.BeaconMetadata.Status = metadata.Status
+				s.BeaconMetadata.Balance = metadata.Balance
+				s.BeaconMetadata.ActivationEpoch = metadata.ActivationEpoch
 			}, func(s *genesistypes.SSVShare) {
 				s.BeaconMetadata = share.BeaconMetadata
+				s.BeaconMetadata.Status = metadata.Status
+				s.BeaconMetadata.Balance = metadata.Balance
+				s.BeaconMetadata.ActivationEpoch = metadata.ActivationEpoch
 			},
 		)
 		_, err := c.startValidator(v)
@@ -934,49 +940,6 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 	})
 	c.logger.Debug("all active indices", zap.Int("count", len(indices)))
 	return indices
-}
-
-// TODO: this looks like its duplicated behaviour, check if necessary
-// onMetadataUpdated is called when validator's metadata was updated
-func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconprotocol.ValidatorMetadata) {
-	if meta == nil {
-		return
-	}
-	logger := c.logger.With(fields.PubKey(pk[:]))
-
-	if v, exist := c.GetValidator(pk); exist {
-		// update share object owned by the validator
-		// TODO: check if this updates running validators
-		if !v.Share().BeaconMetadata.Equals(meta) {
-			v.UpdateShare(
-				func(s *types.SSVShare) {
-					s.BeaconMetadata.Status = meta.Status
-					s.BeaconMetadata.Balance = meta.Balance
-					s.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
-				},
-				func(s *genesistypes.SSVShare) {
-					s.BeaconMetadata.Status = meta.Status
-					s.BeaconMetadata.Balance = meta.Balance
-					s.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
-				},
-			)
-			logger.Debug("metadata was updated")
-		}
-		_, err := c.startValidator(v)
-		if err != nil {
-			logger.Warn("could not start validator after metadata update",
-				zap.Error(err), zap.Any("metadata", meta))
-		}
-		if vc, vcexist := c.validatorsMap.GetCommittee(v.Share().CommitteeID()); vcexist {
-			vc.AddShare(&v.Share().Share)
-			_, err := c.startCommittee(vc)
-			if err != nil {
-				logger.Warn("could not start committee after metadata update",
-					zap.Error(err), zap.Any("metadata", meta))
-			}
-		}
-		return
-	}
 }
 
 // onShareStop is called when a validator was removed or liquidated
@@ -1259,7 +1222,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			for i, s := range shares {
 				pubKeys[i] = s.ValidatorPubKey[:]
 			}
-			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.onMetadataUpdated)
+			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.UpdateValidatorMetadata)
 			if err != nil {
 				c.logger.Warn("failed to update validators metadata", zap.Error(err))
 				continue
@@ -1279,7 +1242,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
-func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, storage beaconprotocol.ValidatorMetadataStorage, beacon beaconprotocol.BeaconNode, onMetadataUpdated func(pk spectypes.ValidatorPK, meta *beaconprotocol.ValidatorMetadata)) error {
+func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, storage beaconprotocol.ValidatorMetadataStorage, beacon beaconprotocol.BeaconNode, onMetadataUpdated func(pk spectypes.ValidatorPK, meta *beaconprotocol.ValidatorMetadata) error) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
 	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
