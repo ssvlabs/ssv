@@ -211,15 +211,16 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 			logger.Debug("discoveryNodeFilter: nil record")
 			return false
 		}
-		domainType, err := records.GetDomainTypeEntry(r)
+		domainType, err := records.GetDomainTypeEntry(r, records.KeyDomainType)
 		if err != nil {
 			logger.Debug("discoveryNodeFilter: could not get domain type", zap.Error(err))
 			return false
 		}
-		if domainType != dvs.domainType {
+		if domainType != dvs.domainType.DomainType() && domainType != dvs.domainType.NextDomainType() {
 			logger.Debug("discoveryNodeFilter: domain type mismatch", zap.String("nodeDomainType", hex.EncodeToString(domainType[:])))
 			return false
 		}
+
 		logger.Debug("discoveryNodeFilter: node accepted ✅")
 		return true
 	}
