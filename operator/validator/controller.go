@@ -48,7 +48,6 @@ import (
 	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -171,7 +170,6 @@ type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
-	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
 }
 
 // controller implements Controller
@@ -333,18 +331,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.committeesObservers.Start()
 
 	return &ctrl
-}
-
-// setupNetworkHandlers registers all the required handlers for sync protocols
-func (c *controller) setupNetworkHandlers() error {
-	syncHandlers := []*p2pprotocol.SyncHandler{}
-	c.logger.Debug("setting up network handlers",
-		zap.Int("count", len(syncHandlers)),
-		zap.Bool("full_node", c.validatorOptions.FullNode),
-		zap.Bool("exporter", c.validatorOptions.Exporter),
-		zap.Int("queue_size", c.validatorOptions.QueueSize))
-	c.network.RegisterHandlers(c.logger, syncHandlers...)
-	return nil
 }
 
 func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
@@ -649,10 +635,6 @@ func (c *controller) startValidators(validators []*validators.ValidatorContainer
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *controller) StartNetworkHandlers() {
-	// first, set stream handlers
-	if err := c.setupNetworkHandlers(); err != nil {
-		c.logger.Panic("could not register stream handlers", zap.Error(err))
-	}
 	c.network.UseMessageRouter(c.messageRouter)
 	for i := 0; i < networkRouterConcurrency; i++ {
 		go c.handleRouterMessages()
@@ -853,11 +835,9 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		// TODO alan: no queue in cc, what should we do?
 		if err := cm.OnExecuteDuty(logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
 			logger.Error("could not execute committee duty", zap.Error(err))
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
 		logger.Warn("could not find committee", fields.CommitteeID(committeeID))
 	}
@@ -1024,7 +1004,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 				)
 				return
 			}
-			// TODO: (Alan) stop committee runners queues consumption
+			deletedCommittee.Stop()
 		}
 	}
 }
@@ -1078,7 +1058,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(c.context)
-		_ = cancel
 
 		opts := c.validatorOptions
 		opts.SSVShare = share
@@ -1091,7 +1070,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
-		vc = validator.NewCommittee(c.context, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc)
+		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 
