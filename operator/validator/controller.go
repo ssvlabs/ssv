@@ -537,7 +537,7 @@ func (c *controller) StartValidators() {
 			}
 		}
 		close(c.committeeValidatorSetup)
-		c.logger.Info("validators setup done", zap.Int("validators", len(inited)), zap.Int("committees", len(committees)))
+		c.logger.Info("validators setup done", zap.Int("validators", len(inited)), zap.Int("committees", len(committees)), zap.Int("shares", len(ownShares)))
 
 		// Start validators.
 		c.startValidators(inited, committees)
@@ -1289,6 +1289,7 @@ func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, 
 
 	// Refresh duties if there are any new active validators.
 	afterUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
+	c.logger.Debug("updated validators metadata", zap.Int("before", len(beforeUpdate)), zap.Int("after", len(afterUpdate)))
 	if c.recentlyStartedValidators > 0 || hasNewValidators(beforeUpdate, afterUpdate) {
 		c.logger.Debug("new validators found after metadata update",
 			zap.Int("before", len(beforeUpdate)),
