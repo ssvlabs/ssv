@@ -131,12 +131,13 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	onUpdated := func(pk spectypes.ValidatorPK, meta *ValidatorMetadata) {
+	onUpdated := func(pk spectypes.ValidatorPK, meta *ValidatorMetadata) error {
 		joined := strings.Join(pks, ":")
 
 		require.True(t, strings.Contains(joined, strings.Trim(phase0.BLSPubKey(pk).String(), "0x")))
 		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))
 		atomic.AddUint64(&updateCount, 1)
+		return nil
 	}
 	err := UpdateValidatorsMetadata(logger, [][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
 	require.Nil(t, err)
