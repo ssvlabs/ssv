@@ -1,4 +1,4 @@
-name: Spec Alignment
+name: Genesis Spec Alignment
 
 on:
   push:
@@ -24,11 +24,11 @@ jobs:
         run: cd ./scripts/differ && go install .
 
       - name: Run Differ
-        run: cd ./scripts/spec-alignment && ./differ.sh
+        run: cd ./scripts/spec-alignment && ./genesis_differ.sh
 
-      - name: Upload output.diff
+      - name: Upload genesis_output.diff
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: output.diff
-          path: ./scripts/spec-alignment/output.diff
+          name: genesis_output.diff
+          path: ./scripts/spec-alignment/genesis_output.diff
