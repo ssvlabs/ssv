@@ -1026,6 +1026,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey)
+	c.logger.Debug("setup validator", fields.PubKey(share.ValidatorPubKey[:]), zap.Bool("found", found), zap.Bool("is not nill", v != nil))
 	if !found {
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
@@ -1049,7 +1050,8 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
-
+	} else {
+		c.printShare(v.Share(), "get validator")
 	}
 
 	// Start a committee validator.
