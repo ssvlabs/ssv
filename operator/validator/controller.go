@@ -656,7 +656,7 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	if share == nil {
 		return errors.New("share was not found")
 	}
-	if !share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) || share.Liquidated {
+	if c.operatorDataStore.GetOperatorID() == 0 || !share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) || share.Liquidated {
 		return nil
 	}
 

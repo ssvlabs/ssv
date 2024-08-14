@@ -231,18 +231,11 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				}).AnyTimes()
 				if tc.expectMetadataFetch {
 					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-					sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(data map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error {
-						for _, share := range tc.shareStorageListResponse {
-							if metadata, ok := data[share.Share.ValidatorPubKey]; ok {
-								share.Metadata.BeaconMetadata = metadata
-							}
-						}
-						return nil
-					}).Times(1)
 					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				}
-				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
+				sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
