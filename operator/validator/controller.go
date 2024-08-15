@@ -551,6 +551,7 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
+		c.recentlyStartedValidators = 0
 		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.UpdateValidatorMetadata)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
@@ -560,7 +561,15 @@ func (c *controller) StartValidators() {
 		} else {
 			c.logger.Debug("updated validators metadata after setup",
 				zap.Int("shares", len(allPubKeys)),
+				zap.Uint64("started_validators", c.recentlyStartedValidators),
 				fields.Took(time.Since(start)))
+			if c.recentlyStartedValidators > 0 {
+				select {
+				case c.indicesChange <- struct{}{}:
+				case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+					c.logger.Warn("timed out while notifying DutyScheduler of new validators")
+				}
+			}
 		}
 	}
 }
