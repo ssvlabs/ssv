@@ -384,18 +384,17 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 	testCases := []struct {
 		name                      string
 		metadata                  *beacon.ValidatorMetadata
-		ExpectedErrorResult       bool
 		sharesStorageExpectReturn any
 		getShareError             bool
 		operatorDataId            uint64
 		testPublicKey             spectypes.ValidatorPK
 		mockRecipientTimes        int
 	}{
-		{"Empty metadata", nil, true, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Valid metadata", validatorMetaData, false, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Share wasn't found", validatorMetaData, true, nil, true, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Empty metadata", nil, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Valid metadata", validatorMetaData, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Share wasn't found", validatorMetaData, nil, true, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Share not belong to operator", validatorMetaData, nil, false, 2, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Metadata with error", validatorMetaData, fmt.Errorf("error"), false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
 	}
 
 	for _, tc := range testCases {
@@ -431,7 +430,8 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(shareWithMetaData).AnyTimes()
 			}
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(tc.mockRecipientTimes)
-			sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(tc.sharesStorageExpectReturn).AnyTimes()
+			sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(tc.sharesStorageExpectReturn).AnyTimes()
+			sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 			ctr := setupController(logger, controllerOptions)
 
@@ -445,7 +445,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 			err := ctr.UpdateValidatorsMetadata(data)
 
-			if tc.ExpectedErrorResult {
+			if tc.sharesStorageExpectReturn != nil {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
