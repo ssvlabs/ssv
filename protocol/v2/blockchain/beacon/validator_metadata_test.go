@@ -132,6 +132,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	}).AnyTimes()
 
 	onUpdated := func(data map[spectypes.ValidatorPK]*ValidatorMetadata) error {
+		storage.UpdateValidatorsMetadata(data)
 		for pk, meta := range data {
 			joined := strings.Join(pks, ":")
 
@@ -141,7 +142,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		}
 		return nil
 	}
-	err := UpdateValidatorsMetadata(logger, [][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
+	err := UpdateValidatorsMetadata(logger, [][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, bc, onUpdated)
 	require.Nil(t, err)
 	require.Equal(t, uint64(2), updateCount)
 

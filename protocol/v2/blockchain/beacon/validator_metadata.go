@@ -69,7 +69,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 type OnUpdated func(data map[spectypes.ValidatorPK]*ValidatorMetadata) error
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc BeaconNode, onUpdated OnUpdated) error {
+func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, bc BeaconNode, onUpdated OnUpdated) error {
 	start := time.Now()
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
@@ -79,16 +79,9 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 	// TODO: importing logging/fields causes import cycle
 	logger.Debug("🆕 got validators metadata", zap.Int("requested", len(pubKeys)),
 		zap.Int("received", len(results)))
-	if err := collection.UpdateValidatorsMetadata(results); err != nil {
-		logger.Error("❗ failed to update validators metadata",
+	if err = onUpdated(results); err != nil {
+		logger.Warn("❗ failed to call UpdateValidatorsMetadata onUpdated callback",
 			zap.Error(err))
-	}
-	if onUpdated != nil {
-		err := onUpdated(results)
-		if err != nil {
-			logger.Warn("❗ failed to call UpdateValidatorsMetadata onUpdated callback",
-				zap.Error(err))
-		}
 	}
 
 	return nil
