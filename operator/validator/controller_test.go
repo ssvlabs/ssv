@@ -36,6 +36,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -438,7 +439,11 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return true, nil
 			}
 			ctr.validatorStartFunc = validatorStartFunc
-			err := ctr.UpdateValidatorMetadata(tc.testPublicKey, tc.metadata)
+
+			data := make(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata)
+			data[tc.testPublicKey] = tc.metadata
+
+			err := ctr.UpdateValidatorsMetadata(data)
 
 			if tc.ExpectedErrorResult {
 				require.Error(t, err)

@@ -550,8 +550,7 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
-		c.recentlyStartedValidators = 0
-		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.UpdateValidatorMetadata)
+		err := c.fetchAndUpdateValidatorsMetadata(c.logger, allPubKeys, c.sharesStorage, c.beacon)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
 				zap.Int("shares", len(allPubKeys)),
@@ -560,15 +559,7 @@ func (c *controller) StartValidators() {
 		} else {
 			c.logger.Debug("updated validators metadata after setup",
 				zap.Int("shares", len(allPubKeys)),
-				zap.Uint64("started_validators", c.recentlyStartedValidators),
 				fields.Took(time.Since(start)))
-			if c.recentlyStartedValidators > 0 {
-				select {
-				case c.indicesChange <- struct{}{}:
-				case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
-					c.logger.Warn("timed out while notifying DutyScheduler of new validators")
-				}
-			}
 		}
 	}
 }
@@ -648,64 +639,7 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-// UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
-func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
-	if metadata == nil {
-		return errors.New("could not update empty metadata")
-	}
-	// Save metadata to share storage.
-	err := c.sharesStorage.UpdateValidatorMetadata(pk, metadata)
-	if err != nil {
-		return errors.Wrap(err, "could not update validator metadata")
-	}
-
-	// If this validator is not ours or is liquidated, don't start it.
-	share := c.sharesStorage.Get(nil, pk[:])
-	if share == nil {
-		return errors.New("share was not found")
-	}
-	if c.operatorDataStore.GetOperatorID() == 0 || !share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) || share.Liquidated {
-		return nil
-	}
-
-	// Start validator (if not already started).
-	// TODO: why its in the map if not started?
-	if v, found := c.validatorsMap.GetValidator(pk); found {
-		v.UpdateShare(
-			func(s *types.SSVShare) {
-				s.BeaconMetadata = share.BeaconMetadata
-				s.ValidatorIndex = share.ValidatorIndex
-			}, func(s *genesistypes.SSVShare) {
-				s.BeaconMetadata = share.BeaconMetadata
-			},
-		)
-		_, err := c.startValidator(v)
-		if err != nil {
-			c.logger.Warn("could not start validator", zap.Error(err))
-		}
-		vc, found := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
-		if found {
-			vc.AddShare(&v.Share().Share)
-			_, err := c.startCommittee(vc)
-			if err != nil {
-				c.logger.Warn("could not start committee", zap.Error(err))
-			}
-		}
-	} else {
-		c.logger.Info("starting new validator", fields.PubKey(pk[:]))
-
-		started, err := c.onShareStart(share)
-		if err != nil {
-			return errors.Wrap(err, "could not start validator")
-		}
-		if started {
-			c.logger.Debug("started share after metadata update", zap.Bool("started", started))
-		}
-	}
-	return nil
-}
-
-// UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
+// UpdateValidatorsMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
 func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
 	// TODO: better log and err handling
 	for pk, metadata := range data {
@@ -1207,7 +1141,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			for i, s := range shares {
 				pubKeys[i] = s.ValidatorPubKey[:]
 			}
-			err := c.updateValidatorsMetadata(c.logger, pubKeys, c, c.beacon)
+			err := c.fetchAndUpdateValidatorsMetadata(c.logger, pubKeys, c.sharesStorage, c.beacon)
 			if err != nil {
 				c.logger.Warn("failed to update validators metadata", zap.Error(err))
 				continue
@@ -1227,12 +1161,12 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
-func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pks [][]byte, storage beaconprotocol.ValidatorMetadataStorage, beacon beaconprotocol.BeaconNode) error {
+func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks [][]byte, storage beaconprotocol.ValidatorMetadataStorage, beacon beaconprotocol.BeaconNode) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
 	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
 
-	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, storage, beacon, c.UpdateValidatorMetadata)
+	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, storage, beacon, c.UpdateValidatorsMetadata)
 	if err != nil {
 		return errors.Wrap(err, "failed to update validators metadata")
 	}
