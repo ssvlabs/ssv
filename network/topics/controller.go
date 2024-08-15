@@ -126,7 +126,7 @@ func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
 			continue
 		}
 		if err := topic.SetScoreParams(p); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %d; ", topicName, err))
+			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %w; ", topicName, err))
 			continue
 		}
 	}
