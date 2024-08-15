@@ -124,7 +124,6 @@ type GenesisControllerOptions struct {
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
 	StartValidators()
-	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validators.ValidatorContainer, bool)
 	UpdateValidatorMetaDataLoop()
@@ -365,7 +364,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.IsAttesting(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+		if s.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
@@ -918,25 +917,13 @@ func dutyDataToSSVMsg(
 	}, nil
 }
 
-// CommitteeActiveIndices fetches indices of in-committee validators who are active at the given epoch.
-func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	vals := c.validatorsMap.GetAllValidators()
-	indices := make([]phase0.ValidatorIndex, 0, len(vals))
-	for _, v := range vals {
-		if v.Share().IsAttesting(epoch) {
-			indices = append(indices, v.Share().BeaconMetadata.Index)
-		}
-	}
-	return indices
-}
-
 func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
 	if afterInit {
 		<-c.committeeValidatorSetup
 	}
 	var indices []phase0.ValidatorIndex
 	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if share.IsAttesting(epoch) {
+		if share.IsParticipating(epoch) {
 			indices = append(indices, share.BeaconMetadata.Index)
 		}
 		return true

@@ -1013,87 +1013,6 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	})
 }
 
-func TestGetIndices(t *testing.T) {
-	farFutureEpoch := phase0.Epoch(99999)
-	currentEpoch := phase0.Epoch(100)
-	testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
-		createPubKey(byte('0')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          0, // ValidatorStateUnknown
-			Index:           0,
-			ActivationEpoch: farFutureEpoch,
-		}),
-		createPubKey(byte('1')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          1, // ValidatorStatePendingInitialized
-			Index:           0,
-			ActivationEpoch: farFutureEpoch,
-		}),
-		createPubKey(byte('2')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          2, // ValidatorStatePendingQueued
-			Index:           3,
-			ActivationEpoch: phase0.Epoch(101),
-		}),
-
-		createPubKey(byte('3')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          3, // ValidatorStateActiveOngoing
-			Index:           3,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('4')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          4, // ValidatorStateActiveExiting
-			Index:           4,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('5')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          5, // ValidatorStateActiveSlashed
-			Index:           5,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-
-		createPubKey(byte('6')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          6, // ValidatorStateExitedUnslashed
-			Index:           6,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('7')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          7, // ValidatorStateExitedSlashed
-			Index:           7,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('8')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          8, // ValidatorStateWithdrawalPossible
-			Index:           8,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('9')): newValidator(t, &beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          9, // ValidatorStateWithdrawalDone
-			Index:           9,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-	}
-	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
-	logger := logging.TestLogger(t)
-	controllerOptions := MockControllerOptions{
-		validatorsMap: mockValidatorsMap,
-	}
-	ctr := setupController(logger, controllerOptions)
-
-	activeIndicesForCurrentEpoch := ctr.CommitteeActiveIndices(currentEpoch)
-	require.Equal(t, 2, len(activeIndicesForCurrentEpoch)) // should return only active indices
-
-	activeIndicesForNextEpoch := ctr.CommitteeActiveIndices(currentEpoch + 1)
-	require.Equal(t, 3, len(activeIndicesForNextEpoch)) // should return including ValidatorStatePendingQueued
-}
-
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	return controller{
 		metadataUpdateInterval:  0,
@@ -1120,21 +1039,6 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		metadataLastUpdated: opts.metadataLastUpdated,
 		networkConfig:       networkconfig.TestNetwork,
 	}
-}
-
-func newValidator(t *testing.T, metaData *beacon.ValidatorMetadata) *validators.ValidatorContainer {
-	v, err := validators.NewValidatorContainer(
-		&validator.Validator{
-			Share: &types.SSVShare{
-				Metadata: types.Metadata{
-					BeaconMetadata: metaData,
-				},
-			},
-		},
-		nil,
-	)
-	require.NoError(t, err)
-	return v
 }
 
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
