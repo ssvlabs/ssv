@@ -1243,33 +1243,35 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 		return
 	}
 
-	slotTicker := slotticker.New(c.logger, slotticker.Config{
-		SlotDuration: c.networkConfig.SlotDurationSec(),
-		GenesisTime:  c.networkConfig.GetGenesisTime(),
-	})
+	go func() {
+		slotTicker := slotticker.New(c.logger, slotticker.Config{
+			SlotDuration: c.networkConfig.SlotDurationSec(),
+			GenesisTime:  c.networkConfig.GetGenesisTime(),
+		})
 
-	next := slotTicker.Next()
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-		case <-next:
-			next = slotTicker.Next()
-			if c.networkConfig.PastAlanFork() {
-				// Cancel genesis context to stop the genesis validators.
-				c.cancelGenesisCtx()
-
-				// Unset genesis validators to free up memory.
-				c.validatorsMap.ForEachValidator(func(validator *validators.ValidatorContainer) bool {
-					validator.UnsetGenesisValidator()
-					return true
-				})
-
-				logger.Info("stopped genesis validators on fork")
+		next := slotTicker.Next()
+		for {
+			select {
+			case <-c.ctx.Done():
 				return
+			case <-next:
+				next = slotTicker.Next()
+				if c.networkConfig.PastAlanFork() {
+					// Cancel genesis context to stop the genesis validators.
+					c.cancelGenesisCtx()
+
+					// Unset genesis validators to free up memory.
+					c.validatorsMap.ForEachValidator(func(validator *validators.ValidatorContainer) bool {
+						validator.UnsetGenesisValidator()
+						return true
+					})
+
+					logger.Info("stopped genesis validators on fork")
+					return
+				}
 			}
 		}
-	}
+	}()
 }
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval

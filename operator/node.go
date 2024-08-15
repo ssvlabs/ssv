@@ -149,7 +149,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	}
 	go n.net.UpdateSubnets(logger)
 	go n.net.UpdateScoreParams(logger)
-	go n.validatorsCtrl.ForkListener(logger)
+	n.validatorsCtrl.ForkListener(logger)
 	n.validatorsCtrl.StartValidators()
 	go n.reportOperators(logger)
 
