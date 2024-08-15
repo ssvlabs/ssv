@@ -5,6 +5,9 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 type Hex []byte
@@ -66,6 +69,38 @@ func (us *Uint64Slice) Bind(value string) error {
 			return err
 		}
 		*us = append(*us, n)
+	}
+	return nil
+}
+
+type Role spectypes.BeaconRole
+
+func (r *Role) Bind(value string) error {
+	role, err := message.BeaconRoleFromString(value)
+	if err != nil {
+		return err
+	}
+	*r = Role(role)
+	return nil
+}
+
+func (r Role) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + spectypes.BeaconRole(r).String() + `"`), nil
+}
+
+type RoleSlice []Role
+
+func (rs *RoleSlice) Bind(value string) error {
+	if value == "" {
+		return nil
+	}
+	for _, s := range strings.Split(value, ",") {
+		var r Role
+		err := r.Bind(s)
+		if err != nil {
+			return err
+		}
+		*rs = append(*rs, r)
 	}
 	return nil
 }
