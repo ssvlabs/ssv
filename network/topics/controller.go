@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -9,7 +10,6 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
@@ -112,28 +112,25 @@ func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
 	if ctrl.scoreParamsFactory == nil {
 		return fmt.Errorf("scoreParamsFactory is not set")
 	}
-	errs := ""
+	var errs error
 	topics := ctrl.ps.GetTopics()
 	for _, topicName := range topics {
 		topic := ctrl.container.Get(topicName)
 		if topic == nil {
-			errs = errs + fmt.Sprintf("topic %s is not ready; ", topicName)
+			errs = errors.Join(errs, fmt.Errorf("topic %s is not ready; ", topicName))
 			continue
 		}
 		p := ctrl.scoreParamsFactory(topicName)
 		if p == nil {
-			errs = errs + fmt.Sprintf("score params for topic %s is nil; ", topicName)
+			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil; ", topicName))
 			continue
 		}
 		if err := topic.SetScoreParams(p); err != nil {
-			errs = errs + fmt.Sprintf("could not set score params for topic %s: %d; ", topicName, err)
+			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %d; ", topicName, err))
 			continue
 		}
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("%s", errs)
-	}
-	return nil
+	return errs
 }
 
 // Close implements io.Closer
