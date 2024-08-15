@@ -57,33 +57,12 @@ func (e *Exporter) Instances(w http.ResponseWriter, r *http.Request) error {
 				if instance == nil || instance.DecidedMessage == nil {
 					continue
 				}
-				response.Data = append(response.Data, &signedMessageJSON{
-					Signature: instance.DecidedMessage.Signature,
-					Signers:   instance.DecidedMessage.Signers,
-					Message: messageJSON{
-						MsgType:                  instance.DecidedMessage.Message.MsgType,
-						Height:                   instance.DecidedMessage.Message.Height,
-						Round:                    instance.DecidedMessage.Message.Round,
-						Identifier:               instance.DecidedMessage.Message.Identifier,
-						Root:                     instance.DecidedMessage.Message.Root[:],
-						DataRound:                instance.DecidedMessage.Message.DataRound,
-						RoundChangeJustification: instance.DecidedMessage.Message.RoundChangeJustification,
-						PrepareJustification:     instance.DecidedMessage.Message.PrepareJustification,
-					},
-					FullData: instance.DecidedMessage.FullData,
-				})
+				response.Data = append(response.Data, newSignedMessageJSON(instance.DecidedMessage))
 			}
 		}
 	}
 
 	return api.Render(w, r, response)
-}
-
-type signedMessageJSON struct {
-	Signature spectypes.Signature
-	Signers   []spectypes.OperatorID
-	Message   messageJSON
-	FullData  []byte
 }
 
 type messageJSON struct {
@@ -96,4 +75,29 @@ type messageJSON struct {
 	DataRound                specqbft.Round
 	RoundChangeJustification [][]byte
 	PrepareJustification     [][]byte
+}
+
+type signedMessageJSON struct {
+	Signature spectypes.Signature
+	Signers   []spectypes.OperatorID
+	Message   messageJSON
+	FullData  []byte
+}
+
+func newSignedMessageJSON(msg *specqbft.SignedMessage) *signedMessageJSON {
+	return &signedMessageJSON{
+		Signature: msg.Signature,
+		Signers:   msg.Signers,
+		Message: messageJSON{
+			MsgType:                  msg.Message.MsgType,
+			Height:                   msg.Message.Height,
+			Round:                    msg.Message.Round,
+			Identifier:               msg.Message.Identifier,
+			Root:                     msg.Message.Root[:],
+			DataRound:                msg.Message.DataRound,
+			RoundChangeJustification: msg.Message.RoundChangeJustification,
+			PrepareJustification:     msg.Message.PrepareJustification,
+		},
+		FullData: msg.FullData,
+	}
 }
