@@ -57,6 +57,9 @@ type Config struct {
 	Log          log.Logger         // if set, log messages go here
 	ValidSchemes enr.IdentityScheme // allowed identity schemes
 	Clock        mclock.Clock
+
+	// NodeFilter must return true for a node to be added to the table, unless it is nil.
+	NodeFilter func(*enode.Node) bool
 }
 
 func (cfg Config) withDefaults() Config {
@@ -78,6 +81,12 @@ func (cfg Config) withDefaults() Config {
 	if cfg.Clock == nil {
 		cfg.Clock = mclock.System{}
 	}
+
+	// No filtering by default:
+	if cfg.NodeFilter == nil {
+		cfg.NodeFilter = func(*enode.Node) bool { return true }
+	}
+
 	return cfg
 }
 

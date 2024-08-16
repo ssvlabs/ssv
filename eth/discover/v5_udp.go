@@ -69,6 +69,7 @@ type UDPv5 struct {
 	log          log.Logger
 	clock        mclock.Clock
 	validSchemes enr.IdentityScheme
+	nodeFilter   func(*enode.Node) bool
 
 	// misc buffers used during message handling
 	logcontext []interface{}
@@ -156,6 +157,7 @@ func newUDPv5(conn UDPConn, ln *enode.LocalNode, cfg Config) (*UDPv5, error) {
 		log:          cfg.Log,
 		validSchemes: cfg.ValidSchemes,
 		clock:        cfg.Clock,
+		nodeFilter:   cfg.NodeFilter,
 		// channels into dispatch
 		packetInCh:    make(chan ReadPacket, 1),
 		readNextCh:    make(chan struct{}, 1),
@@ -444,6 +446,9 @@ func (t *UDPv5) verifyResponseNode(c *callV5, r *enr.Record, distances []uint, s
 	if _, ok := seen[node.ID()]; ok {
 		return nil, fmt.Errorf("duplicate record")
 	}
+	if !t.nodeFilter(node) {
+		return nil, errors.New("filtered out by NodeFilter")
+	}
 	seen[node.ID()] = struct{}{}
 	return node, nil
 }
@@ -706,8 +711,10 @@ func (t *UDPv5) handlePacket(rawpacket []byte, fromAddr *net.UDPAddr) error {
 		return err
 	}
 	if fromNode != nil {
-		// Handshake succeeded, add to table.
-		t.tab.addSeenNode(wrapNode(fromNode))
+		if t.nodeFilter(fromNode) {
+			// Handshake succeeded, add to table.
+			t.tab.addSeenNode(wrapNode(fromNode))
+		}
 	}
 	if packet.Kind() != v5wire.WhoareyouPacket {
 		// WHOAREYOU logged separately to report errors.
