@@ -4,16 +4,14 @@ import (
 	"crypto/ecdsa"
 	"net"
 
-	"github.com/ssvlabs/ssv/logging"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
-
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/eth/discover"
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
-
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 )
 
 // DiscV5Options for creating a new discv5 listener
