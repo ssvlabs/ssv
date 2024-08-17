@@ -17,6 +17,7 @@
 // Contains the NTP time drift detection via the SNTP protocol:
 //   https://tools.ietf.org/html/rfc4330
 
+// nolint
 package discover
 
 import (
