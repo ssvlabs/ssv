@@ -451,3 +451,72 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	cancel()
 	require.NoError(t, schedulerPool.Wait())
 }
+
+func TestScheduler_Proposer_Fork(t *testing.T) {
+	var (
+		handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
+		alanForkEpoch = phase0.Epoch(1)
+	)
+	currentSlot.Set(phase0.Slot(0))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, alanForkEpoch)
+	fetchDutiesCallGenesis, executeDutiesCallGenesis := setupProposerGenesisDutiesMock(scheduler, dutiesMap)
+	_, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
+	startFn()
+
+	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(2),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(32),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+
+	// STEP 1: wait for proposer genesis duties to be fetched
+	ticker.Send(currentSlot.Get())
+	waitForGenesisDutiesFetch(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout)
+
+	// STEP 2: wait for no action to be taken
+	currentSlot.Set(phase0.Slot(1))
+	ticker.Send(currentSlot.Get())
+	waitForNoActionGenesis(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout)
+
+	// STEP 3: wait for proposer duties to be executed
+	currentSlot.Set(phase0.Slot(2))
+	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	expectedGenesis := expectedExecutedGenesisProposerDuties(handler, duties)
+	setExecuteGenesisDutyFunc(scheduler, executeDutiesCallGenesis, len(expectedGenesis))
+
+	ticker.Send(currentSlot.Get())
+	waitForGenesisDutiesExecution(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout, expectedGenesis)
+
+	// skip to the next epoch
+	currentSlot.Set(phase0.Slot(3))
+	for slot := currentSlot.Get(); slot < 32; slot++ {
+		ticker.Send(slot)
+		waitForNoActionGenesis(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout)
+		currentSlot.Set(slot + 1)
+	}
+
+	// fork epoch
+	currentSlot.Set(phase0.Slot(32))
+	duties, _ = dutiesMap.Get(phase0.Epoch(1))
+	expected := expectedExecutedProposerDuties(handler, duties)
+	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+	ticker.Send(currentSlot.Get())
+	waitForDutiesFetch(t, logger, fetchDutiesCallGenesis, executeDutiesCall, timeout)
+	waitForDutiesExecution(t, logger, fetchDutiesCallGenesis, executeDutiesCall, timeout, expected)
+
+	// Stop scheduler & wait for graceful exit.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}
