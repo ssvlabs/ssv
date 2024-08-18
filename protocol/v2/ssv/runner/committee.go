@@ -417,23 +417,24 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		attestations = append(attestations, att)
 	}
 
-	submissionStart := time.Now()
-	if err := cr.beacon.SubmitAttestations(attestations); err != nil {
-		logger.Error("❌ failed to submit attestation", zap.Error(err))
-		return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
-	}
-
 	if len(attestations) > 0 {
+		submissionStart := time.Now()
+		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
+			logger.Error("❌ failed to submit attestation", zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+		}
+
 		logger.Info("✅ successfully submitted attestations",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attestations[0].Data.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(time.Since(cr.started)))
-	}
-	// Record successful submissions
-	for validator := range attestationsToSubmit {
-		cr.RecordSubmission(spectypes.BNRoleAttester, validator)
+
+		// Record successful submissions
+		for validator := range attestationsToSubmit {
+			cr.RecordSubmission(spectypes.BNRoleAttester, validator)
+		}
 	}
 
 	// Submit multiple sync committee
@@ -441,22 +442,24 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 	for _, syncMsg := range syncCommitteeMessagesToSubmit {
 		syncCommitteeMessages = append(syncCommitteeMessages, syncMsg)
 	}
-	submissionStart = time.Now()
-	if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
-		logger.Error("❌ failed to submit sync committee", zap.Error(err))
-		return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
-	}
+
 	if len(syncCommitteeMessages) > 0 {
+		submissionStart := time.Now()
+		if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
+			logger.Error("❌ failed to submit sync committee", zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+		}
 		logger.Info("✅ successfully submitted sync committee",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(time.Since(cr.started)))
-	}
-	// Record successful submissions
-	for validator := range syncCommitteeMessagesToSubmit {
-		cr.RecordSubmission(spectypes.BNRoleSyncCommittee, validator)
+
+		// Record successful submissions
+		for validator := range syncCommitteeMessagesToSubmit {
+			cr.RecordSubmission(spectypes.BNRoleSyncCommittee, validator)
+		}
 	}
 
 	if anyErr != nil {
