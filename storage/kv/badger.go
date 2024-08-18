@@ -60,10 +60,7 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 	}
 
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
-	logger.Info("opening badger db", zap.Any("options", opt))
-	opt.Logger = newLogger(logger)
 	db, err := badger.Open(opt)
-	logger.Info("badger db opened", zap.Error(err))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open badger")
 	}
