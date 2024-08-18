@@ -60,7 +60,6 @@ type storage struct {
 
 // NewNodeStorage creates a new instance of Storage
 func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
-	logger.Info("setting up node storage")
 	stg := &storage{
 		logger:         logger,
 		db:             db,

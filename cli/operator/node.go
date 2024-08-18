@@ -158,7 +158,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 
-		logger.Info("setting up operator storage")
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
@@ -433,12 +432,10 @@ func setupGlobal() (*zap.Logger, error) {
 }
 
 func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
-	logger.Info("setting up db")
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
-	logger.Info("db opened", zap.Error(err))
 	reopenDb := func() error {
 		if err := db.Close(); err != nil {
 			return errors.Wrap(err, "failed to close db")
@@ -452,12 +449,10 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 		DbPath:  cfg.DBOptions.Path,
 		Network: eth2Network,
 	}
-	logger.Info("running migrations")
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to run migrations")
 	}
-	logger.Info("migrations applied", zap.Int("applied", applied))
 	if applied == 0 {
 		return db, nil
 	}
@@ -488,12 +483,10 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey keys.OperatorPrivateKey, configPrivKeyText string) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	logger.Info("setting up operator storage")
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	logger.Info("node storage created")
 
 	storedPrivKeyHash, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil {

@@ -59,7 +59,6 @@ type sharesStorage struct {
 }
 
 func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, error) {
-	logger.Info("setting up shares storage")
 	storage := &sharesStorage{
 		logger: logger,
 		shares: make(map[string]*types.SSVShare),
@@ -70,7 +69,6 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 	if err != nil {
 		return nil, err
 	}
-	logger.Info("shares storage created")
 	return storage, nil
 }
 
