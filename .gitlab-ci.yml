@@ -120,7 +120,7 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - main
+    - exporter-api
 
 Deploy nodes to prod:
   stage: deploy
@@ -193,10 +193,10 @@ Deploy exporter to prod:
     # +------------------------------+
     # │  🔴 Deploy Mainnet exporter 2|
     # +------------------------------+
-    - .k8/production/mainnet/scripts/deploy-exporters-2.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_2_MAINNET_CPU_LIMIT $SSV_EXPORTER_2_MAINNET_MEM_LIMIT
+    # - .k8/production/mainnet/scripts/deploy-exporters-2.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_2_MAINNET_CPU_LIMIT $SSV_EXPORTER_2_MAINNET_MEM_LIMIT
     # +------------------------------+
     # │  🔴 Deploy Mainnet exporter 3|
     # +------------------------------+
-    - .k8/production/mainnet/scripts/deploy-exporters-3.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION
+    # - .k8/production/mainnet/scripts/deploy-exporters-3.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION
   only:
-    - main
+    - exporter-api

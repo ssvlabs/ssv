@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -16,7 +17,7 @@ type Exporter struct {
 	QBFTStores *ibftstorage.QBFTStores
 }
 
-func (e *Exporter) Instances(w http.ResponseWriter, r *http.Request) error {
+func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
 		From    int           `json:"from"`
 		To      int           `json:"to"`
@@ -24,7 +25,7 @@ func (e *Exporter) Instances(w http.ResponseWriter, r *http.Request) error {
 		PubKeys api.HexSlice  `json:"pubkeys"`
 	}
 	var response struct {
-		Data []*signedMessageJSON `json:"data"`
+		Data []*decidedJSON `json:"data"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -44,7 +45,7 @@ func (e *Exporter) Instances(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
-	response.Data = []*signedMessageJSON{}
+	response.Data = []*decidedJSON{}
 	for _, pubKey := range request.PubKeys {
 		for height := request.From; height <= request.To; height++ {
 			for _, role := range request.Roles {
@@ -57,12 +58,24 @@ func (e *Exporter) Instances(w http.ResponseWriter, r *http.Request) error {
 				if instance == nil || instance.DecidedMessage == nil {
 					continue
 				}
-				response.Data = append(response.Data, newSignedMessageJSON(instance.DecidedMessage))
+				response.Data = append(response.Data, &decidedJSON{
+					Role:      role,
+					Slot:      phase0.Slot(instance.DecidedMessage.Message.Height),
+					PublicKey: pubKey,
+					Message:   newSignedMessageJSON(instance.DecidedMessage),
+				})
 			}
 		}
 	}
 
 	return api.Render(w, r, response)
+}
+
+type decidedJSON struct {
+	Role      api.Role           `json:"role"`
+	Slot      phase0.Slot        `json:"slot"`
+	PublicKey api.Hex            `json:"public_key"`
+	Message   *signedMessageJSON `json:"message"`
 }
 
 type messageJSON struct {
