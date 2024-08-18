@@ -56,7 +56,7 @@ func setupProposerGenesisDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedProposerGenesisDuties(handler *ProposerHandler, duties []*eth2apiv1.ProposerDuty) []*genesisspectypes.Duty {
+func expectedExecutedGenesisProposerDuties(handler *ProposerHandler, duties []*eth2apiv1.ProposerDuty) []*genesisspectypes.Duty {
 	expectedDuties := make([]*genesisspectypes.Duty, 0)
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toGenesisSpecDuty(d, genesisspectypes.BNRoleProposer))
@@ -85,7 +85,7 @@ func TestScheduler_Proposer_Genesis_Same_Slot(t *testing.T) {
 
 	// STEP 1: wait for proposer duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
-	expected := expectedExecutedProposerGenesisDuties(handler, duties)
+	expected := expectedExecutedGenesisProposerDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -128,7 +128,7 @@ func TestScheduler_Proposer_Genesis_Diff_Slots(t *testing.T) {
 	// STEP 3: wait for proposer duties to be executed
 	currentSlot.Set(phase0.Slot(2))
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
-	expected := expectedExecutedProposerGenesisDuties(handler, duties)
+	expected := expectedExecutedGenesisProposerDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -192,7 +192,7 @@ func TestScheduler_Proposer_Genesis_Indices_Changed(t *testing.T) {
 	// STEP 4: wait for proposer duties to be executed
 	currentSlot.Set(phase0.Slot(3))
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
-	expected := expectedExecutedProposerGenesisDuties(handler, []*eth2apiv1.ProposerDuty{duties[2]})
+	expected := expectedExecutedGenesisProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[2]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -254,7 +254,7 @@ func TestScheduler_Proposer_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 	// STEP 5: wait for proposer duties to be executed
 	currentSlot.Set(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
-	expected := expectedExecutedProposerGenesisDuties(handler, []*eth2apiv1.ProposerDuty{duties[0]})
+	expected := expectedExecutedGenesisProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[0]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -263,7 +263,7 @@ func TestScheduler_Proposer_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 	// STEP 6: wait for proposer duties to be executed
 	currentSlot.Set(phase0.Slot(3))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
-	expected = expectedExecutedProposerGenesisDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
+	expected = expectedExecutedGenesisProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -272,7 +272,7 @@ func TestScheduler_Proposer_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 	// STEP 7: wait for proposer duties to be executed
 	currentSlot.Set(phase0.Slot(4))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
-	expected = expectedExecutedProposerGenesisDuties(handler, []*eth2apiv1.ProposerDuty{duties[2]})
+	expected = expectedExecutedGenesisProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[2]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -348,7 +348,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current(t *testing.T) {
 	// STEP 7: The second assigned duty should be executed
 	currentSlot.Set(phase0.Slot(37))
 	duties, _ := dutiesMap.Get(phase0.Epoch(1))
-	expected := expectedExecutedProposerGenesisDuties(handler, duties)
+	expected := expectedExecutedGenesisProposerDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -434,7 +434,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 	// STEP 7: The second assigned duty should be executed
 	currentSlot.Set(phase0.Slot(37))
 	duties, _ = dutiesMap.Get(phase0.Epoch(1))
-	expected := expectedExecutedProposerGenesisDuties(handler, []*eth2apiv1.ProposerDuty{duties[0]})
+	expected := expectedExecutedGenesisProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[0]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -443,7 +443,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 	// STEP 8: The second assigned duty should be executed
 	currentSlot.Set(phase0.Slot(38))
 	duties, _ = dutiesMap.Get(phase0.Epoch(1))
-	expected = expectedExecutedProposerGenesisDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
+	expected = expectedExecutedGenesisProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
