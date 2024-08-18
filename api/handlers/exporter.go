@@ -46,9 +46,9 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	response.Data = []*decidedJSON{}
-	for _, pubKey := range request.PubKeys {
-		for height := request.From; height <= request.To; height++ {
-			for _, role := range request.Roles {
+	for _, role := range request.Roles {
+		for _, pubKey := range request.PubKeys {
+			for height := request.From; height <= request.To; height++ {
 				identifier := spectypes.NewMsgID(e.DomainType, pubKey, spectypes.BeaconRole(role))
 				storage := e.QBFTStores.Get(spectypes.BeaconRole(role))
 				instance, err := storage.GetInstance(identifier[:], qbft.Height(height))
