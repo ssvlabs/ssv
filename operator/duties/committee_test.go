@@ -949,6 +949,7 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 	startTime := time.Now()
 	ticker.Send(currentSlot.Get())
 	waitForGenesisDutiesExecution(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout, aExpected)
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
@@ -958,6 +959,7 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 	for slot := currentSlot.Get(); slot < 47; slot++ {
 		ticker.Send(slot)
 		waitForNoActionGenesis(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
+		waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 		currentSlot.Set(slot + 1)
 	}
 
@@ -975,6 +977,7 @@ func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
 	startTime = time.Now()
 	ticker.Send(currentSlot.Get())
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
+	waitForNoActionGenesis(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
 
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))

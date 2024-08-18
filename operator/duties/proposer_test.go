@@ -497,6 +497,7 @@ func TestScheduler_Proposer_Fork(t *testing.T) {
 
 	ticker.Send(currentSlot.Get())
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout, expectedGenesis)
+	waitForNoAction(t, logger, fetchDutiesCallGenesis, executeDutiesCall, timeout)
 
 	// skip to the next epoch
 	currentSlot.Set(phase0.Slot(3))
@@ -515,6 +516,7 @@ func TestScheduler_Proposer_Fork(t *testing.T) {
 	ticker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCallGenesis, executeDutiesCall, timeout)
 	waitForDutiesExecution(t, logger, fetchDutiesCallGenesis, executeDutiesCall, timeout, expected)
+	waitForNoActionGenesis(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
