@@ -11,6 +11,7 @@ import (
 
 	"github.com/bloxapp/ssv/api"
 	"github.com/bloxapp/ssv/api/handlers"
+	"github.com/bloxapp/ssv/utils/commons"
 )
 
 type Server struct {
@@ -44,6 +45,7 @@ func (s *Server) Run() error {
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
 	router.Use(middlewareLogger(s.logger))
+	router.Use(middlewareNodeVersion)
 
 	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
 	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
@@ -84,4 +86,11 @@ func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 		}
 		return http.HandlerFunc(fn)
 	}
+}
+
+func middlewareNodeVersion(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-SSV-Node-Version", commons.GetNodeVersion())
+		next.ServeHTTP(w, r)
+	})
 }
