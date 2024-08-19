@@ -185,6 +185,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 		sharesStorage:     sharesStorage,
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
+		networkConfig:     networkconfig.TestNetwork,
 		validatorOptions: validator.Options{
 			Storage:       storageMap,
 			NetworkConfig: networkconfig.TestNetwork,
