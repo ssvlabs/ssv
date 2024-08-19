@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -135,7 +136,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 }
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
-func (b *BaseRunner) resolveDuplicateSignature(container *types.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
+func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
 
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)

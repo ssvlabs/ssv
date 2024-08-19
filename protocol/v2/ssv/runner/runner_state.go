@@ -9,13 +9,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	PreConsensusContainer  *types.PartialSigContainer
-	PostConsensusContainer *types.PartialSigContainer
+	PreConsensusContainer  *ssv.PartialSigContainer
+	PostConsensusContainer *ssv.PartialSigContainer
 	RunningInstance        *instance.Instance
 	DecidedValue           []byte //spectypes.Encoder
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
@@ -26,8 +26,8 @@ type State struct {
 
 func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 	return &State{
-		PreConsensusContainer:  types.NewPartialSigContainer(quorum),
-		PostConsensusContainer: types.NewPartialSigContainer(quorum),
+		PreConsensusContainer:  ssv.NewPartialSigContainer(quorum),
+		PostConsensusContainer: ssv.NewPartialSigContainer(quorum),
 
 		StartingDuty: duty,
 		Finished:     false,
@@ -35,9 +35,9 @@ func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container *types.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *ssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
-	signature, err := types.ReconstructSignature(container, root, validatorPubKey[:], validatorIndex)
+	signature, err := ssv.ReconstructSignature(container, root, validatorPubKey[:], validatorIndex)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not reconstruct beacon sig")
 	}
@@ -67,8 +67,8 @@ func (pcs *State) Decode(data []byte) error {
 func (pcs *State) MarshalJSON() ([]byte, error) {
 	// Create alias without duty
 	type StateAlias struct {
-		PreConsensusContainer  *types.PartialSigContainer
-		PostConsensusContainer *types.PartialSigContainer
+		PreConsensusContainer  *ssv.PartialSigContainer
+		PostConsensusContainer *ssv.PartialSigContainer
 		RunningInstance        *instance.Instance
 		DecidedValue           []byte
 		Finished               bool
@@ -102,8 +102,8 @@ func (pcs *State) UnmarshalJSON(data []byte) error {
 
 	// Create alias without duty
 	type StateAlias struct {
-		PreConsensusContainer  *types.PartialSigContainer
-		PostConsensusContainer *types.PartialSigContainer
+		PreConsensusContainer  *ssv.PartialSigContainer
+		PostConsensusContainer *ssv.PartialSigContainer
 		RunningInstance        *instance.Instance
 		DecidedValue           []byte
 		Finished               bool

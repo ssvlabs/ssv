@@ -8,7 +8,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -29,7 +29,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes
 }
 
 // Verify each signature in container removing the invalid ones
-func (b *BaseRunner) FallBackAndVerifyEachSignature(container *types.PartialSigContainer, root [32]byte,
+func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigContainer, root [32]byte,
 	committee []*spectypes.ShareMember, validatorIndex spec.ValidatorIndex) {
 	signatures := container.GetSignatures(validatorIndex, root)
 

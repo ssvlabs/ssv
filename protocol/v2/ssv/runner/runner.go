@@ -14,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -244,7 +244,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner R
 // basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
 	signedMsg *spectypes.PartialSignatureMessages,
-	container *types.PartialSigContainer,
+	container *ssv.PartialSigContainer,
 ) (bool, [][32]byte, error) {
 	roots := make([][32]byte, 0)
 	anyQuorum := false
