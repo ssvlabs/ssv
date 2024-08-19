@@ -17,6 +17,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/eth/simulator"
@@ -127,7 +128,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 }
 
 func TestStreamLogs(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
 	const testTimeout = 2 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
@@ -412,7 +414,8 @@ func TestChainReorganizationLogs(t *testing.T) {
 
 // TestSimSSV deploys the simplified SSVNetwork contract to generate events and receive at the client
 func TestSimSSV(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
