@@ -33,6 +33,7 @@ jobs:
       - name: Run e2e.sh
         env:
           BEACON_NODE_URL: ${{ secrets.E2E_BEACON_NODE_URL }}
+#          CLEAN_SERVICES: true
           EXECUTION_NODE_URL: ${{ secrets.E2E_EXECUTION_NODE_URL }}
           NODE_GROUP_1_IMAGE_TAG: ${{ github.event.inputs.node_group_1_image_tag }}
         run: |
@@ -57,3 +58,7 @@ jobs:
         with:
           name: logs.tgz
           path: ./logs.tgz
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v

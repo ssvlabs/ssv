@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/matchers"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"os"
 
@@ -17,8 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-
-	"github.com/ssvlabs/ssv/e2e/logs_catcher"
 )
 
 type ShareUpdateCmd struct {
@@ -58,7 +57,7 @@ func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
 	return nil
 }
 
-func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, operatorPrivateKey string, operatorID types.OperatorID, operatorCorruptedShares []*logs_catcher.CorruptedShare) error {
+func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, operatorPrivateKey string, operatorID types.OperatorID, operatorCorruptedShares []*matchers.CorruptedShare) error {
 	dbPath := fmt.Sprintf(dbPathFormat, operatorID)
 	db, err := openDB(logger, dbPath)
 	if err != nil {
@@ -171,8 +170,8 @@ func readOperatorPrivateKeyFromFile(filePath string) (string, error) {
 
 // buildOperatorCorruptedSharesMap takes a slice of CorruptedShare and returns a map
 // where each key is an OperatorID and the value is a slice of CorruptedShares associated with that OperatorID.
-func buildOperatorCorruptedSharesMap(corruptedShares []*logs_catcher.CorruptedShare) map[types.OperatorID][]*logs_catcher.CorruptedShare {
-	operatorSharesMap := make(map[types.OperatorID][]*logs_catcher.CorruptedShare)
+func buildOperatorCorruptedSharesMap(corruptedShares []*matchers.CorruptedShare) map[types.OperatorID][]*matchers.CorruptedShare {
+	operatorSharesMap := make(map[types.OperatorID][]*matchers.CorruptedShare)
 
 	for _, share := range corruptedShares {
 		operatorSharesMap[share.OperatorID] = append(operatorSharesMap[share.OperatorID], share)

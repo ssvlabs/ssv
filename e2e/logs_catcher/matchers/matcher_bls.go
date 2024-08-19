@@ -1,8 +1,10 @@
-package logs_catcher
+package matchers
 
 import (
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"strconv"
 	"strings"
 	"time"
@@ -41,12 +43,13 @@ type CorruptedShare struct {
 	OperatorID      types.OperatorID `json:"operator_id"`
 }
 
-func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI, share *CorruptedShare) error {
+func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli logs_catcher.DockerCLI, share *CorruptedShare) error {
 	startctx, startc := context.WithTimeout(pctx, time.Second*12*35) // wait max 35 slots
 	defer startc()
-
+	networkCfg := networkconfig.HoleskyE2E
+	matcher := NewDutyMatcher(logger, cli, startctx, networkCfg.PastAlanFork())
 	validatorIndex := fmt.Sprintf("v%d", share.ValidatorIndex)
-	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, targetContainer, cli)
+	conditionLog, err := matcher.startCondition([]string{logs_catcher.GotDutiesSuccess, validatorIndex}, targetContainer)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -66,7 +69,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	leader := DetermineLeader(dutySlot)
 	logger.Debug("Leader: ", zap.Uint64("leader", leader))
 
-	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
+	_, err = matcher.startCondition([]string{logs_catcher.SubmittedAttSuccess, share.ValidatorPubKey}, targetContainer)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -102,7 +105,7 @@ func DetermineLeader(dutySlot phase0.Slot) types.OperatorID {
 	return leader
 }
 
-func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committee []*types.CommitteeMember, leader types.OperatorID, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID) error {
+func ProcessLogs(ctx context.Context, logger *zap.Logger, cli logs_catcher.DockerCLI, committee []*types.CommitteeMember, leader types.OperatorID, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID) error {
 	for _, operator := range committee {
 		target := fmt.Sprintf("ssv-node-%d", operator.OperatorID)
 		if operator.OperatorID == corruptedOperator {
@@ -120,21 +123,21 @@ func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committ
 	return nil
 }
 
-func processCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID, target string) error {
+func processCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli logs_catcher.DockerCLI, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID, target string) error {
 	successConditions := []string{
-		reconstructSignaturesSuccess,
-		fmt.Sprintf(dutyIDField, dutyID),
+		logs_catcher.ReconstructSignaturesSuccess,
+		fmt.Sprintf(logs_catcher.DutyIDField, dutyID),
 	}
 	failConditions := []string{
-		fmt.Sprintf(roleField, types.BNRoleAttester.String()),
-		fmt.Sprintf(slotField, dutySlot),
-		fmt.Sprintf(msgTypeField, message.MsgTypeToString(types.SSVPartialSignatureMsgType)),
-		fmt.Sprintf(errorField, reconstructSignatureErr),
+		fmt.Sprintf(logs_catcher.RoleField, types.BNRoleAttester.String()),
+		fmt.Sprintf(logs_catcher.SlotField, dutySlot),
+		fmt.Sprintf(logs_catcher.MsgTypeField, message.MsgTypeToString(types.SSVPartialSignatureMsgType)),
+		fmt.Sprintf(logs_catcher.ErrorField, logs_catcher.ReconstructSignatureErr),
 	}
 	return matchDualConditionLog(ctx, logger, cli, corruptedOperator, successConditions, failConditions, target)
 }
 
-func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, leader types.OperatorID, dutySlot phase0.Slot, corruptedOperator types.OperatorID, target string) error {
+func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli logs_catcher.DockerCLI, leader types.OperatorID, dutySlot phase0.Slot, corruptedOperator types.OperatorID, target string) error {
 	var conditions []logCondition
 	if leader == corruptedOperator {
 		conditions = []logCondition{
@@ -154,7 +157,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				msgType:          types.SSVConsensusMsgType,
 				consensusMsgType: qbft.PrepareMsgType,
 				signer:           corruptedOperator,
-				error:            pastRoundErr,
+				error:            logs_catcher.PastRoundErr,
 			},
 			{
 				role:             types.BNRoleAttester.String(),
@@ -208,20 +211,20 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 	return nil
 }
 
-func matchCondition(ctx context.Context, logger *zap.Logger, cli DockerCLI, condition logCondition, target string) error {
+func matchCondition(ctx context.Context, logger *zap.Logger, cli logs_catcher.DockerCLI, condition logCondition, target string) error {
 	conditionStrings := []string{
-		fmt.Sprintf(roleField, condition.role),
-		fmt.Sprintf(msgHeightField, condition.slot),
-		fmt.Sprintf(msgRoundField, condition.round),
-		fmt.Sprintf(msgTypeField, message.MsgTypeToString(condition.msgType)),
-		fmt.Sprintf(consensusMsgTypeField, condition.consensusMsgType),
-		fmt.Sprintf(signersField, condition.signer),
-		fmt.Sprintf(errorField, condition.error),
+		fmt.Sprintf(logs_catcher.RoleField, condition.role),
+		fmt.Sprintf(logs_catcher.MsgHeightField, condition.slot),
+		fmt.Sprintf(logs_catcher.MsgRoundField, condition.round),
+		fmt.Sprintf(logs_catcher.MsgTypeField, message.MsgTypeToString(condition.msgType)),
+		fmt.Sprintf(logs_catcher.ConsensusMsgTypeField, condition.consensusMsgType),
+		fmt.Sprintf(logs_catcher.SignersField, condition.signer),
+		fmt.Sprintf(logs_catcher.ErrorField, condition.error),
 	}
 	return matchSingleConditionLog(ctx, logger, cli, conditionStrings, target)
 }
 
-func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCLI, first []string, target string) error {
+func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli logs_catcher.DockerCLI, first []string, target string) error {
 	res, err := docker.DockerLogs(ctx, cli, target, "")
 	if err != nil {
 		return err
@@ -237,7 +240,7 @@ func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli Docker
 	return nil
 }
 
-func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCLI, corruptedOperator types.OperatorID, success []string, fail []string, target string) error {
+func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli logs_catcher.DockerCLI, corruptedOperator types.OperatorID, success []string, fail []string, target string) error {
 	res, err := docker.DockerLogs(ctx, cli, target, "")
 	if err != nil {
 		return err

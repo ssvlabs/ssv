@@ -2,6 +2,7 @@ package slashinginterceptor
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"sync"
 	"time"
 
@@ -45,30 +46,29 @@ type validatorState struct {
 }
 
 type SlashingInterceptor struct {
-	logger             *zap.Logger
-	network            beacon.Network
-	startEpoch         phase0.Epoch
-	sleepEpoch         phase0.Epoch
-	endEpoch           phase0.Epoch
-	validators         map[phase0.ValidatorIndex]*validatorState
+	pastAlanFork       bool
 	fakeProposerDuties bool
+	logger             *zap.Logger
+	startEpoch         phase0.Epoch
+	endEpoch           phase0.Epoch
 	mu                 sync.RWMutex
+	network            beacon.Network
+	validators         map[phase0.ValidatorIndex]*validatorState
 }
 
 func New(
 	logger *zap.Logger,
 	network beacon.Network,
-	//startEpoch phase0.Epoch,
 	fakeProposerDuties bool,
 	validators []*v1.Validator,
+	pastAlanFork bool,
 ) *SlashingInterceptor {
 	s := &SlashingInterceptor{
-		logger:     logger,
-		network:    network,
-		startEpoch: 0,
-		sleepEpoch: 0,
-		// sleepEpoch:         math.MaxUint64, // TODO: replace with startEpoch + 1 after debugging is done
+		startEpoch:         0,
 		endEpoch:           0,
+		logger:             logger,
+		network:            network,
+		pastAlanFork:       pastAlanFork,
 		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
 	}
@@ -238,7 +238,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 		s.logger.Info("not all attestations submitted in end epoch", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
 	}
 
-	s.logger.Info("End epoch finished")
+	s.logger.Info("End epoch finished", fields.Epoch(s.endEpoch))
 	// TODO: rewrite logs above so that we check two conditions:
 	// 1. All non-slashable validators submitted in end epoch
 	// 2. All slashable validators did not submit in end epoch
@@ -246,7 +246,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 }
 
 func (s *SlashingInterceptor) blockedEpoch(epoch phase0.Epoch) bool {
-	return epoch < s.startEpoch || epoch == s.sleepEpoch || epoch > s.endEpoch || !s.IsInterceptorInitialize()
+	return epoch < s.startEpoch || epoch > s.endEpoch || !s.IsInterceptorInitialize()
 }
 
 func (s *SlashingInterceptor) requestContext(ctx context.Context) (*zap.Logger, beaconproxy.Gateway) {

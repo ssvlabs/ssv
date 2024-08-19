@@ -106,7 +106,7 @@ func FatalListener(ctx context.Context, logger *zap.Logger, cli DockerCLI) error
 
 	var feeders []Feeder
 
-	stopCond := []KeyValue{KV(MesasgeKey, endOfEpochLog)}
+	stopCond := []KeyValue{KV(MesasgeKey, EndOfEpochLog)}
 	stopCondAction := func(s string) {
 		logger.Info("Stop condition arrived, stopping error checks")
 		errChan <- nil
