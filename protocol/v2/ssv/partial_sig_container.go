@@ -106,7 +106,7 @@ func ReconstructSignature(ps *PartialSigContainer, root [32]byte, validatorPubKe
 	validatorPubKeyCopy := make([]byte, len(validatorPubKey))
 	copy(validatorPubKeyCopy, validatorPubKey)
 
-	if err := types.VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
+	if err := types.VerifyReconstructedSignature(signature, validatorPubKeyCopy, root); err != nil {
 		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
 	}
 	return signature.Serialize(), nil
