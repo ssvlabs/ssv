@@ -452,7 +452,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	require.NoError(t, schedulerPool.Wait())
 }
 
-func TestScheduler_Proposer_Fork(t *testing.T) {
+func TestScheduler_Proposer_On_Fork(t *testing.T) {
 	var (
 		handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		currentSlot   = &SafeValue[phase0.Slot]{}

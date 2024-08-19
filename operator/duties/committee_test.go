@@ -900,7 +900,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	t.Skip("TODO")
 }
 
-func TestScheduler_Committee_Fork_Attester_only(t *testing.T) {
+func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
