@@ -2,10 +2,8 @@ package validator
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -75,30 +73,14 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler MessageHandler, runner *runner.CommitteeRunner) error {
-	if runner == nil {
-		return fmt.Errorf("could not get duty runner for slot %d", slot)
-	}
-
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
-	var q queueContainer
-
-	err := func() error {
-		v.mtx.RLock() // read v.Queues
-		defer v.mtx.RUnlock()
-		var ok bool
-		q, ok = v.Queues[slot]
-		if !ok {
-			return errors.New(fmt.Sprintf("queue not found for slot %d", slot))
-		}
-		return nil
-	}()
-	if err != nil {
-		return err
-	}
-
+func (v *Committee) ConsumeQueue(
+	ctx context.Context,
+	q queueContainer,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	handler MessageHandler,
+	runner *runner.CommitteeRunner,
+) error {
 	state := *q.queueState
 
 	logger.Debug("📬 queue consumer is running")

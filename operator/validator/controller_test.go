@@ -360,15 +360,19 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
-	firstValidator := &validators.ValidatorContainer{Validator: &validator.Validator{
-		DutyRunners: runner.ValidatorDutyRunners{},
-		Storage:     ibftstorage.NewStores(),
-		Share: &types.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+	firstValidator, err := validators.NewValidatorContainer(
+		&validator.Validator{
+			DutyRunners: runner.ValidatorDutyRunners{},
+			Storage:     ibftstorage.NewStores(),
+			Share: &types.SSVShare{
+				Share: spectypes.Share{
+					ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+				},
 			},
 		},
-	}}
+		nil,
+	)
+	require.NoError(t, err)
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			Committee:       operators,
@@ -518,7 +522,7 @@ func TestSetupValidators(t *testing.T) {
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
-	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
+	testValidator := setupTestValidator(t, ownerAddressBytes, feeRecipientBytes)
 	storageMu := sync.Mutex{}
 	storageData := make(map[string]*beacon.ValidatorMetadata)
 
@@ -726,11 +730,15 @@ func TestGetValidator(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	// Initialize a test validator with the decoded owner address
-	testValidator := &validators.ValidatorContainer{Validator: &validator.Validator{
-		Share: &types.SSVShare{
-			Metadata: types.Metadata{},
+	testValidator, err := validators.NewValidatorContainer(
+		&validator.Validator{
+			Share: &types.SSVShare{
+				Metadata: types.Metadata{},
+			},
 		},
-	}}
+		nil,
+	)
+	require.NoError(t, err)
 
 	testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
 		createPubKey(byte('0')): testValidator,
@@ -971,7 +979,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	secondFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
 
 	t.Run("Test with right owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
+		testValidator := setupTestValidator(t, ownerAddressBytes, firstFeeRecipientBytes)
 
 		testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
 			createPubKey(byte('0')): testValidator,
@@ -989,7 +997,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	})
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
+		testValidator := setupTestValidator(t, ownerAddressBytes, firstFeeRecipientBytes)
 		testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
 			createPubKey(byte('0')): testValidator,
 		}
@@ -1005,87 +1013,6 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	})
 }
 
-func TestGetIndices(t *testing.T) {
-	farFutureEpoch := phase0.Epoch(99999)
-	currentEpoch := phase0.Epoch(100)
-	testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
-		createPubKey(byte('0')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          0, // ValidatorStateUnknown
-			Index:           0,
-			ActivationEpoch: farFutureEpoch,
-		}),
-		createPubKey(byte('1')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          1, // ValidatorStatePendingInitialized
-			Index:           0,
-			ActivationEpoch: farFutureEpoch,
-		}),
-		createPubKey(byte('2')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          2, // ValidatorStatePendingQueued
-			Index:           3,
-			ActivationEpoch: phase0.Epoch(101),
-		}),
-
-		createPubKey(byte('3')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          3, // ValidatorStateActiveOngoing
-			Index:           3,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('4')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          4, // ValidatorStateActiveExiting
-			Index:           4,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('5')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          5, // ValidatorStateActiveSlashed
-			Index:           5,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-
-		createPubKey(byte('6')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          6, // ValidatorStateExitedUnslashed
-			Index:           6,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('7')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          7, // ValidatorStateExitedSlashed
-			Index:           7,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('8')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          8, // ValidatorStateWithdrawalPossible
-			Index:           8,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-		createPubKey(byte('9')): newValidator(&beacon.ValidatorMetadata{
-			Balance:         0,
-			Status:          9, // ValidatorStateWithdrawalDone
-			Index:           9,
-			ActivationEpoch: phase0.Epoch(100),
-		}),
-	}
-	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
-	logger := logging.TestLogger(t)
-	controllerOptions := MockControllerOptions{
-		validatorsMap: mockValidatorsMap,
-	}
-	ctr := setupController(logger, controllerOptions)
-
-	activeIndicesForCurrentEpoch := ctr.CommitteeActiveIndices(currentEpoch)
-	require.Equal(t, 2, len(activeIndicesForCurrentEpoch)) // should return only active indices
-
-	activeIndicesForNextEpoch := ctr.CommitteeActiveIndices(currentEpoch + 1)
-	require.Equal(t, 3, len(activeIndicesForNextEpoch)) // should return including ValidatorStatePendingQueued
-}
-
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	return controller{
 		metadataUpdateInterval:  0,
@@ -1098,7 +1025,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		sharesStorage:           opts.sharesStorage,
 		operatorsStorage:        opts.operatorStorage,
 		validatorsMap:           opts.validatorsMap,
-		context:                 context.Background(),
+		ctx:                     context.Background(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
 		messageRouter:           newMessageRouter(logger),
@@ -1110,17 +1037,8 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 			Buffer:       100,
 		}),
 		metadataLastUpdated: opts.metadataLastUpdated,
+		networkConfig:       networkconfig.TestNetwork,
 	}
-}
-
-func newValidator(metaData *beacon.ValidatorMetadata) *validators.ValidatorContainer {
-	return &validators.ValidatorContainer{Validator: &validator.Validator{
-		Share: &types.SSVShare{
-			Metadata: types.Metadata{
-				BeaconMetadata: metaData,
-			},
-		},
-	}}
 }
 
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
@@ -1192,19 +1110,24 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 	return res
 }
 
-func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validators.ValidatorContainer {
-	return &validators.ValidatorContainer{Validator: &validator.Validator{
-		DutyRunners: runner.ValidatorDutyRunners{},
-		Storage:     ibftstorage.NewStores(),
-		Share: &types.SSVShare{
-			Share: spectypes.Share{
-				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
-			},
-			Metadata: types.Metadata{
-				OwnerAddress: common.BytesToAddress(ownerAddressBytes),
+func setupTestValidator(t *testing.T, ownerAddressBytes, feeRecipientBytes []byte) *validators.ValidatorContainer {
+	v, err := validators.NewValidatorContainer(
+		&validator.Validator{
+			DutyRunners: runner.ValidatorDutyRunners{},
+			Storage:     ibftstorage.NewStores(),
+			Share: &types.SSVShare{
+				Share: spectypes.Share{
+					FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
+				},
+				Metadata: types.Metadata{
+					OwnerAddress: common.BytesToAddress(ownerAddressBytes),
+				},
 			},
 		},
-	}}
+		nil,
+	)
+	require.NoError(t, err)
+	return v
 }
 
 func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {

@@ -3,11 +3,13 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
@@ -84,6 +86,7 @@ type config struct {
 	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
 	KeyStore                   KeyStore                         `yaml:"KeyStore"`
+	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"SSV.Network" `
 	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
@@ -191,7 +194,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
-		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
@@ -328,6 +330,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
@@ -371,7 +374,6 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			executionClient,
 			validatorCtrl,
-			storageMap,
 			metricsReporter,
 			networkConfig,
 			nodeStorage,
@@ -594,6 +596,25 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		return networkconfig.NetworkConfig{}, err
 	}
 
+	if cfg.SSVOptions.CustomDomainType != "" {
+		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
+		}
+		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
+		if err != nil {
+			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+		}
+		if len(byts) != 4 {
+			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
+		}
+		networkConfig.GenesisDomainType = spectypes.DomainType(byts)
+		if networkConfig.PastAlanFork() {
+			logger.Info("custom domain type is ineffective now after Alan fork", fields.Domain(networkConfig.GenesisDomainType))
+		} else {
+			logger.Info("running with custom domain type", fields.Domain(networkConfig.GenesisDomainType))
+		}
+	}
+
 	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
 
 	nodeType := "light"
@@ -621,7 +642,10 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	n := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	n, err := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	if err != nil {
+		logger.Fatal("failed to setup p2p network", zap.Error(err))
+	}
 	return n, p2pv1.GenesisP2P{Network: n}
 }
 
@@ -644,7 +668,6 @@ func setupEventHandling(
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
 	validatorCtrl validator.Controller,
-	storageMap *ibftstorage.QBFTStores,
 	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
@@ -668,7 +691,6 @@ func setupEventHandling(
 		operatorDecrypter,
 		keyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
-		storageMap,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 		eventhandler.WithMetrics(metricsReporter),

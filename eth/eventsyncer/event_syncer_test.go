@@ -27,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -152,7 +151,6 @@ func setupEventHandler(
 	operatorData *registrystorage.OperatorData,
 	privateKey keys.OperatorPrivateKey,
 ) *eventhandler.EventHandler {
-	storageMap := ibftstorage.NewStores()
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
@@ -187,7 +185,6 @@ func setupEventHandler(
 		privateKey,
 		keyManager,
 		bc,
-		storageMap,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger))
 

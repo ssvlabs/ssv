@@ -354,7 +354,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.DomainTypeProvider = networkconfig.TestNetwork
+	base.DomainType = networkconfig.TestNetwork.AlanDomainType
 
 	logger := logging.TestLogger(t)
 
@@ -370,8 +370,8 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		}
 	}
 
-	if ret.GetBaseRunner().DomainTypeProvider == nil {
-		ret.GetBaseRunner().DomainTypeProvider = networkconfig.TestNetwork
+	if (ret.GetBaseRunner().DomainType == spectypes.DomainType{}) {
+		ret.GetBaseRunner().DomainType = networkconfig.TestNetwork.AlanDomainType
 	}
 
 	return ret
@@ -537,8 +537,11 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	c := validator.NewCommittee(
 		ctx,
+		cancel,
 		logger,
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,

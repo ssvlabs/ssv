@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
+	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -72,9 +73,9 @@ type storageOperator struct {
 // but we keep the name Share to avoid conflicts with gob encoding.
 type Share struct {
 	OperatorID            spectypes.OperatorID
-	ValidatorPubKey       spectypes.ValidatorPK `ssz-size:"48"`
-	SharePubKey           []byte                `ssz-size:"48"`
-	Committee             []*storageOperator    `ssz-max:"13"`
+	ValidatorPubKey       []byte             `ssz-size:"48"`
+	SharePubKey           []byte             `ssz-size:"48"`
+	Committee             []*storageOperator `ssz-max:"13"`
 	Quorum, PartialQuorum uint64
 	DomainType            spectypes.DomainType `ssz-size:"4"`
 	FeeRecipientAddress   [20]byte             `ssz-size:"20"`
@@ -163,7 +164,7 @@ func (s *sharesStorage) load() error {
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
-
+		val.DomainType = spectypes.DomainType(genesistypes.GetDefaultDomain())
 		share, err := s.storageShareToSpecShare(val)
 		if err != nil {
 			return fmt.Errorf("failed to convert storage share to spec share: %w", err)
@@ -240,18 +241,24 @@ func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVSha
 		return err
 	}
 
+	updateShares := make([]*types.SSVShare, 0, len(shares))
+	addShares := make([]*types.SSVShare, 0, len(shares))
+
 	for _, share := range shares {
 		key := hex.EncodeToString(share.ValidatorPubKey[:])
 
 		// Update validatorStore indices.
 		if _, ok := s.shares[key]; ok {
-			s.validatorStore.handleShareUpdated(share)
+			updateShares = append(updateShares, share)
 		} else {
-			s.validatorStore.handleSharesAdded(share)
+			addShares = append(addShares, share)
 		}
-
 		s.shares[key] = share
 	}
+
+	s.validatorStore.handleSharesUpdated(updateShares...)
+	s.validatorStore.handleSharesAdded(addShares...)
+
 	return nil
 }
 
@@ -266,7 +273,7 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(committee))
 	stShare := &storageShare{
 		Share: Share{
-			ValidatorPubKey:     share.ValidatorPubKey,
+			ValidatorPubKey:     share.ValidatorPubKey[:],
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
 			Quorum:              quorum,
@@ -284,21 +291,22 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSVShare, error) {
 	committee := make([]*spectypes.ShareMember, len(share.Committee))
 	for i, c := range share.Committee {
-		// TODO: (genesis) this is needed to fill in genesis committees
-		// opPubKey, ok := s.operators[c.OperatorID]
-		// if !ok {
-		// 	return nil, fmt.Errorf("operator not found: %d", c.OperatorID)
-		// }
-
 		committee[i] = &spectypes.ShareMember{
 			Signer:      c.OperatorID,
 			SharePubKey: c.PubKey,
 		}
 	}
 
+	if len(share.ValidatorPubKey) != phase0.PublicKeyLength {
+		return nil, fmt.Errorf("invalid ValidatorPubKey length: got %v, expected 48", len(share.ValidatorPubKey))
+	}
+
+	var validatorPubKey spectypes.ValidatorPK
+	copy(validatorPubKey[:], share.ValidatorPubKey)
+
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorPubKey:     share.ValidatorPubKey,
+			ValidatorPubKey:     validatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
 			DomainType:          share.DomainType,

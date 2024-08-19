@@ -21,9 +21,8 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
@@ -56,7 +55,8 @@ var (
 )
 
 func TestHandleBlockEventsStream(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1324,7 +1324,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operator.privateKey,
 			keyManager,
 			bc,
-			storageMap,
 			WithFullNode(),
 			WithLogger(logger),
 			WithMetrics(nopMetrics{}),
@@ -1363,7 +1362,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operator.privateKey,
 		keyManager,
 		bc,
-		storageMap,
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {

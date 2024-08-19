@@ -37,8 +37,6 @@ import (
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
-	t.Skip("need to fix failing genesis message validation tests")
-
 	logger := zaptest.NewLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)

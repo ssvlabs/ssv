@@ -14,10 +14,8 @@ import (
 
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -324,7 +322,6 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 	validatorShare.DomainType = eh.networkConfig.DomainType()
 	validatorShare.Committee = shareMembers
-	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
 }
@@ -361,15 +358,6 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return emptyPK, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role convert.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := convert.NewMsgID(eh.networkConfig.DomainType(), share.ValidatorPubKey[:], role)
-		return store.CleanAllInstances(logger, messageID[:])
-	}
-	err := eh.storageMap.Each(removeDecidedMessages)
-	if err != nil {
-		return emptyPK, fmt.Errorf("could not clean all decided messages: %w", err)
-	}
-
 	if err := eh.nodeStorage.Shares().Delete(txn, share.ValidatorPubKey[:]); err != nil {
 		return emptyPK, fmt.Errorf("could not remove validator share: %w", err)
 	}
@@ -379,7 +367,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err = eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
