@@ -59,7 +59,7 @@ func (m *MockController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []
 }
 
 // AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockControllerMockRecorder) AllActiveIndices(epoch, afterInit interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) AllActiveIndices(epoch, afterInit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch, afterInit)
 }
@@ -71,7 +71,7 @@ func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID ty
 }
 
 // ExecuteCommitteeDuty indicates an expected call of ExecuteCommitteeDuty.
-func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(logger, committeeID, duty interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(logger, committeeID, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockController)(nil).ExecuteCommitteeDuty), logger, committeeID, duty)
 }
@@ -83,7 +83,7 @@ func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types0.ValidatorD
 }
 
 // ExecuteDuty indicates an expected call of ExecuteDuty.
-func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
 }
@@ -95,7 +95,7 @@ func (m *MockController) ExecuteGenesisDuty(logger *zap.Logger, duty *types.Duty
 }
 
 // ExecuteGenesisDuty indicates an expected call of ExecuteGenesisDuty.
-func (mr *MockControllerMockRecorder) ExecuteGenesisDuty(logger, duty interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExecuteGenesisDuty(logger, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuty", reflect.TypeOf((*MockController)(nil).ExecuteGenesisDuty), logger, duty)
 }
@@ -109,9 +109,21 @@ func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint
 }
 
 // ExitValidator indicates an expected call of ExitValidator.
-func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex)
+}
+
+// ForkListener mocks base method.
+func (m *MockController) ForkListener(logger *zap.Logger) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ForkListener", logger)
+}
+
+// ForkListener indicates an expected call of ForkListener.
+func (mr *MockControllerMockRecorder) ForkListener(logger any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkListener", reflect.TypeOf((*MockController)(nil).ForkListener), logger)
 }
 
 // GetOperatorShares mocks base method.
@@ -138,7 +150,7 @@ func (m *MockController) GetValidator(pubKey types0.ValidatorPK) (*validators.Va
 }
 
 // GetValidator indicates an expected call of GetValidator.
-func (mr *MockControllerMockRecorder) GetValidator(pubKey interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) GetValidator(pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockController)(nil).GetValidator), pubKey)
 }
@@ -183,7 +195,7 @@ func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []ui
 }
 
 // LiquidateCluster indicates an expected call of LiquidateCluster.
-func (mr *MockControllerMockRecorder) LiquidateCluster(owner, operatorIDs, toLiquidate interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) LiquidateCluster(owner, operatorIDs, toLiquidate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LiquidateCluster", reflect.TypeOf((*MockController)(nil).LiquidateCluster), owner, operatorIDs, toLiquidate)
 }
@@ -197,7 +209,7 @@ func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []u
 }
 
 // ReactivateCluster indicates an expected call of ReactivateCluster.
-func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toReactivate interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toReactivate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReactivateCluster", reflect.TypeOf((*MockController)(nil).ReactivateCluster), owner, operatorIDs, toReactivate)
 }
@@ -223,7 +235,7 @@ func (m *MockController) StartValidator(share *types1.SSVShare) error {
 }
 
 // StartValidator indicates an expected call of StartValidator.
-func (mr *MockControllerMockRecorder) StartValidator(share interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) StartValidator(share any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidator", reflect.TypeOf((*MockController)(nil).StartValidator), share)
 }
@@ -249,7 +261,7 @@ func (m *MockController) StopValidator(pubKey types0.ValidatorPK) error {
 }
 
 // StopValidator indicates an expected call of StopValidator.
-func (mr *MockControllerMockRecorder) StopValidator(pubKey interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) StopValidator(pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), pubKey)
 }
@@ -263,7 +275,7 @@ func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address) err
 }
 
 // UpdateFeeRecipient indicates an expected call of UpdateFeeRecipient.
-func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient)
 }
@@ -328,7 +340,7 @@ func (m *MockRecipients) GetRecipientData(r basedb.Reader, owner common.Address)
 }
 
 // GetRecipientData indicates an expected call of GetRecipientData.
-func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner interface{}) *gomock.Call {
+func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRecipientData", reflect.TypeOf((*MockRecipients)(nil).GetRecipientData), r, owner)
 }
@@ -365,7 +377,7 @@ func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types1.SSVSha
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockSharesStorageMockRecorder) Get(txn, pubKey interface{}) *gomock.Call {
+func (mr *MockSharesStorageMockRecorder) Get(txn, pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockSharesStorage)(nil).Get), txn, pubKey)
 }
@@ -373,7 +385,7 @@ func (mr *MockSharesStorageMockRecorder) Get(txn, pubKey interface{}) *gomock.Ca
 // List mocks base method.
 func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types1.SSVShare {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{txn}
+	varargs := []any{txn}
 	for _, a := range filters {
 		varargs = append(varargs, a)
 	}
@@ -383,9 +395,9 @@ func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFil
 }
 
 // List indicates an expected call of List.
-func (mr *MockSharesStorageMockRecorder) List(txn interface{}, filters ...interface{}) *gomock.Call {
+func (mr *MockSharesStorageMockRecorder) List(txn any, filters ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{txn}, filters...)
+	varargs := append([]any{txn}, filters...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockSharesStorage)(nil).List), varargs...)
 }
 
@@ -396,7 +408,7 @@ func (m *MockSharesStorage) Range(txn basedb.Reader, fn func(*types1.SSVShare) b
 }
 
 // Range indicates an expected call of Range.
-func (mr *MockSharesStorageMockRecorder) Range(txn, fn interface{}) *gomock.Call {
+func (mr *MockSharesStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Range", reflect.TypeOf((*MockSharesStorage)(nil).Range), txn, fn)
 }
@@ -410,7 +422,7 @@ func (m *MockSharesStorage) UpdateValidatorMetadata(pk types0.ValidatorPK, metad
 }
 
 // UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
-func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata interface{}) *gomock.Call {
+func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorMetadata), pk, metadata)
 }
@@ -424,7 +436,7 @@ func (m *MockSharesStorage) UpdateValidatorsMetadata(arg0 map[types0.ValidatorPK
 }
 
 // UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
-func (mr *MockSharesStorageMockRecorder) UpdateValidatorsMetadata(arg0 interface{}) *gomock.Call {
+func (mr *MockSharesStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorsMetadata), arg0)
 }
@@ -461,7 +473,7 @@ func (m *MockP2PNetwork) Broadcast(id types0.MessageID, message *types0.SignedSS
 }
 
 // Broadcast indicates an expected call of Broadcast.
-func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message interface{}) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
 }
@@ -475,7 +487,7 @@ func (m *MockP2PNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) er
 }
 
 // SubscribeRandoms indicates an expected call of SubscribeRandoms.
-func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(logger, numSubnets interface{}) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(logger, numSubnets any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), logger, numSubnets)
 }
@@ -487,7 +499,7 @@ func (m *MockP2PNetwork) UseMessageRouter(router network.MessageRouter) {
 }
 
 // UseMessageRouter indicates an expected call of UseMessageRouter.
-func (mr *MockP2PNetworkMockRecorder) UseMessageRouter(router interface{}) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) UseMessageRouter(router any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseMessageRouter", reflect.TypeOf((*MockP2PNetwork)(nil).UseMessageRouter), router)
 }
