@@ -209,7 +209,6 @@ type controller struct {
 	committeesObserversMutex sync.Mutex
 
 	recentlyStartedValidators uint64
-	metadataLastUpdated       map[spectypes.ValidatorPK]time.Time
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
 }
@@ -316,7 +315,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		committeesObservers: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
 		),
-		metadataLastUpdated:     make(map[spectypes.ValidatorPK]time.Time),
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -639,15 +637,6 @@ func (c *controller) StartNetworkHandlers() {
 
 // UpdateValidatorsMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
 func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	// TODO: better log and err handling
-	for pk, metadata := range data {
-		c.metadataLastUpdated[pk] = time.Now()
-
-		if metadata == nil {
-			delete(data, pk)
-		}
-	}
-
 	// Save metadata to share storage.
 	start := time.Now()
 	err := c.sharesStorage.UpdateValidatorsMetadata(data)
