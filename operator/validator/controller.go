@@ -34,6 +34,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validators"
 	genesisbeaconprotocol "github.com/ssvlabs/ssv/protocol/genesis/blockchain/beacon"
@@ -126,6 +127,7 @@ type Controller interface {
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validators.ValidatorContainer, bool)
 	UpdateValidatorMetaDataLoop()
+	ForkListener(logger *zap.Logger)
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
@@ -173,7 +175,12 @@ type P2PNetwork interface {
 
 // controller implements Controller
 type controller struct {
-	context context.Context
+	ctx context.Context
+
+	// genesisCtx is designated for any genesis coroutines, such as validators,
+	// and is cancelled on the Alan fork epoch.
+	genesisCtx       context.Context
+	cancelGenesisCtx context.CancelFunc
 
 	logger  *zap.Logger
 	metrics validator.Metrics
@@ -296,7 +303,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		recipientsStorage: options.RegistryStorage,
 		ibftStorageMap:    options.StorageMap,
 		validatorStore:    options.ValidatorStore,
-		context:           options.Context,
+		ctx:               options.Context,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
 		beaconSigner:      options.BeaconSigner,
@@ -325,6 +332,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 		messageValidator: options.MessageValidator,
 	}
+	ctrl.genesisCtx, ctrl.cancelGenesisCtx = context.WithCancel(options.Context)
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
@@ -364,7 +372,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 }
 
 func (c *controller) handleRouterMessages() {
-	ctx, cancel := context.WithCancel(c.context)
+	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
 	ch := c.messageRouter.GetMessageChan()
 	for {
@@ -382,7 +390,9 @@ func (c *controller) handleRouterMessages() {
 
 				pk := m.GetID().GetPubKey()
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk[:])); ok {
-					v.GenesisValidator.HandleMessage(c.logger, m)
+					if genesisValidator, ok := v.GenesisValidator(); ok {
+						genesisValidator.HandleMessage(c.logger, m)
+					}
 				}
 				// TODO: (Alan) make exporter work with genesis message as well
 				// } else if c.validatorOptions.Exporter {
@@ -404,7 +414,7 @@ func (c *controller) handleRouterMessages() {
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.Validator.HandleMessage(c.logger, m)
+					v.Validator().HandleMessage(c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(c.logger, m)
 				} else if c.validatorOptions.Exporter {
@@ -784,8 +794,10 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.GenesisValidator.Queues[duty.Type].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		if genesisValidator, ok := v.GenesisValidator(); ok {
+			if pushed := genesisValidator.Queues[duty.Type].Q.TryPush(dec); !pushed {
+				logger.Warn("dropping ExecuteDuty message because the queue is full")
+			}
 		}
 	} else {
 		logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
@@ -809,7 +821,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDu
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.Validator.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+		if pushed := v.Validator().Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
@@ -1012,23 +1024,36 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 	if !found {
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
-		ctx, cancel := context.WithCancel(c.context)
+		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
 		opts := c.validatorOptions
 		opts.SSVShare = share
 		opts.Operator = operator
-		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
-		alanValidator := validator.NewValidator(ctx, cancel, opts)
+		opts.DutyRunners = SetupRunners(validatorCtx, c.logger, opts)
+		alanValidator := validator.NewValidator(validatorCtx, validatorCancel, opts)
 
-		genesisOpts := c.genesisValidatorOptions
 		// TODO: (Alan) share mutations such as metadata changes and fee recipient updates aren't reflected in genesis shares
 		// because shares are duplicated.
-		genesisOpts.SSVShare = genesisssvtypes.ConvertToGenesisSSVShare(share, operator)
-		genesisOpts.DutyRunners = SetupGenesisRunners(ctx, c.logger, opts)
 
-		genesisValidator := genesisvalidator.NewValidator(ctx, cancel, genesisOpts)
+		var genesisValidator *genesisvalidator.Validator
+		if !c.networkConfig.PastAlanFork() {
+			// Create a validator context based on genesis context.
+			genesisValidatorCtx, validatorCancel := context.WithCancel(c.genesisCtx)
 
-		v = &validators.ValidatorContainer{Validator: alanValidator, GenesisValidator: genesisValidator}
+			genesisOpts := c.genesisValidatorOptions
+			genesisOpts.SSVShare = genesisssvtypes.ConvertToGenesisSSVShare(share, operator)
+			genesisOpts.DutyRunners = SetupGenesisRunners(genesisValidatorCtx, c.logger, opts)
+
+			genesisValidator = genesisvalidator.NewValidator(genesisValidatorCtx, validatorCancel, genesisOpts)
+		}
+
+		v, err = validators.NewValidatorContainer(
+			alanValidator,
+			genesisValidator,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not create validator container: %w", err)
+		}
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
@@ -1040,7 +1065,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 	if !found {
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
-		ctx, cancel := context.WithCancel(c.context)
+		ctx, cancel := context.WithCancel(c.ctx)
 
 		opts := c.validatorOptions
 		opts.SSVShare = share
@@ -1198,6 +1223,42 @@ func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
 	//}
 
 	return true, nil
+}
+
+func (c *controller) ForkListener(logger *zap.Logger) {
+	if c.networkConfig.PastAlanFork() {
+		return
+	}
+
+	go func() {
+		slotTicker := slotticker.New(c.logger, slotticker.Config{
+			SlotDuration: c.networkConfig.SlotDurationSec(),
+			GenesisTime:  c.networkConfig.GetGenesisTime(),
+		})
+
+		next := slotTicker.Next()
+		for {
+			select {
+			case <-c.ctx.Done():
+				return
+			case <-next:
+				next = slotTicker.Next()
+				if c.networkConfig.PastAlanFork() {
+					// Cancel genesis context to stop the genesis validators.
+					c.cancelGenesisCtx()
+
+					// Unset genesis validators to free up memory.
+					c.validatorsMap.ForEachValidator(func(validator *validators.ValidatorContainer) bool {
+						validator.UnsetGenesisValidator()
+						return true
+					})
+
+					logger.Info("stopped genesis validators on fork")
+					return
+				}
+			}
+		}
+	}()
 }
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
