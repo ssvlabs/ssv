@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -75,10 +76,13 @@ func TestMain(m *testing.M) {
 		Nodes: nodes,
 	}
 
-	m.Run()
+	// exitCode required here only for linter
+	exitCode := m.Run()
 
 	//teardown
 	for i := 0; i < len(ln.Nodes); i++ {
 		_ = ln.Nodes[i].Close()
 	}
+
+	os.Exit(exitCode)
 }
