@@ -646,11 +646,12 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 	c.logger.Debug("🆕 updated validators metadata in storage",
 		fields.Took(time.Since(start)), zap.Int("count", len(data)))
 
-	// If we're not an operator, don't start any validators.
+	// If we're not an operator, return early.
 	if c.operatorDataStore.GetOperatorID() == 0 {
 		return nil
 	}
 
+	// Start validators, if needed.
 	shares := c.sharesStorage.List(
 		nil,
 		registrystorage.ByNotLiquidated(),
