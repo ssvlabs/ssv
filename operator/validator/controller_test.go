@@ -68,6 +68,7 @@ type MockControllerOptions struct {
 	validatorsMap     *validators.ValidatorsMap
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorStorage   registrystorage.Operators
+	networkConfig     networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -690,6 +691,7 @@ func TestSetupValidators(t *testing.T) {
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
 				network:           network,
+				networkConfig:     networkconfig.TestNetwork,
 				sharesStorage:     sharesStorage,
 				operatorDataStore: operatorDataStore,
 				recipientsStorage: recipientStorage,
@@ -1022,6 +1024,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		ctx:                     context.Background(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
+		networkConfig:           opts.networkConfig,
 		messageRouter:           newMessageRouter(logger),
 		committeeValidatorSetup: make(chan struct{}),
 		indicesChange:           make(chan struct{}, 32),
