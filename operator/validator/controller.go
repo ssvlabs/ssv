@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
@@ -650,19 +648,28 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		}
 	}
 
-	startdb := time.Now()
 	// Save metadata to share storage.
+	start := time.Now()
 	err := c.sharesStorage.UpdateValidatorsMetadata(data)
 	if err != nil {
 		return errors.Wrap(err, "could not update validator metadata")
 	}
-	c.logger.Debug("🆕 updated validators metadata in storage", zap.Duration("elapsed", time.Since(startdb)), zap.Int("count", len(data)))
+	c.logger.Debug("🆕 updated validators metadata in storage",
+		fields.Took(time.Since(start)), zap.Int("count", len(data)))
 
-	pks := maps.Keys(data)
+	// If we're not an operator, don't start any validators.
+	if c.operatorDataStore.GetOperatorID() == 0 {
+		return nil
+	}
 
-	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated(), registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()), func(share *ssvtypes.SSVShare) bool {
-		return slices.Contains(pks, share.ValidatorPubKey)
-	})
+	shares := c.sharesStorage.List(
+		nil,
+		registrystorage.ByNotLiquidated(),
+		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
+		func(share *ssvtypes.SSVShare) bool {
+			return data[share.ValidatorPubKey] != nil
+		},
+	)
 
 	for _, share := range shares {
 		// Start validator (if not already started).
