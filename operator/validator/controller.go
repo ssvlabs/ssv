@@ -20,11 +20,11 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
+
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
