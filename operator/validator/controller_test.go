@@ -1010,6 +1010,11 @@ func TestUpdateFeeRecipient(t *testing.T) {
 }
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
+	// Default to test network config if not provided.
+	if opts.networkConfig.Name == "" {
+		opts.networkConfig = networkconfig.TestNetwork
+	}
+
 	return controller{
 		metadataUpdateInterval:  0,
 		logger:                  logger,
