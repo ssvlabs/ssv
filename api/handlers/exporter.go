@@ -53,7 +53,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 				storage := e.QBFTStores.Get(spectypes.BeaconRole(role))
 				instance, err := storage.GetInstance(identifier[:], qbft.Height(height))
 				if err != nil {
-					return api.BadRequestError(fmt.Errorf("error getting instance: %w", err))
+					return fmt.Errorf("error getting instance: %w", err)
 				}
 				if instance == nil || instance.DecidedMessage == nil {
 					continue

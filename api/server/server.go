@@ -58,10 +58,11 @@ func (s *Server) Run() error {
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
 	server := &http.Server{
-		Addr:         s.addr,
-		Handler:      router,
-		ReadTimeout:  12 * time.Second,
-		WriteTimeout: 12 * time.Second,
+		Addr:              s.addr,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
 	}
 	return server.ListenAndServe()
 }
