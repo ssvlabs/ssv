@@ -956,7 +956,7 @@ func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {
 
 	// skip to the next epoch
 	currentSlot.Set(phase0.Slot(2))
-	for slot := currentSlot.Get(); slot < 47; slot++ {
+	for slot := currentSlot.Get(); slot < 48; slot++ {
 		ticker.Send(slot)
 		waitForNoActionGenesis(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
 		waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -964,7 +964,7 @@ func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {
 	}
 
 	// wait for duties to be fetched for the next fork epoch
-	currentSlot.Set(phase0.Slot(47))
+	currentSlot.Set(phase0.Slot(48))
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
