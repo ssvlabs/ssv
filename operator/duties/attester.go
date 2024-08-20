@@ -90,7 +90,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch/2-2 {
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch/2-1 {
 				h.fetchNextEpoch = true
 			}
 
