@@ -37,7 +37,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	logger.Debug("📢 broadcasting round change message",
 		fields.Round(i.State.Round),
 		fields.Root(root),
-		zap.Any("round-change-signers", roundChange.OperatorIDs),
+		zap.Any("round_change_signers", roundChange.OperatorIDs),
 		fields.Height(i.State.Height),
 		zap.String("reason", "timeout"))
 
