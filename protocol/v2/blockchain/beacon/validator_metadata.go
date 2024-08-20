@@ -7,7 +7,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 )
 
@@ -67,10 +66,10 @@ func (m *ValidatorMetadata) Slashed() bool {
 }
 
 // OnUpdated represents a function to be called once validator's metadata was updated
-type OnUpdated func(pk spectypes.ValidatorPK, meta *ValidatorMetadata)
+type OnUpdated func(data map[spectypes.ValidatorPK]*ValidatorMetadata) error
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc BeaconNode, onUpdated OnUpdated) error {
+func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, bc BeaconNode, onUpdated OnUpdated) error {
 	start := time.Now()
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
@@ -80,17 +79,11 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 	// TODO: importing logging/fields causes import cycle
 	logger.Debug("🆕 got validators metadata", zap.Int("requested", len(pubKeys)),
 		zap.Int("received", len(results)))
-	if err := collection.UpdateValidatorsMetadata(results); err != nil {
-		logger.Error("❗ failed to update validators metadata",
+	if err = onUpdated(results); err != nil {
+		logger.Warn("❗ failed to call UpdateValidatorsMetadata onUpdated callback",
 			zap.Error(err))
 	}
-	for pk, meta := range results {
-		if onUpdated != nil {
-			onUpdated(pk, meta)
-		}
-		logger.Debug("💾️ successfully updated validator metadata",
-			fields.PubKey(pk[:]), zap.Any("metadata", meta))
-	}
+
 	return nil
 }
 
