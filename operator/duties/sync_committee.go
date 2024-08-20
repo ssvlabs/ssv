@@ -92,7 +92,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			cancel()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
-			periodSlots := h.network.Beacon.EpochsPerSyncCommitteePeriod() * h.network.Beacon.SlotsPerEpoch()
+			periodSlots := h.slotsPerPeriod()
 			if uint64(slot)%periodSlots == periodSlots-h.preparationSlots-1 {
 				h.fetchNextPeriod = true
 			}
@@ -318,6 +318,10 @@ func calculateSubscriptions(endEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommi
 }
 
 func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
-	periodSlots := h.network.Beacon.EpochsPerSyncCommitteePeriod() * h.network.Beacon.SlotsPerEpoch()
+	periodSlots := h.slotsPerPeriod()
 	return uint64(slot)%periodSlots > periodSlots-h.preparationSlots
+}
+
+func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
+	return h.network.Beacon.EpochsPerSyncCommitteePeriod() * h.network.Beacon.SlotsPerEpoch()
 }
