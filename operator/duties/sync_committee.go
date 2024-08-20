@@ -319,7 +319,7 @@ func calculateSubscriptions(endEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommi
 
 func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
 	periodSlots := h.slotsPerPeriod()
-	return uint64(slot)%periodSlots > periodSlots-h.preparationSlots
+	return uint64(slot)%periodSlots > periodSlots-h.preparationSlots-2
 }
 
 func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
