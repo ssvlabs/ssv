@@ -114,9 +114,14 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 			filter = func(m *genesisqueue.GenesisSSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
+					logger.Error("❗ could not cast message body to EventMsg", fields.MessageID(spectypes.MessageID(m.MsgID)))
 					return false
 				}
-				return e.Type == types.ExecuteDuty
+				if e.Type == types.ExecuteDuty {
+					return true
+				}
+				logger.Debug("❗ dropping message because no duty is running", fields.MessageID(spectypes.MessageID(m.MsgID)), fields.MessageType(spectypes.MsgType(m.MsgType)))
+				return false
 			}
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
@@ -129,7 +134,11 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
 					return true
 				}
-				return sm.Message.MsgType != genesisspecqbft.PrepareMsgType && sm.Message.MsgType != genesisspecqbft.CommitMsgType
+				if sm.Message.MsgType != genesisspecqbft.PrepareMsgType && sm.Message.MsgType != genesisspecqbft.CommitMsgType {
+					return true
+				}
+				logger.Debug("❗ dropping message because no proposal was accepted for the current round", fields.MessageID(spectypes.MessageID(m.MsgID)), fields.MessageType(spectypes.MsgType(m.MsgType)))
+				return false
 			}
 		}
 
