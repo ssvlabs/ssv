@@ -173,7 +173,7 @@ mock:
 
 .PHONY: mockgen-install
 mockgen-install:
-	go install github.com/golang/mock/mockgen@v1.6.0
+	go install go.uber.org/mock/mockgen@v0.4.0
 	@which mockgen || echo "Error: ensure `go env GOPATH` is added to PATH"
 
 .PHONY: format
