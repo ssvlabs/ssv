@@ -7,7 +7,9 @@ import (
 	"github.com/pkg/errors"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 type PartialSigContainer struct {
@@ -97,7 +99,7 @@ func ReconstructSignature(ps *PartialSigContainer, root [32]byte, validatorPubKe
 	for operatorID, sig := range ps.Signatures[validatorIndex][signingRootHex(root)] {
 		operatorsSignatures[operatorID] = sig
 	}
-	signature, err := spectypes.ReconstructSignatures(operatorsSignatures)
+	signature, err := threshold.ReconstructSignatures(operatorsSignatures)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}
