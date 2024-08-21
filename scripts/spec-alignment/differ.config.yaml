@@ -34,6 +34,7 @@ Comparisons:
   - Packages:
       Left:
         - ./protocol/v2/types
+        - ./utils/threshold
       Right:
         - ./types
     Hints:
