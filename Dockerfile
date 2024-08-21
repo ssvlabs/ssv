@@ -65,4 +65,4 @@ EXPOSE 5678 5000 4000/udp
 # Force using Go's DNS resolver because Alpine's DNS resolver (when netdns=cgo) may cause issues.
 ENV GODEBUG="netdns=go"
 
-#ENTRYPOINT ["/go/bin/ssvnode"]
+ENTRYPOINT ["/go/bin/ssvnode"]
