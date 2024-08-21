@@ -185,7 +185,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 		external = ipAddr
 		logger.Info("Running with IP", zap.String("ip", ipAddr.String()))
 	} else {
-		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
+		logger.Info("Running with External IP", zap.String("external_ip", n.externalIP))
 	}
 
 	// if *forkVersion != "" {

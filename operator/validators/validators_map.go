@@ -65,19 +65,6 @@ func (vm *ValidatorsMap) ForEachValidator(iterator validatorIterator) bool {
 	return true
 }
 
-// GetAllValidators returns all validators.
-func (vm *ValidatorsMap) GetAllValidators() []*ValidatorContainer {
-	vm.vlock.RLock()
-	defer vm.vlock.RUnlock()
-
-	var validators []*ValidatorContainer
-	for _, val := range vm.validators {
-		validators = append(validators, val)
-	}
-
-	return validators
-}
-
 // GetValidator returns a validator
 func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*ValidatorContainer, bool) {
 	vm.vlock.RLock()

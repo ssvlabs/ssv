@@ -58,7 +58,6 @@ type sharesStorage struct {
 	db             basedb.Database
 	prefix         []byte
 	shares         map[string]*types.SSVShare
-	operators      map[uint64][]byte
 	validatorStore *validatorStore
 	mu             sync.RWMutex
 }
@@ -114,15 +113,10 @@ func (s *storageShare) Decode(data []byte) error {
 
 func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
-		logger:    logger,
-		shares:    make(map[string]*types.SSVShare),
-		operators: make(map[uint64][]byte),
-		db:        db,
-		prefix:    prefix,
-	}
-
-	if err := storage.loadOperators(); err != nil {
-		return nil, nil, err
+		logger: logger,
+		shares: make(map[string]*types.SSVShare),
+		db:     db,
+		prefix: prefix,
 	}
 
 	if err := storage.load(); err != nil {
@@ -134,24 +128,6 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 	)
 	storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...)
 	return storage, storage.validatorStore, nil
-}
-
-// loadOperators reads all operators from db.
-func (s *sharesStorage) loadOperators() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	opStorage := NewOperatorsStorage(s.logger, s.db, s.prefix)
-	operators, err := opStorage.ListOperators(nil, 0, 0)
-	if err != nil {
-		return err
-	}
-
-	for _, op := range operators {
-		s.operators[op.ID] = op.PublicKey
-	}
-
-	return nil
 }
 
 // load reads all shares from db.

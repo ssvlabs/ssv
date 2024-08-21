@@ -31,15 +31,19 @@ func TestController_LiquidateCluster(t *testing.T) {
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
-	firstValidator := &validators.ValidatorContainer{Validator: &validator.Validator{
-		DutyRunners: runner.ValidatorDutyRunners{},
-		Storage:     ibftstorage.NewStores(),
-		Share: &types.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+	firstValidator, err := validators.NewValidatorContainer(
+		&validator.Validator{
+			DutyRunners: runner.ValidatorDutyRunners{},
+			Storage:     ibftstorage.NewStores(),
+			Share: &types.SSVShare{
+				Share: spectypes.Share{
+					ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+				},
 			},
 		},
-	}}
+		nil,
+	)
+	require.NoError(t, err)
 
 	ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
 	defer ctrl.Finish()
@@ -52,15 +56,14 @@ func TestController_LiquidateCluster(t *testing.T) {
 		return true, nil
 	}
 	controllerOptions := MockControllerOptions{
-		beacon:              bc,
-		network:             network,
-		operatorDataStore:   operatorDataStore,
-		sharesStorage:       sharesStorage,
-		recipientsStorage:   recipientStorage,
-		validatorsMap:       mockValidatorsMap,
-		validatorOptions:    validator.Options{},
-		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
+		beacon:            bc,
+		network:           network,
+		operatorDataStore: operatorDataStore,
+		sharesStorage:     sharesStorage,
+		recipientsStorage: recipientStorage,
+		validatorsMap:     mockValidatorsMap,
+		validatorOptions:  validator.Options{},
+		metrics:           validator.NopMetrics{},
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -69,7 +72,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 	_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
 	require.True(t, ok, "validator not found")
 
-	err := ctr.LiquidateCluster(common.HexToAddress("123"), []uint64{1, 2, 3, 4}, []*types.SSVShare{{Share: spectypes.Share{
+	err = ctr.LiquidateCluster(common.HexToAddress("123"), []uint64{1, 2, 3, 4}, []*types.SSVShare{{Share: spectypes.Share{
 		ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 	}}})
 	require.NoError(t, err)
@@ -93,15 +96,19 @@ func TestController_StopValidator(t *testing.T) {
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
-	firstValidator := &validators.ValidatorContainer{Validator: &validator.Validator{
-		DutyRunners: runner.ValidatorDutyRunners{},
-		Storage:     ibftstorage.NewStores(),
-		Share: &types.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+	firstValidator, err := validators.NewValidatorContainer(
+		&validator.Validator{
+			DutyRunners: runner.ValidatorDutyRunners{},
+			Storage:     ibftstorage.NewStores(),
+			Share: &types.SSVShare{
+				Share: spectypes.Share{
+					ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+				},
 			},
 		},
-	}}
+		nil,
+	)
+	require.NoError(t, err)
 
 	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t)
 	genesisStorageMap := setupGenesisQBFTStorage(t)
@@ -126,9 +133,8 @@ func TestController_StopValidator(t *testing.T) {
 		validatorOptions: validator.Options{GenesisOptions: validator.GenesisOptions{
 			Storage: genesisStorageMap,
 		}},
-		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
-		signer:              signer,
+		metrics: validator.NopMetrics{},
+		signer:  signer,
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -179,6 +185,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 		sharesStorage:     sharesStorage,
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
+		networkConfig:     networkconfig.TestNetwork,
 		validatorOptions: validator.Options{
 			Storage:       storageMap,
 			NetworkConfig: networkconfig.TestNetwork,
@@ -186,9 +193,8 @@ func TestController_ReactivateCluster(t *testing.T) {
 				Storage: genesisStorageMap,
 			},
 		},
-		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
-		signer:              signer,
+		metrics: validator.NopMetrics{},
+		signer:  signer,
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc

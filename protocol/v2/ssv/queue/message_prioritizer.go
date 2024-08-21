@@ -5,7 +5,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft"
 )
 
-// State represents a portion of the the current state
+// State represents a portion of the current state
 // that is relevant to the prioritization of messages.
 type State struct {
 	HasRunningInstance bool
