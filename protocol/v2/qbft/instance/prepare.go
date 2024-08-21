@@ -29,7 +29,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
 	logger.Debug("📬 got prepare message",
 		fields.Round(i.State.Round),
-		zap.Any("prepare-signers", i.State.ProposalAcceptedForCurrentRound.SignedMessage.OperatorIDs),
+		zap.Any("prepare-signers", msg.SignedMessage.OperatorIDs),
 		fields.Root(proposedRoot))
 
 	if hasQuorumBefore {
