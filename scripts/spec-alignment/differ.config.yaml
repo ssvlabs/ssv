@@ -14,6 +14,7 @@ ReducedPackageNames:
 Comparisons:
   - Packages:
       Left:
+        - ./protocol/v2/ssv
         - ./protocol/v2/ssv/runner
         - ./protocol/v2/types
       Right:
