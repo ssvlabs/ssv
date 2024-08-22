@@ -190,8 +190,8 @@ func TestScheduler_Attester_Genesis_Indices_Changed(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be fetched again
 	currentSlot.Set(phase0.Slot(1))
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 1
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -254,8 +254,8 @@ func TestScheduler_Attester_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 
 	// STEP 5: wait for attester duties to be fetched
 	currentSlot.Set(phase0.Slot(2))
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be executed
@@ -304,8 +304,8 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition(t *testing.T
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -388,8 +388,8 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition_Indices_Chan
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -497,8 +497,8 @@ func TestScheduler_Attester_Genesis_Reorg_Previous(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(33))
 	waitForDuties.Set(true)
+	currentSlot.Set(phase0.Slot(33))
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
