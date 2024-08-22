@@ -100,22 +100,17 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 		var runningInstance *instance.Instance
 		if runner.HasRunningDuty() {
 			runningInstance = runner.GetBaseRunner().State.RunningInstance
-			if runningInstance != nil {
-				decided, _ := runningInstance.IsDecided()
-				state.HasRunningInstance = !decided
-			}
 		}
 		state.Height = v.GetLastHeight(msgID)
 		state.Round = v.GetLastRound(msgID)
-		state.Quorum = v.Share.Quorum
 
 		filter := genesisqueue.FilterAny
-		if !runner.HasRunningDuty() {
+		if runningInstance == nil {
 			// If no duty is running, pop only ExecuteDuty messages.
 			filter = func(m *genesisqueue.GenesisSSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
-					logger.Error("❗ could not cast message body to EventMsg", fields.MessageID(spectypes.MessageID(m.MsgID)))
+					logger.Error("❗ could not cast message body to EventMsg", fields.MessageID(spectypes.MessageID(m.MsgID)), fields.MessageType(spectypes.MsgType(m.MsgType)))
 					return false
 				}
 				if e.Type == types.ExecuteDuty {
