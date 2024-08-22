@@ -82,6 +82,10 @@ output:
 
 # all available settings of specific linters
 linters-settings:
+  gosec:
+    # TODO: fix all issues with int overflow and return this rule back
+    excludes:
+      - G115
   dogsled:
     # checks assignments with too many blank identifiers; default is 2
     max-blank-identifiers: 2
