@@ -6,6 +6,7 @@ import (
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
@@ -137,7 +138,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 				if sm.Message.MsgType != genesisspecqbft.PrepareMsgType && sm.Message.MsgType != genesisspecqbft.CommitMsgType {
 					return true
 				}
-				logger.Debug("❗ dropping message because no proposal was accepted for the current round", fields.MessageID(spectypes.MessageID(m.MsgID)), fields.MessageType(spectypes.MsgType(m.MsgType)))
+				logger.Debug("❗ dropping message because no proposal was accepted for the current round", fields.MessageID(spectypes.MessageID(m.MsgID)), fields.MessageType(spectypes.MsgType(m.MsgType)), fields.Height(specqbft.Height(sm.Message.Height)), fields.Round(specqbft.Round(sm.Message.Round)), fields.MessageType(spectypes.MsgType(sm.Message.MsgType)))
 				return false
 			}
 		}
