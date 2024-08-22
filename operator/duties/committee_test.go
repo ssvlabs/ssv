@@ -400,8 +400,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
-	cancel()
 	require.NoError(t, schedulerPool.Wait())
+	cancel()
 }
 
 func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
