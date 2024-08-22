@@ -26,7 +26,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 
 	logger.Debug("📬 got proposal message",
 		fields.Round(i.State.Round),
-		zap.Any("proposal-signers", msg.SignedMessage.OperatorIDs))
+		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
 
 	newRound := msg.QBFTMessage.Round
 	i.State.ProposalAcceptedForCurrentRound = msg
@@ -52,7 +52,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
 		fields.Round(i.State.Round),
-		zap.Any("proposal-signers", msg.SignedMessage.OperatorIDs),
+		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs),
 		zap.Any("prepare-signers", prepare.OperatorIDs))
 
 	if err := i.Broadcast(logger, prepare); err != nil {

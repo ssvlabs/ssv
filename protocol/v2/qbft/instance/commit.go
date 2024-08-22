@@ -19,7 +19,7 @@ import (
 func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *spectypes.SignedSSVMessage, error) {
 	logger.Debug("📬 got commit message",
 		fields.Round(i.State.Round),
-		zap.Any("commit-signers", msg.SignedMessage.OperatorIDs),
+		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
 		fields.Root(msg.QBFTMessage.Root))
 
 	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(msg)
@@ -46,7 +46,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessag
 
 		logger.Debug("🎯 got commit quorum",
 			fields.Round(i.State.Round),
-			zap.Any("agg-signers", agg.OperatorIDs),
+			zap.Any("agg_signers", agg.OperatorIDs),
 			fields.Root(msg.QBFTMessage.Root))
 
 		i.metrics.EndStageCommit()

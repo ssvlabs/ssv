@@ -56,15 +56,14 @@ func TestController_LiquidateCluster(t *testing.T) {
 		return true, nil
 	}
 	controllerOptions := MockControllerOptions{
-		beacon:              bc,
-		network:             network,
-		operatorDataStore:   operatorDataStore,
-		sharesStorage:       sharesStorage,
-		recipientsStorage:   recipientStorage,
-		validatorsMap:       mockValidatorsMap,
-		validatorOptions:    validator.Options{},
-		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
+		beacon:            bc,
+		network:           network,
+		operatorDataStore: operatorDataStore,
+		sharesStorage:     sharesStorage,
+		recipientsStorage: recipientStorage,
+		validatorsMap:     mockValidatorsMap,
+		validatorOptions:  validator.Options{},
+		metrics:           validator.NopMetrics{},
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -134,9 +133,8 @@ func TestController_StopValidator(t *testing.T) {
 		validatorOptions: validator.Options{GenesisOptions: validator.GenesisOptions{
 			Storage: genesisStorageMap,
 		}},
-		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
-		signer:              signer,
+		metrics: validator.NopMetrics{},
+		signer:  signer,
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -187,6 +185,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 		sharesStorage:     sharesStorage,
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
+		networkConfig:     networkconfig.TestNetwork,
 		validatorOptions: validator.Options{
 			Storage:       storageMap,
 			NetworkConfig: networkconfig.TestNetwork,
@@ -194,9 +193,8 @@ func TestController_ReactivateCluster(t *testing.T) {
 				Storage: genesisStorageMap,
 			},
 		},
-		metrics:             validator.NopMetrics{},
-		metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
-		signer:              signer,
+		metrics: validator.NopMetrics{},
+		signer:  signer,
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc

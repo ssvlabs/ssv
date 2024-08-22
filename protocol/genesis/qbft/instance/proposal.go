@@ -27,7 +27,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 
 	logger.Debug("📬 got proposal message",
 		fields.Round(specqbft.Round(i.State.Round)),
-		zap.Any("proposal-signers", signedProposal.Signers))
+		zap.Any("proposal_signers", signedProposal.Signers))
 
 	newRound := signedProposal.Message.Round
 	i.State.ProposalAcceptedForCurrentRound = signedProposal
@@ -53,7 +53,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
 		fields.Round(specqbft.Round(i.State.Round)),
-		zap.Any("proposal-signers", signedProposal.Signers),
+		zap.Any("proposal_signers", signedProposal.Signers),
 		zap.Any("prepare-signers", prepare.Signers))
 
 	if err := i.Broadcast(logger, prepare); err != nil {

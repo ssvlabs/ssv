@@ -36,6 +36,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -56,18 +57,18 @@ const (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	network             P2PNetwork
-	recipientsStorage   Recipients
-	sharesStorage       SharesStorage
-	metrics             validator.Metrics
-	beacon              beacon.BeaconNode
-	validatorOptions    validator.Options
-	signer              spectypes.BeaconSigner
-	metadataLastUpdated map[spectypes.ValidatorPK]time.Time
-	StorageMap          *ibftstorage.QBFTStores
-	validatorsMap       *validators.ValidatorsMap
-	operatorDataStore   operatordatastore.OperatorDataStore
-	operatorStorage     registrystorage.Operators
+	network           P2PNetwork
+	recipientsStorage Recipients
+	sharesStorage     SharesStorage
+	metrics           validator.Metrics
+	beacon            beacon.BeaconNode
+	validatorOptions  validator.Options
+	signer            spectypes.BeaconSigner
+	StorageMap        *ibftstorage.QBFTStores
+	validatorsMap     *validators.ValidatorsMap
+	operatorDataStore operatordatastore.OperatorDataStore
+	operatorStorage   registrystorage.Operators
+	networkConfig     networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -231,18 +232,11 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				}).AnyTimes()
 				if tc.expectMetadataFetch {
 					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-					sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(data map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error {
-						for _, share := range tc.shareStorageListResponse {
-							if metadata, ok := data[share.Share.ValidatorPubKey]; ok {
-								share.Metadata.BeaconMetadata = metadata
-							}
-						}
-						return nil
-					}).Times(1)
 					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				}
-				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
+				sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
@@ -260,8 +254,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				validatorOptions: validator.Options{
 					Exporter: true,
 				},
-				metrics:             validator.NopMetrics{},
-				metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
+				metrics: validator.NopMetrics{},
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
@@ -394,18 +387,17 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 	testCases := []struct {
 		name                      string
 		metadata                  *beacon.ValidatorMetadata
-		ExpectedErrorResult       bool
 		sharesStorageExpectReturn any
 		getShareError             bool
 		operatorDataId            uint64
 		testPublicKey             spectypes.ValidatorPK
 		mockRecipientTimes        int
 	}{
-		{"Empty metadata", nil, true, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Valid metadata", validatorMetaData, false, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Share wasn't found", validatorMetaData, true, nil, true, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Empty metadata", nil, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Valid metadata", validatorMetaData, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Share wasn't found", validatorMetaData, nil, true, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Share not belong to operator", validatorMetaData, nil, false, 2, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
+		{"Metadata with error", validatorMetaData, fmt.Errorf("error"), false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
 	}
 
 	for _, tc := range testCases {
@@ -425,14 +417,13 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			// Assuming controllerOptions is set up correctly
 			controllerOptions := MockControllerOptions{
 				// keyManager:          km,
-				signer:              signer,
-				network:             network,
-				operatorDataStore:   operatorDataStore,
-				sharesStorage:       sharesStorage,
-				recipientsStorage:   recipientStorage,
-				validatorsMap:       mockValidatorsMap,
-				metrics:             validator.NopMetrics{},
-				metadataLastUpdated: map[spectypes.ValidatorPK]time.Time{},
+				signer:            signer,
+				network:           network,
+				operatorDataStore: operatorDataStore,
+				sharesStorage:     sharesStorage,
+				recipientsStorage: recipientStorage,
+				validatorsMap:     mockValidatorsMap,
+				metrics:           validator.NopMetrics{},
 			}
 
 			if tc.getShareError {
@@ -441,7 +432,8 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(shareWithMetaData).AnyTimes()
 			}
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(tc.mockRecipientTimes)
-			sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(tc.sharesStorageExpectReturn).AnyTimes()
+			sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(tc.sharesStorageExpectReturn).AnyTimes()
+			sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 			ctr := setupController(logger, controllerOptions)
 
@@ -449,9 +441,13 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return true, nil
 			}
 			ctr.validatorStartFunc = validatorStartFunc
-			err := ctr.UpdateValidatorMetadata(tc.testPublicKey, tc.metadata)
 
-			if tc.ExpectedErrorResult {
+			data := make(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata)
+			data[tc.testPublicKey] = tc.metadata
+
+			err := ctr.UpdateValidatorsMetadata(data)
+
+			if tc.sharesStorageExpectReturn != nil {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -695,6 +691,7 @@ func TestSetupValidators(t *testing.T) {
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
 				network:           network,
+				networkConfig:     networkconfig.TestNetwork,
 				sharesStorage:     sharesStorage,
 				operatorDataStore: operatorDataStore,
 				recipientsStorage: recipientStorage,
@@ -707,8 +704,7 @@ func TestSetupValidators(t *testing.T) {
 						Storage: genesisStorageMap,
 					},
 				},
-				metadataLastUpdated: metadataLastMap,
-				metrics:             validator.NopMetrics{},
+				metrics: validator.NopMetrics{},
 			}
 
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
@@ -1014,6 +1010,11 @@ func TestUpdateFeeRecipient(t *testing.T) {
 }
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
+	// Default to test network config if not provided.
+	if opts.networkConfig.Name == "" {
+		opts.networkConfig = networkconfig.TestNetwork
+	}
+
 	return controller{
 		metadataUpdateInterval:  0,
 		logger:                  logger,
@@ -1028,6 +1029,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		ctx:                     context.Background(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
+		networkConfig:           opts.networkConfig,
 		messageRouter:           newMessageRouter(logger),
 		committeeValidatorSetup: make(chan struct{}),
 		indicesChange:           make(chan struct{}, 32),
@@ -1036,8 +1038,6 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 			WorkersCount: 1,
 			Buffer:       100,
 		}),
-		metadataLastUpdated: opts.metadataLastUpdated,
-		networkConfig:       networkconfig.TestNetwork,
 	}
 }
 
