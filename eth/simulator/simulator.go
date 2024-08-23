@@ -20,10 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/holiman/uint256"
 	"math/big"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/core/tracing"
+	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -107,7 +109,7 @@ func NewSimulatedBackendWithDatabase(database ethdb.Database, alloc types.Genesi
 	filterSystem := filters.NewFilterSystem(ethservice.APIBackend, filters.Config{})
 	n.RegisterAPIs([]rpc.API{{
 		Namespace: "eth",
-		Service:   filters.NewFilterAPI(filterSystem, false),
+		Service:   filters.NewFilterAPI(filterSystem),
 	}})
 
 	backend := &SimulatedBackend{
@@ -119,7 +121,7 @@ func NewSimulatedBackendWithDatabase(database ethdb.Database, alloc types.Genesi
 
 	filterBackend := &filterBackend{ethservice.ChainDb(), ethservice.BlockChain(), backend}
 	backend.filterSystem = filters.NewFilterSystem(filterBackend, filters.Config{})
-	backend.events = filters.NewEventSystem(backend.filterSystem, false)
+	backend.events = filters.NewEventSystem(backend.filterSystem)
 
 	header := backend.Blockchain.CurrentBlock()
 	block := backend.Blockchain.GetBlock(header.Hash(), header.Number.Uint64())
@@ -683,7 +685,7 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	// Set infinite balance to the fake caller account.
 	maxUint2561 := big.NewInt(0).Sub(big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256), nil), big.NewInt(1))
 	uint256Max, _ := uint256.FromBig(maxUint2561)
-	stateDB.SetBalance(call.From, uint256Max)
+	stateDB.SetBalance(call.From, uint256Max, tracing.BalanceIncreaseGenesisBalance)
 
 	// Execute the call.
 	msg := &core.Message{

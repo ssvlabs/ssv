@@ -60,7 +60,7 @@ func NewCommittee(
 	beaconNetwork spectypes.BeaconNetwork,
 	operator *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
-// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
+	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
 ) *Committee {
 	return &Committee{
 		logger:        logger,
@@ -160,7 +160,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	if len(validatorShares) == 0 {
 		return errors.New("no shares for duty's validators")
 	}
-	
+
 	if len(duty.ValidatorDuties) == 0 {
 		return errors.New("CommitteeDuty has no valid beacon duties")
 	}

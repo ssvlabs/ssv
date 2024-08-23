@@ -927,6 +927,10 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.SSVShare = share
 		opts.Operator = operator
 		opts.DutyRunners, err = SetupRunners(validatorCtx, c.logger, opts)
+		if err != nil {
+			validatorCancel()
+			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
+		}
 		alanValidator := validator.NewValidator(validatorCtx, validatorCancel, opts)
 
 		// TODO: (Alan) share mutations such as metadata changes and fee recipient updates aren't reflected in genesis shares
