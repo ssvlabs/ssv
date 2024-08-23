@@ -161,9 +161,9 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New("no shares for duty's validators")
 	}
 
-	if len(duty.ValidatorDuties) == 0 {
-		return errors.New("CommitteeDuty has no valid beacon duties")
-	}
+	//if len(duty.ValidatorDuties) == 0 {
+	//	return errors.New("CommitteeDuty has no valid beacon duties")
+	//}
 
 	r, err := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
 	if err != nil {

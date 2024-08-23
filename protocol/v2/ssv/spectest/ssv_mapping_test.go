@@ -62,7 +62,7 @@ func TestSSVMapping(t *testing.T) {
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
-				//t.Parallel()
+				t.Parallel()
 				r.test(t)
 			})
 		}
