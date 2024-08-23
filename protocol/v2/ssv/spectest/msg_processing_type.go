@@ -257,10 +257,7 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
 		)
-		if err != nil {
-			return nil, err
-		}
-		return r.(*runner.CommitteeRunner), nil
+		return r.(*runner.CommitteeRunner), err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 

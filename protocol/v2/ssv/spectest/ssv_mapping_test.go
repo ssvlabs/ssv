@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/committee"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/partialsigcontainer"
+	runnerconstruction "github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/construction"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
@@ -61,7 +62,7 @@ func TestSSVMapping(t *testing.T) {
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
-				t.Parallel()
+				//t.Parallel()
 				r.test(t)
 			})
 		}
@@ -196,6 +197,19 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 			Name:  test.(map[string]interface{})["Name"].(string),
 			Tests: typedTests,
 		}
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
+			},
+		}
+
+	case reflect.TypeOf(&runnerconstruction.RunnerConstructionSpecTest{}).String():
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &runnerconstruction.RunnerConstructionSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
 			name: typedTest.TestName(),
