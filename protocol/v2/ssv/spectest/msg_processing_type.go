@@ -240,8 +240,8 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
-		return runner.NewCommitteeRunner(
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error) {
+		r, err := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			controller.NewController(
@@ -256,7 +256,11 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetSigner(),
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
-		).(*runner.CommitteeRunner)
+		)
+		if err != nil {
+			return nil, err
+		}
+		return r.(*runner.CommitteeRunner), nil
 	}
 	ctx, cancel := context.WithCancel(ctx)
 

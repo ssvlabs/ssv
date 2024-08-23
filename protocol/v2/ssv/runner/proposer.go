@@ -50,7 +50,11 @@ func NewProposerRunner(
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
-) Runner {
+) (Runner, error) {
+	if len(share) != 1 {
+		return nil, errors.New("must have one share")
+	}
+
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
@@ -68,7 +72,7 @@ func NewProposerRunner(
 		operatorSigner: operatorSigner,
 		graffiti:       graffiti,
 		metrics:        metrics.NewConsensusMetrics(spectypes.RoleProposer),
-	}
+	}, nil
 }
 
 func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {

@@ -56,7 +56,10 @@ func NewCommitteeRunner(
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
-) Runner {
+) (Runner, error) {
+	if len(share) == 0 {
+		return nil, errors.New("no shares")
+	}
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
@@ -73,7 +76,7 @@ func NewCommitteeRunner(
 		stoppedValidators: make(map[spectypes.ValidatorPK]struct{}),
 		submittedDuties:   make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
 		metrics:           metrics.NewConsensusMetrics(spectypes.RoleCommittee),
-	}
+	}, nil
 }
 
 func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {

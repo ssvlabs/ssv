@@ -27,7 +27,7 @@ var (
 	runnerExpirySlots = phase0.Slot(34)
 )
 
-type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner
+type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error)
 
 type Committee struct {
 	logger *zap.Logger
@@ -161,7 +161,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New("CommitteeDuty has no valid beacon duties")
 	}
 
-	r := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
+	r, err := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
+	if err != nil {
+		return errors.Wrap(err, "could not create CommitteeRunner")
+	}
 	// Set timeout function.s
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r

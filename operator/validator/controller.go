@@ -926,7 +926,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts := c.validatorOptions
 		opts.SSVShare = share
 		opts.Operator = operator
-		opts.DutyRunners = SetupRunners(validatorCtx, c.logger, opts)
+		opts.DutyRunners, err = SetupRunners(validatorCtx, c.logger, opts)
 		alanValidator := validator.NewValidator(validatorCtx, validatorCancel, opts)
 
 		// TODO: (Alan) share mutations such as metadata changes and fee recipient updates aren't reflected in genesis shares
@@ -1285,11 +1285,11 @@ func SetupCommitteeRunners(
 		return qbftCtrl
 	}
 
-	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
+	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 		valCheck := specssv.BeaconVoteValueCheckF(options.Signer, slot, slashableValidators, epoch)
-		crunner := runner.NewCommitteeRunner(
+		crunner, err := runner.NewCommitteeRunner(
 			options.NetworkConfig,
 			shares,
 			buildController(spectypes.RoleCommittee, valCheck),
@@ -1299,7 +1299,10 @@ func SetupCommitteeRunners(
 			options.OperatorSigner,
 			valCheck,
 		)
-		return crunner.(*runner.CommitteeRunner)
+		if err != nil {
+			return nil, err
+		}
+		return crunner.(*runner.CommitteeRunner), nil
 	}
 }
 
@@ -1308,11 +1311,11 @@ func SetupRunners(
 	ctx context.Context,
 	logger *zap.Logger,
 	options validator.Options,
-) runner.ValidatorDutyRunners {
+) (runner.ValidatorDutyRunners, error) {
 
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
-		return runner.ValidatorDutyRunners{} // TODO need to find better way to fix it
+		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
 	}
 
 	runnersType := []spectypes.RunnerRole{
@@ -1353,6 +1356,7 @@ func SetupRunners(
 
 	runners := runner.ValidatorDutyRunners{}
 	alanDomainType := options.NetworkConfig.AlanDomainType
+	var err error
 	for _, role := range runnersType {
 		switch role {
 		//case spectypes.BNRoleAttester:
@@ -1362,11 +1366,11 @@ func SetupRunners(
 		case spectypes.RoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
-			runners[role] = runner.NewProposerRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
+			runners[role], err = runner.NewProposerRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
-			runners[role] = runner.NewAggregatorRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
+			runners[role], err = runner.NewAggregatorRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
 		//case spectypes.BNRoleSyncCommittee:
 		//syncCommitteeValueCheckF := specssv.SyncCommitteeValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 		//qbftCtrl := buildController(spectypes.BNRoleSyncCommittee, syncCommitteeValueCheckF)
@@ -1374,14 +1378,17 @@ func SetupRunners(
 		case spectypes.RoleSyncCommitteeContribution:
 			syncCommitteeContributionValueCheckF := specssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
-			runners[role] = runner.NewSyncCommitteeAggregatorRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
+			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role] = runner.NewValidatorRegistrationRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role], err = runner.NewValidatorRegistrationRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		case spectypes.RoleVoluntaryExit:
-			runners[role] = runner.NewVoluntaryExitRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role], err = runner.NewVoluntaryExitRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "could not create duty runner")
 		}
 	}
-	return runners
+	return runners, nil
 }
 
 func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options validator.Options) genesisrunner.DutyRunners {

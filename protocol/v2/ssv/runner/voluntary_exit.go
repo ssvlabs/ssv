@@ -41,7 +41,12 @@ func NewVoluntaryExitRunner(
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-) Runner {
+) (Runner, error) {
+
+	if len(share) != 1 {
+		return nil, errors.New("must have one share")
+	}
+
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
@@ -56,7 +61,7 @@ func NewVoluntaryExitRunner(
 		operatorSigner: operatorSigner,
 
 		metrics: metrics.NewConsensusMetrics(spectypes.RoleVoluntaryExit),
-	}
+	}, nil
 }
 
 func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {

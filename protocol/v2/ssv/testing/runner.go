@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -56,11 +57,19 @@ var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.Te
 	return baseRunner(logger, spectestingutils.UnknownDutyType, keySet)
 }
 
-var baseRunner = func(
+var baseRunner = func(logger *zap.Logger, role spectypes.RunnerRole, keySet *spectestingutils.TestKeySet) runner.Runner {
+	runner, err := ConstructBaseRunner(logger, role, keySet)
+	if err != nil {
+		panic(err)
+	}
+	return runner
+}
+
+var ConstructBaseRunner = func(
 	logger *zap.Logger,
 	role spectypes.RunnerRole,
 	keySet *spectestingutils.TestKeySet,
-) runner.Runner {
+) (runner.Runner, error) {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
@@ -106,9 +115,12 @@ var baseRunner = func(
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[share.ValidatorIndex] = share
 
+	var r runner.Runner
+	var err error
+
 	switch role {
 	case spectypes.RoleCommittee:
-		return runner.NewCommitteeRunner(
+		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
@@ -119,7 +131,7 @@ var baseRunner = func(
 			valCheck,
 		)
 	case spectypes.RoleAggregator:
-		return runner.NewAggregatorRunner(
+		r, err = runner.NewAggregatorRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -132,7 +144,7 @@ var baseRunner = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleProposer:
-		return runner.NewProposerRunner(
+		r, err = runner.NewProposerRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -146,7 +158,7 @@ var baseRunner = func(
 			[]byte("graffiti"),
 		)
 	case spectypes.RoleSyncCommitteeContribution:
-		return runner.NewSyncCommitteeAggregatorRunner(
+		r, err = runner.NewSyncCommitteeAggregatorRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -159,7 +171,7 @@ var baseRunner = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
-		return runner.NewValidatorRegistrationRunner(
+		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -169,7 +181,7 @@ var baseRunner = func(
 			opSigner,
 		)
 	case spectypes.RoleVoluntaryExit:
-		return runner.NewVoluntaryExitRunner(
+		r, err = runner.NewVoluntaryExitRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -179,7 +191,7 @@ var baseRunner = func(
 			opSigner,
 		)
 	case spectestingutils.UnknownDutyType:
-		ret := runner.NewCommitteeRunner(
+		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
@@ -189,11 +201,11 @@ var baseRunner = func(
 			opSigner,
 			valCheck,
 		)
-		ret.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
-		return ret
+		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
-		panic("unknown role type")
+		return nil, errors.New("unknown role type")
 	}
+	return r, err
 }
 
 //
@@ -262,11 +274,19 @@ var baseRunner = func(
 //	return msgs
 //}
 
-var baseRunnerWithShareMap = func(
+var baseRunnerWithShareMap = func(logger *zap.Logger, role spectypes.RunnerRole, shareMap map[phase0.ValidatorIndex]*spectypes.Share) runner.Runner {
+	runner, err := ConstructBaseRunnerWithShareMap(logger, role, shareMap)
+	if err != nil {
+		panic(err)
+	}
+	return runner
+}
+
+var ConstructBaseRunnerWithShareMap = func(
 	logger *zap.Logger,
 	role spectypes.RunnerRole,
 	shareMap map[phase0.ValidatorIndex]*spectypes.Share,
-) runner.Runner {
+) (runner.Runner, error) {
 
 	var keySetInstance *spectestingutils.TestKeySet
 	var shareInstance *spectypes.Share
@@ -334,9 +354,11 @@ var baseRunnerWithShareMap = func(
 		false,
 	)
 
+	var r runner.Runner
+	var err error
 	switch role {
 	case spectypes.RoleCommittee:
-		return runner.NewCommitteeRunner(
+		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
@@ -347,7 +369,7 @@ var baseRunnerWithShareMap = func(
 			valCheck,
 		)
 	case spectypes.RoleAggregator:
-		return runner.NewAggregatorRunner(
+		r, err = runner.NewAggregatorRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -360,7 +382,7 @@ var baseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleProposer:
-		return runner.NewProposerRunner(
+		r, err = runner.NewProposerRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -374,7 +396,7 @@ var baseRunnerWithShareMap = func(
 			[]byte("graffiti"),
 		)
 	case spectypes.RoleSyncCommitteeContribution:
-		return runner.NewSyncCommitteeAggregatorRunner(
+		r, err = runner.NewSyncCommitteeAggregatorRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -387,7 +409,7 @@ var baseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
-		return runner.NewValidatorRegistrationRunner(
+		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -397,7 +419,7 @@ var baseRunnerWithShareMap = func(
 			opSigner,
 		)
 	case spectypes.RoleVoluntaryExit:
-		return runner.NewVoluntaryExitRunner(
+		r, err = runner.NewVoluntaryExitRunner(
 			networkconfig.TestNetwork.AlanDomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -407,7 +429,7 @@ var baseRunnerWithShareMap = func(
 			opSigner,
 		)
 	case spectestingutils.UnknownDutyType:
-		ret := runner.NewCommitteeRunner(
+		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
@@ -417,9 +439,11 @@ var baseRunnerWithShareMap = func(
 			opSigner,
 			valCheck,
 		)
-		ret.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
-		return ret
+		if r != nil {
+			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
+		}
 	default:
-		panic("unknown role type")
+		return nil, errors.New("unknown role type")
 	}
+	return r, err
 }
