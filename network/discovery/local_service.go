@@ -94,15 +94,15 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
 	// TODO
-	return nil
+	return false, nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
 	// TODO
-	return nil
+	return false, nil
 }
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
