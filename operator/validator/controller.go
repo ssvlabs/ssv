@@ -969,8 +969,10 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.SSVShare = share
 		opts.Operator = operator
 
+		committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
+
 		logger := c.logger.With([]zap.Field{
-			zap.String("committee", fields.FormatCommittee(operator.Committee)),
+			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
 			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
 		}...)
 

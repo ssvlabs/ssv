@@ -1,11 +1,10 @@
 package validation
 
 import (
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -27,6 +26,7 @@ type LoggerFields struct {
 	SSVMessageType spectypes.MsgType
 	Slot           phase0.Slot
 	Consensus      *ConsensusFields
+	DutyID         string
 }
 
 // AsZapFields returns zap logging fields for the descriptor.
@@ -36,6 +36,10 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 		fields.Role(d.Role),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
+	}
+
+	if d.DutyID != "" {
+		result = append(result, fields.DutyID(d.DutyID))
 	}
 
 	if d.Consensus != nil {
@@ -77,6 +81,29 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	return descriptor
 }
 
+func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
+	var dutyId string
+	// make dutyid
+	if lf.Role == spectypes.RoleCommittee {
+		c := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID))
+		dutyId = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
+	} else {
+		// get the validator index from the msgid
+		idx := mv.validatorStore.Validator(lf.DutyExecutorID).ValidatorIndex
+		dutyId = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role, idx)
+	}
+	lf.DutyID = dutyId
+}
+
+func (mv *messageValidator) addGenesisDutyIDField(lf *GenesisLoggerFields) {
+	var dutyId string
+	msgid := genesisspectypes.MessageIDFromBytes(lf.DutyExecutorID)
+	idx := mv.validatorStore.Validator(msgid.GetPubKey()).ValidatorIndex
+	dutyId = fields.GenesisFormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role, idx)
+
+	lf.DutyID = dutyId
+}
+
 // LoggerFields provides details about a message. It's used for logging and metrics.
 type GenesisLoggerFields struct {
 	DutyExecutorID []byte
@@ -84,6 +111,7 @@ type GenesisLoggerFields struct {
 	SSVMessageType genesisspectypes.MsgType
 	Slot           phase0.Slot
 	Consensus      *ConsensusFields
+	DutyID         string
 }
 
 // AsZapFields returns zap logging fields for the descriptor.

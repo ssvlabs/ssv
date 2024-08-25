@@ -126,6 +126,11 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 		With(loggerFields.AsZapFields()...).
 		With(fields.PeerID(peerID))
 
+	// Only on debug level is enabled to avoid  unnecessary calls to ValidatorStore.
+	if logger.Level() == zap.DebugLevel {
+		mv.addDutyIDField(loggerFields)
+	}
+
 	var valErr Error
 	if !errors.As(err, &valErr) {
 		mv.metrics.MessageIgnored(err.Error(), loggerFields.Role, loggerFields.Consensus.Round)

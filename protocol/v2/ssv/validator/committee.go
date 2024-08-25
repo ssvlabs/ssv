@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"sync"
 	"time"
 
@@ -210,7 +211,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
 	for slot, runner := range c.Runners {
 		logger.Debug("trying to stop duty for validator",
-			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+			fields.DutyID(fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.Operator.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
 			zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
 		)
 		runner.StopDuty(validator)
