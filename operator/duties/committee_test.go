@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"runtime"
 	"testing"
 	"time"
 
@@ -608,8 +607,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 
 // reorg previous dependent root changed
 func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *testing.T) {
-	originalProcs := runtime.GOMAXPROCS(1)
-	defer runtime.GOMAXPROCS(originalProcs)
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
