@@ -92,7 +92,6 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockExecutionClient := NewMockExecutionClient(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)
-	mockValidatorController := NewMockValidatorController(ctrl)
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
@@ -101,13 +100,12 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	}
 
 	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		ExecutionClient:     mockExecutionClient,
-		Network:             mockNetworkConfig,
-		ValidatorProvider:   mockValidatorProvider,
-		ValidatorController: mockValidatorController,
-		DutyExecutor:        mockDutyExecutor,
+		Ctx:               ctx,
+		BeaconNode:        mockBeaconNode,
+		ExecutionClient:   mockExecutionClient,
+		Network:           mockNetworkConfig,
+		ValidatorProvider: mockValidatorProvider,
+		DutyExecutor:      mockDutyExecutor,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			ticker := NewMockSlotTicker()
 			mockSlotService.Subscribe(ticker.Subscribe())
