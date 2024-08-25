@@ -19,7 +19,6 @@ type dutyHandler interface {
 		executionClient ExecutionClient,
 		network networkconfig.NetworkConfig,
 		validatorProvider ValidatorProvider,
-		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
 		slotTickerProvider slotticker.Provider,
 		reorgEvents chan ReorgEvent,
@@ -31,14 +30,13 @@ type dutyHandler interface {
 }
 
 type baseHandler struct {
-	logger              *zap.Logger
-	beaconNode          BeaconNode
-	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
-	validatorProvider   ValidatorProvider
-	validatorController ValidatorController
-	dutiesExecutor      DutiesExecutor
-	ticker              slotticker.SlotTicker
+	logger            *zap.Logger
+	beaconNode        BeaconNode
+	executionClient   ExecutionClient
+	network           networkconfig.NetworkConfig
+	validatorProvider ValidatorProvider
+	dutiesExecutor    DutiesExecutor
+	ticker            slotticker.SlotTicker
 
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
@@ -53,7 +51,6 @@ func (h *baseHandler) Setup(
 	executionClient ExecutionClient,
 	network networkconfig.NetworkConfig,
 	validatorProvider ValidatorProvider,
-	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,
 	slotTickerProvider slotticker.Provider,
 	reorgEvents chan ReorgEvent,
@@ -64,7 +61,6 @@ func (h *baseHandler) Setup(
 	h.executionClient = executionClient
 	h.network = network
 	h.validatorProvider = validatorProvider
-	h.validatorController = validatorController
 	h.dutiesExecutor = dutiesExecutor
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents

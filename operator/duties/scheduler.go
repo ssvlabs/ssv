@@ -86,34 +86,27 @@ type ValidatorProvider interface {
 	Validator(pubKey []byte) *types.SSVShare
 }
 
-// ValidatorController represents the component that controls validators via the scheduler
-type ValidatorController interface {
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-}
-
 type SchedulerOptions struct {
-	Ctx                 context.Context
-	BeaconNode          BeaconNode
-	ExecutionClient     ExecutionClient
-	Network             networkconfig.NetworkConfig
-	ValidatorProvider   ValidatorProvider
-	ValidatorController ValidatorController
-	DutyExecutor        DutyExecutor
-	IndicesChg          chan struct{}
-	ValidatorExitCh     <-chan ExitDescriptor
-	SlotTickerProvider  slotticker.Provider
-	DutyStore           *dutystore.Store
-	P2PNetwork          network.P2PNetwork
+	Ctx                context.Context
+	BeaconNode         BeaconNode
+	ExecutionClient    ExecutionClient
+	Network            networkconfig.NetworkConfig
+	ValidatorProvider  ValidatorProvider
+	DutyExecutor       DutyExecutor
+	IndicesChg         chan struct{}
+	ValidatorExitCh    <-chan ExitDescriptor
+	SlotTickerProvider slotticker.Provider
+	DutyStore          *dutystore.Store
+	P2PNetwork         network.P2PNetwork
 }
 
 type Scheduler struct {
-	beaconNode          BeaconNode
-	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
-	validatorProvider   ValidatorProvider
-	validatorController ValidatorController
-	slotTickerProvider  slotticker.Provider
-	dutyExecutor        DutyExecutor
+	beaconNode         BeaconNode
+	executionClient    ExecutionClient
+	network            networkconfig.NetworkConfig
+	validatorProvider  ValidatorProvider
+	slotTickerProvider slotticker.Provider
+	dutyExecutor       DutyExecutor
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -143,7 +136,6 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		slotTickerProvider:  opts.SlotTickerProvider,
 		dutyExecutor:        opts.DutyExecutor,
 		validatorProvider:   opts.ValidatorProvider,
-		validatorController: opts.ValidatorController,
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
 
@@ -201,7 +193,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.executionClient,
 			s.network,
 			s.validatorProvider,
-			s.validatorController,
 			s,
 			s.slotTickerProvider,
 			reorgCh,
