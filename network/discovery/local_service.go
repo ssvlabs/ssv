@@ -105,6 +105,10 @@ func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 	return false, nil
 }
 
+func (md *localDiscovery) PublishENR(logger *zap.Logger) {
+	// TODO
+}
+
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
 type discoveryNotifee struct {
 	handler HandleNewPeer
