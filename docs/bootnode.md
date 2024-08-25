@@ -54,7 +54,7 @@ _Note: This is an example. Replace the placeholders as explained below._
    docker rm -f ssv_bootnode && docker run -d --restart unless-stopped --name=ssv_bootnode \
        -e CONFIG_PATH=/config.yaml -p 5000:5000 -p 4000:4000/udp \
        -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data -it \
-       'bloxstaking/ssv-node-unstable:latest' make BUILD_PATH=/go/bin/ssvnode start-boot-node
+       'ssvlabs/ssv-node-unstable:latest' make BUILD_PATH=/go/bin/ssvnode start-boot-node
    ```
 
    _Note: `/data` must be a persistent volume to preserve the ENR across restarts!_
