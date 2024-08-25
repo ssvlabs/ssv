@@ -65,6 +65,10 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	descriptor.Role = decodedMessage.GetID().GetRoleType()
 	descriptor.SSVMessageType = decodedMessage.GetType()
 
+	if mv.logger.Level() == zap.DebugLevel {
+		mv.addDutyIDField(descriptor)
+	}
+
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
 		if m != nil {
@@ -85,7 +89,7 @@ func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	var dutyId string
 	// make dutyid
 	if lf.Role == spectypes.RoleCommittee {
-		c := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID))
+		c := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
 		dutyId = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
 	} else {
 		// get the validator index from the msgid
