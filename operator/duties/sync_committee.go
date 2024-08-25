@@ -203,7 +203,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	activeValidators := h.validatorProvider.ParticipatingValidators(firstEpoch)
 	var allActiveIndices []phase0.ValidatorIndex
 	for _, validator := range activeValidators {
-		allActiveIndices = append(allActiveIndices, validator.BeaconMetadata.Index)
+		allActiveIndices = append(allActiveIndices, validator.ValidatorIndex)
 	}
 	if len(allActiveIndices) == 0 {
 		h.logger.Debug("no active validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
