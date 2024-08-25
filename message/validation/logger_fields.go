@@ -95,15 +95,6 @@ func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	lf.DutyID = dutyId
 }
 
-func (mv *messageValidator) addGenesisDutyIDField(lf *GenesisLoggerFields) {
-	var dutyId string
-	msgid := genesisspectypes.MessageIDFromBytes(lf.DutyExecutorID)
-	idx := mv.validatorStore.Validator(msgid.GetPubKey()).ValidatorIndex
-	dutyId = fields.GenesisFormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role, idx)
-
-	lf.DutyID = dutyId
-}
-
 // LoggerFields provides details about a message. It's used for logging and metrics.
 type GenesisLoggerFields struct {
 	DutyExecutorID []byte
@@ -111,7 +102,6 @@ type GenesisLoggerFields struct {
 	SSVMessageType genesisspectypes.MsgType
 	Slot           phase0.Slot
 	Consensus      *ConsensusFields
-	DutyID         string
 }
 
 // AsZapFields returns zap logging fields for the descriptor.
