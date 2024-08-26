@@ -74,13 +74,13 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages, limits MessageCounts) error {
 	switch m.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
-		if c.PreConsensus > limits.PreConsensus {
+		if c.PreConsensus >= limits.PreConsensus {
 			err := ErrInvalidPartialSignatureTypeCount
 			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 			return err
 		}
 	case spectypes.PostConsensusPartialSig:
-		if c.PostConsensus > limits.PostConsensus {
+		if c.PostConsensus >= limits.PostConsensus {
 			err := ErrInvalidPartialSignatureTypeCount
 			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
 			return err
