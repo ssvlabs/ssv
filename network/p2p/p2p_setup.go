@@ -236,13 +236,14 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	var discV5Opts *discovery.DiscV5Options
 	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
 		discV5Opts = &discovery.DiscV5Options{
-			IP:            ipAddr.String(),
-			BindIP:        net.IPv4zero.String(),
-			Port:          n.cfg.UDPPort,
-			TCPPort:       n.cfg.TCPPort,
-			NetworkKey:    n.cfg.NetworkPrivateKey,
-			Bootnodes:     n.cfg.TransformBootnodes(),
-			EnableLogging: n.cfg.DiscoveryTrace,
+			IP:                 ipAddr.String(),
+			BindIP:             net.IPv4zero.String(),
+			Port:               n.cfg.UDPPort,
+			TCPPort:            n.cfg.TCPPort,
+			NetworkKey:         n.cfg.NetworkPrivateKey,
+			Bootnodes:          n.cfg.TransformBootnodes(),
+			EnableLogging:      n.cfg.DiscoveryTrace,
+			DisableNetRestrict: n.cfg.DisableIPRateLimit,
 		}
 		if len(n.fixedSubnets) > 0 {
 			discV5Opts.Subnets = n.fixedSubnets

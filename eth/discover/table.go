@@ -108,6 +108,14 @@ type bucket struct {
 
 func newTable(t transport, db *enode.DB, cfg Config) (*Table, error) {
 	cfg = cfg.withDefaults()
+
+	var tblIPLimit uint = tableIPLimit
+	var bktIPLimit uint = bucketIPLimit
+	if cfg.DisableNetRestrict {
+		tblIPLimit = 1000
+		bktIPLimit = 1000
+	}
+
 	tab := &Table{
 		net:        t,
 		db:         db,
@@ -118,7 +126,7 @@ func newTable(t transport, db *enode.DB, cfg Config) (*Table, error) {
 		closeReq:   make(chan struct{}),
 		closed:     make(chan struct{}),
 		rand:       mrand.New(mrand.NewSource(0)),
-		ips:        netutil.DistinctNetSet{Subnet: tableSubnet, Limit: tableIPLimit},
+		ips:        netutil.DistinctNetSet{Subnet: tableSubnet, Limit: tblIPLimit},
 	}
 	if err := tab.setFallbackNodes(cfg.Bootnodes); err != nil {
 		return nil, err
@@ -126,7 +134,7 @@ func newTable(t transport, db *enode.DB, cfg Config) (*Table, error) {
 	for i := range tab.buckets {
 		tab.buckets[i] = &bucket{
 			index: i,
-			ips:   netutil.DistinctNetSet{Subnet: bucketSubnet, Limit: bucketIPLimit},
+			ips:   netutil.DistinctNetSet{Subnet: bucketSubnet, Limit: bktIPLimit},
 		}
 	}
 	tab.seedRand()

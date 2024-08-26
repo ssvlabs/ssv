@@ -59,6 +59,8 @@ type Config struct {
 	ValidSchemes enr.IdentityScheme // allowed identity schemes
 	Clock        mclock.Clock
 
+	DisableNetRestrict bool
+
 	// NodeFilter must return true for a node to be added to the table, unless it is nil.
 	NodeFilter func(*enode.Node) bool
 }

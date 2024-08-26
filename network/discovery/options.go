@@ -37,6 +37,8 @@ type DiscV5Options struct {
 	Subnets []byte
 	// EnableLogging when true enables logs to be emitted
 	EnableLogging bool
+	// DisableNetRestrict when true disables the network restrictions
+	DisableNetRestrict bool
 }
 
 // DefaultOptions returns the default options
@@ -86,8 +88,9 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 // DiscV5Cfg creates discv5 config from the options
 func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, error) {
 	dv5Cfg := discover.Config{
-		PrivateKey:   opts.NetworkKey,
-		V5ProtocolID: &SSVProtocolID,
+		PrivateKey:         opts.NetworkKey,
+		V5ProtocolID:       &SSVProtocolID,
+		DisableNetRestrict: opts.DisableNetRestrict,
 	}
 	if len(opts.Bootnodes) > 0 {
 		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)

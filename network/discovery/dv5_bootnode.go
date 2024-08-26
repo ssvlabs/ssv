@@ -12,9 +12,10 @@ import (
 
 // BootnodeOptions contains options to create the node
 type BootnodeOptions struct {
-	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Bootnode private key (default will generate new)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
-	Port       int    `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
+	PrivateKey         string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Bootnode private key (default will generate new)"`
+	ExternalIP         string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
+	Port               int    `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
+	DisableIPRateLimit bool   `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" default:"false" env-description:"Flag to turn on/off IP rate limiting"`
 }
 
 // Bootnode represents a bootnode used for tests
@@ -58,12 +59,13 @@ func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *Boot
 	}
 	discOpts := &Options{
 		DiscV5Opts: &DiscV5Options{
-			IP:         opts.ExternalIP,
-			BindIP:     "", // net.IPv4zero.String()
-			Port:       opts.Port,
-			TCPPort:    5000,
-			NetworkKey: privKey,
-			Bootnodes:  []string{},
+			IP:                 opts.ExternalIP,
+			BindIP:             "", // net.IPv4zero.String()
+			Port:               opts.Port,
+			TCPPort:            5000,
+			NetworkKey:         privKey,
+			Bootnodes:          []string{},
+			DisableNetRestrict: opts.DisableIPRateLimit,
 		},
 	}
 	return newDiscV5Service(ctx, logger, discOpts)
