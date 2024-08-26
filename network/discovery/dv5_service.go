@@ -269,7 +269,6 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) er
 	if updated != nil {
 		dvs.subnets = updated
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
-		go dvs.publishENR(logger)
 	}
 	return nil
 }
@@ -288,13 +287,12 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 	if updated != nil {
 		dvs.subnets = updated
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
-		go dvs.publishENR(logger)
 	}
 	return nil
 }
 
-// publishENR publishes the new ENR across the network
-func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
+// PublishENR publishes the new ENR across the network
+func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
 	defer done()
 	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {

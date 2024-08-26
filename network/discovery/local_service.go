@@ -74,6 +74,10 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 	}
 }
 
+func (md *localDiscovery) PublishENR(logger *zap.Logger) {
+	// TODO
+}
+
 // Bootstrap starts to listen to new nodes
 func (md *localDiscovery) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	err := md.svc.Start()

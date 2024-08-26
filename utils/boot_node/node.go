@@ -11,13 +11,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/eth/discover"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -28,12 +28,13 @@ var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // Options contains options to create the node
 type Options struct {
-	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's external IP"`
-	TCPPort    int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
-	UDPPort    int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
-	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
-	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
+	PrivateKey         string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
+	ExternalIP         string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's external IP"`
+	TCPPort            int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
+	UDPPort            int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
+	DbPath             string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
+	Network            string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
+	DisableIPRateLimit bool   `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" default:"false" env-description:"Flag to turn on/off IP rate limiting"`
 }
 
 // Node represents the behavior of boot node
@@ -44,13 +45,14 @@ type Node interface {
 
 // bootNode implements Node interface
 type bootNode struct {
-	privateKey  string
-	discv5port  int
-	forkVersion []byte
-	externalIP  string
-	tcpPort     int
-	dbPath      string
-	network     networkconfig.NetworkConfig
+	privateKey         string
+	discv5port         int
+	forkVersion        []byte
+	externalIP         string
+	tcpPort            int
+	dbPath             string
+	network            networkconfig.NetworkConfig
+	disableNetRestrict bool
 }
 
 // New is the constructor of ssvNode
@@ -60,13 +62,14 @@ func New(opts Options) (Node, error) {
 		return nil, err
 	}
 	return &bootNode{
-		privateKey:  opts.PrivateKey,
-		discv5port:  opts.UDPPort,
-		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
-		externalIP:  opts.ExternalIP,
-		tcpPort:     opts.TCPPort,
-		dbPath:      opts.DbPath,
-		network:     networkConfig,
+		privateKey:         opts.PrivateKey,
+		discv5port:         opts.UDPPort,
+		forkVersion:        []byte{0x00, 0x00, 0x20, 0x09},
+		externalIP:         opts.ExternalIP,
+		tcpPort:            opts.TCPPort,
+		dbPath:             opts.DbPath,
+		network:            networkConfig,
+		disableNetRestrict: opts.DisableIPRateLimit,
 	}, nil
 }
 
@@ -103,8 +106,9 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
 	cfg := discover.Config{
-		PrivateKey:   privKey,
-		V5ProtocolID: &SSVProtocolID,
+		PrivateKey:         privKey,
+		V5ProtocolID:       &SSVProtocolID,
+		DisableNetRestrict: n.disableNetRestrict,
 	}
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"

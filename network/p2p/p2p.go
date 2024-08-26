@@ -406,6 +406,8 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 		}
 
+		go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
+
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.activeSubnets, 0)
 		logger.Debug("updated subnets",

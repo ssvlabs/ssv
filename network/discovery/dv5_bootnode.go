@@ -30,6 +30,8 @@ type Bootnode struct {
 // NewBootnode creates a new bootnode
 func NewBootnode(pctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (*Bootnode, error) {
 	ctx, cancel := context.WithCancel(pctx)
+	logger.Info("creating bootnode", zap.Int("port", opts.Port),
+		zap.Bool("disable_ip_rate_limit", opts.DisableIPRateLimit))
 	disc, err := createBootnodeDiscovery(ctx, logger, opts)
 	if err != nil {
 		cancel()
