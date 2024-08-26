@@ -13,8 +13,7 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
 
-// TODO: (Alan) add ValidatorStore tests
-type ValidatorStore interface {
+type BaseValidatorStore interface {
 	Validator(pubKey []byte) *types.SSVShare
 	ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare
 	Validators() []*types.SSVShare
@@ -26,13 +25,17 @@ type ValidatorStore interface {
 	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
 	OperatorCommittees(id spectypes.OperatorID) []*Committee
 
-	WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore
-
 	// TODO: save recipient address
 }
 
+type ValidatorStore interface {
+	BaseValidatorStore
+
+	WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore
+}
+
 type SelfValidatorStore interface {
-	ValidatorStore
+	BaseValidatorStore
 
 	SelfValidators() []*types.SSVShare
 	SelfParticipatingValidators(phase0.Epoch) []*types.SSVShare
