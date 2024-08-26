@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ssvlabs/ssv/eth/discover"
 )
 
 var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
