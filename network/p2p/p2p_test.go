@@ -3,8 +3,10 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -40,18 +42,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	shares := []*ssvtypes.SSVShare{
-		{
-			Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-					Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
-				},
-				Liquidated: false,
-			},
-		},
-	}
+	shares := generateShares(t, 1)
 
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
 		Nodes:        n,
@@ -78,8 +69,12 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
-		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
+		keySets1, err1 := generateKeySetsWithRandomPK()
+		keySets2, err2 := generateKeySetsWithRandomPK()
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		msg1 := generateMsg(keySets1, 1)
+		msg3 := generateMsg(keySets2, 3)
 		require.NoError(t, node1.Broadcast(msg1.SSVMessage.GetID(), msg1))
 		<-time.After(time.Millisecond * 20)
 		require.NoError(t, node2.Broadcast(msg3.SSVMessage.GetID(), msg3))
@@ -91,10 +86,15 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-
-		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
-		msg2 := generateMsg(spectestingutils.Testing4SharesSet(), 2)
-		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
+		keySets1, err1 := generateKeySetsWithRandomPK()
+		keySets2, err2 := generateKeySetsWithRandomPK()
+		keySets3, err3 := generateKeySetsWithRandomPK()
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		require.NoError(t, err3)
+		msg1 := generateMsg(keySets1, 1)
+		msg2 := generateMsg(keySets2, 2)
+		msg3 := generateMsg(keySets3, 3)
 		require.NoError(t, err)
 
 		time.Sleep(time.Millisecond * 20)
@@ -269,4 +269,37 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 
 	return ln, routers, nil
+}
+
+func generateKeySetsWithRandomPK() (*spectestingutils.TestKeySet, error) {
+	sharesSets := spectestingutils.Testing4SharesSet()
+	randomHex, err := GenerateRandomHex()
+	if err != nil {
+		return nil, err
+	}
+	validatorPK1 := pkFromHex(randomHex)
+	sharesSets.ValidatorPK = validatorPK1
+	return sharesSets, nil
+}
+
+func GenerateRandomHex() (string, error) {
+	b := make([]byte, 64) // 64 bytes = 128 characters in hex
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func pkFromHex(str string) *bls.PublicKey {
+	types.InitBLS()
+	ret := &bls.PublicKey{}
+	byts, err := hex.DecodeString(str)
+	if err != nil {
+		panic(err.Error())
+	}
+	if err := ret.Deserialize(byts); err != nil {
+		panic(err.Error())
+	}
+	return ret
 }
