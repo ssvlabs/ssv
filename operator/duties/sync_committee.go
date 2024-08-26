@@ -16,16 +16,16 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
-// syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
-// period change at which to prepare the relevant duties.
-var syncCommitteePreparationEpochs = uint64(2)
-
 type SyncCommitteeHandler struct {
 	baseHandler
 
 	duties             *dutystore.SyncCommitteeDuties
 	fetchCurrentPeriod bool
 	fetchNextPeriod    bool
+
+	// preparationSlots is the number of slots ahead of the sync committee
+	// period change at which to prepare the relevant duties.
+	preparationSlots uint64
 }
 
 func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitteeHandler {
@@ -64,6 +64,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
+	// Prepare relevant duties 1.5 epochs (48 slots) ahead of the sync committee period change.
+	// The 1.5 epochs timing helps ensure setup occurs when the beacon node is likely less busy.
+	h.preparationSlots = h.network.Beacon.SlotsPerEpoch() * 3 / 2
+
 	if h.shouldFetchNextPeriod(h.network.Beacon.EstimatedCurrentSlot()) {
 		h.fetchNextPeriod = true
 	}
@@ -87,12 +91,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.processFetching(ctx, period, true)
 			cancel()
 
-			// If we have reached the mid-point of the epoch, fetch the duties for the next period in the next slot.
-			// This allows us to set them up at a time when the beacon node should be less busy.
-			epochsPerPeriod := h.network.Beacon.EpochsPerSyncCommitteePeriod()
-			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()/2-2 &&
-				// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
-				uint64(epoch)%epochsPerPeriod == epochsPerPeriod-syncCommitteePreparationEpochs {
+			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
+			periodSlots := h.slotsPerPeriod()
+			if uint64(slot)%periodSlots == periodSlots-h.preparationSlots-1 {
 				h.fetchNextPeriod = true
 			}
 
@@ -317,8 +318,10 @@ func calculateSubscriptions(endEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommi
 }
 
 func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
-	epochsPerPeriod := h.network.Beacon.EpochsPerSyncCommitteePeriod()
-	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-	return uint64(slot)%h.network.SlotsPerEpoch() >= h.network.SlotsPerEpoch()/2-1 &&
-		uint64(epoch)%epochsPerPeriod >= epochsPerPeriod-syncCommitteePreparationEpochs
+	periodSlots := h.slotsPerPeriod()
+	return uint64(slot)%periodSlots > periodSlots-h.preparationSlots-2
+}
+
+func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
+	return h.network.Beacon.EpochsPerSyncCommitteePeriod() * h.network.Beacon.SlotsPerEpoch()
 }
