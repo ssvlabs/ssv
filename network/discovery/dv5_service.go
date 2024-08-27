@@ -153,7 +153,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		return errors.Wrap(err, "could not read domain type")
 	}
 	nodeNextDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyNextDomainType)
-	if err != nil {
+	if err != nil && !errors.Is(err, records.ErrEntryNotFound) {
 		return errors.Wrap(err, "could not read domain type")
 	}
 	if dvs.domainType.DomainType() != nodeDomainType &&
