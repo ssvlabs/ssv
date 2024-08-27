@@ -19,6 +19,155 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+// MockBaseValidatorStore is a mock of BaseValidatorStore interface.
+type MockBaseValidatorStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockBaseValidatorStoreMockRecorder
+}
+
+// MockBaseValidatorStoreMockRecorder is the mock recorder for MockBaseValidatorStore.
+type MockBaseValidatorStoreMockRecorder struct {
+	mock *MockBaseValidatorStore
+}
+
+// NewMockBaseValidatorStore creates a new mock instance.
+func NewMockBaseValidatorStore(ctrl *gomock.Controller) *MockBaseValidatorStore {
+	mock := &MockBaseValidatorStore{ctrl: ctrl}
+	mock.recorder = &MockBaseValidatorStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockBaseValidatorStore) EXPECT() *MockBaseValidatorStoreMockRecorder {
+	return m.recorder
+}
+
+// Committee mocks base method.
+func (m *MockBaseValidatorStore) Committee(id types.CommitteeID) *storage.Committee {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Committee", id)
+	ret0, _ := ret[0].(*storage.Committee)
+	return ret0
+}
+
+// Committee indicates an expected call of Committee.
+func (mr *MockBaseValidatorStoreMockRecorder) Committee(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committee", reflect.TypeOf((*MockBaseValidatorStore)(nil).Committee), id)
+}
+
+// Committees mocks base method.
+func (m *MockBaseValidatorStore) Committees() []*storage.Committee {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Committees")
+	ret0, _ := ret[0].([]*storage.Committee)
+	return ret0
+}
+
+// Committees indicates an expected call of Committees.
+func (mr *MockBaseValidatorStoreMockRecorder) Committees() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committees", reflect.TypeOf((*MockBaseValidatorStore)(nil).Committees))
+}
+
+// OperatorCommittees mocks base method.
+func (m *MockBaseValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.Committee {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OperatorCommittees", id)
+	ret0, _ := ret[0].([]*storage.Committee)
+	return ret0
+}
+
+// OperatorCommittees indicates an expected call of OperatorCommittees.
+func (mr *MockBaseValidatorStoreMockRecorder) OperatorCommittees(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperatorCommittees", reflect.TypeOf((*MockBaseValidatorStore)(nil).OperatorCommittees), id)
+}
+
+// OperatorValidators mocks base method.
+func (m *MockBaseValidatorStore) OperatorValidators(id types.OperatorID) []*types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OperatorValidators", id)
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	return ret0
+}
+
+// OperatorValidators indicates an expected call of OperatorValidators.
+func (mr *MockBaseValidatorStoreMockRecorder) OperatorValidators(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperatorValidators", reflect.TypeOf((*MockBaseValidatorStore)(nil).OperatorValidators), id)
+}
+
+// ParticipatingCommittees mocks base method.
+func (m *MockBaseValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.Committee {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ParticipatingCommittees", epoch)
+	ret0, _ := ret[0].([]*storage.Committee)
+	return ret0
+}
+
+// ParticipatingCommittees indicates an expected call of ParticipatingCommittees.
+func (mr *MockBaseValidatorStoreMockRecorder) ParticipatingCommittees(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipatingCommittees", reflect.TypeOf((*MockBaseValidatorStore)(nil).ParticipatingCommittees), epoch)
+}
+
+// ParticipatingValidators mocks base method.
+func (m *MockBaseValidatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	return ret0
+}
+
+// ParticipatingValidators indicates an expected call of ParticipatingValidators.
+func (mr *MockBaseValidatorStoreMockRecorder) ParticipatingValidators(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipatingValidators", reflect.TypeOf((*MockBaseValidatorStore)(nil).ParticipatingValidators), epoch)
+}
+
+// Validator mocks base method.
+func (m *MockBaseValidatorStore) Validator(pubKey []byte) *types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validator", pubKey)
+	ret0, _ := ret[0].(*types0.SSVShare)
+	return ret0
+}
+
+// Validator indicates an expected call of Validator.
+func (mr *MockBaseValidatorStoreMockRecorder) Validator(pubKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockBaseValidatorStore)(nil).Validator), pubKey)
+}
+
+// ValidatorByIndex mocks base method.
+func (m *MockBaseValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorByIndex", index)
+	ret0, _ := ret[0].(*types0.SSVShare)
+	return ret0
+}
+
+// ValidatorByIndex indicates an expected call of ValidatorByIndex.
+func (mr *MockBaseValidatorStoreMockRecorder) ValidatorByIndex(index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorByIndex", reflect.TypeOf((*MockBaseValidatorStore)(nil).ValidatorByIndex), index)
+}
+
+// Validators mocks base method.
+func (m *MockBaseValidatorStore) Validators() []*types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validators")
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	return ret0
+}
+
+// Validators indicates an expected call of Validators.
+func (mr *MockBaseValidatorStoreMockRecorder) Validators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockBaseValidatorStore)(nil).Validators))
+}
+
 // MockValidatorStore is a mock of ValidatorStore interface.
 type MockValidatorStore struct {
 	ctrl     *gomock.Controller
@@ -385,18 +534,4 @@ func (m *MockSelfValidatorStore) Validators() []*types0.SSVShare {
 func (mr *MockSelfValidatorStoreMockRecorder) Validators() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockSelfValidatorStore)(nil).Validators))
-}
-
-// WithOperatorID mocks base method.
-func (m *MockSelfValidatorStore) WithOperatorID(operatorID func() types.OperatorID) storage.SelfValidatorStore {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithOperatorID", operatorID)
-	ret0, _ := ret[0].(storage.SelfValidatorStore)
-	return ret0
-}
-
-// WithOperatorID indicates an expected call of WithOperatorID.
-func (mr *MockSelfValidatorStoreMockRecorder) WithOperatorID(operatorID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithOperatorID", reflect.TypeOf((*MockSelfValidatorStore)(nil).WithOperatorID), operatorID)
 }
