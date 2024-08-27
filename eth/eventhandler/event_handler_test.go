@@ -18,6 +18,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -90,7 +91,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	sim := simTestBackend(testAddresses)
 
 	// Create JSON-RPC handler
-	rpcServer, _ := sim.Node.RPCHandler()
+	rpcServer, _ := sim.Node().RPCHandler()
 	// Expose handler on a test server with ws open
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
@@ -99,14 +100,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
 	if err != nil {
 		t.Errorf("deploying contract: %v", err)
 	}
 	sim.Commit()
 
 	// Check contract code at the simulated blockchain
-	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
+	contractCode, err := sim.Client().CodeAt(ctx, contractAddr, nil)
 	if err != nil {
 		t.Errorf("getting contract code: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	logs := client.StreamLogs(ctx, 0)
 
-	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
+	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
 	require.NoError(t, err)
 
 	// Generate a new validator
@@ -1426,15 +1427,15 @@ func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 	return vLogOperatorAdded
 }
 
-func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
+func simTestBackend(testAddresses []*ethcommon.Address) *simulator.Backend {
 	genesis := ethtypes.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
 		genesis[*testAddr] = ethtypes.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
-	return simulator.NewSimulatedBackend(
-		genesis, 50_000_000,
+	return simulator.NewBackend(
+		genesis, simulated.WithBlockGasLimit(50_000_000),
 	)
 }
 

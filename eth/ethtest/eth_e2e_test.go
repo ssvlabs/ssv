@@ -10,7 +10,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -165,8 +165,10 @@ func TestEthExecLayer(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expectedNonce, nonce)
 
+			lastBlockNum, err := testEnv.sim.Client().BlockByNumber(ctx, nil)
+			require.NoError(t, err)
 			// Not sure does this make sense
-			require.Equal(t, uint64(testEnv.sim.Blockchain.CurrentBlock().Number.Int64()), *common.blockNum)
+			require.Equal(t, lastBlockNum.Number().Uint64(), *common.blockNum)
 		}
 
 		// Step 2: Exit validator

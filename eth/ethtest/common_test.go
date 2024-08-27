@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rpc"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
@@ -26,7 +26,7 @@ import (
 
 type CommonTestInput struct {
 	t             *testing.T
-	sim           *simulator.SimulatedBackend
+	sim           *simulator.Backend
 	boundContract *simcontract.Simcontract
 	blockNum      *uint64
 	nodeStorage   storage.Storage
@@ -35,7 +35,7 @@ type CommonTestInput struct {
 
 func NewCommonTestInput(
 	t *testing.T,
-	sim *simulator.SimulatedBackend,
+	sim *simulator.Backend,
 	boundContract *simcontract.Simcontract,
 	blockNum *uint64,
 	nodeStorage storage.Storage,
@@ -56,7 +56,7 @@ type TestEnv struct {
 	validators     []*testValidatorData
 	ops            []*testOperator
 	nodeStorage    storage.Storage
-	sim            *simulator.SimulatedBackend
+	sim            *simulator.Backend
 	boundContract  *simcontract.Simcontract
 	auth           *bind.TransactOpts
 	shares         [][]byte
@@ -71,10 +71,6 @@ type TestEnv struct {
 func (e *TestEnv) shutdown() {
 	if e.mockCtrl != nil {
 		e.mockCtrl.Finish()
-	}
-
-	if e.httpSrv != nil {
-		e.httpSrv.Close()
 	}
 
 	if e.execClient != nil {
@@ -131,8 +127,7 @@ func (e *TestEnv) setup(
 	// Adding testAddresses to the genesis block mostly to specify some balances for them
 	sim := simTestBackend(testAddresses)
 
-	// Create JSON-RPC handler
-	rpcServer, err := sim.Node.RPCHandler()
+	rpcServer, err := sim.Node().RPCHandler()
 	e.rpcServer = rpcServer
 	if err != nil {
 		return fmt.Errorf("can't create RPC server: %w", err)
@@ -153,7 +148,7 @@ func (e *TestEnv) setup(
 		return err
 	}
 
-	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
 	if err != nil {
 		return fmt.Errorf("deploy contract: %w", err)
 	}
@@ -161,7 +156,7 @@ func (e *TestEnv) setup(
 	sim.Commit()
 
 	// Check contract code at the simulated blockchain
-	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
+	contractCode, err := sim.Client().CodeAt(ctx, contractAddr, nil)
 	if err != nil {
 		return fmt.Errorf("get contract code: %w", err)
 	}
@@ -186,7 +181,7 @@ func (e *TestEnv) setup(
 		return err
 	}
 
-	e.boundContract, err = simcontract.NewSimcontract(contractAddr, sim)
+	e.boundContract, err = simcontract.NewSimcontract(contractAddr, sim.Client())
 	if err != nil {
 		return err
 	}
@@ -225,7 +220,7 @@ func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
 	}
 }
 
-func commitBlock(sim *simulator.SimulatedBackend, blockNum *uint64) {
+func commitBlock(sim *simulator.Backend, blockNum *uint64) {
 	sim.Commit()
 	*blockNum++
 }
