@@ -1,15 +1,17 @@
 package p2pv1
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/pkg/errors"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"go.uber.org/zap"
 )
 
 type GenesisP2P struct {
@@ -38,13 +40,9 @@ func (p *GenesisP2P) Broadcast(message *genesisspectypes.SSVMessage) error {
 	}
 	encodedMsg = commons.EncodeGenesisSignedSSVMessage(encodedMsg, p.Network.operatorDataStore.GetOperatorID(), signature)
 
-	if err != nil {
-		return fmt.Errorf("could not encode signed ssv message: %w", err)
-	}
-
 	share := p.Network.nodeStorage.ValidatorStore().Validator(message.MsgID.GetPubKey())
 	if share == nil {
-		return fmt.Errorf("could not find validator: %x", message.MsgID.GetPubKey())
+		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(message.MsgID.GetPubKey()))
 	}
 
 	topics := commons.ValidatorTopicID(message.MsgID.GetPubKey())
