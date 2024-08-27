@@ -214,6 +214,9 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 
 func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 	for _, share := range shares {
+		if share == nil {
+			continue
+		}
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
 			c.muValidatorIndex.Lock()
