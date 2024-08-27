@@ -337,11 +337,12 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 		// Update byOperatorID
 		c.muOperatorID.RLock()
 		for _, shareMember := range share.Committee {
-			data := c.byOperatorID[shareMember.Signer]
-			for i, s := range data.shares {
-				if s.ValidatorPubKey == share.ValidatorPubKey {
-					data.shares[i] = share
-					break
+			if data := c.byOperatorID[shareMember.Signer]; data != nil {
+				for i, s := range data.shares {
+					if s.ValidatorPubKey == share.ValidatorPubKey {
+						data.shares[i] = share
+						break
+					}
 				}
 			}
 		}
