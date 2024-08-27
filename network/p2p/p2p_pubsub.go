@@ -199,7 +199,12 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 		n.activeValidators.Del(pkHex)
 	}
 
-	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
+	share := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	if share == nil {
+		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
+	}
+
+	cmtid := share.CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
