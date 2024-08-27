@@ -319,9 +319,10 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 
 		// Update byCommitteeID
 		c.muCommitteeID.RLock()
-		committee, ok := c.byCommitteeID[share.CommitteeID()]
-		if ok {
-			c.muCommitteeID.RUnlock() // Unlock read lock before acquiring write lock
+		committee := c.byCommitteeID[share.CommitteeID()]
+		c.muCommitteeID.RUnlock()
+
+		if committee != nil {
 			c.muCommitteeID.Lock()
 			for i, validator := range committee.Validators {
 				if validator.ValidatorPubKey == share.ValidatorPubKey {
@@ -331,8 +332,6 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 				}
 			}
 			c.muCommitteeID.Unlock()
-		} else {
-			c.muCommitteeID.RUnlock() // Unlock read lock here
 		}
 
 		// Update byOperatorID
