@@ -184,6 +184,53 @@ func TestPriorityQueue_Order(t *testing.T) {
 	}
 }
 
+func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
+	queue := NewDefault()
+	require.True(t, queue.Empty())
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	state := &State{
+		HasRunningInstance: true,
+		Height:             1,
+		Slot:               1,
+		Round:              1,
+		Quorum:             4,
+	}
+
+	// Pop in a separate goroutine. The first two pops should get the matching messages, and the third should return nil.
+	go func() {
+		defer wg.Done()
+		popped := queue.Pop(context.Background(), NewMessagePrioritizer(state), func(msg *GenesisSSVMessage) bool {
+			_, ok := msg.Body.(*qbft.SignedMessage)
+			if !ok {
+				return true
+			}
+			return msg.Body.(*qbft.SignedMessage).Message.MsgType != qbft.CommitMsgType
+		})
+		require.NotNil(t, popped)
+
+	}()
+
+	// Simulate delay before pushing messages.
+	time.Sleep(100 * time.Millisecond)
+
+	// Push non-matching message.
+	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
+
+	// Push one matching message.
+	decodeAndPush(t, queue, mockNonConsensusMessage{Slot: 1, Type: spectypes.PostConsensusPartialSig}, state)
+
+	// Push non-matching message.
+	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
+
+	wg.Wait()
+
+	// Ensure that the queue still contains the non-matching messages.
+	require.False(t, queue.Empty())
+}
+
 type testMetrics struct {
 	dropped atomic.Uint64
 }
