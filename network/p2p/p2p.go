@@ -381,11 +381,12 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			return self
 		})
 
+		// Register/unregister subnets for discovery.
 		var errs error
-		var added, removed bool
+		var hasAdded, hasRemoved bool
 		if len(addedSubnets) > 0 {
 			var err error
-			added, err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+			hasAdded, err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
 			if err != nil {
 				logger.Debug("could not register subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
@@ -393,7 +394,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 		if len(removedSubnets) > 0 {
 			var err error
-			removed, err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
+			hasRemoved, err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
 			if err != nil {
 				logger.Debug("could not unregister subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
@@ -409,7 +410,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 				}
 			}
 		}
-		if added || removed {
+		if hasAdded || hasRemoved {
 			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
 		}
 
