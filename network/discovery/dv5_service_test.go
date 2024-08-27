@@ -55,17 +55,24 @@ func TestCheckPeer(t *testing.T) {
 				expectedError: errors.New("could not read domain type: not found"),
 			},
 			{
+				name:           "missing domain type but has next domain type",
+				domainType:     nil,
+				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
+				subnets:        mySubnets,
+				expectedError:  errors.New("could not read domain type: not found"),
+			},
+			{
 				name:           "domain type mismatch",
 				domainType:     &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
 				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x6},
 				subnets:        mySubnets,
-				expectedError:  errors.New("mismatched domain type: 01020305"),
+				expectedError:  errors.New("mismatched domain type: neither 01020305 nor 01020306 match 01020304"),
 			},
 			{
 				name:          "domain type mismatch (missing next domain type)",
 				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
 				subnets:       mySubnets,
-				expectedError: errors.New("mismatched domain type: 01020305"),
+				expectedError: errors.New("mismatched domain type: neither 01020305 nor 00000000 match 01020304"),
 			},
 			{
 				name:           "only next domain type matches",
