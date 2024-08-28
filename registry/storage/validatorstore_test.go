@@ -595,9 +595,9 @@ func TestValidatorStore_UpdateNilData(t *testing.T) {
 	store.handleSharesAdded(share1)
 
 	// Manually set a nil entry for a signer in byOperatorID
-	store.mu.Lock()
+	store.muOperatorID.Lock()
 	store.byOperatorID[share1.Committee[0].Signer] = nil
-	store.mu.Unlock()
+	store.muOperatorID.Unlock()
 
 	t.Run("update with nil data in byOperatorID", func(t *testing.T) {
 		require.NotPanics(t, func() {

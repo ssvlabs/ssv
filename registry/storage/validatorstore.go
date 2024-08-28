@@ -75,7 +75,9 @@ type validatorStore struct {
 	byCommitteeID    map[spectypes.CommitteeID]*Committee
 	byOperatorID     map[spectypes.OperatorID]*sharesAndCommittees
 
-	mu sync.RWMutex
+	muValidatorIndex sync.RWMutex
+	muCommitteeID    sync.RWMutex
+	muOperatorID     sync.RWMutex
 }
 
 func newValidatorStore(
@@ -96,8 +98,8 @@ func (c *validatorStore) Validator(pubKey []byte) *types.SSVShare {
 }
 
 func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.muValidatorIndex.RLock()
+	defer c.muValidatorIndex.RUnlock()
 
 	return c.byValidatorIndex[index]
 }
@@ -117,8 +119,8 @@ func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SS
 }
 
 func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SSVShare {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.muOperatorID.RLock()
+	defer c.muOperatorID.RUnlock()
 
 	if data, ok := c.byOperatorID[id]; ok {
 		return data.shares
@@ -127,22 +129,22 @@ func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SS
 }
 
 func (c *validatorStore) Committee(id spectypes.CommitteeID) *Committee {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.muCommitteeID.RLock()
+	defer c.muCommitteeID.RUnlock()
 
 	return c.byCommitteeID[id]
 }
 
 func (c *validatorStore) Committees() []*Committee {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.muCommitteeID.RLock()
+	defer c.muCommitteeID.RUnlock()
 
 	return maps.Values(c.byCommitteeID)
 }
 
 func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committee {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.muCommitteeID.RLock()
+	defer c.muCommitteeID.RUnlock()
 
 	var committees []*Committee
 	for _, committee := range c.byCommitteeID {
@@ -154,8 +156,8 @@ func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committe
 }
 
 func (c *validatorStore) OperatorCommittees(id spectypes.OperatorID) []*Committee {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.muOperatorID.RLock()
+	defer c.muOperatorID.RUnlock()
 
 	if data, ok := c.byOperatorID[id]; ok {
 		return data.committees
@@ -211,9 +213,6 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 }
 
 func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	for _, share := range shares {
 		if share == nil {
 			continue
@@ -221,10 +220,13 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
+			c.muValidatorIndex.Lock()
 			c.byValidatorIndex[share.BeaconMetadata.Index] = share
+			c.muValidatorIndex.Unlock()
 		}
 
 		// Update byCommitteeID
+		c.muCommitteeID.Lock()
 		committee := c.byCommitteeID[share.CommitteeID()]
 		if committee == nil {
 			committee = buildCommittee([]*types.SSVShare{share})
@@ -233,8 +235,10 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 			committee = buildCommittee(append(committee.Validators, share))
 		}
 		c.byCommitteeID[committee.ID] = committee
+		c.muCommitteeID.Unlock()
 
 		// Update byOperatorID
+		c.muOperatorID.Lock()
 		for _, operator := range share.Committee {
 			data := c.byOperatorID[operator.Signer]
 			if data == nil {
@@ -248,24 +252,26 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 			}
 			c.byOperatorID[operator.Signer] = data
 		}
+		c.muOperatorID.Unlock()
 	}
 }
 
 func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	share := c.byPubKey(pk[:])
 	if share == nil {
 		return
 	}
 
 	// Update byValidatorIndex
+	c.muValidatorIndex.Lock()
 	delete(c.byValidatorIndex, share.BeaconMetadata.Index)
+	c.muValidatorIndex.Unlock()
 
 	// Update byCommitteeID
+	c.muCommitteeID.Lock()
 	committee := c.byCommitteeID[share.CommitteeID()]
 	if committee == nil {
+		c.muCommitteeID.Unlock()
 		return
 	}
 	validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
@@ -282,11 +288,14 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 		committee.Validators = validators
 		committee.Indices = indices
 	}
+	c.muCommitteeID.Unlock()
 
 	// Update byOperatorID
+	c.muOperatorID.Lock()
 	for _, operator := range share.Committee {
 		data := c.byOperatorID[operator.Signer]
 		if data == nil {
+			c.muOperatorID.Unlock()
 			return
 		}
 		shares := make([]*types.SSVShare, 0, len(data.shares)-1)
@@ -301,20 +310,20 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 			data.shares = shares
 		}
 	}
+	c.muOperatorID.Unlock()
 }
 
 func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	for _, share := range shares {
-
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
+			c.muValidatorIndex.Lock()
 			c.byValidatorIndex[share.BeaconMetadata.Index] = share
+			c.muValidatorIndex.Unlock()
 		}
 
 		// Update byCommitteeID
+		c.muCommitteeID.Lock()
 		if committee := c.byCommitteeID[share.CommitteeID()]; committee != nil {
 			for i, validator := range committee.Validators {
 				if validator.ValidatorPubKey == share.ValidatorPubKey {
@@ -324,8 +333,10 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 				}
 			}
 		}
+		c.muCommitteeID.Unlock()
 
 		// Update byOperatorID
+		c.muOperatorID.Lock()
 		for _, shareMember := range share.Committee {
 			if data := c.byOperatorID[shareMember.Signer]; data != nil {
 				for i, s := range data.shares {
@@ -336,16 +347,22 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 				}
 			}
 		}
+		c.muOperatorID.Unlock()
 	}
 }
 
 func (c *validatorStore) handleDrop() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	c.muValidatorIndex.Lock()
 	c.byValidatorIndex = make(map[phase0.ValidatorIndex]*types.SSVShare)
+	c.muValidatorIndex.Unlock()
+
+	c.muCommitteeID.Lock()
 	c.byCommitteeID = make(map[spectypes.CommitteeID]*Committee)
+	c.muCommitteeID.Unlock()
+
+	c.muOperatorID.Lock()
 	c.byOperatorID = make(map[spectypes.OperatorID]*sharesAndCommittees)
+	c.muOperatorID.Unlock()
 }
 
 func buildCommittee(shares []*types.SSVShare) *Committee {
