@@ -211,8 +211,8 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 }
 
 func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	for _, share := range shares {
 		if share == nil {

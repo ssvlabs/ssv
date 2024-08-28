@@ -778,7 +778,6 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 }
 
 func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
-	t.Skip("Skipping high contention test due to failure. TODO")
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
