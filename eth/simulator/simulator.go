@@ -68,11 +68,6 @@ type Backend struct {
 	client simClient
 }
 
-// Node is ONLY change in this file is exposing the Node private field to get the RPCHandler
-func (b *Backend) Node() *node.Node {
-	return b.node
-}
-
 // NewBackend creates a new simulated blockchain that can be used as a backend for
 // contract bindings in unit tests.
 //
@@ -98,7 +93,6 @@ func NewBackend(alloc types.GenesisAlloc, options ...func(nodeConf *node.Config,
 	}
 	// Assemble the Ethereum stack to run the chain with
 	stack, err := node.New(&nodeConf)
-	println(stack.HTTPEndpoint(), stack.WSEndpoint())
 	if err != nil {
 		panic(err) // this should never happen
 	}

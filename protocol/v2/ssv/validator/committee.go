@@ -161,15 +161,11 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New("no shares for duty's validators")
 	}
 
-	//if len(duty.ValidatorDuties) == 0 {
-	//	return errors.New("CommitteeDuty has no valid beacon duties")
-	//}
-
 	r, err := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
 	if err != nil {
 		return errors.Wrap(err, "could not create CommitteeRunner")
 	}
-	// Set timeout function.s
+	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
 	if _, ok := c.Queues[duty.Slot]; !ok {

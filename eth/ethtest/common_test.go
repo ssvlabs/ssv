@@ -73,6 +73,10 @@ func (e *TestEnv) shutdown() {
 		e.mockCtrl.Finish()
 	}
 
+	if e.httpSrv != nil {
+		e.httpSrv.Close()
+	}
+
 	if e.execClient != nil {
 		// Always returns nil error
 		_ = e.execClient.Close()

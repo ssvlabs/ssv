@@ -65,7 +65,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	}
 	err := client.connect(ctx)
 	if err != nil {
-		fmt.Println("failed to connnect", nodeAddr)
 		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
 	}
 	return client, nil
