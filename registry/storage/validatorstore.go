@@ -293,9 +293,11 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 	}
 
 	// Update byValidatorIndex
-	c.muValidatorIndex.Lock()
-	delete(c.byValidatorIndex, share.BeaconMetadata.Index)
-	c.muValidatorIndex.Unlock()
+	if share.BeaconMetadata != nil {
+		c.muValidatorIndex.Lock()
+		delete(c.byValidatorIndex, share.BeaconMetadata.Index)
+		c.muValidatorIndex.Unlock()
+	}
 
 	// Update byCommitteeID
 	committeeID := share.CommitteeID()
