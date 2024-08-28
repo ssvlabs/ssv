@@ -86,8 +86,12 @@ func TestValidatorStore(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -115,14 +119,27 @@ func TestValidatorStore(t *testing.T) {
 		require.Contains(t, store.Committees(), buildCommittee([]*ssvtypes.SSVShare{share1}))
 		require.Contains(t, store.Committees(), buildCommittee([]*ssvtypes.SSVShare{share2}))
 
-		require.Equal(t, share1, store.Validator(share1.ValidatorPubKey[:]))
-		require.Equal(t, share2, store.Validator(share2.ValidatorPubKey[:]))
+		s1, e := store.Validator(share1.ValidatorPubKey[:])
+		require.True(t, e)
+		require.Equal(t, share1, s1)
+		s2, e := store.Validator(share2.ValidatorPubKey[:])
+		require.True(t, e)
+		require.Equal(t, share2, s2)
 
-		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), store.Committee(share1.CommitteeID()))
-		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share2}), store.Committee(share2.CommitteeID()))
+		c1, e := store.Committee(share1.CommitteeID())
+		require.True(t, e)
+		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), c1)
 
-		require.Equal(t, share1, store.ValidatorByIndex(share1.ValidatorIndex))
-		require.Equal(t, share2, store.ValidatorByIndex(share2.ValidatorIndex))
+		c2, e := store.Committee(share2.CommitteeID())
+		require.True(t, e)
+		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share2}), c2)
+
+		s1, e = store.ValidatorByIndex(share1.ValidatorIndex)
+		require.True(t, e)
+		require.Equal(t, share1, s1)
+		s2, e = store.ValidatorByIndex(share2.ValidatorIndex)
+		require.True(t, e)
+		require.Equal(t, share2, s2)
 
 		require.Empty(t, store.ParticipatingValidators(99))
 		require.Len(t, store.ParticipatingValidators(101), 1)
@@ -173,14 +190,27 @@ func TestValidatorStore(t *testing.T) {
 		require.Contains(t, store.Committees(), buildCommittee([]*ssvtypes.SSVShare{share1}))
 		require.Contains(t, store.Committees(), buildCommittee([]*ssvtypes.SSVShare{updatedShare2}))
 
-		require.Equal(t, share1, store.Validator(share1.ValidatorPubKey[:]))
-		require.Equal(t, updatedShare2, store.Validator(updatedShare2.ValidatorPubKey[:]))
+		s1, e := store.Validator(share1.ValidatorPubKey[:])
+		require.True(t, e)
+		require.Equal(t, share1, s1)
+		s2, e := store.Validator(updatedShare2.ValidatorPubKey[:])
+		require.True(t, e)
+		require.Equal(t, updatedShare2, s2)
 
-		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), store.Committee(share1.CommitteeID()))
-		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{updatedShare2}), store.Committee(updatedShare2.CommitteeID()))
+		c1, e := store.Committee(share1.CommitteeID())
+		require.True(t, e)
+		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), c1)
 
-		require.Equal(t, share1, store.ValidatorByIndex(share1.ValidatorIndex))
-		require.Equal(t, updatedShare2, store.ValidatorByIndex(updatedShare2.ValidatorIndex))
+		c2, e := store.Committee(updatedShare2.CommitteeID())
+		require.True(t, e)
+		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{updatedShare2}), c2)
+
+		s1, e = store.ValidatorByIndex(share1.ValidatorIndex)
+		require.True(t, e)
+		require.Equal(t, share1, s1)
+		s2, e = store.ValidatorByIndex(updatedShare2.ValidatorIndex)
+		require.True(t, e)
+		require.Equal(t, updatedShare2, s2)
 
 		require.Empty(t, store.ParticipatingValidators(99))
 		require.Len(t, store.ParticipatingValidators(101), 1)
@@ -229,11 +259,17 @@ func TestValidatorStore(t *testing.T) {
 		require.Len(t, store.Committees(), 1)
 		require.Contains(t, store.Committees(), buildCommittee([]*ssvtypes.SSVShare{share1}))
 
-		require.Equal(t, share1, store.Validator(share1.ValidatorPubKey[:]))
+		s, e := store.Validator(share1.ValidatorPubKey[:])
+		require.True(t, e)
+		require.Equal(t, share1, s)
 
-		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), store.Committee(share1.CommitteeID()))
+		c1, e := store.Committee(share1.CommitteeID())
+		require.True(t, e)
+		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), c1)
 
-		require.Equal(t, share1, store.ValidatorByIndex(share1.ValidatorIndex))
+		s, e = store.ValidatorByIndex(share1.ValidatorIndex)
+		require.True(t, e)
+		require.Equal(t, share1, s)
 
 		require.Empty(t, store.ParticipatingValidators(99))
 		require.Len(t, store.ParticipatingValidators(101), 1)
@@ -282,8 +318,12 @@ func TestValidatorStore_DropState(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -303,8 +343,15 @@ func TestValidatorStore_DropState(t *testing.T) {
 	t.Run("state after drop", func(t *testing.T) {
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
-		require.Nil(t, store.Validator(share1.ValidatorPubKey[:]))
-		require.Nil(t, store.Validator(share2.ValidatorPubKey[:]))
+
+		s, e := store.Validator(share1.ValidatorPubKey[:])
+		require.False(t, e)
+		require.Nil(t, s)
+
+		s, e = store.Validator(share2.ValidatorPubKey[:])
+		require.False(t, e)
+		require.Nil(t, s)
+
 	})
 }
 
@@ -313,8 +360,12 @@ func TestValidatorStore_Concurrency(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -358,8 +409,12 @@ func TestSelfValidatorStore_NilOperatorID(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -454,8 +509,12 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 		b.StopTimer()
 		store := newValidatorStore(
 			func() []*ssvtypes.SSVShare { return maps.Values(shares) },
-			func(pubKey []byte) *ssvtypes.SSVShare {
-				return shares[spectypes.ValidatorPK(pubKey)]
+			func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+				share := shares[spectypes.ValidatorPK(pubKey)]
+				if share == nil {
+					return nil, false
+				}
+				return share, true
 			},
 		)
 		b.StartTimer()
@@ -550,8 +609,12 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shares) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shares[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shares[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 	store.handleSharesAdded(maps.Values(shares)...)
@@ -576,8 +639,12 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -608,8 +675,12 @@ func TestValidatorStore_EmptyStoreOperations(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -620,8 +691,12 @@ func TestValidatorStore_EmptyStoreOperations(t *testing.T) {
 	t.Run("validate empty store operations", func(t *testing.T) {
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
-		require.Nil(t, store.Validator(pubKey[:]))
-		require.Nil(t, store.Committee(spectypes.CommitteeID{1}))
+		s, e := store.Validator(pubKey[:])
+		require.False(t, e)
+		require.Nil(t, s)
+		c, e := store.Committee(spectypes.CommitteeID{1})
+		require.False(t, e)
+		require.Nil(t, c)
 		require.Len(t, store.OperatorValidators(1), 0)
 		require.Len(t, store.OperatorCommittees(1), 0)
 	})
@@ -632,8 +707,12 @@ func TestValidatorStore_AddDuplicateShares(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -652,8 +731,12 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -662,7 +745,11 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 			store.handleSharesUpdated(share1) // Update without adding
 		})
 		require.Len(t, store.Validators(), 0)
-		require.Nil(t, store.Validator(share1.ValidatorPubKey[:]))
+
+		s, e := store.Validator(share1.ValidatorPubKey[:])
+		require.False(t, e)
+		require.Nil(t, s)
+
 	})
 }
 
@@ -671,15 +758,23 @@ func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
 	t.Run("remove non-existing share", func(t *testing.T) {
 		store.handleShareRemoved(share1) // Remove without adding
 		require.Len(t, store.Validators(), 0)
-		require.Nil(t, store.Validator(share1.ValidatorPubKey[:]))
+
+		s, e := store.Validator(share1.ValidatorPubKey[:])
+		require.False(t, e)
+		require.Nil(t, s)
+
 	})
 }
 
@@ -688,8 +783,12 @@ func TestValidatorStore_UpdateNilData(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -709,7 +808,10 @@ func TestValidatorStore_UpdateNilData(t *testing.T) {
 
 		// Validate that the state remains consistent and does not crash
 		require.Len(t, store.Validators(), 1)
-		require.Equal(t, share1, store.Validator(share1.ValidatorPubKey[:]))
+
+		s, e := store.Validator(share1.ValidatorPubKey[:])
+		require.True(t, e)
+		require.Equal(t, share1, s)
 	})
 }
 
@@ -738,8 +840,12 @@ func TestValidatorStore_HandlingDifferentStatuses(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -759,8 +865,12 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -815,8 +925,12 @@ func TestValidatorStore_MixedOperations(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -843,8 +957,12 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -874,7 +992,8 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 	t.Run("check invalid committee handling", func(t *testing.T) {
 		require.Len(t, store.Validators(), 1)
 		require.Contains(t, store.Validators(), invalidCommitteeShare)
-		committee := store.Committee(invalidCommitteeShare.CommitteeID())
+		committee, exists := store.Committee(invalidCommitteeShare.CommitteeID())
+		require.True(t, exists)
 		require.NotNil(t, committee)
 		require.Len(t, committee.Operators, 1) // Should handle duplicates
 	})
@@ -884,8 +1003,12 @@ func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -912,8 +1035,8 @@ func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			_ = store.Validator(share1.ValidatorPubKey[:])
-			_ = store.Committee(share1.CommitteeID())
+			_, _ = store.Validator(share1.ValidatorPubKey[:])
+			_, _ = store.Committee(share1.CommitteeID())
 			_ = store.Validators()
 			_ = store.Committees()
 		}()
@@ -937,8 +1060,12 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -959,7 +1086,12 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 
 	t.Run("bulk update shares", func(t *testing.T) {
 		store.handleSharesUpdated(share1, share2)
-		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, store.Validator(share1.ValidatorPubKey[:]).Metadata.BeaconMetadata.Status)
+		s1, e1 := store.Validator(share1.ValidatorPubKey[:])
+		s2, e2 := store.Validator(share2.ValidatorPubKey[:])
+		require.True(t, e1)
+		require.True(t, e2)
+		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, s1.Metadata.BeaconMetadata.Status)
+		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, s2.Metadata.BeaconMetadata.Status)
 	})
 }
 
@@ -968,8 +1100,12 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 
 	store := newValidatorStore(
 		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) *ssvtypes.SSVShare {
-			return shareMap[spectypes.ValidatorPK(pubKey)]
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
 		},
 	)
 
@@ -987,7 +1123,10 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	t.Run("add share with no metadata", func(t *testing.T) {
 		store.handleSharesAdded(noMetadataShare)
 
-		require.Nil(t, store.ValidatorByIndex(0))
+		s, e := store.ValidatorByIndex(0)
+		require.False(t, e)
+		require.Nil(t, s)
+
 		require.Len(t, store.OperatorValidators(3), 1)
 		require.Equal(t, noMetadataShare, store.OperatorValidators(3)[0])
 	})
@@ -1002,7 +1141,9 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	t.Run("update share with metadata", func(t *testing.T) {
 		store.handleSharesUpdated(noMetadataShare)
 
-		require.Equal(t, noMetadataShare, store.ValidatorByIndex(10))
+		s, e := store.ValidatorByIndex(10)
+		require.True(t, e)
+		require.Equal(t, noMetadataShare, s)
 	})
 
 	t.Run("remove share", func(t *testing.T) {
@@ -1011,8 +1152,13 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 		delete(shareMap, noMetadataShare.ValidatorPubKey)
 
 		// Ensure complete removal
-		require.Nil(t, store.ValidatorByIndex(10), "Validator by index should be nil after removal")
+		s, e := store.ValidatorByIndex(10)
+		require.False(t, e)
+		require.Nil(t, s, "Validator by index should be nil after removal")
 		require.Empty(t, store.OperatorValidators(3), "Operator validators should be empty after removal")
-		require.Nil(t, store.Validator(noMetadataShare.ValidatorPubKey[:]), "Validator should be nil after removal")
+
+		s, e = store.Validator(noMetadataShare.ValidatorPubKey[:])
+		require.False(t, e)
+		require.Nil(t, s, "Validator should be nil after removal")
 	})
 }

@@ -14,13 +14,13 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
 
 type BaseValidatorStore interface {
-	Validator(pubKey []byte) *types.SSVShare
-	ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare
+	Validator(pubKey []byte) (*types.SSVShare, bool)
+	ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool)
 	Validators() []*types.SSVShare
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	OperatorValidators(id spectypes.OperatorID) []*types.SSVShare
 
-	Committee(id spectypes.CommitteeID) *Committee
+	Committee(id spectypes.CommitteeID) (*Committee, bool)
 	Committees() []*Committee
 	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
 	OperatorCommittees(id spectypes.OperatorID) []*Committee
@@ -69,7 +69,7 @@ type sharesAndCommittees struct {
 type validatorStore struct {
 	operatorID func() spectypes.OperatorID
 	shares     func() []*types.SSVShare
-	byPubKey   func([]byte) *types.SSVShare
+	byPubKey   func([]byte) (*types.SSVShare, bool)
 
 	byValidatorIndex map[phase0.ValidatorIndex]*types.SSVShare
 	byCommitteeID    map[spectypes.CommitteeID]*Committee
@@ -80,7 +80,7 @@ type validatorStore struct {
 
 func newValidatorStore(
 	shares func() []*types.SSVShare,
-	shareByPubKey func([]byte) *types.SSVShare,
+	shareByPubKey func([]byte) (*types.SSVShare, bool),
 ) *validatorStore {
 	return &validatorStore{
 		shares:           shares,
@@ -91,15 +91,20 @@ func newValidatorStore(
 	}
 }
 
-func (c *validatorStore) Validator(pubKey []byte) *types.SSVShare {
+func (c *validatorStore) Validator(pubKey []byte) (*types.SSVShare, bool) {
 	return c.byPubKey(pubKey)
 }
 
-func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare {
+func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.byValidatorIndex[index]
+	share := c.byValidatorIndex[index]
+	if share == nil {
+		return nil, false
+	}
+
+	return share, true
 }
 
 func (c *validatorStore) Validators() []*types.SSVShare {
@@ -126,11 +131,16 @@ func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SS
 	return nil
 }
 
-func (c *validatorStore) Committee(id spectypes.CommitteeID) *Committee {
+func (c *validatorStore) Committee(id spectypes.CommitteeID) (*Committee, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.byCommitteeID[id]
+	committee := c.byCommitteeID[id]
+	if committee == nil {
+		return nil, false
+	}
+
+	return committee, true
 }
 
 func (c *validatorStore) Committees() []*Committee {

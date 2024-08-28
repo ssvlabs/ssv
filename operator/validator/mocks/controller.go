@@ -369,11 +369,12 @@ func (m *MockSharesStorage) EXPECT() *MockSharesStorageMockRecorder {
 }
 
 // Get mocks base method.
-func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types1.SSVShare {
+func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) (*types1.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", txn, pubKey)
 	ret0, _ := ret[0].(*types1.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.

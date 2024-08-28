@@ -105,7 +105,8 @@ func TestSharesStorage(t *testing.T) {
 	validatorShare2, _ := generateRandomValidatorSpecShare(splitKeys)
 	require.NoError(t, shareStorage.Save(nil, validatorShare2))
 
-	validatorShareByKey := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	validatorShareByKey, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.True(t, exists)
 	require.NotNil(t, validatorShareByKey)
 	require.NoError(t, err)
 	require.EqualValues(t, hex.EncodeToString(validatorShareByKey.ValidatorPubKey[:]), hex.EncodeToString(validatorShare.ValidatorPubKey[:]))
@@ -160,8 +161,8 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	require.NoError(t, shareStorage.Delete(nil, validatorShare.ValidatorPubKey[:]))
-	share := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
-	require.NoError(t, err)
+	share, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.False(t, exists)
 	require.Nil(t, share)
 
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
@@ -338,22 +339,26 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 	require.NoError(t, shareStorage.Save(nil, validatorShare))
 
 	// Ensure the share is saved correctly
-	savedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	savedShare, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.True(t, exists)
 	require.NotNil(t, savedShare)
 
 	// Ensure the share is saved correctly in the validatorStore
-	validatorShareFromStore := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	validatorShareFromStore, exists := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.True(t, exists)
 	require.NotNil(t, validatorShareFromStore)
 
 	// Delete the share from storage
 	require.NoError(t, shareStorage.Delete(nil, validatorShare.ValidatorPubKey[:]))
 
 	// Verify that the share is deleted from shareStorage
-	deletedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	deletedShare, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.False(t, exists)
 	require.Nil(t, deletedShare, "Share should be deleted from shareStorage")
 
 	// Verify that the validatorStore reflects the removal correctly
-	removedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	removedShare, exists := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.False(t, exists)
 	require.Nil(t, removedShare, "Share should be removed from validator store after deletion")
 
 	// Further checks on internal data structures
@@ -382,6 +387,8 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 	shareStorage, ok := shareStorageInterface.(*sharesStorage)
 	require.True(t, ok, "shareStorageInterface should be of type *sharesStorage")
 
+	validatorStore := shareStorage.validatorStore
+
 	// Initialize threshold and generate keys for test setup
 	threshold.Init()
 	const keysCount = 4
@@ -403,12 +410,13 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 	require.NoError(t, shareStorage.Save(nil, validatorShare))
 
 	// Ensure the share is saved correctly
-	savedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	savedShare, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.True(t, exists)
 	require.NotNil(t, savedShare)
 
 	// Verify that the validatorStore has the share via SharesStorage
-	validatorStore := shareStorage.validatorStore
-	storedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	storedShare, exists := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.True(t, exists)
 	require.NotNil(t, storedShare, "Share should be present in validator store after adding to sharesStorage")
 
 	// Now update the share
@@ -421,7 +429,8 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 	require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, updatedMetadata))
 
 	// Ensure the updated share is reflected in validatorStore
-	updatedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	updatedShare, exists := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.True(t, exists)
 	require.NotNil(t, updatedShare, "Updated share should be present in validator store")
 	require.Equal(t, updatedMetadata, updatedShare.BeaconMetadata, "Validator metadata should be updated in validator store")
 
@@ -429,9 +438,11 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 	require.NoError(t, shareStorage.Delete(nil, validatorShare.ValidatorPubKey[:]))
 
 	// Verify that the share is removed from both sharesStorage and validatorStore
-	deletedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	deletedShare, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.False(t, exists)
 	require.Nil(t, deletedShare, "Share should be deleted from sharesStorage")
 
-	removedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	removedShare, exists := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.False(t, exists)
 	require.Nil(t, removedShare, "Share should be removed from validator store after deletion in sharesStorage")
 }

@@ -56,8 +56,8 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 	} else {
-		val := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
-		if val == nil {
+		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if !exists {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
 		topics = commons.CommitteeTopicID(val.CommitteeID())
@@ -123,8 +123,8 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	share := n.nodeStorage.ValidatorStore().Validator(pk[:])
-	if share == nil {
+	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	if !exists {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
@@ -199,8 +199,8 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 		n.activeValidators.Del(pkHex)
 	}
 
-	share := n.nodeStorage.ValidatorStore().Validator(pk[:])
-	if share == nil {
+	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	if !exists {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 

@@ -158,7 +158,7 @@ type Recipients interface {
 }
 
 type SharesStorage interface {
-	Get(txn basedb.Reader, pubKey []byte) *ssvtypes.SSVShare
+	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
 	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error

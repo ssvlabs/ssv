@@ -43,11 +43,12 @@ func (m *MockBaseValidatorStore) EXPECT() *MockBaseValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockBaseValidatorStore) Committee(id types.CommitteeID) *storage.Committee {
+func (m *MockBaseValidatorStore) Committee(id types.CommitteeID) (*storage.Committee, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committee", id)
 	ret0, _ := ret[0].(*storage.Committee)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Committee indicates an expected call of Committee.
@@ -127,11 +128,12 @@ func (mr *MockBaseValidatorStoreMockRecorder) ParticipatingValidators(epoch any)
 }
 
 // Validator mocks base method.
-func (m *MockBaseValidatorStore) Validator(pubKey []byte) *types0.SSVShare {
+func (m *MockBaseValidatorStore) Validator(pubKey []byte) (*types0.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
 	ret0, _ := ret[0].(*types0.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Validator indicates an expected call of Validator.
@@ -141,11 +143,12 @@ func (mr *MockBaseValidatorStoreMockRecorder) Validator(pubKey any) *gomock.Call
 }
 
 // ValidatorByIndex mocks base method.
-func (m *MockBaseValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types0.SSVShare {
+func (m *MockBaseValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types0.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatorByIndex", index)
 	ret0, _ := ret[0].(*types0.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // ValidatorByIndex indicates an expected call of ValidatorByIndex.
@@ -192,11 +195,12 @@ func (m *MockValidatorStore) EXPECT() *MockValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockValidatorStore) Committee(id types.CommitteeID) *storage.Committee {
+func (m *MockValidatorStore) Committee(id types.CommitteeID) (*storage.Committee, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committee", id)
 	ret0, _ := ret[0].(*storage.Committee)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Committee indicates an expected call of Committee.
@@ -276,11 +280,12 @@ func (mr *MockValidatorStoreMockRecorder) ParticipatingValidators(epoch any) *go
 }
 
 // Validator mocks base method.
-func (m *MockValidatorStore) Validator(pubKey []byte) *types0.SSVShare {
+func (m *MockValidatorStore) Validator(pubKey []byte) (*types0.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
 	ret0, _ := ret[0].(*types0.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Validator indicates an expected call of Validator.
@@ -290,11 +295,12 @@ func (mr *MockValidatorStoreMockRecorder) Validator(pubKey any) *gomock.Call {
 }
 
 // ValidatorByIndex mocks base method.
-func (m *MockValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types0.SSVShare {
+func (m *MockValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types0.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatorByIndex", index)
 	ret0, _ := ret[0].(*types0.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // ValidatorByIndex indicates an expected call of ValidatorByIndex.
@@ -355,11 +361,12 @@ func (m *MockSelfValidatorStore) EXPECT() *MockSelfValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockSelfValidatorStore) Committee(id types.CommitteeID) *storage.Committee {
+func (m *MockSelfValidatorStore) Committee(id types.CommitteeID) (*storage.Committee, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committee", id)
 	ret0, _ := ret[0].(*storage.Committee)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Committee indicates an expected call of Committee.
@@ -495,11 +502,12 @@ func (mr *MockSelfValidatorStoreMockRecorder) SelfValidators() *gomock.Call {
 }
 
 // Validator mocks base method.
-func (m *MockSelfValidatorStore) Validator(pubKey []byte) *types0.SSVShare {
+func (m *MockSelfValidatorStore) Validator(pubKey []byte) (*types0.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
 	ret0, _ := ret[0].(*types0.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Validator indicates an expected call of Validator.
@@ -509,11 +517,12 @@ func (mr *MockSelfValidatorStoreMockRecorder) Validator(pubKey any) *gomock.Call
 }
 
 // ValidatorByIndex mocks base method.
-func (m *MockSelfValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types0.SSVShare {
+func (m *MockSelfValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types0.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatorByIndex", index)
 	ret0, _ := ret[0].(*types0.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // ValidatorByIndex indicates an expected call of ValidatorByIndex.

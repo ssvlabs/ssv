@@ -30,7 +30,7 @@ type SharesListFunc = func(filters ...SharesFilter) []*types.SSVShare
 // Shares is the interface for managing shares.
 type Shares interface {
 	// Get returns the share for the given public key, or nil if not found.
-	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
+	Get(txn basedb.Reader, pubKey []byte) (*types.SSVShare, bool)
 
 	// List returns a list of shares, filtered by the given filters (if any).
 	List(txn basedb.Reader, filters ...SharesFilter) []*types.SSVShare
@@ -124,7 +124,7 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 	}
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
-		func(pk []byte) *types.SSVShare { return storage.Get(nil, pk) },
+		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 	)
 	storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...)
 	return storage, storage.validatorStore, nil
@@ -151,15 +151,20 @@ func (s *sharesStorage) load() error {
 	})
 }
 
-func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) *types.SSVShare {
+func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return s.unsafeGet(pubKey)
 }
 
-func (s *sharesStorage) unsafeGet(pubKey []byte) *types.SSVShare {
-	return s.shares[hex.EncodeToString(pubKey)]
+func (s *sharesStorage) unsafeGet(pubKey []byte) (*types.SSVShare, bool) {
+	share := s.shares[hex.EncodeToString(pubKey)]
+	if share == nil {
+		return nil, false
+	}
+
+	return share, true
 }
 
 func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.SSVShare {
@@ -328,8 +333,8 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metada
 		return nil
 	}
 
-	share := s.Get(nil, pk[:])
-	if share == nil {
+	share, exists := s.Get(nil, pk[:])
+	if !exists {
 		return nil
 	}
 
@@ -345,8 +350,8 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 	s.mu.RLock()
 	var shares []*types.SSVShare
 	for pk, metadata := range data {
-		share := s.unsafeGet(pk[:])
-		if share == nil {
+		share, exists := s.unsafeGet(pk[:])
+		if !exists {
 			continue
 		}
 		share.BeaconMetadata = metadata

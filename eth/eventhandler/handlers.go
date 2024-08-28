@@ -175,9 +175,8 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
-	validatorShare := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-
-	if validatorShare == nil {
+	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if exists {
 		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
@@ -339,8 +338,8 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	logger.Debug("processing event")
 
 	// TODO: handle metrics
-	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-	if share == nil {
+	share, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if !exists {
 		logger.Warn("malformed event: could not find validator share")
 		return emptyPK, &MalformedEventError{Err: ErrValidatorShareNotFound}
 	}
@@ -473,8 +472,8 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	logger.Debug("processing event")
 	defer logger.Debug("processed event")
 
-	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-	if share == nil {
+	share, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if !exists {
 		logger.Warn("malformed event: could not find validator share")
 		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
 	}

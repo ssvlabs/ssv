@@ -688,7 +688,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("ValidatorExited happy flow", func(t *testing.T) {
 			valPubKey := validatorData1.masterPubKey.Serialize()
 			// Check the validator's shares are present in the state before removing
-			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			valShare, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.False(t, exists)
 			require.NotNil(t, valShare)
 			valShare.BeaconMetadata = &beacon.ValidatorMetadata{
 				Index:           1,
@@ -726,7 +727,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check the validator is in the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
 			require.Equal(t, 4, len(shares))
-			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.False(t, exists)
 			require.NotNil(t, valShare)
 		})
 	})
@@ -768,7 +770,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			blockNum++
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
-			valShare := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			require.False(t, exists)
 			require.NotNil(t, valShare)
 		})
 
@@ -805,7 +808,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			blockNum++
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
-			valShare := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			require.False(t, exists)
 			require.NotNil(t, valShare)
 		})
 
@@ -815,7 +819,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("ValidatorRemoved happy flow", func(t *testing.T) {
 			valPubKey := validatorData1.masterPubKey.Serialize()
 			// Check the validator's shares are present in the state before removing
-			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			valShare, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.False(t, exists)
 			require.NotNil(t, valShare)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
 
@@ -851,7 +856,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check the validator was removed from the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
 			require.Equal(t, 3, len(shares))
-			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.False(t, exists)
 			require.Nil(t, valShare)
 			requireKeyManagerDataToNotExist(t, eh, 3, validatorData1)
 		})
@@ -887,7 +893,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests. This one has to be in the state
 		valPubKey := validatorData2.masterPubKey.Serialize()
 
-		share := eh.nodeStorage.Shares().Get(nil, valPubKey)
+		share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.True(t, exists)
 		require.NotNil(t, share)
 		require.False(t, share.Liquidated)
 
@@ -896,7 +903,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		blockNum++
 
-		share = eh.nodeStorage.Shares().Get(nil, valPubKey)
+		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.True(t, exists)
 		require.NotNil(t, share)
 		require.True(t, share.Liquidated)
 		// check that slashing data was not deleted
@@ -1030,7 +1038,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests
 		valPubKey := validatorData2.masterPubKey.Serialize()
 
-		share := eh.nodeStorage.Shares().Get(nil, valPubKey)
+		share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.True(t, exists)
 		require.NotNil(t, share)
 		require.True(t, share.Liquidated)
 		currentSlot.SetSlot(100)
@@ -1055,7 +1064,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		blockNum++
 
-		share = eh.nodeStorage.Shares().Get(nil, valPubKey)
+		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.True(t, exists)
 		require.NotNil(t, share)
 		require.False(t, share.Liquidated)
 	})
@@ -1160,7 +1170,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			valPubKey := validatorData4.masterPubKey.Serialize()
-			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			valShare, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.False(t, exists)
 			require.Nil(t, valShare)
 
 			// Call the contract method
@@ -1211,7 +1222,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			blockNum++
 
-			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.False(t, exists)
 			require.Nil(t, valShare)
 
 			// Check that validator was registered
@@ -1226,8 +1238,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("test ClusterLiquidated + ClusterReactivated events handling", func(t *testing.T) {
 			// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests
 			valPubKey := validatorData2.masterPubKey.Serialize()
-			share := eh.nodeStorage.Shares().Get(nil, valPubKey)
-
+			share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
 			require.NotNil(t, share)
 			require.False(t, share.Liquidated)
 			_, err = boundContract.SimcontractTransactor.Liquidate(
@@ -1274,7 +1286,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			blockNum++
 
-			share = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
 			require.NotNil(t, share)
 			require.False(t, share.Liquidated)
 		})

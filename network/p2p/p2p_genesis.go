@@ -40,8 +40,8 @@ func (p *GenesisP2P) Broadcast(message *genesisspectypes.SSVMessage) error {
 	}
 	encodedMsg = commons.EncodeGenesisSignedSSVMessage(encodedMsg, p.Network.operatorDataStore.GetOperatorID(), signature)
 
-	share := p.Network.nodeStorage.ValidatorStore().Validator(message.MsgID.GetPubKey())
-	if share == nil {
+	_, exists := p.Network.nodeStorage.ValidatorStore().Validator(message.MsgID.GetPubKey())
+	if !exists {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(message.MsgID.GetPubKey()))
 	}
 

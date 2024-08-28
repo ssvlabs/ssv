@@ -63,7 +63,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committeeID := shares.active.CommitteeID()
 
-	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) *registrystorage.Committee {
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
 			beaconMetadata1 := *shares.active.BeaconMetadata
 			beaconMetadata2 := beaconMetadata1
@@ -79,6 +79,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			share3 := cloneSSVShare(share2)
 			share3.ValidatorIndex = share2.ValidatorIndex + 1
 			share3.BeaconMetadata = &beaconMetadata3
+
 			return &registrystorage.Committee{
 				ID:        id,
 				Operators: committee,
@@ -92,13 +93,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					share2.ValidatorIndex,
 					share3.ValidatorIndex,
 				},
-			}
+			}, true
 		}
 
-		return nil
+		return nil, false
 	}).AnyTimes()
 
-	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) *ssvtypes.SSVShare {
+	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
 		for _, share := range []*ssvtypes.SSVShare{
 			shares.active,
 			shares.liquidated,
@@ -108,10 +109,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			shares.noMetadata,
 		} {
 			if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
-				return share
+				return share, true
 			}
 		}
-		return nil
+		return nil, false
 	}).AnyTimes()
 
 	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
