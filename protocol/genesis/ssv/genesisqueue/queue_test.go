@@ -184,6 +184,42 @@ func TestPriorityQueue_Order(t *testing.T) {
 	}
 }
 
+func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
+	queue := NewDefault()
+	require.True(t, queue.Empty())
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	state := &State{
+		HasRunningInstance: true,
+		Height:             1,
+		Slot:               1,
+		Round:              1,
+		Quorum:             4,
+	}
+
+	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
+	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
+	time.Sleep(50 * time.Millisecond)
+	require.Equal(t, 2, queue.Len())
+	expectedMsg := decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(2), Type: qbft.CommitMsgType}, state)
+
+	go func() {
+		defer wg.Done()
+		matchHeight2 := func(msg *GenesisSSVMessage) bool {
+			return msg.Body.(*qbft.SignedMessage).Message.Height == 2
+		}
+		popped := queue.Pop(context.Background(), NewMessagePrioritizer(state), matchHeight2)
+		require.Equal(t, expectedMsg, popped)
+	}()
+
+	wg.Wait()
+
+	// Ensure that the queue still contains the non-matching messages.
+	require.Equal(t, queue.Len(), 2)
+}
+
 func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
 	queue := NewDefault()
 	require.True(t, queue.Empty())
