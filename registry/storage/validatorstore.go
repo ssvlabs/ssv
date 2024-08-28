@@ -308,6 +308,7 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 			c.byValidatorIndex[share.BeaconMetadata.Index] = share
 		}
 
+		// Update byCommitteeID
 		committee := c.byCommitteeID[share.CommitteeID()]
 		if committee != nil {
 			for i, validator := range committee.Validators {
