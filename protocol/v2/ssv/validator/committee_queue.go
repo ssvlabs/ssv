@@ -109,17 +109,26 @@ func (v *Committee) ConsumeQueue(
 			}
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
-			// for the current height and round.
+			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
+					return false
+				}
+
+				if sm.Round != state.Round { // allow next round or change round messages.
 					return true
 				}
 
-				if sm.Height != state.Height || sm.Round != state.Round {
-					return true
-				}
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+			}
+		} else if runningInstance != nil && !runningInstance.State.Decided {
+			filter = func(ssvMessage *queue.SSVMessage) bool {
+				// don't read post consensus until decided
+				if ssvMessage.SSVMessage.MsgType == spectypes.SSVPartialSignatureMsgType {
+					return false
+				}
+				return true
 			}
 		}
 
