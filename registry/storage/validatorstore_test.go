@@ -219,7 +219,7 @@ func TestValidatorStore(t *testing.T) {
 		require.NotContains(t, selfStore.SelfParticipatingCommittees(201), buildCommittee([]*ssvtypes.SSVShare{updatedShare2}))
 	})
 
-	store.handleShareRemoved(share2.ValidatorPubKey)
+	store.handleShareRemoved(share2)
 	delete(shareMap, share2.ValidatorPubKey)
 
 	t.Run("check removed share", func(t *testing.T) {
@@ -376,6 +376,105 @@ func TestSelfValidatorStore_NilOperatorID(t *testing.T) {
 	require.Nil(t, selfStore.SelfParticipatingCommittees(201))
 }
 
+func BenchmarkValidatorStore_Add(b *testing.B) {
+	shares := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+
+	const (
+		totalOperators  = 500
+		totalValidators = 50_000
+	)
+
+	var validatorIndex atomic.Int64
+	createShare := func(operators []spectypes.OperatorID) *ssvtypes.SSVShare {
+		index := validatorIndex.Add(1)
+
+		var pk spectypes.ValidatorPK
+		binary.LittleEndian.PutUint64(pk[:], uint64(index))
+
+		var committee []*spectypes.ShareMember
+		for _, signer := range operators {
+			committee = append(committee, &spectypes.ShareMember{Signer: signer})
+		}
+
+		return &ssvtypes.SSVShare{
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Index: phase0.ValidatorIndex(index),
+				},
+			},
+			Share: spectypes.Share{
+				ValidatorIndex:      phase0.ValidatorIndex(index),
+				ValidatorPubKey:     pk,
+				SharePubKey:         pk[:],
+				Committee:           committee,
+				FeeRecipientAddress: [20]byte{10, 20, 30},
+				Graffiti:            []byte("example"),
+			},
+		}
+	}
+
+	for i := 0; i < totalValidators; i++ {
+		committee := make([]spectypes.OperatorID, 4)
+		if rand.Float64() < 0.02 {
+			// 2% chance of a purely random committee.
+			for i, id := range rand.Perm(totalOperators)[:4] {
+				committee[i] = spectypes.OperatorID(id)
+			}
+		} else {
+			// 98% chance to form big committees.
+			first := rand.Intn(totalOperators * 0.2) // 20% of the operators.
+			for i := range committee {
+				committee[i] = spectypes.OperatorID((first + i) % totalOperators)
+			}
+		}
+		share := createShare(committee)
+		shares[share.ValidatorPubKey] = share
+	}
+
+	// Print table of committees and validator counts for debugging.
+	committees := map[[4]spectypes.OperatorID]int{}
+	for _, share := range shares {
+		committee := [4]spectypes.OperatorID{}
+		for i, member := range share.Committee {
+			committee[i] = member.Signer
+		}
+		committees[committee]++
+	}
+	tbl := table.New(os.Stdout)
+	tbl.SetHeaders("Committee", "Validators")
+	for committee, count := range committees {
+		tbl.AddRow(fmt.Sprintf("%v", committee), fmt.Sprintf("%d", count))
+	}
+	// tbl.Render() // Uncomment to print.
+
+	b.Logf("Total committees: %d", len(committees))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		store := newValidatorStore(
+			func() []*ssvtypes.SSVShare { return maps.Values(shares) },
+			func(pubKey []byte) *ssvtypes.SSVShare {
+				return shares[spectypes.ValidatorPK(pubKey)]
+			},
+		)
+		b.StartTimer()
+
+		keys := maps.Keys(shares)
+		var wg sync.WaitGroup
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func(start, end int) {
+				defer wg.Done()
+				for i := range keys[start:end] {
+					store.handleSharesAdded(shares[keys[i]])
+				}
+			}(i*(len(shares)/10), (i+1)*(len(shares)/10))
+		}
+		wg.Wait()
+	}
+}
+
 func BenchmarkValidatorStore_Update(b *testing.B) {
 	shares := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 
@@ -484,7 +583,11 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 
 	// Attempt to remove a non-existing share
 	t.Run("remove non-existing share", func(t *testing.T) {
-		store.handleShareRemoved(spectypes.ValidatorPK{99, 88, 77})
+		store.handleShareRemoved(&ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{99, 88, 77},
+			},
+		})
 		// Ensure store remains unaffected
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
@@ -574,7 +677,7 @@ func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 	)
 
 	t.Run("remove non-existing share", func(t *testing.T) {
-		store.handleShareRemoved(share1.ValidatorPubKey) // Remove without adding
+		store.handleShareRemoved(share1) // Remove without adding
 		require.Len(t, store.Validators(), 0)
 		require.Nil(t, store.Validator(share1.ValidatorPubKey[:]))
 	})
@@ -595,9 +698,9 @@ func TestValidatorStore_UpdateNilData(t *testing.T) {
 	store.handleSharesAdded(share1)
 
 	// Manually set a nil entry for a signer in byOperatorID
-	store.muOperatorID.Lock()
+	store.mu.Lock()
 	store.byOperatorID[share1.Committee[0].Signer] = nil
-	store.muOperatorID.Unlock()
+	store.mu.Unlock()
 
 	t.Run("update with nil data in byOperatorID", func(t *testing.T) {
 		require.NotPanics(t, func() {
@@ -698,7 +801,7 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 
 	// Remove all shares
 	for _, share := range bulkShares {
-		store.handleShareRemoved(share.ValidatorPubKey)
+		store.handleShareRemoved(share)
 		delete(shareMap, share.ValidatorPubKey)
 	}
 
@@ -723,7 +826,7 @@ func TestValidatorStore_MixedOperations(t *testing.T) {
 	store.handleSharesAdded(share1, share2)
 
 	// Mixed operations
-	store.handleShareRemoved(share1.ValidatorPubKey)
+	store.handleShareRemoved(share1)
 	shareMap[share1.ValidatorPubKey] = share1 // Re-add share1
 	store.handleSharesAdded(share1)
 	shareMap[updatedShare2.ValidatorPubKey] = updatedShare2
@@ -805,7 +908,7 @@ func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			store.handleShareRemoved(share1.ValidatorPubKey)
+			store.handleShareRemoved(share1)
 		}()
 		go func() {
 			defer wg.Done()
@@ -903,7 +1006,7 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	})
 
 	t.Run("remove share", func(t *testing.T) {
-		store.handleShareRemoved(noMetadataShare.ValidatorPubKey)
+		store.handleShareRemoved(noMetadataShare)
 		// Remove from shareMap to mimic actual behavior
 		delete(shareMap, noMetadataShare.ValidatorPubKey)
 

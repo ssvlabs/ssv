@@ -300,25 +300,24 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 }
 
 func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
-	// Remove the share from the validator store. This method will handle its own locking.
-	s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		// Delete the share from the database
-		if err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey)); err != nil {
-			return err
-		}
-
-		// Remove the share from local storage map
-		delete(s.shares, hex.EncodeToString(pubKey))
-		return nil
-	}()
-	if err != nil {
+	// Delete the share from the database
+	if err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey)); err != nil {
 		return err
 	}
+
+	share := s.shares[hex.EncodeToString(pubKey)]
+	if share == nil {
+		return nil
+	}
+
+	// Remove the share from local storage map
+	delete(s.shares, hex.EncodeToString(pubKey))
+
+	// Remove the share from the validator store. This method will handle its own locking.
+	s.validatorStore.handleShareRemoved(share)
 
 	return nil
 }
