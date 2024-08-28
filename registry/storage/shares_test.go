@@ -372,3 +372,66 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 	validators := shareStorage.List(nil)
 	require.EqualValues(t, 0, len(validators), "No validators should be left in storage after drop")
 }
+
+func TestValidatorStoreThroughSharesStorage(t *testing.T) {
+	logger := logging.TestLogger(t)
+	operatorStorage, shareStorageInterface, _, done := newStorageForTest(logger)
+	defer done()
+
+	// Cast shareStorageInterface to its underlying struct type to access fields directly
+	shareStorage, ok := shareStorageInterface.(*sharesStorage)
+	require.True(t, ok, "shareStorageInterface should be of type *sharesStorage")
+
+	// Initialize threshold and generate keys for test setup
+	threshold.Init()
+	const keysCount = 4
+
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	// Save operators to the storage
+	for operatorID := range splitKeys {
+		_, err = operatorStorage.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
+		require.NoError(t, err)
+	}
+
+	// Generate and save a random validator share
+	validatorShare, _ := generateRandomValidatorSpecShare(splitKeys)
+	require.NoError(t, shareStorage.Save(nil, validatorShare))
+
+	// Ensure the share is saved correctly
+	savedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.NotNil(t, savedShare)
+
+	// Verify that the validatorStore has the share via SharesStorage
+	validatorStore := shareStorage.validatorStore
+	storedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.NotNil(t, storedShare, "Share should be present in validator store after adding to sharesStorage")
+
+	// Now update the share
+	updatedMetadata := &beaconprotocol.ValidatorMetadata{
+		Balance:         5000,
+		Status:          eth2apiv1.ValidatorStateActiveOngoing,
+		Index:           3,
+		ActivationEpoch: 5,
+	}
+	require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, updatedMetadata))
+
+	// Ensure the updated share is reflected in validatorStore
+	updatedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.NotNil(t, updatedShare, "Updated share should be present in validator store")
+	require.Equal(t, updatedMetadata, updatedShare.BeaconMetadata, "Validator metadata should be updated in validator store")
+
+	// Remove the share via SharesStorage
+	require.NoError(t, shareStorage.Delete(nil, validatorShare.ValidatorPubKey[:]))
+
+	// Verify that the share is removed from both sharesStorage and validatorStore
+	deletedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.Nil(t, deletedShare, "Share should be deleted from sharesStorage")
+
+	removedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.Nil(t, removedShare, "Share should be removed from validator store after deletion in sharesStorage")
+}
