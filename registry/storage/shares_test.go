@@ -305,3 +305,70 @@ func newStorageForTest(logger *zap.Logger) (Operators, Shares, *kv.BadgerDB, fun
 		_ = db.Close()
 	}
 }
+
+func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
+	logger := logging.TestLogger(t)
+	operatorStorage, shareStorageInterface, _, done := newStorageForTest(logger)
+	defer done()
+
+	// Cast shareStorageInterface to its underlying struct type to access fields directly
+	shareStorage, ok := shareStorageInterface.(*sharesStorage)
+	require.True(t, ok, "shareStorageInterface should be of type *sharesStorage")
+
+	validatorStore := shareStorage.validatorStore
+
+	// Initialize threshold and generate keys for test setup
+	threshold.Init()
+	const keysCount = 4
+
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	// Save operators to the storage
+	for operatorID := range splitKeys {
+		_, err = operatorStorage.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
+		require.NoError(t, err)
+	}
+
+	// Generate and save a random validator share
+	validatorShare, _ := generateRandomValidatorSpecShare(splitKeys)
+	require.NoError(t, shareStorage.Save(nil, validatorShare))
+
+	// Ensure the share is saved correctly
+	savedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.NotNil(t, savedShare)
+
+	// Ensure the share is saved correctly in the validatorStore
+	validatorShareFromStore := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.NotNil(t, validatorShareFromStore)
+
+	// Delete the share from storage
+	require.NoError(t, shareStorage.Delete(nil, validatorShare.ValidatorPubKey[:]))
+
+	// Verify that the share is deleted from shareStorage
+	deletedShare := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.Nil(t, deletedShare, "Share should be deleted from shareStorage")
+
+	// Verify that the validatorStore reflects the removal correctly
+	removedShare := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])
+	require.Nil(t, removedShare, "Share should be removed from validator store after deletion")
+
+	// Further checks on internal data structures
+	committeeID := validatorShare.CommitteeID()
+	committee := validatorStore.byCommitteeID[committeeID]
+	require.Nil(t, committee, "Committee should be nil after share deletion")
+
+	// Verify that other internal mappings are updated accordingly
+	for _, operator := range validatorShare.Committee {
+		data := validatorStore.byOperatorID[operator.Signer]
+		require.Nil(t, data, "Data for operator should be nil after share deletion")
+	}
+
+	// Cleanup the share storage for the next test
+	require.NoError(t, shareStorage.Drop())
+	validators := shareStorage.List(nil)
+	require.EqualValues(t, 0, len(validators), "No validators should be left in storage after drop")
+}
