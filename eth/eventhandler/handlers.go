@@ -176,7 +176,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-	if exists {
+	if !exists {
 		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
