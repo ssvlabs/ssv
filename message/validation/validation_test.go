@@ -39,48 +39,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/kv"
 )
 
-// Deep copy helper function for testing purposes only
-func cloneSSVShare(original *ssvtypes.SSVShare) *ssvtypes.SSVShare {
-	if original == nil {
-		return nil
-	}
-
-	// Manually create a new instance of SSVShare
-	cloned := &ssvtypes.SSVShare{
-		Share: spectypes.Share{
-			ValidatorIndex:      original.ValidatorIndex,
-			ValidatorPubKey:     original.ValidatorPubKey,
-			SharePubKey:         original.SharePubKey,
-			DomainType:          original.DomainType,
-			FeeRecipientAddress: original.FeeRecipientAddress,
-			Graffiti:            append([]byte(nil), original.Graffiti...), // Deep copy of slice
-		},
-		Metadata: ssvtypes.Metadata{
-			OwnerAddress: original.OwnerAddress,
-			Liquidated:   original.Liquidated,
-		},
-	}
-
-	// Deep copy BeaconMetadata if needed
-	if original.BeaconMetadata != nil {
-		beaconMetadataCopy := *original.BeaconMetadata
-		cloned.Metadata.BeaconMetadata = &beaconMetadataCopy
-	}
-
-	// Deep copy Committee field, which is a slice of pointers
-	if original.Committee != nil {
-		cloned.Committee = make([]*spectypes.ShareMember, len(original.Committee))
-		for i, member := range original.Committee {
-			if member != nil {
-				memberCopy := *member // Deep copy each ShareMember
-				cloned.Committee[i] = &memberCopy
-			}
-		}
-	}
-
-	return cloned
-}
-
 func Test_ValidateSSVMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -1681,6 +1639,48 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
 	})
+}
+
+// Deep copy helper function for testing purposes only
+func cloneSSVShare(original *ssvtypes.SSVShare) *ssvtypes.SSVShare {
+	if original == nil {
+		return nil
+	}
+
+	// Manually create a new instance of SSVShare
+	cloned := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:      original.ValidatorIndex,
+			ValidatorPubKey:     original.ValidatorPubKey,
+			SharePubKey:         original.SharePubKey,
+			DomainType:          original.DomainType,
+			FeeRecipientAddress: original.FeeRecipientAddress,
+			Graffiti:            append([]byte(nil), original.Graffiti...), // Deep copy of slice
+		},
+		Metadata: ssvtypes.Metadata{
+			OwnerAddress: original.OwnerAddress,
+			Liquidated:   original.Liquidated,
+		},
+	}
+
+	// Deep copy BeaconMetadata if needed
+	if original.BeaconMetadata != nil {
+		beaconMetadataCopy := *original.BeaconMetadata
+		cloned.Metadata.BeaconMetadata = &beaconMetadataCopy
+	}
+
+	// Deep copy Committee field, which is a slice of pointers
+	if original.Committee != nil {
+		cloned.Committee = make([]*spectypes.ShareMember, len(original.Committee))
+		for i, member := range original.Committee {
+			if member != nil {
+				memberCopy := *member // Deep copy each ShareMember
+				cloned.Committee[i] = &memberCopy
+			}
+		}
+	}
+
+	return cloned
 }
 
 type shareSet struct {
