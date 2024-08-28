@@ -828,3 +828,86 @@ func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
 		})
 	})
 }
+
+func TestValidatorStore_BulkAddUpdate(t *testing.T) {
+	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+
+	store := newValidatorStore(
+		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
+		func(pubKey []byte) *ssvtypes.SSVShare {
+			return shareMap[spectypes.ValidatorPK(pubKey)]
+		},
+	)
+
+	// Initial shares to add
+	shareMap[share1.ValidatorPubKey] = share1
+	shareMap[share2.ValidatorPubKey] = share2
+
+	t.Run("bulk add shares", func(t *testing.T) {
+		store.handleSharesAdded(share1, share2)
+		require.Len(t, store.Validators(), 2)
+		require.Contains(t, store.Validators(), share1)
+		require.Contains(t, store.Validators(), share2)
+	})
+
+	// Update shares
+	share1.Metadata.BeaconMetadata.Status = eth2apiv1.ValidatorStateActiveOngoing
+	share2.Metadata.BeaconMetadata.Status = eth2apiv1.ValidatorStateActiveOngoing
+
+	t.Run("bulk update shares", func(t *testing.T) {
+		store.handleSharesUpdated(share1, share2)
+		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, store.Validator(share1.ValidatorPubKey[:]).Metadata.BeaconMetadata.Status)
+	})
+}
+
+func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
+	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+
+	store := newValidatorStore(
+		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
+		func(pubKey []byte) *ssvtypes.SSVShare {
+			return shareMap[spectypes.ValidatorPK(pubKey)]
+		},
+	)
+
+	// Share without metadata
+	noMetadataShare := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  0,
+			ValidatorPubKey: spectypes.ValidatorPK{13, 14, 15},
+			Committee:       []*spectypes.ShareMember{{Signer: 3}},
+		},
+	}
+
+	shareMap[noMetadataShare.ValidatorPubKey] = noMetadataShare
+
+	t.Run("add share with no metadata", func(t *testing.T) {
+		store.handleSharesAdded(noMetadataShare)
+
+		require.Nil(t, store.ValidatorByIndex(0))
+		require.Len(t, store.OperatorValidators(3), 1)
+		require.Equal(t, noMetadataShare, store.OperatorValidators(3)[0])
+	})
+
+	// Update share to have metadata
+	noMetadataShare.Metadata = ssvtypes.Metadata{
+		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+			Index: phase0.ValidatorIndex(10),
+		},
+	}
+
+	t.Run("update share with metadata", func(t *testing.T) {
+		store.handleSharesUpdated(noMetadataShare)
+
+		require.Equal(t, noMetadataShare, store.ValidatorByIndex(10))
+	})
+
+	// Remove share
+	t.Run("remove share", func(t *testing.T) {
+		store.handleShareRemoved(noMetadataShare.ValidatorPubKey)
+
+		require.Nil(t, store.ValidatorByIndex(10))
+		require.Empty(t, store.OperatorValidators(3))
+		require.Nil(t, store.Validator(noMetadataShare.ValidatorPubKey[:]))
+	})
+}
