@@ -226,33 +226,63 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 		}
 
 		// Update byCommitteeID
-		c.muCommitteeID.Lock()
-		committee := c.byCommitteeID[share.CommitteeID()]
+		committeeID := share.CommitteeID()
+
+		// Acquire read lock first to check if the committee exists
+		c.muCommitteeID.RLock()
+		committee := c.byCommitteeID[committeeID]
+		c.muCommitteeID.RUnlock()
+
 		if committee == nil {
-			committee = buildCommittee([]*types.SSVShare{share})
-			c.byCommitteeID[committee.ID] = committee
+			// If committee does not exist, acquire write lock to add a new one
+			c.muCommitteeID.Lock()
+			// Double-check pattern to ensure the committee wasn't added by another goroutine
+			if committee = c.byCommitteeID[committeeID]; committee == nil {
+				committee = buildCommittee([]*types.SSVShare{share})
+				c.byCommitteeID[committee.ID] = committee
+			}
+			c.muCommitteeID.Unlock()
 		} else {
+			// If committee exists, acquire write lock to modify it
+			c.muCommitteeID.Lock()
 			committee = buildCommittee(append(committee.Validators, share))
+			c.byCommitteeID[committee.ID] = committee
+			c.muCommitteeID.Unlock()
 		}
-		c.byCommitteeID[committee.ID] = committee
-		c.muCommitteeID.Unlock()
 
 		// Update byOperatorID
-		c.muOperatorID.Lock()
 		for _, operator := range share.Committee {
-			data := c.byOperatorID[operator.Signer]
+			operatorID := operator.Signer
+
+			// Acquire read lock first to check if data for operatorID exists
+			c.muOperatorID.RLock()
+			data := c.byOperatorID[operatorID]
+			c.muOperatorID.RUnlock()
+
 			if data == nil {
-				data = &sharesAndCommittees{
-					shares:     []*types.SSVShare{share},
-					committees: []*Committee{committee},
+				// If data does not exist, acquire write lock to add a new entry
+				c.muOperatorID.Lock()
+				// Double-check pattern to ensure the entry wasn't added by another goroutine
+				if data = c.byOperatorID[operatorID]; data == nil {
+					data = &sharesAndCommittees{
+						shares:     []*types.SSVShare{share},
+						committees: []*Committee{committee},
+					}
+					c.byOperatorID[operatorID] = data
+				} else {
+					// If another goroutine already added the entry, just update it
+					data.shares = append(data.shares, share)
+					data.committees = append(data.committees, committee)
 				}
+				c.muOperatorID.Unlock()
 			} else {
+				// If data exists, acquire write lock to modify the existing entry
+				c.muOperatorID.Lock()
 				data.shares = append(data.shares, share)
 				data.committees = append(data.committees, committee)
+				c.muOperatorID.Unlock()
 			}
-			c.byOperatorID[operator.Signer] = data
 		}
-		c.muOperatorID.Unlock()
 	}
 }
 
@@ -268,49 +298,67 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 	c.muValidatorIndex.Unlock()
 
 	// Update byCommitteeID
-	c.muCommitteeID.Lock()
-	committee := c.byCommitteeID[share.CommitteeID()]
-	if committee == nil {
-		c.muCommitteeID.Unlock()
-		return
-	}
-	validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
-	indices := make([]phase0.ValidatorIndex, 0, len(committee.Validators)-1)
-	for _, validator := range committee.Validators {
-		if validator.ValidatorPubKey != pk {
-			validators = append(validators, validator)
-			indices = append(indices, validator.ValidatorIndex)
-		}
-	}
-	if len(validators) == 0 {
-		delete(c.byCommitteeID, committee.ID)
-	} else {
-		committee.Validators = validators
-		committee.Indices = indices
-	}
-	c.muCommitteeID.Unlock()
+	committeeID := share.CommitteeID()
 
-	// Update byOperatorID
-	c.muOperatorID.Lock()
-	for _, operator := range share.Committee {
-		data := c.byOperatorID[operator.Signer]
-		if data == nil {
-			c.muOperatorID.Unlock()
-			return
-		}
-		shares := make([]*types.SSVShare, 0, len(data.shares)-1)
-		for _, s := range data.shares {
-			if s.ValidatorPubKey != pk {
-				shares = append(shares, s)
+	// Acquire read lock first to check if the committee exists
+	c.muCommitteeID.RLock()
+	committee := c.byCommitteeID[committeeID]
+	c.muCommitteeID.RUnlock()
+
+	if committee != nil {
+		// If committee exists, acquire write lock to modify it
+		c.muCommitteeID.Lock()
+		// Double-check pattern to ensure the committee wasn't removed by another goroutine
+		if committee = c.byCommitteeID[committeeID]; committee != nil {
+			validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
+			indices := make([]phase0.ValidatorIndex, 0, len(committee.Validators)-1)
+			for _, validator := range committee.Validators {
+				if validator.ValidatorPubKey != pk {
+					validators = append(validators, validator)
+					indices = append(indices, validator.ValidatorIndex)
+				}
+			}
+			if len(validators) == 0 {
+				delete(c.byCommitteeID, committee.ID)
+			} else {
+				committee.Validators = validators
+				committee.Indices = indices
+				c.byCommitteeID[committee.ID] = committee
 			}
 		}
-		if len(shares) == 0 {
-			delete(c.byOperatorID, operator.Signer)
-		} else {
-			data.shares = shares
+		c.muCommitteeID.Unlock()
+	}
+
+	// Update byOperatorID
+	for _, operator := range share.Committee {
+		operatorID := operator.Signer
+
+		// Acquire read lock first to check if data for operatorID exists
+		c.muOperatorID.RLock()
+		data := c.byOperatorID[operatorID]
+		c.muOperatorID.RUnlock()
+
+		if data != nil {
+			// If data exists, acquire write lock to modify the existing entry
+			c.muOperatorID.Lock()
+			// Double-check pattern to ensure the entry wasn't removed by another goroutine
+			if data = c.byOperatorID[operatorID]; data != nil {
+				shares := make([]*types.SSVShare, 0, len(data.shares)-1)
+				for _, s := range data.shares {
+					if s.ValidatorPubKey != pk {
+						shares = append(shares, s)
+					}
+				}
+				if len(shares) == 0 {
+					delete(c.byOperatorID, operatorID)
+				} else {
+					data.shares = shares
+					c.byOperatorID[operatorID] = data
+				}
+			}
+			c.muOperatorID.Unlock()
 		}
 	}
-	c.muOperatorID.Unlock()
 }
 
 func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
@@ -323,31 +371,55 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 		}
 
 		// Update byCommitteeID
-		c.muCommitteeID.Lock()
-		if committee := c.byCommitteeID[share.CommitteeID()]; committee != nil {
-			for i, validator := range committee.Validators {
-				if validator.ValidatorPubKey == share.ValidatorPubKey {
-					committee.Validators[i] = share
-					committee.Indices[i] = share.ValidatorIndex
-					break
-				}
-			}
-		}
-		c.muCommitteeID.Unlock()
+		committeeID := share.CommitteeID()
 
-		// Update byOperatorID
-		c.muOperatorID.Lock()
-		for _, shareMember := range share.Committee {
-			if data := c.byOperatorID[shareMember.Signer]; data != nil {
-				for i, s := range data.shares {
-					if s.ValidatorPubKey == share.ValidatorPubKey {
-						data.shares[i] = share
+		// Acquire read lock first to check if the committee exists
+		c.muCommitteeID.RLock()
+		committee := c.byCommitteeID[committeeID]
+		c.muCommitteeID.RUnlock()
+
+		if committee != nil {
+			// If committee exists, acquire write lock to modify it
+			c.muCommitteeID.Lock()
+			// Double-check pattern to ensure the committee wasn't removed or changed by another goroutine
+			if committee = c.byCommitteeID[committeeID]; committee != nil {
+				for i, validator := range committee.Validators {
+					if validator.ValidatorPubKey == share.ValidatorPubKey {
+						committee.Validators[i] = share
+						committee.Indices[i] = share.ValidatorIndex
 						break
 					}
 				}
+				c.byCommitteeID[committeeID] = committee
+			}
+			c.muCommitteeID.Unlock()
+		}
+
+		// Update byOperatorID
+		for _, shareMember := range share.Committee {
+			operatorID := shareMember.Signer
+
+			// Acquire read lock first to check if data for operatorID exists
+			c.muOperatorID.RLock()
+			data := c.byOperatorID[operatorID]
+			c.muOperatorID.RUnlock()
+
+			if data != nil {
+				// If data exists, acquire write lock to modify the existing entry
+				c.muOperatorID.Lock()
+				// Double-check pattern to ensure the entry wasn't removed or changed by another goroutine
+				if data = c.byOperatorID[operatorID]; data != nil {
+					for i, s := range data.shares {
+						if s.ValidatorPubKey == share.ValidatorPubKey {
+							data.shares[i] = share
+							break
+						}
+					}
+					c.byOperatorID[operatorID] = data
+				}
+				c.muOperatorID.Unlock()
 			}
 		}
-		c.muOperatorID.Unlock()
 	}
 }
 

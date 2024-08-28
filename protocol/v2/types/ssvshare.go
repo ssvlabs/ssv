@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -26,7 +27,9 @@ const (
 type SSVShare struct {
 	spectypes.Share
 	Metadata
-	committeeID *spectypes.CommitteeID
+
+	committeeID     *spectypes.CommitteeID
+	committeeIDOnce sync.Once
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
@@ -59,16 +62,17 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 }
 
 func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
-	if s.committeeID != nil {
-		return *s.committeeID
-	}
-	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
-	for i, v := range s.Share.Committee {
-		ids[i] = v.Signer
-	}
-	id := ComputeCommitteeID(ids)
-	s.committeeID = &id
-	return id
+	s.committeeIDOnce.Do(func() {
+		ids := make([]spectypes.OperatorID, len(s.Share.Committee))
+		for i, v := range s.Share.Committee {
+			ids[i] = v.Signer
+		}
+		id := ComputeCommitteeID(ids)
+		s.committeeID = &id
+	})
+
+	// Dereference the pointer to return the actual value
+	return *s.committeeID
 }
 
 func (s *SSVShare) HasQuorum(cnt int) bool {
