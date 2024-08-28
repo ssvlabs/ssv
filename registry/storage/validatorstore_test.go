@@ -902,12 +902,14 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 		require.Equal(t, noMetadataShare, store.ValidatorByIndex(10))
 	})
 
-	// Remove share
 	t.Run("remove share", func(t *testing.T) {
 		store.handleShareRemoved(noMetadataShare.ValidatorPubKey)
+		// Remove from shareMap to mimic actual behavior
+		delete(shareMap, noMetadataShare.ValidatorPubKey)
 
-		require.Nil(t, store.ValidatorByIndex(10))
-		require.Empty(t, store.OperatorValidators(3))
-		require.Nil(t, store.Validator(noMetadataShare.ValidatorPubKey[:]))
+		// Ensure complete removal
+		require.Nil(t, store.ValidatorByIndex(10), "Validator by index should be nil after removal")
+		require.Empty(t, store.OperatorValidators(3), "Operator validators should be empty after removal")
+		require.Nil(t, store.Validator(noMetadataShare.ValidatorPubKey[:]), "Validator should be nil after removal")
 	})
 }
