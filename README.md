@@ -11,7 +11,7 @@ https://camo.githubusercontent.com/915b7be44ada53c290eb157634330494ebe3e30a/6874
 ![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/full-test.yml/badge.svg?branch=stage)
 ![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/lint.yml/badge.svg?branch=stage)
 ![Test Coverage](./docs/resources/cov-badge.svg)
-[![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/eDXSP9R)
+[![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/ssvnetworkofficial)
 
 [comment]: <> ([![Go Report Card]&#40;https://goreportcard.com/badge/github.com/ethereum/eth2-ssv&#41;]&#40;https://goreportcard.com/report/github.com/ethereum/eth2-ssv&#41;)
 
@@ -47,7 +47,7 @@ to run validators in a decentralized and trustless way.
 The following documents contain instructions and information on how to get started:
 * [Operator Node Installation](https://docs.ssv.network/run-a-node/operator-node/installation)
 * [Developers' Guide](./docs/DEV_GUIDE.md)
-* [SSV API Docs](https://bloxapp.github.io/ssv/)
+* [SSV API Docs](https://ssvlabs.github.io/ssv/)
 
 ## Contribution
 
