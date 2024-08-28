@@ -420,7 +420,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),
 			zap.Any("subnets", subnetsList),
-			zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
+			zap.Strings("subscribed_topics", n.topicsCtrl.Topics()),
 			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
 			zap.Error(errs),

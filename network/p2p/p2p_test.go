@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -36,26 +38,30 @@ func TestGetMaxPeers(t *testing.T) {
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
-	n := 4
+	const numNodes = 4
+	const numKeySets = 3
+	const broadcastDelay = 20 * time.Millisecond
+	const waitTimeout = 5 * time.Second
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	shares := []*ssvtypes.SSVShare{
-		{
-			Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-					Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
-				},
-				Liquidated: false,
-			},
-		},
+	validatorKeySets, err := generateValidatorKeySets(numKeySets)
+	require.NoError(t, err)
+
+	// Generate and assign shares
+	shares := generateShares(t, numKeySets)
+	for i, share := range shares {
+		share.Share = *spectestingutils.TestingShare(validatorKeySets[i], share.ValidatorIndex)
+	}
+
+	for i, share := range shares {
+		share.Share = *spectestingutils.TestingShare(validatorKeySets[i], share.ValidatorIndex)
 	}
 
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
-		Nodes:        n,
-		MinConnected: n/2 - 1,
+		Nodes:        numNodes,
+		MinConnected: numNodes/2 - 1,
 		UseDiscv5:    false,
 		Shares:       shares,
 	})
@@ -78,13 +84,14 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
-		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
+		msg1 := generateMsg(validatorKeySets[0], 1)
+		msg2 := generateMsg(validatorKeySets[1], 2)
+		msg3 := generateMsg(validatorKeySets[2], 3)
 		require.NoError(t, node1.Broadcast(msg1.SSVMessage.GetID(), msg1))
-		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msg3.SSVMessage.GetID(), msg3))
-		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
+		<-time.After(broadcastDelay)
+		require.NoError(t, node2.Broadcast(msg2.SSVMessage.GetID(), msg3))
+		<-time.After(broadcastDelay)
+		require.NoError(t, node2.Broadcast(msg3.SSVMessage.GetID(), msg1))
 	}()
 
 	wg.Add(1)
@@ -92,15 +99,15 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
-		msg2 := generateMsg(spectestingutils.Testing4SharesSet(), 2)
-		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
+		msg1 := generateMsg(validatorKeySets[0], 1)
+		msg2 := generateMsg(validatorKeySets[1], 2)
+		msg3 := generateMsg(validatorKeySets[2], 3)
 		require.NoError(t, err)
 
-		time.Sleep(time.Millisecond * 20)
+		time.Sleep(broadcastDelay)
 		require.NoError(t, node1.Broadcast(msg2.SSVMessage.GetID(), msg2))
 
-		time.Sleep(time.Millisecond * 20)
+		time.Sleep(broadcastDelay)
 		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
 		require.NoError(t, node1.Broadcast(msg3.SSVMessage.GetID(), msg3))
 	}()
@@ -110,7 +117,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	// waiting for messages
 	wg.Add(1)
 	go func() {
-		ct, cancel := context.WithTimeout(ctx, time.Second*5)
+		ct, cancel := context.WithTimeout(ctx, waitTimeout)
 		defer cancel()
 		defer wg.Done()
 		for _, r := range routers {
@@ -269,4 +276,40 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 
 	return ln, routers, nil
+}
+func generateKeySetsWithRandomPK() (*spectestingutils.TestKeySet, error) {
+	sharesSets := spectestingutils.Testing4SharesSet()
+	sk, pk, err := generateSKAndPK()
+	if err != nil {
+		return nil, err
+	}
+	sharesSets.ValidatorPK = pk
+	sharesSets.ValidatorSK = sk
+	return sharesSets, nil
+}
+
+func generateSKAndPK() (*bls.SecretKey, *bls.PublicKey, error) {
+	// Initialize the BLS library
+	bls.Init(bls.BLS12_381)
+
+	// Generate a new secret key
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG() // Uses cryptographically secure random number generation
+
+	// Derive the public key from the secret key
+	pk := sk.GetPublicKey()
+
+	return sk, pk, nil
+}
+
+func generateValidatorKeySets(numKeySets int) ([]*spectestingutils.TestKeySet, error) {
+	validatorKeySets := make([]*spectestingutils.TestKeySet, 0, numKeySets)
+	for i := 0; i < numKeySets; i++ {
+		keySet, err := generateKeySetsWithRandomPK()
+		if err != nil {
+			return nil, fmt.Errorf("error generating key set %d: %w", i+1, err)
+		}
+		validatorKeySets = append(validatorKeySets, keySet)
+	}
+	return validatorKeySets, nil
 }
