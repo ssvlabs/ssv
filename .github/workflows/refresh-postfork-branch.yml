@@ -3,7 +3,7 @@ name: Merge Stage to Post Fork
 on:
   push:
     branches:
-      - stage
+      - ab/test-branch
 
 jobs:
   merge_stage:
@@ -24,8 +24,8 @@ jobs:
         git merge ${{ github.sha }} --no-commit --no-ff
         git commit -m 'merge stage to post fork'
 
-    - name: Switch to pre fork different domain branch and merge
-      run: |
-        git switch ab/pre_fork_diff_domain
-        git merge ${{ github.sha }} --no-commit --no-ff
-        git commit -m 'merge stage to post fork'
+    # - name: Switch to pre fork different domain branch and merge
+    #   run: |
+    #     git switch ab/pre_fork_diff_domain
+    #     git merge ${{ github.sha }} --no-commit --no-ff
+    #     git commit -m 'merge stage to post fork'
