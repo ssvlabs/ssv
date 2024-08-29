@@ -242,6 +242,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	}
 	var discV5Opts *discovery.DiscV5Options
 	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
+		n.cfg.DiscoveryTrace = true
 		discV5Opts = &discovery.DiscV5Options{
 			IP:            ipAddr.String(),
 			BindIP:        net.IPv4zero.String(),
