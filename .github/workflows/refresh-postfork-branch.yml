@@ -3,7 +3,7 @@ name: Merge Stage to Post Fork
 on:
   push:
     branches:
-      - ab/test-branch
+      - ab/refresh_postfork_branch
 
 jobs:
   merge_stage:
@@ -20,7 +20,7 @@ jobs:
 
     - name: Switch to post fork branch and merge
       run: |
-        git switch ab/post_fork
+        git switch ab/test-branch
         git merge ${{ github.sha }} --no-commit --no-ff
         git commit -m 'merge stage to post fork'
 
