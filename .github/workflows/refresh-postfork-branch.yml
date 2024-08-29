@@ -18,10 +18,14 @@ jobs:
         git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
         git config --global user.name "${{ secrets.GIT_USER_NAME }}"
 
-    - name: Switch to dev branch
-      run: git switch ab/post_fork
-
-    - name: Merge stage to post fork
+    - name: Switch to post fork branch and merge
       run: |
+        git switch ab/post_fork
+        git merge ${{ github.sha }} --no-commit --no-ff
+        git commit -m 'merge stage to post fork'
+
+    - name: Switch to pre fork different domain branch and merge
+      run: |
+        git switch ab/pre_fork_diff_domain
         git merge ${{ github.sha }} --no-commit --no-ff
         git commit -m 'merge stage to post fork'
