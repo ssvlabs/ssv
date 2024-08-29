@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.21.7
-	github.com/bloxapp/eth2-key-manager v1.4.1-0.20240829084246-a9949f2961f3
+	github.com/bloxapp/eth2-key-manager v1.4.1-0.20240829091006-b5848884a7a5
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cornelk/hashmap v1.0.8
