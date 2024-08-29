@@ -7,15 +7,15 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func dutyValueCheck(
-	duty *types.ValidatorDuty,
-	network types.BeaconNetwork,
-	expectedType types.BeaconRole,
-	validatorPK types.ValidatorPK,
+	duty *spectypes.ValidatorDuty,
+	network spectypes.BeaconNetwork,
+	expectedType spectypes.BeaconRole,
+	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) error {
 	if network.EstimatedEpochAtSlot(duty.Slot) > network.EstimatedCurrentEpoch()+1 {
@@ -38,13 +38,13 @@ func dutyValueCheck(
 }
 
 func BeaconVoteValueCheckF(
-	signer types.BeaconSigner,
+	signer spectypes.BeaconSigner,
 	slot phase0.Slot,
-	sharePublicKeys []types.ShareValidatorPK,
+	sharePublicKeys []spectypes.ShareValidatorPK,
 	estimatedCurrentEpoch phase0.Epoch,
-) qbft.ProposedValueCheckF {
+) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
-		bv := types.BeaconVote{}
+		bv := spectypes.BeaconVote{}
 		if err := bv.Decode(data); err != nil {
 			return errors.Wrap(err, "failed decoding beacon vote")
 		}
@@ -78,14 +78,14 @@ func BeaconVoteValueCheckF(
 }
 
 func ProposerValueCheckF(
-	signer types.BeaconSigner,
-	network types.BeaconNetwork,
-	validatorPK types.ValidatorPK,
+	signer spectypes.BeaconSigner,
+	network spectypes.BeaconNetwork,
+	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 	sharePublicKey []byte,
-) qbft.ProposedValueCheckF {
+) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
-		cd := &types.ValidatorConsensusData{}
+		cd := &spectypes.ValidatorConsensusData{}
 		if err := cd.Decode(data); err != nil {
 			return errors.Wrap(err, "failed decoding consensus data")
 		}
@@ -93,7 +93,7 @@ func ProposerValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if err := dutyValueCheck(&cd.Duty, network, types.BNRoleProposer, validatorPK, validatorIndex); err != nil {
+		if err := dutyValueCheck(&cd.Duty, network, spectypes.BNRoleProposer, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
 
@@ -117,13 +117,13 @@ func ProposerValueCheckF(
 }
 
 func AggregatorValueCheckF(
-	signer types.BeaconSigner,
-	network types.BeaconNetwork,
-	validatorPK types.ValidatorPK,
+	signer spectypes.BeaconSigner,
+	network spectypes.BeaconNetwork,
+	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) qbft.ProposedValueCheckF {
+) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
-		cd := &types.ValidatorConsensusData{}
+		cd := &spectypes.ValidatorConsensusData{}
 		if err := cd.Decode(data); err != nil {
 			return errors.Wrap(err, "failed decoding consensus data")
 		}
@@ -131,7 +131,7 @@ func AggregatorValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if err := dutyValueCheck(&cd.Duty, network, types.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
+		if err := dutyValueCheck(&cd.Duty, network, spectypes.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
 		return nil
@@ -139,13 +139,13 @@ func AggregatorValueCheckF(
 }
 
 func SyncCommitteeContributionValueCheckF(
-	signer types.BeaconSigner,
-	network types.BeaconNetwork,
-	validatorPK types.ValidatorPK,
+	signer spectypes.BeaconSigner,
+	network spectypes.BeaconNetwork,
+	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) qbft.ProposedValueCheckF {
+) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
-		cd := &types.ValidatorConsensusData{}
+		cd := &spectypes.ValidatorConsensusData{}
 		if err := cd.Decode(data); err != nil {
 			return errors.Wrap(err, "failed decoding consensus data")
 		}
@@ -153,7 +153,7 @@ func SyncCommitteeContributionValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if err := dutyValueCheck(&cd.Duty, network, types.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {
+		if err := dutyValueCheck(&cd.Duty, network, spectypes.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
 
