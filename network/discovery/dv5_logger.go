@@ -20,17 +20,17 @@ func (dvl *dv5Logger) Log(r *log.Record) error {
 	}
 	switch r.Lvl {
 	case log.LvlTrace:
-		logger.Debug(fmt.Sprintf("TRACE: %s", r.Msg))
+		logger.Debug(fmt.Sprintf("TRACE: %s", r.Msg), zap.Any("ctx", r.Ctx))
 	case log.LvlDebug:
-		logger.Debug(r.Msg)
+		logger.Debug(r.Msg, zap.Any("ctx", r.Ctx))
 	case log.LvlInfo:
-		logger.Info(r.Msg)
+		logger.Info(r.Msg, zap.Any("ctx", r.Ctx))
 	case log.LvlWarn:
-		logger.Warn(r.Msg)
+		logger.Warn(r.Msg, zap.Any("ctx", r.Ctx))
 	case log.LvlError:
-		logger.Error(r.Msg)
+		logger.Error(r.Msg, zap.Any("ctx", r.Ctx))
 	case log.LvlCrit:
-		logger.Fatal(r.Msg)
+		logger.Fatal(r.Msg, zap.Any("ctx", r.Ctx))
 	default:
 	}
 	return nil
