@@ -59,7 +59,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 
 	logger.Debug("📢 broadcasting commit message",
 		fields.Round(specqbft.Round(i.State.Round)),
-		zap.Any("commit-singers", commitMsg.Signers),
+		zap.Any("commit_singers", commitMsg.Signers),
 		fields.Root(commitMsg.Message.Root))
 
 	if err := i.Broadcast(logger, commitMsg); err != nil {
