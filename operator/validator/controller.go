@@ -1270,7 +1270,7 @@ func SetupCommitteeRunners(
 			Domain:       options.NetworkConfig.DomainType(),
 			ValueCheckF:  nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbftcontroller.RoundRobinProposer(state, round)
+				leader := qbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
@@ -1331,7 +1331,7 @@ func SetupRunners(
 			Domain:       options.NetworkConfig.DomainType(),
 			ValueCheckF:  nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbftcontroller.RoundRobinProposer(state, round)
+				leader := qbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},

@@ -1,4 +1,4 @@
-package controller
+package qbft
 
 import (
 	"github.com/ssvlabs/ssv-spec/qbft"
