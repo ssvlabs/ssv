@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -50,7 +51,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey[:])
-				if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+				if !h.network.PastAlanForkAtEpoch(epoch) {
 					h.dutiesExecutor.ExecuteGenesisDuties(h.logger, []*genesisspectypes.Duty{{
 						Type:           genesisspectypes.BNRoleValidatorRegistration,
 						ValidatorIndex: share.ValidatorIndex,

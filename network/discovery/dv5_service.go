@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	defaultDiscoveryInterval = time.Second
+	defaultDiscoveryInterval = time.Millisecond * 100
 	publishENRTimeout        = time.Minute
 
 	publishStateReady   = int32(0)
@@ -152,9 +152,14 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if err != nil {
 		return errors.Wrap(err, "could not read domain type")
 	}
-	if nodeDomainType != dvs.domainType.DomainType() &&
-		nodeDomainType != dvs.domainType.NextDomainType() {
-		return fmt.Errorf("mismatched domain type: %x", nodeDomainType)
+	nodeNextDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyNextDomainType)
+	if err != nil && !errors.Is(err, records.ErrEntryNotFound) {
+		return errors.Wrap(err, "could not read domain type")
+	}
+	if dvs.domainType.DomainType() != nodeDomainType &&
+		dvs.domainType.DomainType() != nodeNextDomainType {
+		return fmt.Errorf("mismatched domain type: neither %x nor %x match %x",
+			nodeDomainType, nodeNextDomainType, dvs.domainType.DomainType())
 	}
 
 	// Get the peer's subnets, skipping if it has none.
@@ -258,43 +263,43 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
 	if len(subnets) == 0 {
-		return nil
+		return false, nil
 	}
-	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), subnets, nil)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), subnets, nil)
 	if err != nil {
-		return errors.Wrap(err, "could not update ENR")
+		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updated != nil {
-		dvs.subnets = updated
+	if updatedSubnets != nil {
+		dvs.subnets = updatedSubnets
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
-		go dvs.publishENR(logger)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
 	logger = logger.Named(logging.NameDiscoveryService)
 
 	if len(subnets) == 0 {
-		return nil
+		return false, nil
 	}
-	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), nil, subnets)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), nil, subnets)
 	if err != nil {
-		return errors.Wrap(err, "could not update ENR")
+		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updated != nil {
-		dvs.subnets = updated
+	if updatedSubnets != nil {
+		dvs.subnets = updatedSubnets
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
-		go dvs.publishENR(logger)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
-// publishENR publishes the new ENR across the network
-func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
+// PublishENR publishes the ENR with the current domain type across the network
+func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
 	defer done()
 	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
@@ -302,6 +307,18 @@ func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
 		logger.Debug("pending publish ENR")
 		return
 	}
+
+	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.domainType.DomainType())
+	if err != nil {
+		logger.Error("could not set domain type", zap.Error(err))
+		return
+	}
+	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.domainType.NextDomainType())
+	if err != nil {
+		logger.Error("could not set next domain type", zap.Error(err))
+		return
+	}
+
 	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
 	dvs.discover(ctx, func(e PeerEvent) {
 		metricPublishEnrPings.Inc()

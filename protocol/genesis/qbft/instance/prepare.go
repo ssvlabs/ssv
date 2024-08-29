@@ -29,7 +29,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 
 	logger.Debug("📬 got prepare message",
 		fields.Round(specqbft.Round(i.State.Round)),
-		zap.Any("prepare-signers", signedPrepare.Signers),
+		zap.Any("prepare_signers", signedPrepare.Signers),
 		fields.Root(signedPrepare.Message.Root))
 
 	if hasQuorumBefore {
@@ -49,7 +49,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(specqbft.Round(i.State.Round)),
-		zap.Any("prepare-signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))),
+		zap.Any("prepare_signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))),
 		fields.Root(proposedRoot))
 
 	commitMsg, err := CreateCommit(i.State, i.config, proposedRoot)
@@ -59,7 +59,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 
 	logger.Debug("📢 broadcasting commit message",
 		fields.Round(specqbft.Round(i.State.Round)),
-		zap.Any("commit-singers", commitMsg.Signers),
+		zap.Any("commit_singers", commitMsg.Signers),
 		fields.Root(commitMsg.Message.Root))
 
 	if err := i.Broadcast(logger, commitMsg); err != nil {
