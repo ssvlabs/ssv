@@ -113,6 +113,9 @@ func (v *Committee) ConsumeQueue(
 			filter = func(m *queue.SSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
+					if m.MsgType != spectypes.SSVPartialSignatureMsgType {
+						return true
+					}
 					return false
 				}
 
