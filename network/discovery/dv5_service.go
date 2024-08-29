@@ -47,6 +47,7 @@ type NodeFilter func(*enode.Node) bool
 type DiscV5Service struct {
 	ctx    context.Context
 	cancel context.CancelFunc
+	logger *zap.Logger
 
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
@@ -66,6 +67,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 	dvs := DiscV5Service{
 		ctx:          ctx,
 		cancel:       cancel,
+		logger:       logger,
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 		subnetsIdx:   discOpts.SubnetsIdx,
@@ -226,6 +228,13 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	// selfID is used to exclude current node
 	selfID := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
 
+	allNodes := dvs.dv5Listener.AllNodes()
+	var allNodesStr []string
+	for _, n := range allNodes {
+		allNodesStr = append(allNodesStr, n.ID().String())
+	}
+	dvs.logger.Debug("discover all nodes", zap.Any("nodes", allNodes), zap.Any("self", selfID))
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -243,6 +252,9 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 			if err != nil {
 				continue
 			}
+
+			dvs.logger.Debug("discover found node", zap.Any("node", n.ID().TerminalString()), zap.Any("self", selfID))
+
 			handler(PeerEvent{
 				AddrInfo: *ai,
 				Node:     n,
