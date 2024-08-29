@@ -11,7 +11,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
 
@@ -98,16 +97,7 @@ func (v *Committee) ConsumeQueue(
 		}
 
 		filter := queue.FilterAny
-		if !runner.HasRunningDuty() {
-			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.SSVMessage) bool {
-				e, ok := m.Body.(*types.EventMsg)
-				if !ok {
-					return false
-				}
-				return e.Type == types.ExecuteDuty
-			}
-		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
