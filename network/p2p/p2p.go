@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	ma "github.com/multiformats/go-multiaddr"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/cornelk/hashmap"
 	"github.com/libp2p/go-libp2p/core/connmgr"
@@ -380,16 +381,20 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			return self
 		})
 
+		// Register/unregister subnets for discovery.
 		var errs error
+		var hasAdded, hasRemoved bool
 		if len(addedSubnets) > 0 {
-			err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+			var err error
+			hasAdded, err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
 			if err != nil {
 				logger.Debug("could not register subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
 		}
 		if len(removedSubnets) > 0 {
-			err := n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
+			var err error
+			hasRemoved, err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
 			if err != nil {
 				logger.Debug("could not unregister subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
@@ -404,6 +409,9 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 					logger.Debug("unsubscribed from subnet", zap.Int("subnet", subnet))
 				}
 			}
+		}
+		if hasAdded || hasRemoved {
+			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
 		}
 
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
