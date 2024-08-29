@@ -54,7 +54,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 	logger.Debug("📢 got proposal, broadcasting prepare message",
 		fields.Round(specqbft.Round(i.State.Round)),
 		zap.Any("proposal_signers", signedProposal.Signers),
-		zap.Any("prepare-signers", prepare.Signers))
+		zap.Any("prepare_signers", prepare.Signers))
 
 	if err := i.Broadcast(logger, prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")

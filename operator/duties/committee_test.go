@@ -896,8 +896,144 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	require.NoError(t, schedulerPool.Wait())
 }
 
+func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
+	var (
+		dutyStore     = dutystore.New()
+		attHandler    = NewAttesterHandler(dutyStore.Attester)
+		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		waitForDuties = &SafeValue[bool]{}
+		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares  = []*ssvtypes.SSVShare{{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 1,
+			},
+		}}
+	)
+	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(2),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+	// STEP 1: wait for attester duties to be fetched (handle initial duties)
+	currentSlot.Set(phase0.Slot(0))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	startFn()
+
+	ticker.Send(currentSlot.Get())
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 2: wait for no action to be taken
+	currentSlot.Set(phase0.Slot(1))
+	ticker.Send(currentSlot.Get())
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration
+	startTime := time.Now()
+	currentSlot.Set(phase0.Slot(2))
+	ticker.Send(currentSlot.Get())
+
+	aDuties, _ := attDuties.Get(0)
+	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, currentSlot.Get())
+	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+
+	// STEP 4: trigger head event (block arrival)
+	e := &eth2apiv1.Event{
+		Data: &eth2apiv1.HeadEvent{
+			Slot: currentSlot.Get(),
+		},
+	}
+	scheduler.HandleHeadEvent(logger)(e)
+	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+
+	// Stop scheduler & wait for graceful exit.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}
+
 func TestScheduler_Committee_Early_Block(t *testing.T) {
-	t.Skip("TODO")
+	var (
+		dutyStore     = dutystore.New()
+		attHandler    = NewAttesterHandler(dutyStore.Attester)
+		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		waitForDuties = &SafeValue[bool]{}
+		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares  = []*ssvtypes.SSVShare{{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 1,
+			},
+		}}
+	)
+	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(1),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+	syncDuties.Set(0, []*eth2apiv1.SyncCommitteeDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+	// STEP 1: wait for attester & sync committee duties to be fetched (handle initial duties)
+	currentSlot.Set(phase0.Slot(1))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	startFn()
+
+	// STEP 2: wait for committee duty to be executed
+	aDuties, _ := attDuties.Get(0)
+	sDuties, _ := syncDuties.Get(0)
+	committeeMap := commHandler.buildCommitteeDuties(aDuties, sDuties, 0, currentSlot.Get())
+	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+
+	startTime := time.Now()
+	ticker.Send(currentSlot.Get())
+	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
+
+	// validate the 1/3 of the slot waiting time
+	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+
+	// STEP 3: wait for committee duty to be executed faster than 1/3 of the slot duration
+	startTime = time.Now()
+	currentSlot.Set(phase0.Slot(2))
+	ticker.Send(currentSlot.Get())
+
+	committeeMap = commHandler.buildCommitteeDuties(nil, sDuties, 0, currentSlot.Get())
+	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+
+	// STEP 4: trigger head event (block arrival)
+	e := &eth2apiv1.Event{
+		Data: &eth2apiv1.HeadEvent{
+			Slot: currentSlot.Get(),
+		},
+	}
+	scheduler.HandleHeadEvent(logger)(e)
+	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+
+	// Stop scheduler & wait for graceful exit.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
 }
 
 func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {

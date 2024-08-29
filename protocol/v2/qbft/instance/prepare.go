@@ -29,7 +29,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
 	logger.Debug("📬 got prepare message",
 		fields.Round(i.State.Round),
-		zap.Any("prepare-signers", msg.SignedMessage.OperatorIDs),
+		zap.Any("prepare_signers", msg.SignedMessage.OperatorIDs),
 		fields.Root(proposedRoot))
 
 	if hasQuorumBefore {
@@ -47,7 +47,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(i.State.Round),
-		zap.Any("prepare-signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))))
+		zap.Any("prepare_signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))))
 
 	commitMsg, err := CreateCommit(i.State, i.signer, proposedRoot)
 	if err != nil {
