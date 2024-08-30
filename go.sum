@@ -607,8 +607,8 @@ github.com/nats-io/nkeys v0.1.0/go.mod h1:xpnFELMwJABBLVhffcfd1MZx6VsNRFpEugbxzi
 github.com/nats-io/nuid v1.0.1/go.mod h1:19wcPz3Ph3q0Jbyiqsd0kePYG7A95tJPxeL+1OSON2c=
 github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86/go.mod h1:kHJEU3ofeGjhHklVoIGuVj85JJwZ6kWPaJwCIxgnFmo=
 github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a/Q4r9LP1IltGz7tA7iOK1WonHEYhu1HRBA7ZiM=
-github.com/nkryuchkov/go-libp2p-pubsub v0.0.0-20240830212024-1cbfa744a5ec h1:/RAMjy3rv7ASvlCuKitb9qUKaja+salNSx2vGTaocrU=
-github.com/nkryuchkov/go-libp2p-pubsub v0.0.0-20240830212024-1cbfa744a5ec/go.mod h1:QEb+hEV9WL9wCiUAnpY29FZR6W3zK8qYlaml8R4q6gQ=
+github.com/nkryuchkov/go-libp2p-pubsub v0.0.0-20240830214923-b89cd3f36087 h1:KDehtpYZ6RdfakaYsFhCWlCl7X1XKUIzC6ip10OBJos=
+github.com/nkryuchkov/go-libp2p-pubsub v0.0.0-20240830214923-b89cd3f36087/go.mod h1:QEb+hEV9WL9wCiUAnpY29FZR6W3zK8qYlaml8R4q6gQ=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
 github.com/nxadm/tail v1.4.11 h1:8feyoE3OzPrcshW5/MJ4sGESc5cqmGkGCWlco4l0bqY=
