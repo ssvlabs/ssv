@@ -56,7 +56,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 
 	logger.Debug("📢 broadcasting commit message",
 		fields.Round(i.State.Round),
-		zap.Any("commit-singers", commitMsg.OperatorIDs),
+		zap.Any("commit_singers", commitMsg.OperatorIDs),
 		fields.Root(proposedRoot))
 
 	if err := i.Broadcast(logger, commitMsg); err != nil {

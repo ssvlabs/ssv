@@ -8,12 +8,12 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -161,13 +161,13 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, psigMsgs *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
-	if err := b.ValidatePreConsensusMsg(runner, psigMsgs); err != nil {
+func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	if err := b.ValidatePreConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
-	hasQuorum, roots := b.basePartialSigMsgProcessing(psigMsgs, b.State.PreConsensusContainer)
-	return hasQuorum, roots, nil
+	hasQuorum, roots, err := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+	return hasQuorum, roots, errors.Wrap(err, "could not process pre-consensus partial signature msg")
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
@@ -234,24 +234,24 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-// returns whether at least one quorum exists and the roots of the quorums
-func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
-	if err := b.ValidatePostConsensusMsg(runner, psigMsgs); err != nil {
+func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	if err := b.ValidatePostConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
-	hasQuorum, roots := b.basePartialSigMsgProcessing(psigMsgs, b.State.PostConsensusContainer)
-	return hasQuorum, roots, nil
+	hasQuorum, roots, err := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+	return hasQuorum, roots, errors.Wrap(err, "could not process post-consensus partial signature msg")
 }
 
-// basePartialSigMsgProcessing adds a validated (without signature verification) partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
+// basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
-	psigMsgs *spectypes.PartialSignatureMessages,
-	container *specssv.PartialSigContainer,
-) (bool, [][32]byte) {
+	signedMsg *spectypes.PartialSignatureMessages,
+	container *ssv.PartialSigContainer,
+) (bool, [][32]byte, error) {
 	roots := make([][32]byte, 0)
 	anyQuorum := false
-	for _, msg := range psigMsgs.Messages {
+
+	for _, msg := range signedMsg.Messages {
 		prevQuorum := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
 
 		// Check if it has two signatures for the same signer
@@ -270,7 +270,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 		}
 	}
 
-	return anyQuorum, roots
+	return anyQuorum, roots, nil
 }
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly

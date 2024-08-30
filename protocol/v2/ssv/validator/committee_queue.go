@@ -11,7 +11,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
 
@@ -98,28 +97,25 @@ func (v *Committee) ConsumeQueue(
 		}
 
 		filter := queue.FilterAny
-		if !runner.HasRunningDuty() {
-			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.SSVMessage) bool {
-				e, ok := m.Body.(*types.EventMsg)
-				if !ok {
-					return false
-				}
-				return e.Type == types.ExecuteDuty
-			}
-		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
-			// for the current height and round.
+			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
+					return m.MsgType != spectypes.SSVPartialSignatureMsgType
+				}
+
+				if sm.Round != state.Round { // allow next round or change round messages.
 					return true
 				}
 
-				if sm.Height != state.Height || sm.Round != state.Round {
-					return true
-				}
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+			}
+		} else if runningInstance != nil && !runningInstance.State.Decided {
+			filter = func(ssvMessage *queue.SSVMessage) bool {
+				// don't read post consensus until decided
+				return ssvMessage.SSVMessage.MsgType == spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
