@@ -246,4 +246,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/libp2p/go-libp2p-pubsub => github.com/nkryuchkov/go-libp2p-pubsub v0.0.0-20240830200643-7f33772a6172
+replace github.com/libp2p/go-libp2p-pubsub => github.com/nkryuchkov/go-libp2p-pubsub v0.0.0-20240830205234-2caa909b4ffb
