@@ -230,4 +230,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.0.0-20240702122821-2c345f4fc90f
 
-replace github.com/ethereum/go-ethereum => github.com/nkryuchkov/go-ethereum v1.8.22-0.20240830001604-ec127bdb9ce0
+replace github.com/ethereum/go-ethereum => github.com/nkryuchkov/go-ethereum v1.8.22-0.20240830002528-e38d4c747fda
