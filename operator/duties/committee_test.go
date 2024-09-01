@@ -377,8 +377,13 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be fetched
 	currentSlot.Set(phase0.Slot(1))
-	ticker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
+	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
+	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
+	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
+	time.Sleep(10 * time.Millisecond)
+
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// wait for sync committee duties to be fetched
@@ -387,11 +392,10 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for committee duties to be executed
+	currentSlot.Set(phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
-	const executionSlot = phase0.Slot(2)
-	committeeMap := commHandler.buildCommitteeDuties([]*eth2apiv1.AttesterDuty{aDuties[2]}, nil, 0, executionSlot)
+	committeeMap := commHandler.buildCommitteeDuties([]*eth2apiv1.AttesterDuty{aDuties[2]}, nil, 0, currentSlot.Get())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
-	currentSlot.Set(executionSlot)
 
 	startTime := time.Now()
 	ticker.Send(currentSlot.Get())
@@ -476,8 +480,13 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be fetched
 	currentSlot.Set(phase0.Slot(1))
-	ticker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
+	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
+	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
+	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
+	time.Sleep(10 * time.Millisecond)
+
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// wait for sync committee duties to be fetched
@@ -564,8 +573,13 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be fetched
 	currentSlot.Set(phase0.Slot(1))
-	ticker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
+	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
+	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
+	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
+	time.Sleep(10 * time.Millisecond)
+
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// wait for sync committee duties to be fetched
@@ -629,8 +643,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	ticker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -667,6 +681,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	scheduler.HandleHeadEvent(logger)(e)
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	// no execution should happen in slot 64
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: execute reorged duty
 	currentSlot.Set(phase0.Slot(65))
@@ -733,8 +749,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	ticker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -771,6 +787,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	scheduler.HandleHeadEvent(logger)(e)
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	// no execution should happen in slot 64
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
@@ -780,6 +798,11 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
 	currentSlot.Set(phase0.Slot(65))
 	ticker.Send(currentSlot.Get())
+	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
+	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
+	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
+	time.Sleep(10 * time.Millisecond)
+
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// wait for sync committee duties to be fetched
@@ -871,6 +894,8 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	scheduler.HandleHeadEvent(logger)(e)
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	// no execution should happen in slot 33
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: Ticker with no action
 	currentSlot.Set(phase0.Slot(34))
