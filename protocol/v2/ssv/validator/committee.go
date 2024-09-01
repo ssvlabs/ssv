@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -216,7 +215,7 @@ func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.Valida
 
 		logger.Debug("trying to stop duty for validator",
 			fields.DutyID(committeeDutyID),
-			fields.Slot(slot), zap.String("validator", hex.EncodeToString(validator[:])),
+			fields.Slot(slot), fields.Validator(validator[:]),
 		)
 		runner.StopDuty(validator)
 	}
