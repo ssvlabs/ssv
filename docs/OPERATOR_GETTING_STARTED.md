@@ -5,18 +5,21 @@
 
 # SSV - Operator Getting Started Guide
 
-* [Setting AWS Server for Operator](#setting-aws-server-for-operator)
-  + [1. Setup](#1-setup)
-  + [2. Login with SSH](#2-login-with-ssh)
-  + [3. Installation Script](#3-installation-script)
-  + [4. Generate Operator Keys](#4-generate-operator-keys)
-  + [5. Create a Configuration File](#5-create-a-configuration-file)
-    - [5.1 Logger Configuration](#51-logger-configuration)
-    - [5.2 Metrics Configuration](#52-metrics-configuration)
-    - [5.3 Profiling Configuration](#53-profiling-configuration)
-  + [6. Start SSV Node in Docker](#6-start-ssv-node-in-docker)
-  + [7. Update SSV Node Image](#7-update-ssv-node-image)
-  + [8. Setup Monitoring](#8-setup-monitoring)
+- [SSV - Operator Getting Started Guide](#ssv---operator-getting-started-guide)
+  - [Setting AWS Server for Operator](#setting-aws-server-for-operator)
+    - [1. Setup](#1-setup)
+    - [2. Login with SSH](#2-login-with-ssh)
+    - [3. Pre-requisite](#3-pre-requisite)
+    - [4. Generate Operator Keys](#4-generate-operator-keys)
+      - [Password file](#password-file)
+      - [Key pair generation and encryption](#key-pair-generation-and-encryption)
+    - [5. Create a Configuration File](#5-create-a-configuration-file)
+      - [5.1 Logger Configuration](#51-logger-configuration)
+      - [5.2 Metrics Configuration](#52-metrics-configuration)
+      - [5.3 Profiling Configuration](#53-profiling-configuration)
+    - [6. Start SSV Node in Docker](#6-start-ssv-node-in-docker)
+    - [7. Update SSV Node Image](#7-update-ssv-node-image)
+    - [8. Setup Monitoring](#8-setup-monitoring)
 
 ## Setting AWS Server for Operator
 
@@ -60,9 +63,13 @@ ssh -i {key pair file name} ubuntu@{instance public IP}
 type yes when prompted
 ```
 
-### 3. Installation Script
+### 3. Pre-requisite
 
-Download and run the installation script.
+A fundamental pre-requisite is to have Docker installed on the machine hosting the SSV Node. In order to do so, please refer to [the official Docker documentation](https://docs.docker.com/engine/install/), and find the option that better fits your server configuration.
+
+> ℹ️ In order to run the SSV Node, in a server, only Docker engine is necessary, you can still go ahead and install Docker Desktop, but it will not be necessary unless you plan to use the Graphical Interface.
+
+As a shortcut, the installation script linked below can install the necessary packages for Ubuntu.
 
 ```
 $ sudo su
@@ -76,74 +83,150 @@ $ ./install.sh
 
 ### 4. Generate Operator Keys
 
-The following command will generate your operator's public and private keys (appear as "pk" and "sk" in the output). 
+#### Password file
 
+You will need to create a file (named `password` in this example) containing the password you chose for your Secret Key:
+
+```bash
+echo "<MY_OPERATOR_PASSWORD>" >> password
 ```
-$ docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode generate-operator-keys
+
+#### Key pair generation and encryption
+
+The node Docker image will generate keys for you, then encrypt them with a password you provide, using the following command:
+
+```bash
+docker run --name ssv-node-key-generation -v "$(pwd)/password":/password -it "bloxstaking/ssv-node:latest" /go/bin/ssvnode generate-operator-keys --password-file=password && docker cp ssv-node-key-generation:/encrypted_private_key.json ./encrypted_private_key.json && docker rm ssv-node-key-generation
 ```
+
+Here is an example of the generated file.
+
+```json
+{
+  "checksum": {
+    "function": "sha256",
+    "message": "affa5deb755d8ad13a039117dc6850d2a25ad62a870a1e1f8d4ef...",
+    "params": {}
+  },
+  "cipher": {
+    "function": "aes-128-ctr",
+    "message": "3022f3b5043b77eda7f336dd0218e6b7e633a3f42f7ae92ed9...",
+    "params": { "iv": "12e787716b0e3c30f2d68ed05464c16f" }
+  },
+  "kdf": {
+    "function": "pbkdf2",
+    "message": "",
+    "params": {
+      "c": 262144,
+      "dklen": 32,
+      "prf": "hmac-sha256",
+      "salt": "bc71d3213fe17f15879e6bc468b30eeeb2d0969176491d87f9b00a37bf314a4c"
+    }
+  },
+  "publicKey": "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJak..."
+}
+```
+
+> ℹ️ Pay close attention to the `publicKey` field, as the name says, it contains the public key, which is needed to register the Operator on the ssv.network
 
 ### 5. Create a Configuration File
 
-Fill all the placeholders (e.g. `<ETH 2.0 node>` or `<db folder>`) with actual values,
-and run the command below to create a `config.yaml` file.
+Copy the following `config.yaml` file, just be sure to replace all the placeholders (`ETH2_NODE`, `ETH1_WEBSOCKET_ADDRESS`, `OPERATOR_SECRET_KEY`, etc.) with actual values.
 
-
-```
-$ yq n db.Path "<db folder>" | tee config.yaml \
-  && yq w -i config.yaml eth2.BeaconNodeAddr "<ETH 2.0 node>" \
-  && yq w -i config.yaml eth1.ETH1Addr "<ETH1 node WebSocket address>" \
-  && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>"
-```
-
-Example:
+In particular, substitute `ENCRYPTED_PRIVATE_KEY_JSON` with the operator encrypted private key file [generated above](#4-generate-operator-keys) (e.g. `encrypted_private_key.json`) and `PASSWORD_FILE` with the file containing the password used to generate the encrypted key itself.
 
 ```yaml
+global:
+  # Console output log level 
+  LogLevel: info
+
+  LogFormat: console
+ 
+  LogLevelFormat: capitalColor
+
+  # Debug logs file path
+  LogFilePath: ./data/debug.log
+
 db:
-  Path: ./data/db/node_1
+  # Path to a persistent directory to store the node's database.
+  Path: ./data/db
+
+ssv:
+  # The SSV network to join to
+  # Mainnet = Network: mainnet (default)
+  # Testnet (Goerli)  = Network: jato-v2
+  # Testnet (Holesky) = Network: holesky
+  Network: mainnet
+  
+  ValidatorOptions:
+    # Whether to enable MEV block production. Requires the connected Beacon node to be MEV-enabled.
+    BuilderProposals: false
+
 eth2:
-  Network: prater
-  BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
+  # HTTP URL of the Beacon node to connect to.
+  BeaconNodeAddr: <ETH2_NODE> # e.g. http://example.url:5052
+
 eth1:
-  ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
-OperatorPrivateKey: LS0tLS...
+  # WebSocket URL of the Eth1 node to connect to.
+  ETH1Addr: <ETH1_WEBSOCKET_ADDRESS> # e.g. ws://example.url:8546/ws
+
+p2p:
+  # Optionally provide the external IP address of the node, if it cannot be automatically determined.
+  # HostAddress: 192.168.1.1
+
+  # Optionally override the default TCP & UDP ports of the node.
+  # TcpPort: 13001
+  # UdpPort: 12001
+
+KeyStore:
+  PrivateKeyFile: <ENCRYPTED_PRIVATE_KEY_JSON> # e.g. ./encrypted_private_key.json
+  PasswordFile: <PASSWORD_FILE> # e.g. ./password
+
+# This enables monitoring at the specified port, see https://docs.ssv.network/run-a-node/operator-node/maintenance/monitoring
+MetricsAPIPort: 15000
+
+EnableProfile: true
 ```
+
+> ⚠️ Make sure your `ETH1Addr` endpoint is communicating **over WebSocket** and **not over HTTP** in order to support subscriptions and notifications.
+
 
   #### 5.1 Logger Configuration
 
-  In order to see `debug` level logs, add the corresponding section to the `config.yaml` by running:
+  In order to see `debug` level logs, change the corresponding section to the `config.yaml` by running:
 
-  ```
-  $ yq w -i config.yaml global.LogLevel "debug"
+  ```yaml
+  LogLevel: debug
   ```
 
   Logs can be formatted as `json` instead of the default `console` format:
 
-  ```
-  $ yq w -i config.yaml global.LogFormat "json"
+  ```yaml
+  LogFormat: console
   ```
 
   Log levels can be shown in lowercase and w/o colors, default is upper case with colors:
 
-  ```
-  $ yq w -i config.yaml global.LogLevelFormat "lowercase"
+  ```yaml
+  LogLevelFormat: lowercase
   ```
 
   #### 5.2 Metrics Configuration
 
-  In order to enable metrics, the corresponding config should be in place:
+  The sample config file provided above already has metrics enabled, through the corresponding config:
 
-  ```
-  $ yq w -i config.yaml MetricsAPIPort "15000"
+  ```yaml
+  MetricsAPIPort: 15000
   ```
 
   See [setup monitoring](#8-setup-monitoring) for more details.
 
   #### 5.3 Profiling Configuration
 
-  In order to enable go profiling tools, turn on the corresponding flga:
+  The sample config file provided above already has profiling enabled, through the corresponding config:
 
   ```
-  $ yq w -i config.yaml EnableProfile "true"
+  EnableProfile: true
   ```
 
 ### 6. Start SSV Node in Docker
@@ -152,18 +235,30 @@ Before start, make sure the clock is synced with NTP servers.
 Then, run the docker image in the same folder you created the `config.yaml`:
 
 ```shell
-$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13001:13001 -p 12001:12001/udp -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data --log-opt max-size=500m --log-opt max-file=10 -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \
-  && docker logs ssv_node --follow
+docker run -d --restart unless-stopped --name ssv_node -e \
+</strong>CONFIG_PATH=/config.yaml -p 13001:13001 -p 12001:12001/udp -p 15000:15000 \
+-v "$(pwd)/config.yaml":/config.yaml \
+-v "$(pwd)":/data \
+-v "$(pwd)/password":/password \
+-v "$(pwd)/encrypted_private_key.json":/encrypted_private_key.json \
+-it "bloxstaking/ssv-node:latest" make BUILD_PATH="/go/bin/ssvnode" start-node && \
+docker logs ssv_node --follow
 ```
+
+> ℹ️ This command will keep the terminal busy, showing the container's logs. It is useful to make sure that the node start up sequence runs correctly.
+> 
+> You can detach the terminal at any time by hitting `Ctrl-c` key combination, or closing the terminal itself.
 
 ### 7. Update SSV Node Image
 
-The current version is available through logs or a cmd:
+To verify the current version of a node, launch this command:
+
 ```shell
 $ docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode version
 ```
 
-In order to update, kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
+In order to update, stop any running container (usually `docker stop ssv_node`) and pull the `latest` image (or any specific version `bloxstaking/ssv-node:<version>`)
+
 ```shell
 $ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
 ```
@@ -172,36 +267,4 @@ Now run the container again as specified above in step 6.
 
 ### 8. Setup Monitoring
 
-Follow the next steps to setup a local monitoring environment (prometheus and grafana containers):
-
-1. Prometheus:
-```shell
-# download prometheus config
-$ mkdir prometheus && wget -O ./prometheus/prometheus.yaml https://raw.githubusercontent.com/bloxapp/ssv/stage/monitoring/prometheus/prometheus.yaml
-# start a container
-$ docker run --user root -p 9390:9090 -dit --name=prometheus -v $(pwd)/prometheus/:/data/prometheus -v $(pwd)/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml 'prom/prometheus:v2.24.0' --config.file="/etc/prometheus/prometheus.yml" --storage.tsdb.path="/data/prometheus"
-```
-
-2. Grafana:
-```shell
-# create a data dir
-$ mkdir grafana
-# start a container
-$ docker run -p 3000:3000 -dti -v $(pwd)/grafana/:/var/lib/grafana --name=grafana 'grafana/grafana:8.0.0'
-```
-
-3. Create a local network for connectivity of all containers:
-```shell
-$ docker network create --driver bridge ssv-net
-$ docker network connect --alias ssv-node-1 ssv-net ssv_node
-$ docker network connect --alias prometheus ssv-net prometheus
-$ docker network connect --alias grafana ssv-net grafana
-```
-
-4. Expose grafana externally by adding inbound rule to open port 3000 or by some proxy such as Nginx.
-
-5. Follow grafana instructions in [monitoring > grafana](../monitoring/README.md#grafana)
-
-**Notes:**
-* change the values of `instance` variable in Grafana (`Settings > Variables`) to `ssv-node-1`
-* `Process Health` panels are showing K8S metrics which is not used in this setup, and therefore won't be available
+To set up monitoring on the node, [please follow the instructions in the dedicated page](../monitoring/README.md).
