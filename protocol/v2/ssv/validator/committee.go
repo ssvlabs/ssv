@@ -197,9 +197,11 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	}
 
+	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
+
 	// Prunes all expired committee runners, when new runner is created
-	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
-		logger.Error("couldn't prune expired committee runners", zap.Uint64("current_slot", uint64(duty.Slot)), zap.Error(err))
+	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
 	logger.Info("ℹ️ starting duty processing")
@@ -328,6 +330,10 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
+			opIds := types.OperatorIDsFromOperators(c.Operator.Committee)
+			epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
+			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
+			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)
 			delete(c.Queues, slot)
