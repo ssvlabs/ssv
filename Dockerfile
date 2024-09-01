@@ -1,9 +1,9 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.21.11 AS preparer
+FROM golang:1.21.10 AS preparer
 
-RUN apt-get clean && apt-get update                                                        && \
+RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
   curl=7.88.1-10+deb12u7 \
   git=1:2.39.2-1.1 \
@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM golang:1.21.11 AS runner
+FROM golang:1.21.10 AS runner
 
 RUN apt-get update     && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
