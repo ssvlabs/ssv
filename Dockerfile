@@ -1,11 +1,11 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.21.10 AS preparer
+FROM golang:1.22 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl=7.88.1-10+deb12u7 \
+  curl=7.88.1-10+deb12u6 \
   git=1:2.39.2-1.1 \
   zip=3.0-13 \
   unzip=6.0-28 \
@@ -17,7 +17,7 @@ RUN apt-get update                                                        && \
 
 RUN go version
 
-WORKDIR /go/src/github.com/bloxapp/ssv/
+WORKDIR /go/src/github.com/ssvlabs/ssv/
 COPY go.mod .
 COPY go.sum .
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -45,11 +45,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM golang:1.21.10 AS runner
+FROM golang:1.22 AS runner
 
 RUN apt-get update     && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  dnsutils=1:9.18.28-1~deb12u2 && \
+  dnsutils=1:9.18.24-1 && \
   rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
@@ -66,3 +66,4 @@ EXPOSE 5678 5000 4000/udp
 ENV GODEBUG="netdns=go"
 
 #ENTRYPOINT ["/go/bin/ssvnode"]
+
