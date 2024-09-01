@@ -25,6 +25,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/ilyakaznacheev/cleanenv v1.4.2
+	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/jellydator/ttlcache/v3 v3.0.1
 	github.com/libp2p/go-libp2p v0.36.0
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
@@ -122,7 +123,6 @@ require (
 	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-datastore v0.6.0 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
-	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/ipld/go-ipld-prime v0.20.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
@@ -246,3 +246,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.0.0-20240702122821-2c345f4fc90f
+
+replace github.com/libp2p/go-libp2p-pubsub => github.com/moshe-blox/go-libp2p-pubsub v0.0.0-20240901150937-11d0b8dce04d
