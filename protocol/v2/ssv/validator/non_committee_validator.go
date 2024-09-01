@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -21,6 +20,7 @@ import (
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -33,7 +33,7 @@ type CommitteeObserver struct {
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
 	Roots                  map[[32]byte]spectypes.BeaconRole
-	postConsensusContainer map[phase0.ValidatorIndex]*specssv.PartialSigContainer
+	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
 type CommitteeObserverOptions struct {
@@ -72,7 +72,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
 		Roots:                  make(map[[32]byte]spectypes.BeaconRole),
-		postConsensusContainer: make(map[phase0.ValidatorIndex]*specssv.PartialSigContainer),
+		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
 
@@ -168,7 +168,7 @@ func (ncv *CommitteeObserver) processMessage(
 		validator := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
 		if !ok {
-			container = specssv.NewPartialSigContainer(validator.Quorum())
+			container = ssv.NewPartialSigContainer(validator.Quorum())
 			ncv.postConsensusContainer[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
@@ -196,7 +196,7 @@ func (ncv *CommitteeObserver) processMessage(
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) {
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {

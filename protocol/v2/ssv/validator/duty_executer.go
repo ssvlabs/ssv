@@ -2,7 +2,6 @@ package validator
 
 import (
 	"fmt"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -34,7 +33,10 @@ func (c *Committee) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error
 		return fmt.Errorf("failed to get execute committee duty data: %w", err)
 	}
 
-	logger = logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(executeDutyData.Duty.Slot), executeDutyData.Duty.Slot)))
+	opIds := types.OperatorIDsFromOperators(c.Operator.Committee)
+	epoch := c.BeaconNetwork.EstimatedEpochAtSlot(executeDutyData.Duty.Slot)
+	committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, executeDutyData.Duty.Slot)
+	logger = logger.With(fields.DutyID(committeeDutyID))
 
 	if err := c.StartDuty(logger, executeDutyData.Duty); err != nil {
 		return fmt.Errorf("could not start committee duty: %w", err)

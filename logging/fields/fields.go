@@ -352,27 +352,23 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.ValidatorDuty) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role spectypes.RunnerRole, index phase0.ValidatorIndex) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", role.String(), epoch, slot, index)
 }
 
-func GenesisFormatDutyID(epoch phase0.Epoch, duty *genesisspectypes.Duty) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+func GenesisFormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role genesisspectypes.BeaconRole, index phase0.ValidatorIndex) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", role.String(), epoch, slot, index)
 }
 
-func FormatGenesisDutyID(epoch phase0.Epoch, duty *genesisspectypes.Duty) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
-}
-
-func FormatCommittee(operators []*spectypes.Operator) string {
+func FormatCommittee(operators []spectypes.OperatorID) string {
 	var opids []string
 	for _, op := range operators {
-		opids = append(opids, fmt.Sprint(op.OperatorID))
+		opids = append(opids, fmt.Sprint(op))
 	}
 	return strings.Join(opids, "_")
 }
 
-func FormatCommitteeDutyID(operators []*spectypes.Operator, epoch phase0.Epoch, slot phase0.Slot) string {
+func FormatCommitteeDutyID(operators []spectypes.OperatorID, epoch phase0.Epoch, slot phase0.Slot) string {
 	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
 }
 
@@ -382,7 +378,7 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		b.WriteString(FormatDutyID(epoch, duty))
+		b.WriteString(FormatDutyID(epoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
 	}
 	return zap.String(FieldDuties, b.String())
 }

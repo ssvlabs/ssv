@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -20,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var (
@@ -209,9 +209,13 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 // NOT threadsafe
 func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
 	for slot, runner := range c.Runners {
+		opIds := types.OperatorIDsFromOperators(c.Operator.Committee)
+		epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
+		committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
+
 		logger.Debug("trying to stop duty for validator",
-			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-			zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
+			fields.DutyID(committeeDutyID),
+			fields.Slot(slot), fields.Validator(validator[:]),
 		)
 		runner.StopDuty(validator)
 	}

@@ -109,7 +109,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(duty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(duty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
 	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(duty.Type))
 
 	// Log with height.
