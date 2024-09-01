@@ -97,3 +97,8 @@ func (m Net) ResourceManager() libp2pnetwork.ResourceManager {
 	//TODO implement me
 	panic("implement me")
 }
+
+func (m Net) CanDial(id peer.ID, ma ma.Multiaddr) bool {
+	//TODO implement me
+	panic("implement me")
+}
