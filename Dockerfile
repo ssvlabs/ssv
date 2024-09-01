@@ -3,7 +3,7 @@
 #
 FROM golang:1.21.11 AS preparer
 
-RUN apt-get update                                                        && \
+RUN apt-get clean && apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
   curl=7.88.1-10+deb12u7 \
   git=1:2.39.2-1.1 \
