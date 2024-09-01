@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM golang:1.20.7 AS runner
+FROM golang:1.21.11 AS runner
 
 RUN apt-get update     && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
