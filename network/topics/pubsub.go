@@ -17,6 +17,8 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+
+	ipfslog "github.com/ipfs/go-log/v2"
 )
 
 const (
@@ -131,6 +133,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		//	return true
 		// }),
 	}
+	ipfslog.SetLogLevel("pubsub", "debug")
 
 	if cfg.Discovery != nil {
 		psOpts = append(psOpts, pubsub.WithDiscovery(cfg.Discovery))
