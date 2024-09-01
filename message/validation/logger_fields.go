@@ -86,17 +86,18 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 }
 
 func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
-	var dutyId string
-	// make dutyid
 	if lf.Role == spectypes.RoleCommittee {
 		c := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
-		dutyId = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
+		if c != nil {
+			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
+		}
 	} else {
 		// get the validator index from the msgid
-		idx := mv.validatorStore.Validator(lf.DutyExecutorID).ValidatorIndex
-		dutyId = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role, idx)
+		v := mv.validatorStore.Validator(lf.DutyExecutorID)
+		if v != nil {
+			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role, v.ValidatorIndex)
+		}
 	}
-	lf.DutyID = dutyId
 }
 
 // LoggerFields provides details about a message. It's used for logging and metrics.
