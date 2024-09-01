@@ -210,9 +210,13 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 // NOT threadsafe
 func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
 	for slot, runner := range c.Runners {
+		opIds := types.OperatorIDsFromOperators(c.Operator.Committee)
+		epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
+		committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
+
 		logger.Debug("trying to stop duty for validator",
-			fields.DutyID(fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.Operator.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-			zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
+			fields.DutyID(committeeDutyID),
+			fields.Slot(slot), zap.String("validator", hex.EncodeToString(validator[:])),
 		)
 		runner.StopDuty(validator)
 	}
