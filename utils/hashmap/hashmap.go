@@ -34,11 +34,11 @@ func (m *Map[Key, Value]) Set(key Key, value Value) {
 }
 
 func (m *Map[Key, Value]) Len() int {
-	// TODO: this is quite expensive. If it becomes a bottleneck,
+	// This implementation is quite expensive. If it becomes a bottleneck,
 	// we should consider maintaining an internal atomic counter and
-	// using LoadAndDelete and LoadOrStore exclusively to update it.
+	// using LoadOrStore and LoadAndDelete exclusively to update it.
 	//
-	// With that said, this would reduce the performance of writes and deletes,
+	// With that said, this would hurt the performance of writes and deletes,
 	// so perhaps it should be a separate implementation (such as MapWithLen).
 
 	n := 0
