@@ -360,10 +360,14 @@ func CreateVirtualNet(
 				return
 			}
 
+			var idsToDelete []NodeIndex
 			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
-				node.PeerScores.Del(index)
+				idsToDelete = append(idsToDelete, index)
 				return true
 			})
+			for _, id := range idsToDelete {
+				node.PeerScores.Del(id)
+			}
 			for peerID, peerScore := range peerMap {
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
