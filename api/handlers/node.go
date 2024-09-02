@@ -9,6 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"github.com/ssvlabs/ssv/api"
 	networkpeers "github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/nodeprobe"
@@ -160,7 +161,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	// Check the health of Ethereum nodes and EventSyncer.
 	resp.BeaconNode = healthStatus{h.NodeProber.CheckBeaconNodeHealth(ctx)}
 	resp.ExecutionNode = healthStatus{h.NodeProber.CheckExecutionNodeHealth(ctx)}
-	resp.EventSyncer = healthStatus{(h.NodeProber.CheckEventSyncerHealth(ctx))}
+	resp.EventSyncer = healthStatus{h.NodeProber.CheckEventSyncerHealth(ctx)}
 
 	return api.Render(w, r, resp)
 }
