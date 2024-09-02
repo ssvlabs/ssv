@@ -34,7 +34,7 @@ func (m *Map[Key, Value]) Set(key Key, value Value) {
 }
 
 func (m *Map[Key, Value]) Len() int {
-	// TODO: this is quite expensive. If this becomes a bottleneck,
+	// TODO: this is quite expensive. If it becomes a bottleneck,
 	// we should consider maintaining an internal atomic counter.
 	//
 	// With that said, this would reduce the performance of writes and deletes,
