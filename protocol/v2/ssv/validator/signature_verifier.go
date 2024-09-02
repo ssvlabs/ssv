@@ -2,10 +2,12 @@ package validator
 
 import (
 	"fmt"
+
 	"github.com/pkg/errors"
 
-	"github.com/cornelk/hashmap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/operator/keys"
 )

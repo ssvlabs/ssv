@@ -54,6 +54,9 @@ func (m *Map[Key, Value]) Len() int {
 }
 
 func (m *Map[Key, Value]) Range(f func(Key, Value) bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	for k, v := range m.m {
 		if !f(k, v) {
 			break
