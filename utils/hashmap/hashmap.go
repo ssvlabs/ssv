@@ -34,12 +34,17 @@ func (m *Map[Key, Value]) Set(key Key, value Value) {
 }
 
 func (m *Map[Key, Value]) Len() int {
-	length := 0
+	// TODO: this is quite expensive, we should consider
+	// maintaining an internal atomic counter instead.
+	//
+	// With that said, since that would reduce the performance of writes and deletes,
+	// we should consider doing so in a separate implementation such as MapWithLen.
+	n := 0
 	m.m.Range(func(_, _ any) bool {
-		length++
+		n++
 		return true
 	})
-	return length
+	return n
 }
 
 func (m *Map[Key, Value]) Range(f func(Key, Value) bool) {
