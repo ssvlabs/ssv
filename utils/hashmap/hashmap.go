@@ -49,11 +49,17 @@ func (m *Map[Key, Value]) Range(f func(Key, Value) bool) {
 }
 
 func (m *Map[Key, Value]) Delete(key Key) bool {
-	_, found := m.m.Load(key)
-	if found {
-		m.m.Delete(key)
+	_, loaded := m.m.LoadAndDelete(key)
+	return loaded
+}
+
+func (m *Map[Key, Value]) GetAndDelete(key Key) (Value, bool) {
+	v, loaded := m.m.LoadAndDelete(key)
+	if !loaded {
+		var zero Value
+		return zero, false
 	}
-	return found
+	return v.(Value), true
 }
 
 func (m *Map[Key, Value]) String() string {

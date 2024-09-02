@@ -197,6 +197,24 @@ func TestDelete(t *testing.T) {
 	assert.Equal(t, 0, m.Len())
 }
 
+func TestGetAndDelete(t *testing.T) {
+	t.Parallel()
+
+	m := New[int, string]()
+	value, ok := m.GetAndDelete(1)
+	assert.False(t, ok)
+	assert.Equal(t, "", value)
+
+	m.Set(1, "1")
+	value, ok = m.GetAndDelete(1)
+	assert.True(t, ok)
+	assert.Equal(t, "1", value)
+
+	value, ok = m.GetAndDelete(1)
+	assert.False(t, ok)
+	assert.Equal(t, "", value)
+}
+
 func TestRange(t *testing.T) {
 	t.Parallel()
 	m := New[int, string]()
