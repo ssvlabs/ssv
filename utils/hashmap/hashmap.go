@@ -5,72 +5,50 @@ import (
 )
 
 type Map[Key comparable, Value any] struct {
-	m  map[Key]Value
-	mu sync.RWMutex
+	m sync.Map
 }
 
 func New[Key comparable, Value any]() *Map[Key, Value] {
-	return &Map[Key, Value]{
-		m:  make(map[Key]Value),
-		mu: sync.RWMutex{},
-	}
+	return &Map[Key, Value]{}
 }
 
 func (m *Map[Key, Value]) Get(key Key) (Value, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	v, ok := m.m[key]
-	return v, ok
+	v, ok := m.m.Load(key)
+	if !ok {
+		var zero Value
+		return zero, false
+	}
+	return v.(Value), true
 }
 
 func (m *Map[Key, Value]) GetOrInsert(key Key, value Value) (Value, bool) {
-	m.mu.RLock()
-	v, ok := m.m[key]
-	m.mu.RUnlock()
-
-	if !ok {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-
-		m.m[key] = value
-		v = value
-	}
-	return v, ok
+	actual, loaded := m.m.LoadOrStore(key, value)
+	return actual.(Value), loaded
 }
 
 func (m *Map[Key, Value]) Set(key Key, value Value) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.m[key] = value
+	m.m.Store(key, value)
 }
 
 func (m *Map[Key, Value]) Len() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return len(m.m)
+	length := 0
+	m.m.Range(func(_, _ any) bool {
+		length++
+		return true
+	})
+	return length
 }
 
 func (m *Map[Key, Value]) Range(f func(Key, Value) bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for k, v := range m.m {
-		if !f(k, v) {
-			break
-		}
-	}
+	m.m.Range(func(k, v any) bool {
+		return f(k.(Key), v.(Value))
+	})
 }
 
 func (m *Map[Key, Value]) Del(key Key) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	_, found := m.m[key]
+	_, found := m.m.Load(key)
 	if found {
-		delete(m.m, key)
+		m.m.Delete(key)
 	}
 	return found
 }
