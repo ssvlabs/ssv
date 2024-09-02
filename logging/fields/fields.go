@@ -352,8 +352,8 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role spectypes.RunnerRole, index phase0.ValidatorIndex) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", role.String(), epoch, slot, index)
+func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role string, index phase0.ValidatorIndex) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", role, epoch, slot, index)
 }
 
 func GenesisFormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role genesisspectypes.BeaconRole, index phase0.ValidatorIndex) string {
@@ -378,7 +378,7 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		b.WriteString(FormatDutyID(epoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
+		b.WriteString(FormatDutyID(epoch, duty.Slot, duty.Type.String(), duty.ValidatorIndex))
 	}
 	return zap.String(FieldDuties, b.String())
 }
