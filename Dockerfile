@@ -5,7 +5,7 @@ FROM golang:1.20.7 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl=7.88.1-10+deb12u1 \
+  curl=7.88.1-10+deb12u6 \
   git=1:2.39.2-1.1 \
   zip=3.0-13 \
   unzip=6.0-28 \
@@ -17,7 +17,7 @@ RUN apt-get update                                                        && \
 
 RUN go version
 
-WORKDIR /go/src/github.com/bloxapp/ssv/
+WORKDIR /go/src/github.com/ssvlabs/ssv/
 COPY go.mod .
 COPY go.sum .
 RUN --mount=type=cache,target=/root/.cache/go-build \
