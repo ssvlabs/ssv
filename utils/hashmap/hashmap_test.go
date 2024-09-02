@@ -14,6 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Credit: most of the tests here are borrowed from the hashmap package.
+// https://github.com/cornelk/hashmap/blob/28d6fb92c67132d1bf08a5e07c81fdc5855bb460/hashmap_test.go
+
 func TestNew(t *testing.T) {
 	t.Parallel()
 	m := New[uintptr, uintptr]()
