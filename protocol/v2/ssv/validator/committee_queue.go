@@ -115,7 +115,7 @@ func (v *Committee) ConsumeQueue(
 		} else if runningInstance != nil && !runningInstance.State.Decided {
 			filter = func(ssvMessage *queue.SSVMessage) bool {
 				// don't read post consensus until decided
-				return ssvMessage.SSVMessage.MsgType == spectypes.SSVPartialSignatureMsgType
+				return ssvMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
