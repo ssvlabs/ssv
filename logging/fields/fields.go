@@ -17,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -354,10 +353,6 @@ func FeeRecipient(pubKey []byte) zap.Field {
 
 func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role string, index phase0.ValidatorIndex) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", role, epoch, slot, index)
-}
-
-func GenesisFormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role genesisspectypes.BeaconRole, index phase0.ValidatorIndex) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", role.String(), epoch, slot, index)
 }
 
 func FormatCommittee(operators []spectypes.OperatorID) string {
