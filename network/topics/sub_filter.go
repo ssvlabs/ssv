@@ -97,7 +97,7 @@ func (wl *dynamicWhitelist) Register(name string) {
 
 // Deregister removes the given topic from the whitelist
 func (wl *dynamicWhitelist) Deregister(name string) {
-	wl.whitelist.Del(name)
+	wl.whitelist.Delete(name)
 }
 
 // Whitelisted checks if the given name was whitelisted

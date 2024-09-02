@@ -1,9 +1,12 @@
 package hashmap
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 )
 
+// Map implements a thread-safe map with a sync.Map under the hood.
 type Map[Key comparable, Value any] struct {
 	m sync.Map
 }
@@ -21,7 +24,7 @@ func (m *Map[Key, Value]) Get(key Key) (Value, bool) {
 	return v.(Value), true
 }
 
-func (m *Map[Key, Value]) GetOrInsert(key Key, value Value) (Value, bool) {
+func (m *Map[Key, Value]) GetOrSet(key Key, value Value) (Value, bool) {
 	actual, loaded := m.m.LoadOrStore(key, value)
 	return actual.(Value), loaded
 }
@@ -45,10 +48,26 @@ func (m *Map[Key, Value]) Range(f func(Key, Value) bool) {
 	})
 }
 
-func (m *Map[Key, Value]) Del(key Key) bool {
+func (m *Map[Key, Value]) Delete(key Key) bool {
 	_, found := m.m.Load(key)
 	if found {
 		m.m.Delete(key)
 	}
 	return found
+}
+
+func (m *Map[Key, Value]) String() string {
+	var b strings.Builder
+	i := 0
+	b.WriteString("[")
+	m.m.Range(func(k, v any) bool {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(fmt.Sprintf("%v=%v", k, v))
+		i++
+		return true
+	})
+	b.WriteString("]")
+	return b.String()
 }

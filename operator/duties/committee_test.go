@@ -794,7 +794,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	attDuties.Del(phase0.Epoch(2))
+	attDuties.Delete(phase0.Epoch(2))
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
 	currentSlot.Set(phase0.Slot(65))

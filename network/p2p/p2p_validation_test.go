@@ -361,7 +361,7 @@ func CreateVirtualNet(
 			}
 
 			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
-				node.PeerScores.Del(index)
+				node.PeerScores.Delete(index)
 				return true
 			})
 			for peerID, peerScore := range peerMap {
