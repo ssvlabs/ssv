@@ -355,15 +355,13 @@ func TestConcurrentInsertDelete(t *testing.T) {
 		wg.Add(2)
 
 		go func() {
-			rand.Seed(int64(time.Now().Nanosecond()))
-			time.Sleep(time.Duration(rand.Intn(10)))
+			time.Sleep(time.Duration(randSeed().Intn(10)))
 			l.Delete(222)
 			wg.Done()
 		}()
 		go func() {
 			defer wg.Done()
-			rand.Seed(int64(time.Now().Nanosecond()))
-			time.Sleep(time.Duration(rand.Intn(10)))
+			time.Sleep(time.Duration(randSeed().Intn(10)))
 			l.GetOrSet(223, 223)
 		}()
 		wg.Wait()
@@ -442,18 +440,18 @@ func TestIssue1682(t *testing.T) {
 			var wg sync.WaitGroup
 			for _, cmtID := range cmtIDs {
 				cmtID := cmtID
-				n := 50 + rand.Intn(200)
+				n := 50 + randSeed().Intn(200)
 				for j := 0; j < n; j++ {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						time.Sleep(time.Duration(rand.Intn(2000)) * time.Millisecond)
+						time.Sleep(time.Duration(randSeed().Intn(2000)) * time.Millisecond)
 						_, found := m.GetOrSet(cmtID, validatorStatusSubscribing)
 						if !found {
-							time.Sleep(time.Duration(rand.Intn(200)) * time.Millisecond)
+							time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 							m.Set(cmtID, validatorStatusSubscribed)
 						} else {
-							time.Sleep(time.Duration(rand.Intn(200)) * time.Millisecond)
+							time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 						}
 					}()
 				}
@@ -501,4 +499,8 @@ func TestIssue1682(t *testing.T) {
 	}
 	wwg.Wait()
 	require.Empty(t, errs)
+}
+
+func randSeed() *rand.Rand {
+	return rand.New(rand.NewSource(time.Now().UnixNano()))
 }
