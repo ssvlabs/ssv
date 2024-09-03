@@ -33,13 +33,21 @@ func (m *Map[Key, Value]) Set(key Key, value Value) {
 	m.m.Store(key, value)
 }
 
-func (m *Map[Key, Value]) Len() int {
-	length := 0
+// SlowLen returns the number of elements in the map by iterating over all items.
+//
+// This implementation is quite expensive. If it becomes a bottleneck,
+// we should consider maintaining an internal atomic counter and
+// using LoadOrStore and LoadAndDelete exclusively to update it.
+//
+// With that said, this would hurt the performance of writes and deletes,
+// so perhaps it should be a separate implementation (such as MapWithLen).
+func (m *Map[Key, Value]) SlowLen() int {
+	n := 0
 	m.m.Range(func(_, _ any) bool {
-		length++
+		n++
 		return true
 	})
-	return length
+	return n
 }
 
 func (m *Map[Key, Value]) Range(f func(Key, Value) bool) {
@@ -49,11 +57,17 @@ func (m *Map[Key, Value]) Range(f func(Key, Value) bool) {
 }
 
 func (m *Map[Key, Value]) Delete(key Key) bool {
-	_, found := m.m.Load(key)
-	if found {
-		m.m.Delete(key)
+	_, loaded := m.m.LoadAndDelete(key)
+	return loaded
+}
+
+func (m *Map[Key, Value]) GetAndDelete(key Key) (Value, bool) {
+	v, loaded := m.m.LoadAndDelete(key)
+	if !loaded {
+		var zero Value
+		return zero, false
 	}
-	return found
+	return v.(Value), true
 }
 
 func (m *Map[Key, Value]) String() string {
