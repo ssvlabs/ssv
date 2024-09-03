@@ -55,8 +55,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
-		acceptedRole = spectypes.RoleProposer
-		ignoredRole  = spectypes.RoleAggregator
+		acceptedRole = spectypes.RoleCommittee
+		ignoredRole  = spectypes.RoleProposer
 		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
