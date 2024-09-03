@@ -85,7 +85,7 @@ func NewTopicsController(
 	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic(logger))
 
 	go func() {
-		ticker := time.NewTicker(time.Second * 10)
+		ticker := time.NewTicker(time.Second * 5)
 		defer ticker.Stop()
 		for {
 			select {
