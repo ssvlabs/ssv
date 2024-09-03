@@ -85,7 +85,7 @@ func NewTopicsController(
 	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic(logger))
 
 	go func() {
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(time.Second * 10)
 		defer ticker.Stop()
 		for {
 			select {
@@ -95,11 +95,7 @@ func NewTopicsController(
 				start := time.Now()
 				topicPeers := map[string]int{}
 				for _, topic := range ctrl.ps.GetTopics() {
-					peers, err := ctrl.Peers(topic)
-					if err != nil {
-						logger.Error("could not get peers", zap.String("topic", topic), zap.Error(err))
-						continue
-					}
+					peers := ctrl.ps.ListPeers(topic)
 					topicPeers[topic] = len(peers)
 				}
 				logger.Debug("topics peers", zap.Any("topic_peers", topicPeers), zap.Duration("duration", time.Since(start)))
