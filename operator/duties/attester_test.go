@@ -7,10 +7,11 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cornelk/hashmap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -184,8 +185,8 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be fetched again
 	currentSlot.Set(phase0.Slot(1))
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 1
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -248,8 +249,8 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 	// STEP 5: wait for attester duties to be fetched
 	currentSlot.Set(phase0.Slot(2))
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be executed
@@ -298,8 +299,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
