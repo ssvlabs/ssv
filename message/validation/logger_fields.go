@@ -95,7 +95,7 @@ func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 		// get the validator index from the msgid
 		v := mv.validatorStore.Validator(lf.DutyExecutorID)
 		if v != nil {
-			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role, v.ValidatorIndex)
+			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role.String(), v.ValidatorIndex)
 		}
 	}
 }
