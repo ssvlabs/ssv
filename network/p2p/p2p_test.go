@@ -180,14 +180,12 @@ func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round 
 func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	var id spectypes.MessageID
+	dutyExecutorID := pk
 	if role == spectypes.RoleCommittee {
 		committeeID := ssvtypes.ComputeCommitteeID([]types.OperatorID{1, 2, 3, 4})
-		encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-		id = spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), encodedCommitteeID, spectypes.RoleCommittee)
-	} else {
-		id = spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, role)
+		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
