@@ -20,7 +20,7 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 	m := New[uintptr, uintptr]()
-	assert.Equal(t, 0, m.Len())
+	assert.Equal(t, 0, m.SlowLen())
 }
 
 func TestSetString(t *testing.T) {
@@ -39,10 +39,10 @@ func TestSetString(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, monkey, value)
 
-	assert.Equal(t, 1, m.Len())
+	assert.Equal(t, 1, m.SlowLen())
 
 	m.Set(2, elephant) // insert
-	assert.Equal(t, 2, m.Len())
+	assert.Equal(t, 2, m.SlowLen())
 	value, ok = m.Get(2)
 	assert.True(t, ok)
 	assert.Equal(t, elephant, value)
@@ -58,7 +58,7 @@ func TestSetUint8(t *testing.T) {
 	assert.Equal(t, 128, value)
 
 	m.Set(2, 200) // insert
-	assert.Equal(t, 2, m.Len())
+	assert.Equal(t, 2, m.SlowLen())
 	value, ok = m.Get(2)
 	assert.True(t, ok)
 	assert.Equal(t, 200, value)
@@ -74,7 +74,7 @@ func TestSetInt16(t *testing.T) {
 	assert.Equal(t, 128, value)
 
 	m.Set(2, 200) // insert
-	assert.Equal(t, 2, m.Len())
+	assert.Equal(t, 2, m.SlowLen())
 	value, ok = m.Get(2)
 	assert.True(t, ok)
 	assert.Equal(t, 200, value)
@@ -90,7 +90,7 @@ func TestSetFloat32(t *testing.T) {
 	assert.Equal(t, 128, value)
 
 	m.Set(2.2, 200) // insert
-	assert.Equal(t, 2, m.Len())
+	assert.Equal(t, 2, m.SlowLen())
 	value, ok = m.Get(2.2)
 	assert.True(t, ok)
 	assert.Equal(t, 200, value)
@@ -106,7 +106,7 @@ func TestSetFloat64(t *testing.T) {
 	assert.Equal(t, 128, value)
 
 	m.Set(2.2, 200) // insert
-	assert.Equal(t, 2, m.Len())
+	assert.Equal(t, 2, m.SlowLen())
 	value, ok = m.Get(2.2)
 	assert.True(t, ok)
 	assert.Equal(t, 200, value)
@@ -122,7 +122,7 @@ func TestSetInt64(t *testing.T) {
 	assert.Equal(t, 128, value)
 
 	m.Set(2, 200) // insert
-	assert.Equal(t, 2, m.Len())
+	assert.Equal(t, 2, m.SlowLen())
 	value, ok = m.Get(2)
 	assert.True(t, ok)
 	assert.Equal(t, 200, value)
@@ -138,10 +138,10 @@ func TestByteArray(t *testing.T) {
 	assert.Equal(t, 128, value)
 
 	m.Delete([4]byte{1, 2, 3, 4})
-	assert.Equal(t, 0, m.Len())
+	assert.Equal(t, 0, m.SlowLen())
 	_, ok = m.Get([4]byte{1, 2, 3, 4})
 	assert.False(t, ok)
-	assert.Equal(t, 0, m.Len())
+	assert.Equal(t, 0, m.SlowLen())
 }
 
 func TestGetNonExistingItem(t *testing.T) {
@@ -186,7 +186,7 @@ func TestDelete(t *testing.T) {
 	assert.False(t, deleted)
 	deleted = m.Delete(3)
 	assert.False(t, deleted)
-	assert.Equal(t, 2, m.Len())
+	assert.Equal(t, 2, m.SlowLen())
 
 	deleted = m.Delete(1)
 	assert.True(t, deleted)
@@ -194,7 +194,7 @@ func TestDelete(t *testing.T) {
 	assert.False(t, deleted)
 	deleted = m.Delete(2)
 	assert.True(t, deleted)
-	assert.Equal(t, 0, m.Len())
+	assert.Equal(t, 0, m.SlowLen())
 }
 
 func TestGetAndDelete(t *testing.T) {
@@ -384,7 +384,7 @@ func TestConcurrentInsertDelete(t *testing.T) {
 		}()
 		wg.Wait()
 
-		assert.Equal(t, 3, l.Len())
+		assert.Equal(t, 3, l.SlowLen())
 		_, found := l.Get(223)
 		assert.True(t, found)
 	}

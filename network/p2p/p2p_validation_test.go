@@ -246,7 +246,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			index NodeIndex
 			score float64
 		}
-		peers := make([]peerScore, 0, node.PeerScores.Len())
+		peers := make([]peerScore, 0, node.PeerScores.SlowLen())
 		node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
 			peers = append(peers, peerScore{index, snapshot.Score})
 			return true
