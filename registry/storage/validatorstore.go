@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 
@@ -220,13 +221,13 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 	return participating
 }
 
-func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
+func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for _, share := range shares {
 		if share == nil {
-			continue
+			return fmt.Errorf("nil share")
 		}
 
 		// Update byValidatorIndex
@@ -259,9 +260,15 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 			c.byOperatorID[operator.Signer] = data
 		}
 	}
+
+	return nil
 }
 
-func (c *validatorStore) handleShareRemoved(share *types.SSVShare) {
+func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
+	if share == nil {
+		return fmt.Errorf("nil share")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -306,13 +313,18 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) {
 			}
 		}
 	}
+
+	return nil
 }
 
-func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
+func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for _, share := range shares {
+		if share == nil {
+			return fmt.Errorf("nil share")
+		}
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.BeaconMetadata.Index] = share
@@ -343,6 +355,8 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) {
 			}
 		}
 	}
+
+	return nil
 }
 
 func (c *validatorStore) handleDrop() {

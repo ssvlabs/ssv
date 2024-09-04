@@ -126,7 +126,9 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 	)
-	storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...)
+	if err := storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...); err != nil {
+		return nil, nil, err
+	}
 	return storage, storage.validatorStore, nil
 }
 
@@ -203,6 +205,13 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	if len(shares) == 0 {
 		return nil
 	}
+
+	for _, share := range shares {
+		if share == nil {
+			return fmt.Errorf("nil share")
+		}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -237,8 +246,12 @@ func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVSha
 		s.shares[key] = share
 	}
 
-	s.validatorStore.handleSharesUpdated(updateShares...)
-	s.validatorStore.handleSharesAdded(addShares...)
+	if err := s.validatorStore.handleSharesUpdated(updateShares...); err != nil {
+		return err
+	}
+	if err := s.validatorStore.handleSharesAdded(addShares...); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -322,7 +335,9 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	delete(s.shares, hex.EncodeToString(pubKey))
 
 	// Remove the share from the validator store. This method will handle its own locking.
-	s.validatorStore.handleShareRemoved(share)
+	if err := s.validatorStore.handleShareRemoved(share); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -345,15 +360,21 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metada
 	return s.Save(nil, share)
 }
 
-// UpdateValidatorMetadata updates the metadata of the given validator
+// UpdateValidatorsMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	s.mu.RLock()
 	var shares []*types.SSVShare
+
+	s.mu.Lock()
 	for pk, metadata := range data {
+		if metadata == nil {
+			continue
+		}
+
 		share, exists := s.unsafeGet(pk[:])
 		if !exists {
 			continue
 		}
+
 		share.BeaconMetadata = metadata
 		share.Share.ValidatorIndex = metadata.Index
 		shares = append(shares, share)

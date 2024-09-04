@@ -108,7 +108,7 @@ func TestValidatorStore(t *testing.T) {
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
-	store.handleSharesAdded(share1, share2)
+	require.NoError(t, store.handleSharesAdded(share1, share2))
 
 	t.Run("check added shares", func(t *testing.T) {
 		require.Len(t, store.Validators(), 2)
@@ -179,7 +179,7 @@ func TestValidatorStore(t *testing.T) {
 	})
 
 	shareMap[share2.ValidatorPubKey] = updatedShare2
-	store.handleSharesUpdated(updatedShare2)
+	require.NoError(t, store.handleSharesUpdated(updatedShare2))
 
 	t.Run("check updated share", func(t *testing.T) {
 		require.Len(t, store.Validators(), 2)
@@ -249,7 +249,7 @@ func TestValidatorStore(t *testing.T) {
 		require.NotContains(t, selfStore.SelfParticipatingCommittees(201), buildCommittee([]*ssvtypes.SSVShare{updatedShare2}))
 	})
 
-	store.handleShareRemoved(share2)
+	require.NoError(t, store.handleShareRemoved(share2))
 	delete(shareMap, share2.ValidatorPubKey)
 
 	t.Run("check removed share", func(t *testing.T) {
@@ -329,7 +329,7 @@ func TestValidatorStore_DropState(t *testing.T) {
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
-	store.handleSharesAdded(share1, share2)
+	require.NoError(t, store.handleSharesAdded(share1, share2))
 
 	t.Run("state before drop", func(t *testing.T) {
 		require.Len(t, store.Validators(), 2)
@@ -371,7 +371,7 @@ func TestValidatorStore_Concurrency(t *testing.T) {
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
-	store.handleSharesAdded(share1, share2)
+	require.NoError(t, store.handleSharesAdded(share1, share2))
 
 	var wg sync.WaitGroup
 	wg.Add(6)
@@ -420,7 +420,7 @@ func TestSelfValidatorStore_NilOperatorID(t *testing.T) {
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
-	store.handleSharesAdded(share1, share2)
+	require.NoError(t, store.handleSharesAdded(share1, share2))
 
 	selfStore := store.WithOperatorID(nil)
 	require.Nil(t, selfStore.SelfValidators())
@@ -526,7 +526,7 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 			go func(start, end int) {
 				defer wg.Done()
 				for i := range keys[start:end] {
-					store.handleSharesAdded(shares[keys[i]])
+					require.NoError(b, store.handleSharesAdded(shares[keys[i]]))
 				}
 			}(i*(len(shares)/10), (i+1)*(len(shares)/10))
 		}
@@ -617,7 +617,7 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 			return share, true
 		},
 	)
-	store.handleSharesAdded(maps.Values(shares)...)
+	require.NoError(b, store.handleSharesAdded(maps.Values(shares)...))
 
 	pubKeys := maps.Keys(shares)
 
@@ -629,7 +629,7 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 			randomShares[j] = shares[pubKeys[(first+j)%len(pubKeys)]]
 		}
 
-		store.handleSharesUpdated(randomShares...)
+		require.NoError(b, store.handleSharesUpdated(randomShares...))
 	}
 }
 
@@ -650,11 +650,12 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 
 	// Attempt to remove a non-existing share
 	t.Run("remove non-existing share", func(t *testing.T) {
-		store.handleShareRemoved(&ssvtypes.SSVShare{
+		err := store.handleShareRemoved(&ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{99, 88, 77},
 			},
 		})
+		require.NoError(t, err)
 		// Ensure store remains unaffected
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
@@ -662,9 +663,21 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 
 	// Add nil share - this should be a no-op or handled gracefully
 	t.Run("add nil share", func(t *testing.T) {
-		require.NotPanics(t, func() {
-			store.handleSharesAdded(nil)
-		})
+		require.Error(t, store.handleSharesAdded(nil))
+		require.Len(t, store.Validators(), 0)
+		require.Len(t, store.Committees(), 0)
+	})
+
+	// Update nil share - this should be a no-op or handled gracefully
+	t.Run("update nil share", func(t *testing.T) {
+		require.Error(t, store.handleSharesUpdated(nil))
+		require.Len(t, store.Validators(), 0)
+		require.Len(t, store.Committees(), 0)
+	})
+
+	// Delete nil share - this should be a no-op or handled gracefully
+	t.Run("delete nil share", func(t *testing.T) {
+		require.Error(t, store.handleShareRemoved(nil))
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
 	})
@@ -717,10 +730,10 @@ func TestValidatorStore_AddDuplicateShares(t *testing.T) {
 	)
 
 	shareMap[share1.ValidatorPubKey] = share1
-	store.handleSharesAdded(share1)
+	require.NoError(t, store.handleSharesAdded(share1))
 
 	t.Run("validate store after adding duplicate shares", func(t *testing.T) {
-		store.handleSharesAdded(share1) // Add duplicate
+		require.NoError(t, store.handleSharesAdded(share1)) // Add duplicate
 		require.Len(t, store.Validators(), 1)
 		require.Contains(t, store.Validators(), share1)
 	})
@@ -742,7 +755,7 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 
 	t.Run("update non-existing share", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			store.handleSharesUpdated(share1) // Update without adding
+			require.NoError(t, store.handleSharesUpdated(share1)) // Update without adding
 		})
 		require.Len(t, store.Validators(), 0)
 
@@ -768,7 +781,7 @@ func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 	)
 
 	t.Run("remove non-existing share", func(t *testing.T) {
-		store.handleShareRemoved(share1) // Remove without adding
+		require.NoError(t, store.handleSharesAdded(share1)) // Remove without adding
 		require.Len(t, store.Validators(), 0)
 
 		s, e := store.Validator(share1.ValidatorPubKey[:])
@@ -794,7 +807,7 @@ func TestValidatorStore_UpdateNilData(t *testing.T) {
 
 	// Add a valid share and simulate a nil entry in byOperatorID
 	shareMap[share1.ValidatorPubKey] = share1
-	store.handleSharesAdded(share1)
+	require.NoError(t, store.handleSharesAdded(share1))
 
 	// Manually set a nil entry for a signer in byOperatorID
 	store.mu.Lock()
@@ -803,7 +816,7 @@ func TestValidatorStore_UpdateNilData(t *testing.T) {
 
 	t.Run("update with nil data in byOperatorID", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			store.handleSharesUpdated(share1) // Attempt to update share1
+			require.NoError(t, store.handleSharesUpdated(share1)) // Attempt to update share1
 		})
 
 		// Validate that the state remains consistent and does not crash
@@ -850,7 +863,7 @@ func TestValidatorStore_HandlingDifferentStatuses(t *testing.T) {
 	)
 
 	shareMap[share3.ValidatorPubKey] = share3
-	store.handleSharesAdded(share3)
+	require.NoError(t, store.handleSharesAdded(share3))
 
 	t.Run("check shares with different statuses", func(t *testing.T) {
 		require.Len(t, store.Validators(), 1)
@@ -900,7 +913,7 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 		shareMap[share.ValidatorPubKey] = share
 	}
 
-	store.handleSharesAdded(bulkShares...)
+	require.NoError(t, store.handleSharesAdded(bulkShares...))
 
 	t.Run("check bulk added shares", func(t *testing.T) {
 		require.Len(t, store.Validators(), 100)
@@ -911,7 +924,7 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 
 	// Remove all shares
 	for _, share := range bulkShares {
-		store.handleShareRemoved(share)
+		require.NoError(t, store.handleShareRemoved(share))
 		delete(shareMap, share.ValidatorPubKey)
 	}
 
@@ -937,14 +950,14 @@ func TestValidatorStore_MixedOperations(t *testing.T) {
 	// Initial adds
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
-	store.handleSharesAdded(share1, share2)
+	require.NoError(t, store.handleSharesAdded(share1, share2))
 
 	// Mixed operations
-	store.handleShareRemoved(share1)
+	require.NoError(t, store.handleSharesAdded(share1))
 	shareMap[share1.ValidatorPubKey] = share1 // Re-add share1
-	store.handleSharesAdded(share1)
+	require.NoError(t, store.handleSharesAdded(share1))
 	shareMap[updatedShare2.ValidatorPubKey] = updatedShare2
-	store.handleSharesUpdated(updatedShare2) // Update share2
+	require.NoError(t, store.handleSharesUpdated(updatedShare2)) // Update share2
 
 	t.Run("check mixed operations result", func(t *testing.T) {
 		require.Len(t, store.Validators(), 2)
@@ -987,7 +1000,7 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 	}
 
 	shareMap[invalidCommitteeShare.ValidatorPubKey] = invalidCommitteeShare
-	store.handleSharesAdded(invalidCommitteeShare)
+	require.NoError(t, store.handleSharesAdded(invalidCommitteeShare))
 
 	t.Run("check invalid committee handling", func(t *testing.T) {
 		require.Len(t, store.Validators(), 1)
@@ -1014,7 +1027,7 @@ func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
-	store.handleSharesAdded(share1, share2)
+	require.NoError(t, store.handleSharesAdded(share1, share2))
 
 	var wg sync.WaitGroup
 	wg.Add(100)
@@ -1023,15 +1036,15 @@ func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		go func() {
 			defer wg.Done()
-			store.handleSharesAdded(share1, share2)
+			require.NoError(t, store.handleSharesAdded(share1, share2))
 		}()
 		go func() {
 			defer wg.Done()
-			store.handleSharesUpdated(updatedShare2)
+			require.NoError(t, store.handleSharesUpdated(updatedShare2))
 		}()
 		go func() {
 			defer wg.Done()
-			store.handleShareRemoved(share1)
+			require.NoError(t, store.handleSharesAdded(share1))
 		}()
 		go func() {
 			defer wg.Done()
@@ -1074,7 +1087,7 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 	shareMap[share2.ValidatorPubKey] = share2
 
 	t.Run("bulk add shares", func(t *testing.T) {
-		store.handleSharesAdded(share1, share2)
+		require.NoError(t, store.handleSharesAdded(share1, share2))
 		require.Len(t, store.Validators(), 2)
 		require.Contains(t, store.Validators(), share1)
 		require.Contains(t, store.Validators(), share2)
@@ -1085,7 +1098,7 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 	share2.Metadata.BeaconMetadata.Status = eth2apiv1.ValidatorStateActiveOngoing
 
 	t.Run("bulk update shares", func(t *testing.T) {
-		store.handleSharesUpdated(share1, share2)
+		require.NoError(t, store.handleSharesUpdated(share1, share2))
 		s1, e1 := store.Validator(share1.ValidatorPubKey[:])
 		s2, e2 := store.Validator(share2.ValidatorPubKey[:])
 		require.True(t, e1)
@@ -1121,7 +1134,7 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	shareMap[noMetadataShare.ValidatorPubKey] = noMetadataShare
 
 	t.Run("add share with no metadata", func(t *testing.T) {
-		store.handleSharesAdded(noMetadataShare)
+		require.NoError(t, store.handleSharesAdded(noMetadataShare))
 
 		s, e := store.ValidatorByIndex(0)
 		require.False(t, e)
@@ -1139,7 +1152,7 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	}
 
 	t.Run("update share with metadata", func(t *testing.T) {
-		store.handleSharesUpdated(noMetadataShare)
+		require.NoError(t, store.handleSharesUpdated(noMetadataShare))
 
 		s, e := store.ValidatorByIndex(10)
 		require.True(t, e)
@@ -1147,7 +1160,7 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	})
 
 	t.Run("remove share", func(t *testing.T) {
-		store.handleShareRemoved(noMetadataShare)
+		require.NoError(t, store.handleShareRemoved(noMetadataShare))
 		// Remove from shareMap to mimic actual behavior
 		delete(shareMap, noMetadataShare.ValidatorPubKey)
 

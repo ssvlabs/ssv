@@ -409,6 +409,11 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 	validatorShare, _ := generateRandomValidatorSpecShare(splitKeys)
 	require.NoError(t, shareStorage.Save(nil, validatorShare))
 
+	// Try saving nil share/shares
+	require.Error(t, shareStorage.Save(nil, nil))
+	require.Error(t, shareStorage.Save(nil, nil, validatorShare))
+	require.Error(t, shareStorage.Save(nil, validatorShare, nil))
+
 	// Ensure the share is saved correctly
 	savedShare, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
 	require.True(t, exists)
