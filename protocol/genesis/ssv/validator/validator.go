@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -30,7 +30,7 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	NetworkConfig networkconfig.NetworkConfig
+	BeaconNetwork beacon.BeaconNetwork
 	Index         phase0.ValidatorIndex
 
 	DutyRunners runner.DutyRunners
@@ -61,7 +61,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
 		cancel:           cancel,
-		NetworkConfig:    options.NetworkConfig,
+		BeaconNetwork:    options.BeaconNetwork,
 		Index:            options.ValidatorIndex,
 		DutyRunners:      options.DutyRunners,
 		Network:          options.Network,
@@ -103,7 +103,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	dutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), v.Index)
+	dutyID := fields.FormatDutyID(v.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), v.Index)
 	logger = logger.With(fields.DutyID(dutyID))
 
 	// Log with height.

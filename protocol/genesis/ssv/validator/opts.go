@@ -4,8 +4,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv/networkconfig"
-
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/message/validation"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
@@ -21,7 +19,6 @@ const (
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           genesisspecqbft.Network
-	NetworkConfig     networkconfig.NetworkConfig
 	ValidatorIndex    phase0.ValidatorIndex
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *genesisibftstorage.QBFTStores
