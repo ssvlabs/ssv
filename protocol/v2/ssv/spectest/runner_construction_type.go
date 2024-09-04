@@ -5,8 +5,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/logging"
+	runnertesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 )
 
 type RunnerConstructionSpecTest struct {
@@ -20,14 +22,14 @@ func (test *RunnerConstructionSpecTest) TestName() string {
 }
 
 func (test *RunnerConstructionSpecTest) Run(t *testing.T) {
-
+	logger := logging.TestLogger(t)
 	if len(test.RoleError) == 0 {
 		panic("no roles")
 	}
 
 	for role, expectedError := range test.RoleError {
 		// Construct runner and get construction error
-		_, err := testingutils.ConstructBaseRunnerWithShareMap(role, test.Shares)
+		_, err := runnertesting.ConstructBaseRunnerWithShareMap(logger, role, test.Shares)
 
 		// Check error
 		if len(expectedError) > 0 {

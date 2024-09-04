@@ -316,7 +316,6 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot,
 
 	if err := runner.GetValCheckF()(byts); err != nil {
 		return errors.Wrap(err, "input data invalid")
-
 	}
 
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
