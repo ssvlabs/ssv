@@ -149,9 +149,14 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationSuccess(peerID peer.ID, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
+	logger := mv.logger.
+		With(loggerFields.AsZapFields()...).
+		With(fields.PeerID(peerID))
+
+	logger.Debug("successfully validated message")
 
 	return pubsub.ValidationAccept
 }

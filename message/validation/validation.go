@@ -100,7 +100,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 
 	pmsg.ValidatorData = decodedMessage
 
-	return mv.handleValidationSuccess(decodedMessage)
+	return mv.handleValidationSuccess(peerID, decodedMessage)
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
