@@ -36,6 +36,12 @@ func (d *GenesisSSVMessage) Slot() (phase0.Slot, error) {
 				return 0, ErrUnknownMessageType // TODO alan: other error
 			}
 			return phase0.Slot(data.Height), nil
+		} else if m.Type == ssvtypes.ExecuteDuty {
+			data, err := m.GetExecuteDutyData()
+			if err != nil {
+				return 0, ErrUnknownMessageType // TODO alan: other error
+			}
+			return data.Duty.Slot, nil
 		}
 		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
 	case *genesisspecqbft.SignedMessage: // TODO: remove post-fork

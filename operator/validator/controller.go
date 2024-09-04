@@ -928,6 +928,8 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.SSVShare = share
 		opts.Operator = operator
 		opts.DutyRunners = SetupRunners(validatorCtx, c.logger, opts)
+		opts.ValidatorIndex = share.ValidatorIndex
+
 		alanValidator := validator.NewValidator(validatorCtx, validatorCancel, opts)
 
 		// TODO: (Alan) share mutations such as metadata changes and fee recipient updates aren't reflected in genesis shares
@@ -941,7 +943,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 			genesisOpts := c.genesisValidatorOptions
 			genesisOpts.SSVShare = genesisssvtypes.ConvertToGenesisSSVShare(share, operator)
 			genesisOpts.DutyRunners = SetupGenesisRunners(genesisValidatorCtx, c.logger, opts)
-
+			genesisOpts.ValidatorIndex = share.ValidatorIndex
 			genesisValidator = genesisvalidator.NewValidator(genesisValidatorCtx, validatorCancel, genesisOpts)
 		}
 

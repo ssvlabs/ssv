@@ -3,6 +3,8 @@ package validator
 import (
 	"context"
 	"fmt"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -10,8 +12,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -30,6 +30,9 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	NetworkConfig networkconfig.NetworkConfig
+	Index         phase0.ValidatorIndex
+
 	DutyRunners runner.DutyRunners
 	Network     genesisspecqbft.Network
 	Share       *types.SSVShare
@@ -39,7 +42,7 @@ type Validator struct {
 	Queues  map[genesisspectypes.BeaconRole]queueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
-	dutyIDs *hashmap.Map[genesisspectypes.BeaconRole, string]
+	//dutyIDs *hashmap.Map[genesisspectypes.BeaconRole, string]
 
 	state uint32
 
@@ -58,6 +61,8 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
 		cancel:           cancel,
+		NetworkConfig:    options.NetworkConfig,
+		Index:            options.ValidatorIndex,
 		DutyRunners:      options.DutyRunners,
 		Network:          options.Network,
 		Storage:          options.Storage,
@@ -65,7 +70,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Signer:           options.Signer,
 		Queues:           make(map[genesisspectypes.BeaconRole]queueContainer),
 		state:            uint32(NotStarted),
-		dutyIDs:          hashmap.New[genesisspectypes.BeaconRole, string](),
 		messageValidator: options.MessageValidator,
 	}
 
@@ -99,8 +103,8 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(duty.Type, fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex))
-	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
+	dutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), v.Index)
+	logger = logger.With(fields.DutyID(dutyID))
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -126,8 +130,6 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *genesisqueue.Genesis
 
 	switch msg.GetType() {
 	case genesisspectypes.SSVConsensusMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		signedMsg, ok := msg.Body.(*genesisspecqbft.SignedMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
@@ -135,8 +137,6 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *genesisqueue.Genesis
 		logger = logger.With(fields.Height(specqbft.Height(signedMsg.Message.Height)))
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case genesisspectypes.SSVPartialSignatureMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		signedMsg, ok := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
@@ -162,11 +162,4 @@ func validateMessage(share genesisspectypes.Share, msg *genesisqueue.GenesisSSVM
 	}
 
 	return nil
-}
-
-func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[genesisspectypes.BeaconRole, string], role genesisspectypes.BeaconRole) *zap.Logger {
-	if dutyID, ok := dutyIDs.Get(role); ok {
-		return logger.With(fields.DutyID(dutyID))
-	}
-	return logger
 }

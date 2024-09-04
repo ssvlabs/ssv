@@ -142,6 +142,14 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
+
+		slot, err := msg.Slot()
+		if err != nil {
+			logger.Error("❗ can't get slot from msg", zap.Error(err))
+			continue
+		}
+		msgLogger := logger.With(fields.DutyID(fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType().String(), v.Index)))
+
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
 			logger.Debug("📬 [TEMPORARY] queue statistics",
@@ -151,8 +159,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
+		if err := handler(msgLogger, msg); err != nil {
+			v.logMsg(msgLogger, msg, "❗ could not handle message",
 				fields.MessageType(spectypes.MsgType(msg.SSVMessage.MsgType)),
 				zap.Error(err))
 		}
