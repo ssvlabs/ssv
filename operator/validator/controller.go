@@ -1306,7 +1306,10 @@ func SetupCommitteeRunners(
 			options.OperatorSigner,
 			valCheck,
 		)
-		return crunner.(*runner.CommitteeRunner), err
+		if err != nil {
+			return nil, err
+		}
+		return crunner.(*runner.CommitteeRunner), nil
 	}
 }
 

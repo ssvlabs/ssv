@@ -68,6 +68,11 @@ type Backend struct {
 	client simClient
 }
 
+// Node returns the internal *node.Node to be used by tests.
+func (b *Backend) Node() *node.Node {
+	return b.node
+}
+
 // NewBackend creates a new simulated blockchain that can be used as a backend for
 // contract bindings in unit tests.
 //

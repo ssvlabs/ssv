@@ -195,7 +195,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 	case reflect.TypeOf(&runnerconstruction.RunnerConstructionSpecTest{}).String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &runnerconstruction.RunnerConstructionSpecTest{}
+		typedTest := &RunnerConstructionSpecTest{}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
