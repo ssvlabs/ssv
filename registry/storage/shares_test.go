@@ -117,11 +117,13 @@ func TestSharesStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 
 	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
-		require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, &beaconprotocol.ValidatorMetadata{
-			Balance:         10000,
-			Index:           3,
-			Status:          eth2apiv1.ValidatorStateActiveOngoing,
-			ActivationEpoch: 4,
+		require.NoError(t, shareStorage.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+			validatorShare.ValidatorPubKey: {
+				Balance:         10000,
+				Index:           3,
+				Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				ActivationEpoch: 4,
+			},
 		}))
 	})
 
@@ -166,11 +168,13 @@ func TestSharesStorage(t *testing.T) {
 	require.Nil(t, share)
 
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
-		require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, &beaconprotocol.ValidatorMetadata{
-			Balance:         10000,
-			Index:           3,
-			Status:          2,
-			ActivationEpoch: 4,
+		require.NoError(t, shareStorage.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+			validatorShare.ValidatorPubKey: {
+				Balance:         10000,
+				Index:           3,
+				Status:          2,
+				ActivationEpoch: 4,
+			},
 		}))
 	})
 
@@ -431,7 +435,11 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		Index:           3,
 		ActivationEpoch: 5,
 	}
-	require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, updatedMetadata))
+
+	// Update the share with new metadata
+	require.NoError(t, shareStorage.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		validatorShare.ValidatorPubKey: updatedMetadata,
+	}))
 
 	// Ensure the updated share is reflected in validatorStore
 	updatedShare, exists := validatorStore.byPubKey(validatorShare.ValidatorPubKey[:])

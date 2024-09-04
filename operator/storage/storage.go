@@ -11,7 +11,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -222,10 +221,6 @@ func (s *storage) GetPrivateKeyHash() (string, bool, error) {
 // SavePrivateKeyHash saves operator private key hash
 func (s *storage) SavePrivateKeyHash(hashedKey string) error {
 	return s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
-}
-
-func (s *storage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
-	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }
 
 func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {

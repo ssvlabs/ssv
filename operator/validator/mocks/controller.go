@@ -414,20 +414,6 @@ func (mr *MockSharesStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Range", reflect.TypeOf((*MockSharesStorage)(nil).Range), txn, fn)
 }
 
-// UpdateValidatorMetadata mocks base method.
-func (m *MockSharesStorage) UpdateValidatorMetadata(pk types0.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
-func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorMetadata), pk, metadata)
-}
-
 // UpdateValidatorsMetadata mocks base method.
 func (m *MockSharesStorage) UpdateValidatorsMetadata(arg0 map[types0.ValidatorPK]*beacon.ValidatorMetadata) error {
 	m.ctrl.T.Helper()

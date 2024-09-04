@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -48,8 +47,7 @@ type Shares interface {
 	// Drop deletes all shares.
 	Drop() error
 
-	// UpdateValidatorMetadata updates validator metadata.
-	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
+	// UpdateValidatorsMetadata updates the metadata of the given validators
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
@@ -340,24 +338,6 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	}
 
 	return nil
-}
-
-// UpdateValidatorMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
-	if metadata == nil {
-		return nil
-	}
-
-	share, exists := s.Get(nil, pk[:])
-	if !exists {
-		return nil
-	}
-
-	share.SetMetadataLastUpdated(time.Now())
-	share.BeaconMetadata = metadata
-	share.Share.ValidatorIndex = metadata.Index
-
-	return s.Save(nil, share)
 }
 
 // UpdateValidatorsMetadata updates the metadata of the given validator
