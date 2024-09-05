@@ -2,6 +2,7 @@ package topics
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -136,7 +137,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 			metrics.PeerP4Score(pid, p4Impact)
 
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
-			invalidMessagesStats := truncateStats(filtered)
+			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
 			// Log.
 			fields := []zap.Field{
@@ -151,7 +152,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 				zap.Float64("w6_ip_colocation_factor", w6),
 				zap.Float64("p7_behaviour_penalty", p7),
 				zap.Float64("w7_behaviour_penalty", w7),
-				zap.Strings("invalid_messages", invalidMessagesStats),
+				zap.String("invalid_messages", invalidMessagesStats),
 			}
 			if peerConnected(pid) {
 				fields = append(fields, zap.Bool("connected", true))
@@ -254,12 +255,16 @@ func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*
 	return topicCommittees
 }
 
-// truncateStats returns the subnets in a small format topicNum=ti,fmd,mmd,imd
-func truncateStats(filtered map[string]*pubsub.TopicScoreSnapshot) []string {
-	filteredStrings := make([]string, 0, len(filtered))
+// formatInvalidMessageStats returns the subnets in a small format topicNum=ti,fmd,mmd,imd
+func formatInvalidMessageStats(filtered map[string]*pubsub.TopicScoreSnapshot) string {
+	var b strings.Builder
+	i := 0
 	for topic, snapshot := range filtered {
-		formatted := fmt.Sprintf("%s=%d;%0.3f;%0.3f;%0.3f", topic, snapshot.TimeInMesh, snapshot.FirstMessageDeliveries, snapshot.MeshMessageDeliveries, snapshot.InvalidMessageDeliveries)
-		filteredStrings = append(filteredStrings, formatted)
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(&b, "%s=%d,%0.3f,%0.3f,%0.3f", topic, snapshot.TimeInMesh, snapshot.FirstMessageDeliveries, snapshot.MeshMessageDeliveries, snapshot.InvalidMessageDeliveries)
+		i++
 	}
-	return filteredStrings
+	return b.String()
 }
