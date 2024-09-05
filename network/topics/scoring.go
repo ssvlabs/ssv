@@ -152,6 +152,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 				zap.Float64("p7_behaviour_penalty", p7),
 				zap.Float64("w7_behaviour_penalty", w7),
 				zap.Strings("invalid_messages", invalidMessagesStats),
+				zap.Any("invalid_messages_raw", filtered),
 			}
 			if peerConnected(pid) {
 				fields = append(fields, zap.Bool("connected", true))
