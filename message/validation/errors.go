@@ -119,12 +119,14 @@ var (
 	ErrEncodeOperators                         = Error{text: "encode operators", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(peerID peer.ID, pmsg *pubsub.Message, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
 		With(loggerFields.AsZapFields()...).
-		With(fields.PeerID(peerID))
+		With(fields.PeerID(peerID)).
+		With(zap.String("ReceivedFrom", pmsg.ReceivedFrom.String())).
+		With(zap.String("From", peer.ID(pmsg.From).String()))
 
 	var valErr Error
 	if !errors.As(err, &valErr) {
@@ -149,12 +151,14 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(peerID peer.ID, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationSuccess(peerID peer.ID, pmsg *pubsub.Message, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 	logger := mv.logger.
 		With(loggerFields.AsZapFields()...).
-		With(fields.PeerID(peerID))
+		With(fields.PeerID(peerID)).
+		With(zap.String("ReceivedFrom", pmsg.ReceivedFrom.String())).
+		With(zap.String("From", peer.ID(pmsg.From).String()))
 
 	logger.Debug("successfully validated message")
 
