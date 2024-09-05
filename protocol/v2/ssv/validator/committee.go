@@ -96,6 +96,8 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
+	logger.Debug("Attempting to start queue consumer", zap.Uint64("slot", uint64(duty.Slot)))
+
 	// Setting the cancel function separately due the queue could be created in HandleMessage
 	q, found := c.Queues[duty.Slot]
 	if !found {
@@ -110,8 +112,13 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	// required to stop the queue consumer when timeout message is received by handler
 	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
 
+	if queueCtx.Err() != nil {
+		logger.Warn("Queue context is already canceled or expired", zap.Error(queueCtx.Err()))
+	}
+
 	go func() {
 		defer cancelF()
+		logger.Debug("Queue consumer goroutine started", zap.Uint64("slot", uint64(duty.Slot)))
 		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
 		}
