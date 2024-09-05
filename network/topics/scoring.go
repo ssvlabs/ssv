@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -134,6 +135,9 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 			metrics.PeerScore(pid, peerScores.Score)
 			metrics.PeerP4Score(pid, p4Impact)
 
+			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
+			invalidMessagesStats := formatTopicSnapshot(filtered)
+
 			// Log.
 			fields := []zap.Field{
 				fields.PeerID(pid),
@@ -147,7 +151,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 				zap.Float64("w6_ip_colocation_factor", w6),
 				zap.Float64("p7_behaviour_penalty", p7),
 				zap.Float64("w7_behaviour_penalty", w7),
-				zap.Any("invalid_messages", filtered),
+				zap.Any("invalid_messages", invalidMessagesStats),
 			}
 			if peerConnected(pid) {
 				fields = append(fields, zap.Bool("connected", true))
@@ -248,4 +252,14 @@ func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*
 		}
 	}
 	return topicCommittees
+}
+
+// smallFormatSubnets returns the subnets in a small format topicNum=ti,fmd,mmd,imd
+func formatTopicSnapshot(filtered map[string]*pubsub.TopicScoreSnapshot) []string {
+	filteredStrings := make([]string, 0, len(filtered))
+	for topic, snapshot := range filtered {
+		formatted := fmt.Sprintf("%s=%f;%f;%f;", topic, snapshot.FirstMessageDeliveries, snapshot.MeshMessageDeliveries, snapshot.InvalidMessageDeliveries)
+		filteredStrings = append(filteredStrings, formatted)
+	}
+	return filteredStrings
 }
