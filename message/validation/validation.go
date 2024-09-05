@@ -127,6 +127,7 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.SSVMessage, error) {
 	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
+		SSVMessage:       signedSSVMessage.SSVMessage,
 	}
 
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {

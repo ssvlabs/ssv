@@ -61,11 +61,9 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 		return descriptor
 	}
 
-	mv.logger.Debug("buildLoggerFields is about to panic [1]", zap.Any("decodedMessage", decodedMessage))
-	mv.logger.Debug("buildLoggerFields is about to panic [2]", zap.Any("decodedMessage.MsgID", decodedMessage.MsgID))
-	mv.logger.Debug("buildLoggerFields is about to panic [3]", zap.Any("decodedMessage.GetID()", decodedMessage.GetID()))
-	mv.logger.Debug("buildLoggerFields is about to panic [4]", zap.Any("decodedMessage.GetID().GetDutyExecutorID()", decodedMessage.GetID().GetDutyExecutorID()))
-	mv.logger.Debug("buildLoggerFields is about to panic [5]", zap.Any("descriptor", descriptor))
+	if decodedMessage.SSVMessage == nil {
+		return descriptor
+	}
 
 	descriptor.DutyExecutorID = decodedMessage.GetID().GetDutyExecutorID()
 	descriptor.Role = decodedMessage.GetID().GetRoleType()
