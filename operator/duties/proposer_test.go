@@ -6,9 +6,10 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cornelk/hashmap"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 

@@ -16,7 +16,6 @@ import (
 	"github.com/aquasecurity/table"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
@@ -25,6 +24,8 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -54,8 +55,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
-		acceptedRole = spectypes.RoleProposer
-		ignoredRole  = spectypes.RoleAggregator
+		acceptedRole = spectypes.RoleCommittee
+		ignoredRole  = spectypes.RoleProposer
 		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
@@ -245,7 +246,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			index NodeIndex
 			score float64
 		}
-		peers := make([]peerScore, 0, node.PeerScores.Len())
+		peers := make([]peerScore, 0, node.PeerScores.SlowLen())
 		node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
 			peers = append(peers, peerScore{index, snapshot.Score})
 			return true
@@ -360,7 +361,7 @@ func CreateVirtualNet(
 			}
 
 			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
-				node.PeerScores.Del(index)
+				node.PeerScores.Delete(index)
 				return true
 			})
 			for peerID, peerScore := range peerMap {

@@ -6,11 +6,12 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -109,7 +110,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(duty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(duty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex))
 	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(duty.Type))
 
 	// Log with height.

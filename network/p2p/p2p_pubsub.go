@@ -141,7 +141,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 // subscribeCommittee handles the subscription logic for committee subnets
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	n.interfaceLogger.Debug("subscribing to committee", fields.CommitteeID(cid))
-	status, found := n.activeCommittees.GetOrInsert(string(cid[:]), validatorStatusSubscribing)
+	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
@@ -159,7 +159,7 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
 	pkHex := hex.EncodeToString(pk[:])
 	n.interfaceLogger.Debug("subscribing to validator", zap.String("validator", pkHex))
-	status, found := n.activeValidators.GetOrInsert(pkHex, validatorStatusSubscribing)
+	status, found := n.activeValidators.GetOrSet(pkHex, validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
@@ -196,7 +196,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 		if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
 			return nil
 		}
-		n.activeValidators.Del(pkHex)
+		n.activeValidators.Delete(pkHex)
 	}
 
 	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
@@ -206,7 +206,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 			return err
 		}
 	}
-	n.activeCommittees.Del(string(cmtid[:]))
+	n.activeCommittees.Delete(string(cmtid[:]))
 	return nil
 }
 
