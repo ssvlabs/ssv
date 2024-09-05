@@ -136,7 +136,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 			metrics.PeerP4Score(pid, p4Impact)
 
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
-			invalidMessagesStats := formatTopicSnapshot(filtered)
+			invalidMessagesStats := truncateStats(filtered)
 
 			// Log.
 			fields := []zap.Field{
@@ -254,11 +254,11 @@ func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*
 	return topicCommittees
 }
 
-// smallFormatSubnets returns the subnets in a small format topicNum=ti,fmd,mmd,imd
-func formatTopicSnapshot(filtered map[string]*pubsub.TopicScoreSnapshot) []string {
+// truncateStats returns the subnets in a small format topicNum=ti,fmd,mmd,imd
+func truncateStats(filtered map[string]*pubsub.TopicScoreSnapshot) []string {
 	filteredStrings := make([]string, 0, len(filtered))
 	for topic, snapshot := range filtered {
-		formatted := fmt.Sprintf("%s=%f;%f;%f;", topic, snapshot.FirstMessageDeliveries, snapshot.MeshMessageDeliveries, snapshot.InvalidMessageDeliveries)
+		formatted := fmt.Sprintf("%s=%0.3f;%0.3f;%0.3f;", topic, snapshot.FirstMessageDeliveries, snapshot.MeshMessageDeliveries, snapshot.InvalidMessageDeliveries)
 		filteredStrings = append(filteredStrings, formatted)
 	}
 	return filteredStrings
