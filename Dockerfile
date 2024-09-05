@@ -49,7 +49,7 @@ FROM golang:1.20.7 AS runner
 
 RUN apt-get update     && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  dnsutils=1:9.18.24-1 && \
+  dnsutils=1:9.18.28-1~deb12u2 && \
   rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
