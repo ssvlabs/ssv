@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"sort"
 	"testing"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -30,5 +31,6 @@ func TestTruncateStats(t *testing.T) {
 	}
 
 	logs := truncateStats(filtered)
+	sort.Strings(logs)
 	require.Equal(t, []string{"ssv.v2.103=0;0.000;0.000;3.000", "ssv.v2.107=0;0.000;0.000;3.000", "ssv.v2.109=0;0.000;0.000;1.000"}, logs)
 }
