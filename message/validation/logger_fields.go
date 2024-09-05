@@ -61,9 +61,13 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 		return descriptor
 	}
 
-	descriptor.DutyExecutorID = decodedMessage.GetID().GetDutyExecutorID()
-	descriptor.Role = decodedMessage.GetID().GetRoleType()
-	descriptor.SSVMessageType = decodedMessage.GetType()
+	if decodedMessage.SSVMessage == nil {
+		return descriptor
+	}
+
+	descriptor.DutyExecutorID = decodedMessage.SSVMessage.GetID().GetDutyExecutorID()
+	descriptor.Role = decodedMessage.SSVMessage.GetID().GetRoleType()
+	descriptor.SSVMessageType = decodedMessage.SSVMessage.GetType()
 
 	if mv.logger.Level() == zap.DebugLevel {
 		mv.addDutyIDField(descriptor)
