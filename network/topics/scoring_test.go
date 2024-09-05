@@ -30,5 +30,5 @@ func TestTruncateStats(t *testing.T) {
 	}
 
 	logs := truncateStats(filtered)
-	require.Equal(t, []string{"ssv.v2.103=0.000;0.000;3.000;", "ssv.v2.107=0.000;0.000;3.000;", "ssv.v2.109=0.000;0.000;1.000;"}, logs)
+	require.Equal(t, []string{"ssv.v2.103=0;0.000;0.000;3.000", "ssv.v2.107=0;0.000;0.000;3.000", "ssv.v2.109=0;0.000;0.000;1.000"}, logs)
 }
