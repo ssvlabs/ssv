@@ -216,10 +216,6 @@ func setExecuteGenesisDutyFunc(s *Scheduler, executeDutiesCall chan []*genesissp
 }
 
 func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
-	type committeeDuty struct {
-		spectypes.CommitteeID
-		*spectypes.CommitteeDuty
-	}
 	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
 
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
@@ -232,7 +228,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
 		func(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 			logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
-			executeDutiesBuffer <- &committeeDuty{CommitteeID: committeeID, CommitteeDuty: duty}
+			executeDutiesBuffer <- &committeeDuty{id: committeeID, duty: duty}
 
 			// Check if all expected duties have been received
 			if len(executeDutiesBuffer) == executeDutiesCallSize {
@@ -241,8 +237,8 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 				for i := 0; i < executeDutiesCallSize; i++ {
 					d := <-executeDutiesBuffer
 
-					if _, ok := duties[d.CommitteeID]; !ok {
-						duties[d.CommitteeID] = d.CommitteeDuty
+					if _, ok := duties[d.id]; !ok {
+						duties[d.id] = d
 					}
 				}
 
@@ -378,11 +374,11 @@ func waitForDutiesExecutionCommittee(t *testing.T, logger *zap.Logger, fetchDuti
 			if !ok {
 				require.FailNow(t, "missing cluster id")
 			}
-			require.Len(t, aCommDuty.ValidatorDuties, len(eCommDuty.ValidatorDuties))
+			require.Len(t, aCommDuty.duty.ValidatorDuties, len(eCommDuty.duty.ValidatorDuties))
 
-			for _, e := range eCommDuty.ValidatorDuties {
+			for _, e := range eCommDuty.duty.ValidatorDuties {
 				found := false
-				for _, d := range aCommDuty.ValidatorDuties {
+				for _, d := range aCommDuty.duty.ValidatorDuties {
 					if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
 						found = true
 						break

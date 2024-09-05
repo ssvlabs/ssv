@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
-type committeeDutiesMap map[spectypes.CommitteeID]*spectypes.CommitteeDuty
+type committeeDutiesMap map[spectypes.CommitteeID]*committeeDuty
 
 type CommitteeHandler struct {
 	baseHandler
@@ -20,7 +20,13 @@ type CommitteeHandler struct {
 	attDuties  *dutystore.Duties[eth2apiv1.AttesterDuty]
 	syncDuties *dutystore.SyncCommitteeDuties
 
-	validatorCommitteeIDs map[phase0.ValidatorIndex]spectypes.CommitteeID
+	validatorCommitteeDutyMap map[phase0.ValidatorIndex]*committeeDuty
+}
+
+type committeeDuty struct {
+	duty        *spectypes.CommitteeDuty
+	id          spectypes.CommitteeID
+	operatorIDs []spectypes.OperatorID
 }
 
 func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], syncDuties *dutystore.SyncCommitteeDuties) *CommitteeHandler {
@@ -28,7 +34,7 @@ func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], sy
 		attDuties:  attDuties,
 		syncDuties: syncDuties,
 
-		validatorCommitteeIDs: make(map[phase0.ValidatorIndex]spectypes.CommitteeID),
+		validatorCommitteeDutyMap: make(map[phase0.ValidatorIndex]*committeeDuty),
 	}
 
 	return h
@@ -91,7 +97,10 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
-		h.validatorCommitteeIDs[v.ValidatorIndex] = v.CommitteeID()
+		h.validatorCommitteeDutyMap[v.ValidatorIndex] = &committeeDuty{
+			id:          v.CommitteeID(),
+			operatorIDs: v.OperatorIDs(),
+		}
 	}
 	committeeMap := make(committeeDutiesMap)
 
@@ -113,19 +122,29 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 }
 
 func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, beaconDuty *spectypes.ValidatorDuty) {
-	committeeID, ok := h.validatorCommitteeIDs[beaconDuty.ValidatorIndex]
-	if !ok {
-		h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+	if beaconDuty == nil {
+		h.logger.Error("received nil beaconDuty")
 		return
 	}
 
-	if _, ok := m[committeeID]; !ok {
-		m[committeeID] = &spectypes.CommitteeDuty{
-			Slot:            beaconDuty.Slot,
-			ValidatorDuties: make([]*spectypes.ValidatorDuty, 0),
+	committee, ok := h.validatorCommitteeDutyMap[beaconDuty.ValidatorIndex]
+	if !ok {
+		h.logger.Error("failed to find committee for validator", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+		return
+	}
+
+	if _, ok := m[committee.id]; !ok {
+		m[committee.id] = &committeeDuty{
+			id:          committee.id,
+			operatorIDs: committee.operatorIDs,
+			duty: &spectypes.CommitteeDuty{
+				Slot:            beaconDuty.Slot,
+				ValidatorDuties: make([]*spectypes.ValidatorDuty, 0),
+			},
 		}
 	}
-	m[committeeID].ValidatorDuties = append(m[committeeID].ValidatorDuties, beaconDuty)
+
+	m[committee.id].duty.ValidatorDuties = append(m[committee.id].duty.ValidatorDuties, beaconDuty)
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
