@@ -23,12 +23,28 @@ func DefaultScoringConfig() *ScoringConfig {
 	}
 }
 
-// scoreInspector inspects scores and updates the score index accordingly
+// scoreInspector inspects scores and updates the score index accordingly.
+// It also updates the BadPeersCollector by resetting it and
+// adding peers with scores below the GraylistThreshold.
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency int, metrics Metrics, peerConnected func(pid peer.ID) bool, peerScoreParams *pubsub.PeerScoreParams, topicScoreParamsFactory func(string) *pubsub.TopicScoreParams) pubsub.ExtendedPeerScoreInspectFn {
+func scoreInspector(logger *zap.Logger,
+	scoreIdx peers.ScoreIndex,
+	logFrequency int,
+	metrics Metrics,
+	peerConnected func(pid peer.ID) bool,
+	peerScoreParams *pubsub.PeerScoreParams,
+	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
+	badPeersCollector peers.BadPeersCollector) pubsub.ExtendedPeerScoreInspectFn {
+
 	inspections := 0
 
+	// Get the GraylistThreshold to detect bad peers
+	graylistThreshold := params.PeerScoreThresholds().GraylistThreshold
+
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+
+		// Reset the BadPeersCollector
+		badPeersCollector.Clear()
 
 		if inspections%logFrequency != 0 {
 			// Don't log yet.
@@ -156,6 +172,11 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 				fields = append(fields, zap.Bool("low_score", true))
 			}
 			logger.Debug("peer scores", fields...)
+
+			// If the peer is bad, register it to the BadPeersCollector
+			if peerScores.Score < graylistThreshold {
+				badPeersCollector.RegisterBadPeer(pid, peerScores.Score)
+			}
 
 			// err := scoreIdx.Score(pid, scores...)
 			// if err != nil {
