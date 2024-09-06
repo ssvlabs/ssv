@@ -27,10 +27,10 @@ func (mv *messageValidator) validateConsensusMessage(
 ) (*specqbft.Message, error) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > maxConsensusMsgSize {
+	if len(ssvMessage.Data) > maxEncodedConsensusMsgSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = maxConsensusMsgSize
+		e.want = maxEncodedConsensusMsgSize
 		return nil, e
 	}
 
