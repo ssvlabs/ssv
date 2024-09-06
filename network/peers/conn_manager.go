@@ -29,6 +29,15 @@ type ConnManager interface {
 	TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
 	// TrimPeers will trim unprotected peers.
 	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
+	// DisconnectFromBadPeers will disconnect from bad peers according to the bad peers collector
+	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, badPeersCollector BadPeersCollector)
+}
+
+// connManager implements ConnManager
+type connManager struct {
+	logger      *zap.Logger
+	connManager connmgrcore.ConnManager
+	subnetsIdx  SubnetsIndex
 }
 
 // NewConnManager creates a new conn manager.
@@ -41,13 +50,7 @@ func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnets
 	}
 }
 
-// connManager implements ConnManager
-type connManager struct {
-	logger      *zap.Logger
-	connManager connmgrcore.ConnManager
-	subnetsIdx  SubnetsIndex
-}
-
+// Set the "Protect" tag for the best [n] peers. For the others, set the "Unprotect"
 func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
 	bestPeers := c.getBestPeers(n, mySubnets, allPeers, topicMaxPeers)
 	logger.Debug("tagging best peers",
@@ -66,6 +69,7 @@ func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.S
 	}
 }
 
+// Closes the connection to all peers that are not protected
 func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network) {
 	allPeers := net.Peers()
 	before := len(allPeers)
@@ -75,20 +79,18 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 		if !c.connManager.IsProtected(pid, protectedTag) {
 			err := net.ClosePeer(pid)
 			logger.Debug("closing peer", zap.String("pid", pid.String()), zap.Error(err))
-			// if err != nil {
-			//	logger.Debug("could not close trimmed peer",
-			//		zap.String("pid", pid.String()), zap.Error(err))
-			//}
 		}
 	}
 	logger.Debug("trimmed peers", zap.Int("beforeTrim", before),
 		zap.Int("afterTrim", len(net.Peers())))
 }
 
-// getBestPeers loop over all the existing peers and returns the best set
+// getBestPeers loop over all the existing peers and returns the best set with [n] peers
 // according to the number of shared subnets,
 // while considering subnets with low peer count to be more important.
 func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) map[peer.ID]PeerScore {
+
+	// If we have less than n peers, just return all as the best peers
 	peerScores := make(map[peer.ID]PeerScore)
 	if len(allPeers) < n {
 		for _, p := range allPeers {
@@ -96,10 +98,13 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		}
 		return peerScores
 	}
+
+	// Get score for each subnet
 	stats := c.subnetsIdx.GetSubnetsStats()
 	minSubnetPeers := 4
 	subnetsScores := GetSubnetsDistributionScores(stats, minSubnetPeers, mySubnets, topicMaxPeers)
 
+	// Compute the score for each peer according to peer's subnets and subnets' score
 	var peerLogs []peerLog
 	for _, pid := range allPeers {
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
@@ -121,6 +126,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 
 	c.logPeerScores(peerLogs, mySubnets, stats.Connected)
 
+	// Returns the [n] best peers
 	return GetTopScores(peerScores, n)
 }
 
@@ -191,4 +197,19 @@ func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 		}
 	}
 	return PeerScore(score)
+}
+
+// Disconnects from a peer
+func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) {
+	net.ClosePeer(peerID)
+}
+
+// Disconnects from bad peers, according to the BadPeersCollector
+func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, badPeersCollector BadPeersCollector) {
+	for _, peerID := range allPeers {
+		if isBad, score := badPeersCollector.IsBad(peerID); isBad {
+			c.disconnect(peerID, net)
+			logger.Debug("Disconnecting from bad peer", zap.String("peer", string(peerID)), zap.Float64("score", score))
+		}
+	}
 }
