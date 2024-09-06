@@ -200,7 +200,9 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		for _, message := range partialSignatureMessages.Messages {
 			validatorIndexCount[message.ValidatorIndex]++
 			if validatorIndexCount[message.ValidatorIndex] > 2 {
-				return ErrTripleValidatorIndexInPartialSignatures
+				e := ErrTripleValidatorIndexInPartialSignatures
+				e.got = fmt.Sprintf("debug[2*clusterValidatorCount=%v,clusterValidatorCount+syncCommitteeSize=%v,partialSignatureMessageCount=%v]", 2*clusterValidatorCount, clusterValidatorCount+syncCommitteeSize, partialSignatureMessageCount)
+				return e
 			}
 		}
 	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == types.RoleSyncCommitteeContribution {
