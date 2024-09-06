@@ -30,7 +30,7 @@ const (
 	maxNoJustificationSize     = 3616  // from KB
 	max1JustificationSize      = 50624 // from KB
 	maxConsensusMsgSize        = qbftMsgTypeSize + heightSize + roundSize + identifierSize + rootSize + roundSize + maxSignatures*(maxNoJustificationSize+max1JustificationSize)
-	maxEncodedConsensusMsgSize = maxConsensusMsgSize + maxConsensusMsgSize/20
+	maxEncodedConsensusMsgSize = maxConsensusMsgSize + maxConsensusMsgSize/encodingOverheadDivisor
 )
 
 const (
@@ -39,7 +39,7 @@ const (
 	maxPartialSignatureMessages    = 1000
 	partialSigMsgTypeSize          = 8 // uint64
 	maxPartialSignatureMsgsSize    = partialSigMsgTypeSize + slotSize + maxPartialSignatureMessages*partialSignatureMsgSize
-	maxEncodedPartialSignatureSize = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/20
+	maxEncodedPartialSignatureSize = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/encodingOverheadDivisor
 )
 
 const (
