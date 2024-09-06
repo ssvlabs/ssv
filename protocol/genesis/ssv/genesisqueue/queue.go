@@ -157,11 +157,14 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Gene
 	// Remove the highest priority message and return it.
 	var (
 		prior   *item
-		highest = q.head
+		highest *item
 		current = q.head
 	)
+	if filter(current.message) {
+		highest = current
+	}
 	for {
-		if prioritizer.Prior(current.next.message, highest.message) && filter(current.next.message) {
+		if (highest == nil || prioritizer.Prior(current.next.message, highest.message)) && filter(current.next.message) {
 			highest = current.next
 			prior = current
 		}
@@ -170,15 +173,15 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Gene
 			break
 		}
 	}
+	if highest == nil {
+		return nil
+	}
 	if prior == nil {
 		q.head = highest.next
 	} else {
 		prior.next = highest.next
 	}
-	if filter(highest.message) {
-		return highest.message
-	}
-	return nil
+	return highest.message
 }
 
 func (q *priorityQueue) Empty() bool {

@@ -32,8 +32,12 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 		return opts.Ttl, nil
 	}
 
-	if err := dvs.RegisterSubnets(logger, subnet); err != nil {
+	updated, err := dvs.RegisterSubnets(logger, subnet)
+	if err != nil {
 		return 0, err
+	}
+	if updated {
+		go dvs.PublishENR(logger)
 	}
 
 	return opts.Ttl, nil

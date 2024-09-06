@@ -1,11 +1,12 @@
 package topics
 
 import (
-	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 )
@@ -96,7 +97,7 @@ func (wl *dynamicWhitelist) Register(name string) {
 
 // Deregister removes the given topic from the whitelist
 func (wl *dynamicWhitelist) Deregister(name string) {
-	wl.whitelist.Del(name)
+	wl.whitelist.Delete(name)
 }
 
 // Whitelisted checks if the given name was whitelisted

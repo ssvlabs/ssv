@@ -7,11 +7,12 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cornelk/hashmap"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -190,8 +191,8 @@ func TestScheduler_Attester_Genesis_Indices_Changed(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be fetched again
 	currentSlot.Set(phase0.Slot(1))
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 1
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -254,8 +255,8 @@ func TestScheduler_Attester_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 
 	// STEP 5: wait for attester duties to be fetched
 	currentSlot.Set(phase0.Slot(2))
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be executed
@@ -304,8 +305,8 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition(t *testing.T
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -388,8 +389,8 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition_Indices_Chan
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	mockTicker.Send(currentSlot.Get())
 	waitForDuties.Set(true)
+	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -497,8 +498,8 @@ func TestScheduler_Attester_Genesis_Reorg_Previous(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(33))
 	waitForDuties.Set(true)
+	currentSlot.Set(phase0.Slot(33))
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -645,7 +646,7 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(47))
+	currentSlot.Set(phase0.Slot(48))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
@@ -674,7 +675,7 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(48))
+	currentSlot.Set(phase0.Slot(49))
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -696,12 +697,12 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
-	currentSlot.Set(phase0.Slot(49))
+	currentSlot.Set(phase0.Slot(50))
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: skip to the next epoch
-	currentSlot.Set(phase0.Slot(50))
+	currentSlot.Set(phase0.Slot(51))
 	for slot := currentSlot.Get(); slot < 64; slot++ {
 		mockTicker.Send(slot)
 		waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -736,7 +737,7 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 		waitForDuties = &SafeValue[bool]{}
 		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(47))
+	currentSlot.Set(phase0.Slot(48))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
@@ -765,7 +766,7 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(48))
+	currentSlot.Set(phase0.Slot(49))
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -797,12 +798,12 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be fetched again for the next epoch due to indices change
-	currentSlot.Set(phase0.Slot(49))
+	currentSlot.Set(phase0.Slot(50))
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: skip to the next epoch
-	currentSlot.Set(phase0.Slot(50))
+	currentSlot.Set(phase0.Slot(51))
 	for slot := currentSlot.Get(); slot < 64; slot++ {
 		mockTicker.Send(slot)
 		waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)

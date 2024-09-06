@@ -248,7 +248,9 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			discV5Opts.Subnets = n.fixedSubnets
 			logger = logger.With(zap.String("subnets", records.Subnets(n.fixedSubnets).String()))
 		}
-		logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
+		logger.Info("discovery: using discv5",
+			zap.Strings("bootnodes", discV5Opts.Bootnodes),
+			zap.String("ip", discV5Opts.IP))
 	} else {
 		logger.Info("discovery: using mdns (local)")
 	}
@@ -298,7 +300,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		cfg.ScoreIndex = nil
 	}
 
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
+	midHandler := topics.NewMsgIDHandler(n.ctx, n.cfg.Network, time.Minute*2)
 	n.msgResolver = midHandler
 	cfg.MsgIDHandler = midHandler
 	go cfg.MsgIDHandler.Start()
