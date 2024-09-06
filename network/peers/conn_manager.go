@@ -202,16 +202,20 @@ func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 }
 
 // Disconnects from a peer
-func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) {
-	net.ClosePeer(peerID)
+func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error {
+	return net.ClosePeer(peerID)
 }
 
 // DisconnectFromBadPeers will disconnect from bad peers according to the bad peers collector
 func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, badPeersCollector BadPeersCollector) {
 	for _, peerID := range allPeers {
 		if isBad, score := badPeersCollector.IsBad(peerID); isBad {
-			c.disconnect(peerID, net)
-			logger.Debug("Disconnecting from bad peer", zap.String("peer", string(peerID)), zap.Float64("score", score))
+			err := c.disconnect(peerID, net)
+			if err != nil {
+				logger.Error("Couldn't disconnect from bad peer", zap.String("peer", string(peerID)), zap.Float64("score", score))
+			} else {
+				logger.Debug("Disconnecting from bad peer", zap.String("peer", string(peerID)), zap.Float64("score", score))
+			}
 		}
 	}
 }
@@ -227,7 +231,12 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, net libp2
 
 		// If there's no common subnet, disconnects
 		if len(sharedSubnets) == 0 {
-			c.disconnect(peerID, net)
+			err := c.disconnect(peerID, net)
+			if err != nil {
+				logger.Error("Couldn't disconnect from peer with irrelevant subnets", zap.String("peer", string(peerID)))
+			} else {
+				logger.Debug("Disconnecting from peer with irrelevant subnets", zap.String("peer", string(peerID)))
+			}
 		}
 	}
 }
