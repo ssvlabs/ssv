@@ -31,6 +31,8 @@ type ConnManager interface {
 	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
 	// DisconnectFromBadPeers will disconnect from bad peers according to the bad peers collector
 	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, badPeersCollector BadPeersCollector)
+	// DisconnectFromIrrelevantPeers will disconnect from peers that doesn't share any subnet in common
+	DisconnectFromIrrelevantPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets)
 }
 
 // connManager implements ConnManager
@@ -204,12 +206,28 @@ func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) {
 	net.ClosePeer(peerID)
 }
 
-// Disconnects from bad peers, according to the BadPeersCollector
+// DisconnectFromBadPeers will disconnect from bad peers according to the bad peers collector
 func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, badPeersCollector BadPeersCollector) {
 	for _, peerID := range allPeers {
 		if isBad, score := badPeersCollector.IsBad(peerID); isBad {
 			c.disconnect(peerID, net)
 			logger.Debug("Disconnecting from bad peer", zap.String("peer", string(peerID)), zap.Float64("score", score))
+		}
+	}
+}
+
+// DisconnectFromIrrelevantPeers will disconnect from peers that doesn't share any subnet in common
+func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) {
+	for _, peerID := range allPeers {
+		// Get peer's subnets
+		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
+
+		// Get shared subnets
+		sharedSubnets := records.SharedSubnets(mySubnets, peerSubnets, len(mySubnets))
+
+		// If there's no common subnet, disconnects
+		if len(sharedSubnets) == 0 {
+			c.disconnect(peerID, net)
 		}
 	}
 }
