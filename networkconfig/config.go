@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -44,6 +44,7 @@ type NetworkConfig struct {
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address
 	Bootnodes            []string
+	DiscoveryProtocolID  [6]byte
 
 	AlanForkEpoch phase0.Epoch
 }

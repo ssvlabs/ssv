@@ -2,11 +2,11 @@ package discovery
 
 import (
 	"context"
+	"math"
 	"net"
 	"os"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -17,22 +17,16 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
 )
 
-type TestDomainTypeProvider struct {
-}
-
-func (td *TestDomainTypeProvider) DomainType() spectypes.DomainType {
-	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
-}
-
-func (td *TestDomainTypeProvider) NextDomainType() spectypes.DomainType {
-	return spectypes.DomainType{0x1, 0x2, 0x3, 0x5}
-}
-
-func (td *TestDomainTypeProvider) DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType {
-	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+var TestNetwork = networkconfig.NetworkConfig{
+	Beacon:            beacon.NewNetwork(spectypes.BeaconTestNetwork),
+	GenesisDomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+	AlanDomainType:    spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
+	AlanForkEpoch:     math.MaxUint64,
 }
 
 func TestCheckPeer(t *testing.T) {
@@ -156,11 +150,11 @@ func TestCheckPeer(t *testing.T) {
 	// Run the tests.
 	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
 	dvs := &DiscV5Service{
-		ctx:        ctx,
-		conns:      &mock.MockConnectionIndex{LimitValue: true},
-		subnetsIdx: subnetIndex,
-		domainType: &TestDomainTypeProvider{},
-		subnets:    mySubnets,
+		ctx:           ctx,
+		conns:         &mock.MockConnectionIndex{LimitValue: true},
+		subnetsIdx:    subnetIndex,
+		networkConfig: TestNetwork,
+		subnets:       mySubnets,
 	}
 
 	for _, test := range tests {

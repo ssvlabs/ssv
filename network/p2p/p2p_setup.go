@@ -255,13 +255,13 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
-		Host:        n.host,
-		DiscV5Opts:  discV5Opts,
-		ConnIndex:   n.idx,
-		SubnetsIdx:  n.idx,
-		HostAddress: n.cfg.HostAddress,
-		HostDNS:     n.cfg.HostDNS,
-		DomainType:  n.cfg.Network,
+		Host:          n.host,
+		DiscV5Opts:    discV5Opts,
+		ConnIndex:     n.idx,
+		SubnetsIdx:    n.idx,
+		HostAddress:   n.cfg.HostAddress,
+		HostDNS:       n.cfg.HostDNS,
+		NetworkConfig: n.cfg.Network,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {

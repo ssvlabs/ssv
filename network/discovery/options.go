@@ -2,19 +2,19 @@ package discovery
 
 import (
 	"crypto/ecdsa"
-	"github.com/ssvlabs/ssv/logging"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 	"net"
-
-	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/network/commons"
-	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 )
 
-var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
+var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // DiscV5Options for creating a new discv5 listener
 type DiscV5Options struct {
@@ -83,12 +83,28 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 	return ipAddr, bindIP, n
 }
 
-// DiscV5Cfg creates discv5 config from the options
-func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, error) {
-	dv5Cfg := discover.Config{
-		PrivateKey:   opts.NetworkKey,
-		V5ProtocolID: &SSVProtocolID,
+func WithProtocolID(protocolID [6]byte) func(config *discover.Config) {
+	return func(config *discover.Config) {
+		config.V5ProtocolID = &protocolID
 	}
+}
+
+func WithUnhandled(unhandled chan<- discover.ReadPacket) func(config *discover.Config) {
+	return func(config *discover.Config) {
+		config.Unhandled = unhandled
+	}
+}
+
+// DiscV5Cfg creates discv5 config from the options
+func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger, funcOpts ...func(config *discover.Config)) (*discover.Config, error) {
+	dv5Cfg := &discover.Config{
+		PrivateKey: opts.NetworkKey,
+	}
+
+	for _, fn := range funcOpts {
+		fn(dv5Cfg)
+	}
+
 	if len(opts.Bootnodes) > 0 {
 		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)
 		if err != nil {
@@ -105,5 +121,5 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 		dv5Cfg.Log = newLogger
 	}
 
-	return &dv5Cfg, nil
+	return dv5Cfg, nil
 }
