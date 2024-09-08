@@ -22,6 +22,6 @@ var HoleskyStage = NetworkConfig{
 		// "enr:-Ja4QDYHVgUs9NvlMqq93ot6VNqbmrIlMrwKnq4X3DPRgyUNB4ospDp8ubMvsf-KsgqY8rzpZKy4GbE1DLphabpRBc-GAY_diLjngmlkgnY0gmlwhDQrLYqJc2VjcDI1NmsxoQKnAiuSlgSR8asjCH0aYoVKM8uPbi4noFuFHZHaAHqknYNzc3YBg3RjcIITiYN1ZHCCD6E",
 
 		// Private bootnode:
-		"enr:-Ja4QEF4O52Pl9pxfF1y_gBzmtp9s2-ncWoN2-VPebEvjibaGJH7VpYGZKdCVws_gIAkjjatn67rXhGuItCfcp2kv4SGAZGOmChHgmlkgnY0gmlwhAoqckWJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
+		"enr:-Ja4QDRnHQHmpf7-JaLvWfxO7Ue4fu-aktpc0hvhrxvCdupRUx5Ec8HyhoqAitUwr6PRHFe7PJm9Nr9QTGg2T3hiZd6GAZGOmChKgmlkgnY0gmlwhAoqcliJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
 }
