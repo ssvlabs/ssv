@@ -131,7 +131,8 @@ func (h *CommitteeHandler) appendBeaconDuty(vc validatorCommitteeDutyMap, c comm
 		return
 	}
 
-	if _, ok := c[committee.id]; !ok {
+	cd, ok := c[committee.id]
+	if !ok {
 		c[committee.id] = &committeeDuty{
 			id:          committee.id,
 			operatorIDs: committee.operatorIDs,
@@ -142,7 +143,7 @@ func (h *CommitteeHandler) appendBeaconDuty(vc validatorCommitteeDutyMap, c comm
 		}
 	}
 
-	c[committee.id].duty.ValidatorDuties = append(c[committee.id].duty.ValidatorDuties, beaconDuty)
+	cd.duty.ValidatorDuties = append(c[committee.id].duty.ValidatorDuties, beaconDuty)
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
