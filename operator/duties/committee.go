@@ -133,7 +133,7 @@ func (h *CommitteeHandler) appendBeaconDuty(vc validatorCommitteeDutyMap, c comm
 
 	cd, ok := c[committee.id]
 	if !ok {
-		c[committee.id] = &committeeDuty{
+		cd = &committeeDuty{
 			id:          committee.id,
 			operatorIDs: committee.operatorIDs,
 			duty: &spectypes.CommitteeDuty{
@@ -141,6 +141,7 @@ func (h *CommitteeHandler) appendBeaconDuty(vc validatorCommitteeDutyMap, c comm
 				ValidatorDuties: make([]*spectypes.ValidatorDuty, 0),
 			},
 		}
+		c[committee.id] = cd
 	}
 
 	cd.duty.ValidatorDuties = append(c[committee.id].duty.ValidatorDuties, beaconDuty)
