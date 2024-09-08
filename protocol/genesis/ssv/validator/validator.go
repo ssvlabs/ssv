@@ -41,9 +41,6 @@ type Validator struct {
 	Storage *genesisstorage.QBFTStores
 	Queues  map[genesisspectypes.BeaconRole]queueContainer
 
-	// dutyIDs is a map for logging a unique ID for a given duty
-	//dutyIDs *hashmap.Map[genesisspectypes.BeaconRole, string]
-
 	state uint32
 
 	messageValidator validation.MessageValidator
