@@ -17,6 +17,15 @@ func TestTruncateStats(t *testing.T) {
 	// Test few subnets.
 	filtered = []*topicScoreSnapshot{
 		{
+			"custom_topic",
+			&pubsub.TopicScoreSnapshot{
+				TimeInMesh:               0,
+				FirstMessageDeliveries:   0,
+				MeshMessageDeliveries:    0,
+				InvalidMessageDeliveries: 3,
+			},
+		},
+		{
 			"ssv.v2.103",
 			&pubsub.TopicScoreSnapshot{
 				TimeInMesh:               0,
@@ -45,5 +54,5 @@ func TestTruncateStats(t *testing.T) {
 		},
 	}
 	log = formatInvalidMessageStats(filtered)
-	require.Equal(t, "103=0,0,0,3 107=3,3.5,2.67,3.83 109=-0.02,-3.33,-2.25,-3.83", log)
+	require.Equal(t, "custom_topic=0,0,0,3 103=0,0,0,3 107=3,3.5,2.67,3.83 109=-0.02,-3.33,-2.25,-3.83", log)
 }
