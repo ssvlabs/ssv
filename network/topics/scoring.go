@@ -2,6 +2,8 @@ package topics
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +25,11 @@ func DefaultScoringConfig() *ScoringConfig {
 		IPColocationWeight: -35.11,
 		OneEpochDuration:   (12 * time.Second) * 32,
 	}
+}
+
+type topicScoreSnapshot struct {
+	topic string
+	*pubsub.TopicScoreSnapshot
 }
 
 // scoreInspector inspects scores and updates the score index accordingly
@@ -56,10 +63,10 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 		for pid, peerScores := range scores {
 
 			// Store topic snapshot for topics with invalid messages
-			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
+			filtered := []*topicScoreSnapshot{}
 			for topic, snapshot := range peerScores.Topics {
 				if snapshot.InvalidMessageDeliveries != 0 {
-					filtered[topic] = snapshot
+					filtered = append(filtered, &topicScoreSnapshot{topic, snapshot})
 				}
 			}
 
@@ -256,14 +263,28 @@ func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*
 }
 
 // formatInvalidMessageStats returns the subnets in a small format topicNum=ti,fmd,mmd,imd
-func formatInvalidMessageStats(filtered map[string]*pubsub.TopicScoreSnapshot) string {
+func formatInvalidMessageStats(filtered []*topicScoreSnapshot) string {
+	fmtFloat := func(n float64) string {
+		if math.Trunc(n) == n {
+			return strconv.FormatInt(int64(n), 10)
+		}
+		return strconv.FormatFloat(math.Round(n*100)/100, 'f', -1, 64)
+	}
 	var b strings.Builder
 	i := 0
-	for topic, snapshot := range filtered {
+	for _, snapshot := range filtered {
 		if i > 0 {
 			b.WriteString(" ")
 		}
-		fmt.Fprintf(&b, "%s=%d,%0.3f,%0.3f,%0.3f", topic, snapshot.TimeInMesh, snapshot.FirstMessageDeliveries, snapshot.MeshMessageDeliveries, snapshot.InvalidMessageDeliveries)
+		fmt.Fprintf(
+			&b,
+			"%s=%s,%s,%s,%s",
+			commons.GetTopicBaseName(snapshot.topic),
+			fmtFloat(snapshot.TimeInMesh.Seconds()),
+			fmtFloat(snapshot.FirstMessageDeliveries),
+			fmtFloat(snapshot.MeshMessageDeliveries),
+			fmtFloat(snapshot.InvalidMessageDeliveries),
+		)
 		i++
 	}
 	return b.String()
