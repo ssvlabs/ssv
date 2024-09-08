@@ -145,7 +145,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID genesisspectypes.Mess
 
 		slot, err := msg.Slot()
 		if err != nil {
-			logger.Error("❗ can't get slot from msg", zap.Error(err))
+			v.logMsg(logger, msg, "❗ could not handle message",
+				fields.MessageType(spectypes.MsgType(msg.SSVMessage.MsgType)),
+				zap.Error(fmt.Errorf("can't get slot from msg: %w", err)))
 			continue
 		}
 
