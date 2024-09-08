@@ -91,14 +91,14 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 
 func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	if lf.Role == spectypes.RoleCommittee {
-		c := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
-		if c != nil {
+		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
+		if ok {
 			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
 		}
 	} else {
 		// get the validator index from the msgid
-		v := mv.validatorStore.Validator(lf.DutyExecutorID)
-		if v != nil {
+		v, ok := mv.validatorStore.Validator(lf.DutyExecutorID)
+		if ok {
 			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role.String(), v.ValidatorIndex)
 		}
 	}
