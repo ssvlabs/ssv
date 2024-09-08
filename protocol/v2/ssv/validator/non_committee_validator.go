@@ -106,7 +106,10 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 	for key, quorum := range quorums {
 		role := ncv.getRole(msg, key.Root)
-		validator := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+		if !exists {
+			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
+		}
 		MsgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
 		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, slot, quorum); err != nil {
 			return fmt.Errorf("could not save participants %w", err)
@@ -165,7 +168,10 @@ func (ncv *CommitteeObserver) processMessage(
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
 
 	for _, msg := range signedMsg.Messages {
-		validator := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
+		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
+		if !exists {
+			return nil, fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
+		}
 		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
 		if !ok {
 			container = ssv.NewPartialSigContainer(validator.Quorum())

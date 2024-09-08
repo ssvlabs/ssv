@@ -369,11 +369,12 @@ func (m *MockSharesStorage) EXPECT() *MockSharesStorageMockRecorder {
 }
 
 // Get mocks base method.
-func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types1.SSVShare {
+func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) (*types1.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", txn, pubKey)
 	ret0, _ := ret[0].(*types1.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
@@ -411,20 +412,6 @@ func (m *MockSharesStorage) Range(txn basedb.Reader, fn func(*types1.SSVShare) b
 func (mr *MockSharesStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Range", reflect.TypeOf((*MockSharesStorage)(nil).Range), txn, fn)
-}
-
-// UpdateValidatorMetadata mocks base method.
-func (m *MockSharesStorage) UpdateValidatorMetadata(pk types0.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
-func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorMetadata), pk, metadata)
 }
 
 // UpdateValidatorsMetadata mocks base method.
