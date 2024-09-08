@@ -344,22 +344,25 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
 	var shares []*types.SSVShare
 
-	s.mu.RLock()
-	for pk, metadata := range data {
-		if metadata == nil {
-			continue
-		}
+	func() {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
 
-		share, exists := s.unsafeGet(pk[:])
-		if !exists {
-			continue
-		}
+		for pk, metadata := range data {
+			if metadata == nil {
+				continue
+			}
 
-		share.BeaconMetadata = metadata
-		share.Share.ValidatorIndex = metadata.Index
-		shares = append(shares, share)
-	}
-	s.mu.RUnlock()
+			share, exists := s.unsafeGet(pk[:])
+			if !exists {
+				continue
+			}
+
+			share.BeaconMetadata = metadata
+			share.Share.ValidatorIndex = metadata.Index
+			shares = append(shares, share)
+		}
+	}()
 
 	saveShares := func(sshares []*types.SSVShare) error {
 		s.mu.Lock()
