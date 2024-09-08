@@ -41,8 +41,6 @@ type Validator struct {
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.RunnerRole]queueContainer
 
-	Index phase0.ValidatorIndex
-
 	state uint32
 
 	messageValidator validation.MessageValidator
@@ -57,21 +55,19 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	v := &Validator{
-		mtx:            &sync.RWMutex{},
-		ctx:            pctx,
-		cancel:         cancel,
-		NetworkConfig:  options.NetworkConfig,
-		DutyRunners:    options.DutyRunners,
-		Network:        options.Network,
-		Storage:        options.Storage,
-		Operator:       options.Operator,
-		Share:          options.SSVShare,
-		Signer:         options.Signer,
-		OperatorSigner: options.OperatorSigner,
-		Index:          options.ValidatorIndex,
-		Queues:         make(map[spectypes.RunnerRole]queueContainer),
-		state:          uint32(NotStarted),
-		//dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
+		mtx:              &sync.RWMutex{},
+		ctx:              pctx,
+		cancel:           cancel,
+		NetworkConfig:    options.NetworkConfig,
+		DutyRunners:      options.DutyRunners,
+		Network:          options.Network,
+		Storage:          options.Storage,
+		Operator:         options.Operator,
+		Share:            options.SSVShare,
+		Signer:           options.Signer,
+		OperatorSigner:   options.OperatorSigner,
+		Queues:           make(map[spectypes.RunnerRole]queueContainer),
+		state:            uint32(NotStarted),
 		messageValidator: options.MessageValidator,
 	}
 
@@ -200,7 +196,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole, slot phase0.Slot) *zap.Logger {
 	logger = logger.With(fields.Slot(slot))
-	dutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, role.String(), v.Index)
+	dutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, role.String(), v.Share.ValidatorIndex)
 	logger = logger.With(fields.DutyID(dutyID))
 	return logger
 }

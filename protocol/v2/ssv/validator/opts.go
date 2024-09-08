@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -37,7 +36,6 @@ type Options struct {
 	OperatorSigner    ssvtypes.OperatorSigner
 	DutyRunners       runner.ValidatorDutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
-	ValidatorIndex    phase0.ValidatorIndex
 	FullNode          bool
 	Exporter          bool
 	QueueSize         int

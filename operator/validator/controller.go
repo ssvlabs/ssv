@@ -928,7 +928,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		opts.SSVShare = share
 		opts.Operator = operator
 		opts.DutyRunners = SetupRunners(validatorCtx, c.logger, opts)
-		opts.ValidatorIndex = share.ValidatorIndex
 
 		alanValidator := validator.NewValidator(validatorCtx, validatorCancel, opts)
 

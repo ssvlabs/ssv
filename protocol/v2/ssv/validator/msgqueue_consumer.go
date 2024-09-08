@@ -151,7 +151,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			continue
 		}
 
-		msgDutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, role, v.Index)
+		msgDutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, role, v.Share.ValidatorIndex)
 		msgLogger := logger.With(fields.DutyID(msgDutyID))
 
 		lens = append(lens, q.Q.Len())
