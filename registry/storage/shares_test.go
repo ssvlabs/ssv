@@ -71,10 +71,9 @@ func TestMaxPossibleShareSize(t *testing.T) {
 
 func TestSharesStorage(t *testing.T) {
 	logger := logging.TestLogger(t)
-	operatorStorage, shareStorage, db, done := newStorageForTest(logger)
-	require.NotNil(t, operatorStorage)
-	require.NotNil(t, shareStorage)
-	defer done()
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
 
 	threshold.Init()
 	const keysCount = 4
@@ -86,7 +85,7 @@ func TestSharesStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	for operatorID := range splitKeys {
-		_, err = operatorStorage.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
+		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
 		require.NoError(t, err)
 	}
 
@@ -101,24 +100,24 @@ func TestSharesStorage(t *testing.T) {
 		OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Liquidated:   false,
 	}
-	require.NoError(t, shareStorage.Save(nil, validatorShare))
+	require.NoError(t, storage.Shares.Save(nil, validatorShare))
 
 	validatorShare2, _ := generateRandomValidatorSpecShare(splitKeys)
-	require.NoError(t, shareStorage.Save(nil, validatorShare2))
+	require.NoError(t, storage.Shares.Save(nil, validatorShare2))
 
-	validatorShareByKey, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	validatorShareByKey, exists := storage.Shares.Get(nil, validatorShare.ValidatorPubKey[:])
 	require.True(t, exists)
 	require.NotNil(t, validatorShareByKey)
 	require.NoError(t, err)
 	require.EqualValues(t, hex.EncodeToString(validatorShareByKey.ValidatorPubKey[:]), hex.EncodeToString(validatorShare.ValidatorPubKey[:]))
 	require.EqualValues(t, validatorShare.Committee, validatorShareByKey.Committee)
 
-	validators := shareStorage.List(nil)
+	validators := storage.Shares.List(nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(validators))
 
 	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
-		require.NoError(t, shareStorage.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			validatorShare.ValidatorPubKey: {
 				Balance:         10000,
 				Index:           3,
@@ -131,45 +130,45 @@ func TestSharesStorage(t *testing.T) {
 	t.Run("List_Filter_ByClusterId", func(t *testing.T) {
 		clusterID := ssvtypes.ComputeClusterIDHash(validatorShare.Metadata.OwnerAddress, []uint64{1, 2, 3, 4})
 
-		validators := shareStorage.List(nil, ByClusterIDHash(clusterID))
+		validators := storage.Shares.List(nil, ByClusterIDHash(clusterID))
 		require.Equal(t, 2, len(validators))
 	})
 
 	t.Run("List_Filter_ByOperatorID", func(t *testing.T) {
-		validators := shareStorage.List(nil, ByOperatorID(1))
+		validators := storage.Shares.List(nil, ByOperatorID(1))
 		require.Equal(t, 2, len(validators))
 	})
 
 	t.Run("List_Filter_ByActiveValidator", func(t *testing.T) {
-		validators := shareStorage.List(nil, ByActiveValidator())
+		validators := storage.Shares.List(nil, ByActiveValidator())
 		require.Equal(t, 2, len(validators))
 	})
 
 	t.Run("List_Filter_ByNotLiquidated", func(t *testing.T) {
-		validators := shareStorage.List(nil, ByNotLiquidated())
+		validators := storage.Shares.List(nil, ByNotLiquidated())
 		require.Equal(t, 1, len(validators))
 	})
 
 	t.Run("List_Filter_ByAttesting", func(t *testing.T) {
-		validators := shareStorage.List(nil, ByAttesting(phase0.Epoch(1)))
+		validators := storage.Shares.List(nil, ByAttesting(phase0.Epoch(1)))
 		require.Equal(t, 1, len(validators))
 	})
 
 	t.Run("KV_reuse_works", func(t *testing.T) {
-		storageDuplicate, _, err := NewSharesStorage(logger, db, []byte("test"))
+		storageDuplicate, _, err := NewSharesStorage(logger, storage.db, []byte("test"))
 		require.NoError(t, err)
 		existingValidators := storageDuplicate.List(nil)
 
 		require.Equal(t, 2, len(existingValidators))
 	})
 
-	require.NoError(t, shareStorage.Delete(nil, validatorShare.ValidatorPubKey[:]))
-	share, exists := shareStorage.Get(nil, validatorShare.ValidatorPubKey[:])
+	require.NoError(t, storage.Shares.Delete(nil, validatorShare.ValidatorPubKey[:]))
+	share, exists := storage.Shares.Get(nil, validatorShare.ValidatorPubKey[:])
 	require.False(t, exists)
 	require.Nil(t, share)
 
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
-		require.NoError(t, shareStorage.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			validatorShare.ValidatorPubKey: {
 				Balance:         10000,
 				Index:           3,
@@ -180,9 +179,9 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	t.Run("Drop", func(t *testing.T) {
-		require.NoError(t, shareStorage.Drop())
+		require.NoError(t, storage.Shares.Drop())
 
-		validators := shareStorage.List(nil, ByOperatorID(1))
+		validators := storage.Shares.List(nil, ByOperatorID(1))
 		require.NoError(t, err)
 		require.EqualValues(t, 0, len(validators))
 	})
@@ -292,24 +291,6 @@ func generateMaxPossibleShare() (*storageShare, error) {
 
 	validatorShare, _ := generateRandomValidatorStorageShare(splitKeys)
 	return validatorShare, nil
-}
-
-func newStorageForTest(logger *zap.Logger) (Operators, Shares, *kv.BadgerDB, func()) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	if err != nil {
-		return nil, nil, nil, func() {}
-	}
-
-	o := NewOperatorsStorage(logger, db, []byte("test"))
-
-	s, _, err := NewSharesStorage(logger, db, []byte("test"))
-	if err != nil {
-		return nil, nil, nil, func() {}
-	}
-
-	return o, s, db, func() {
-		_ = db.Close()
-	}
 }
 
 type testStorage struct {
