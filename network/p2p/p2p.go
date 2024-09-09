@@ -277,7 +277,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 // Returns a function that balances the peers in case the maximum number of connections is reached.
 // Balancing is peformed in three steps:
 // - Drops peers with bad GossipSub score.
-// - Drop peers that don't have any subnet in common.
+// - Drop irrelevant peers that don't have any subnet in common.
 // - tags the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removes the worst peer.
 func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 	return func() {
