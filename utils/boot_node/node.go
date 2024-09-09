@@ -24,8 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/utils"
 )
 
-var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
-
 // Options contains options to create the node
 type Options struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
@@ -103,8 +101,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
 	cfg := discover.Config{
-		PrivateKey:   privKey,
-		V5ProtocolID: &SSVProtocolID,
+		PrivateKey: privKey,
 	}
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"
