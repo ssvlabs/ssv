@@ -121,7 +121,6 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	logger.Debug("Starting committee duty runner")
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
