@@ -63,8 +63,9 @@ func (c *Committee) IsParticipating(epoch phase0.Epoch) bool {
 }
 
 type sharesAndCommittees struct {
-	shares     []*types.SSVShare
-	committees []*Committee
+	shares           []*types.SSVShare
+	committees       []*Committee
+	committeeIndices map[spectypes.CommitteeID]int
 }
 
 type validatorStore struct {
@@ -249,12 +250,18 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 			data := c.byOperatorID[operator.Signer]
 			if data == nil {
 				data = &sharesAndCommittees{
-					shares:     []*types.SSVShare{share},
-					committees: []*Committee{committee},
+					shares:           []*types.SSVShare{share},
+					committees:       []*Committee{committee},
+					committeeIndices: map[spectypes.CommitteeID]int{committee.ID: 0},
 				}
 			} else {
 				data.shares = append(data.shares, share)
-				data.committees = append(data.committees, committee)
+				if index, ok := data.committeeIndices[committee.ID]; ok {
+					data.committees[index] = committee
+				} else {
+					data.committeeIndices[committee.ID] = len(data.committees)
+					data.committees = append(data.committees, committee)
+				}
 			}
 
 			c.byOperatorID[operator.Signer] = data
@@ -279,37 +286,58 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 
 	// Update byCommitteeID
 	committee := c.byCommitteeID[share.CommitteeID()]
-	if committee != nil {
-		validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
-		indices := make([]phase0.ValidatorIndex, 0, len(committee.Validators)-1)
-		for _, validator := range committee.Validators {
-			if validator.ValidatorPubKey != share.ValidatorPubKey {
-				validators = append(validators, validator)
-				indices = append(indices, validator.ValidatorIndex)
-			}
+	if committee == nil {
+		// Corrupt state.
+		return fmt.Errorf("committee not found")
+	}
+	committeeRemoved := false
+	validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
+	indices := make([]phase0.ValidatorIndex, 0, len(committee.Validators)-1)
+	for _, validator := range committee.Validators {
+		if validator.ValidatorPubKey != share.ValidatorPubKey {
+			validators = append(validators, validator)
+			indices = append(indices, validator.ValidatorIndex)
 		}
-		if len(validators) == 0 {
-			delete(c.byCommitteeID, committee.ID)
-		} else {
-			committee.Validators = validators
-			committee.Indices = indices
-		}
+	}
+	if len(validators) == len(committee.Validators) {
+		// Corrupt state.
+		return fmt.Errorf("share not found in committee")
+	}
+	if len(validators) == 0 {
+		delete(c.byCommitteeID, committee.ID)
+		committeeRemoved = true
+	} else {
+		committee.Validators = validators
+		committee.Indices = indices
 	}
 
 	// Update byOperatorID
 	for _, operator := range share.Committee {
 		data := c.byOperatorID[operator.Signer]
 		if data != nil {
-			shares := make([]*types.SSVShare, 0, len(data.shares)-1)
-			for _, s := range data.shares {
-				if s.ValidatorPubKey != share.ValidatorPubKey {
-					shares = append(shares, s)
-				}
+			index := slices.IndexFunc(data.shares, func(s *types.SSVShare) bool {
+				return s.ValidatorPubKey == share.ValidatorPubKey
+			})
+			if index == -1 {
+				// Corrupt state.
+				return fmt.Errorf("share not found in operator %d", operator.Signer)
 			}
-			if len(shares) == 0 {
+			if len(data.shares) == 1 {
 				delete(c.byOperatorID, operator.Signer)
-			} else {
-				data.shares = shares
+				continue
+			}
+			data.shares = append(data.shares[:index], data.shares[index+1:]...)
+
+			if committeeRemoved {
+				index := slices.IndexFunc(data.committees, func(c *Committee) bool {
+					return c.ID == share.CommitteeID()
+				})
+				if index == -1 {
+					// Corrupt state.
+					return fmt.Errorf("committee not found in operator %d", operator.Signer)
+				}
+				data.committees = append(data.committees[:index], data.committees[index+1:]...)
+				delete(data.committeeIndices, share.CommitteeID())
 			}
 		}
 	}
