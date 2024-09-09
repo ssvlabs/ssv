@@ -103,8 +103,6 @@ type p2pNetwork struct {
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
 	operatorSigner          keys.OperatorSigner
 	operatorDataStore       operatordatastore.OperatorDataStore
-
-	badPeersCollector peers.BadPeersCollector
 }
 
 // New creates a new p2p network
@@ -129,7 +127,6 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
 		metrics:                 mr,
-		badPeersCollector:       peers.NewBadPeersCollector(),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err
@@ -290,11 +287,11 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
 
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
 
 		// Disconnect from bad peers
-		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers, n.badPeersCollector)
+		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
 
 		// Disconnect from irrelevant peers
 		connMgr.DisconnectFromIrrelevantPeers(logger, n.host.Network(), allPeers, mySubnets)

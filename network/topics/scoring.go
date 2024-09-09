@@ -24,8 +24,8 @@ func DefaultScoringConfig() *ScoringConfig {
 }
 
 // scoreInspector inspects scores and updates the score index accordingly.
-// It also updates the BadPeersCollector by resetting it and
-// adding peers with scores below the GraylistThreshold.
+// It also updates the GossipSubScoreIndex by resetting it and
+// adding the peers' scores.
 // TODO: finalize once validation is in place
 func scoreInspector(logger *zap.Logger,
 	scoreIdx peers.ScoreIndex,
@@ -34,18 +34,16 @@ func scoreInspector(logger *zap.Logger,
 	peerConnected func(pid peer.ID) bool,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
-	badPeersCollector peers.BadPeersCollector) pubsub.ExtendedPeerScoreInspectFn {
+	gossipSubScoreIndex peers.GossipSubScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 
 	inspections := 0
 
-	// Get the GraylistThreshold to detect bad peers
-	graylistThreshold := params.PeerScoreThresholds().GraylistThreshold
-
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 
-		// Reset the BadPeersCollector
-		badPeersCollector.Clear()
+		// Updates the GossipSubScoreIndex in every iteration
+		updateGossipSubScoreIndex(gossipSubScoreIndex, scores)
 
+		// Check if should do logging
 		if inspections%logFrequency != 0 {
 			// Don't log yet.
 			inspections++
@@ -173,11 +171,6 @@ func scoreInspector(logger *zap.Logger,
 			}
 			logger.Debug("peer scores", fields...)
 
-			// If the peer is bad, register it to the BadPeersCollector
-			if peerScores.Score < graylistThreshold {
-				badPeersCollector.RegisterBadPeer(pid, peerScores.Score)
-			}
-
 			// err := scoreIdx.Score(pid, scores...)
 			// if err != nil {
 			//	logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
@@ -188,6 +181,17 @@ func scoreInspector(logger *zap.Logger,
 		}
 
 		inspections++
+	}
+}
+
+// Updates the GossipSubScoreIndex with the peers' scores
+func updateGossipSubScoreIndex(gossipSubScoreIndex peers.GossipSubScoreIndex, scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+	// Reset the index
+	gossipSubScoreIndex.Clear()
+
+	// Add the score for each peer
+	for pid, peerScores := range scores {
+		gossipSubScoreIndex.AddScore(pid, peerScores.Score)
 	}
 }
 

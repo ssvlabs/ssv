@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -30,25 +31,27 @@ type ConnManager interface {
 	// TrimPeers will trim unprotected peers.
 	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
 	// DisconnectFromBadPeers will disconnect from bad peers according to the bad peers collector
-	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, badPeersCollector BadPeersCollector)
+	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID)
 	// DisconnectFromIrrelevantPeers will disconnect from peers that doesn't share any subnet in common
 	DisconnectFromIrrelevantPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets)
 }
 
 // connManager implements ConnManager
 type connManager struct {
-	logger      *zap.Logger
-	connManager connmgrcore.ConnManager
-	subnetsIdx  SubnetsIndex
+	logger              *zap.Logger
+	connManager         connmgrcore.ConnManager
+	subnetsIdx          SubnetsIndex
+	gossipSubScoreIndex GossipSubScoreIndex
 }
 
 // NewConnManager creates a new conn manager.
 // multiple instances can be created, but concurrency is not supported.
-func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) ConnManager {
+func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex, gossipSubScoreIndex GossipSubScoreIndex) ConnManager {
 	return &connManager{
-		logger:      logger,
-		connManager: connMgr,
-		subnetsIdx:  subnetsIdx,
+		logger:              logger,
+		connManager:         connMgr,
+		subnetsIdx:          subnetsIdx,
+		gossipSubScoreIndex: gossipSubScoreIndex,
 	}
 }
 
@@ -206,15 +209,22 @@ func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error
 	return net.ClosePeer(peerID)
 }
 
-// DisconnectFromBadPeers will disconnect from bad peers according to the bad peers collector
-func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, badPeersCollector BadPeersCollector) {
+// DisconnectFromBadPeers will disconnect from bad peers according to their GossipSub score
+func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) {
 	for _, peerID := range allPeers {
-		if isBad, score := badPeersCollector.IsBad(peerID); isBad {
+
+		// Check if peer is bad
+		if isBad := c.gossipSubScoreIndex.HasBadGossipSubScore(peerID); isBad {
+
+			// Get GossipSub score for logging
+			gossipSubScore, hasScore := c.gossipSubScoreIndex.GetGossipSubScore(peerID)
+
+			// Disconnect
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("Couldn't disconnect from bad peer", zap.String("peer", string(peerID)), zap.Float64("score", score))
+				logger.Error("Couldn't disconnect from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore), zap.Bool("has GossipSub Score", hasScore))
 			} else {
-				logger.Debug("Disconnecting from bad peer", zap.String("peer", string(peerID)), zap.Float64("score", score))
+				logger.Debug("Disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore), zap.Bool("has GossipSub Score", hasScore))
 			}
 		}
 	}
@@ -233,9 +243,9 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, net libp2
 		if len(sharedSubnets) == 0 {
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("Couldn't disconnect from peer with irrelevant subnets", zap.String("peer", string(peerID)))
+				logger.Error("Couldn't disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
 			} else {
-				logger.Debug("Disconnecting from peer with irrelevant subnets", zap.String("peer", string(peerID)))
+				logger.Debug("Disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
 			}
 		}
 	}
