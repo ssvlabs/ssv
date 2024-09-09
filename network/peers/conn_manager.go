@@ -55,7 +55,12 @@ func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnets
 	}
 }
 
-// Set the "Protect" tag for the best [n] peers. For the others, set the "Unprotect"
+// Disconnects from a peer
+func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error {
+	return net.ClosePeer(peerID)
+}
+
+// Set the "Protect" tag for the best [n] peers. For the others, set the "Unprotect" tag
 func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
 	bestPeers := c.getBestPeers(n, mySubnets, allPeers, topicMaxPeers)
 	logger.Debug("tagging best peers",
@@ -82,8 +87,8 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 	// c.connManager.TrimOpenConns(ctx)
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
-			err := net.ClosePeer(pid)
-			logger.Debug("closing peer", zap.String("pid", pid.String()), zap.Error(err))
+			err := c.disconnect(pid, net)
+			logger.Debug("closing peer", fields.PeerID(pid), zap.Error(err))
 		}
 	}
 	logger.Debug("trimmed peers", zap.Int("beforeTrim", before),
@@ -202,11 +207,6 @@ func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 		}
 	}
 	return PeerScore(score)
-}
-
-// Disconnects from a peer
-func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error {
-	return net.ClosePeer(peerID)
 }
 
 // DisconnectFromBadPeers will disconnect from bad peers according to their GossipSub score
