@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+// To add some encoding overhead for ssz, we use (N + N/encodingOverheadDivisor + 4) for a structure with expected size N
+
 const (
 	// lateMessageMargin is the duration past a message's TTL in which it is still considered valid.
 	lateMessageMargin = time.Second * 3
@@ -30,7 +32,7 @@ const (
 	maxNoJustificationSize     = 3616  // from KB
 	max1JustificationSize      = 50624 // from KB
 	maxConsensusMsgSize        = qbftMsgTypeSize + heightSize + roundSize + identifierSize + rootSize + roundSize + maxSignatures*(maxNoJustificationSize+max1JustificationSize)
-	maxEncodedConsensusMsgSize = maxConsensusMsgSize + maxConsensusMsgSize/encodingOverheadDivisor
+	maxEncodedConsensusMsgSize = maxConsensusMsgSize + maxConsensusMsgSize/encodingOverheadDivisor + 4
 )
 
 const (
@@ -39,7 +41,7 @@ const (
 	maxPartialSignatureMessages    = 1000
 	partialSigMsgTypeSize          = 8 // uint64
 	maxPartialSignatureMsgsSize    = partialSigMsgTypeSize + slotSize + maxPartialSignatureMessages*partialSignatureMsgSize
-	maxEncodedPartialSignatureSize = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/encodingOverheadDivisor
+	maxEncodedPartialSignatureSize = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/encodingOverheadDivisor + 4
 )
 
 const (
@@ -52,5 +54,5 @@ const (
 const (
 	maxPayloadDataSize = max(maxEncodedConsensusMsgSize, maxEncodedPartialSignatureSize)
 	maxSignedMsgSize   = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + maxFullDataSize
-	maxEncodedMsgSize  = maxSignedMsgSize + maxSignedMsgSize/encodingOverheadDivisor
+	maxEncodedMsgSize  = maxSignedMsgSize + maxSignedMsgSize/encodingOverheadDivisor + 4
 )
