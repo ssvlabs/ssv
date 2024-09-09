@@ -79,6 +79,14 @@ func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 	return id
 }
 
+func (s *SSVShare) OperatorIDs() []spectypes.OperatorID {
+	ids := make([]spectypes.OperatorID, len(s.Committee))
+	for i, v := range s.Committee {
+		ids[i] = v.Signer
+	}
+	return ids
+}
+
 func (s *SSVShare) HasQuorum(cnt int) bool {
 	return uint64(cnt) >= s.Quorum()
 }
