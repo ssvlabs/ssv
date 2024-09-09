@@ -145,14 +145,16 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			break
 		}
 
+		msgLogger := logger
 		slot, err := msg.Slot()
-		if err != nil {
-			logger.Warn("❗ could not read slot from message", zap.Error(err))
-			continue
+		if err == nil {
+			msgDutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, role, v.Share.ValidatorIndex)
+			msgLogger = msgLogger.With(fields.DutyID(msgDutyID))
+		} else {
+			v.logMsg(msgLogger, msg, "❗ could read slot from message",
+				fields.MessageType(msg.SSVMessage.MsgType),
+				zap.Error(err))
 		}
-
-		msgDutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, role, v.Share.ValidatorIndex)
-		msgLogger := logger.With(fields.DutyID(msgDutyID))
 
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
