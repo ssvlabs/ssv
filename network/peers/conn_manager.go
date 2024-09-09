@@ -30,7 +30,7 @@ type ConnManager interface {
 	TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
 	// TrimPeers will trim unprotected peers.
 	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
-	// DisconnectFromBadPeers will disconnect from bad peers according to the bad peers collector
+	// DisconnectFromBadPeers will disconnect from bad peers according to their GossipSub scores
 	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID)
 	// DisconnectFromIrrelevantPeers will disconnect from peers that doesn't share any subnet in common
 	DisconnectFromIrrelevantPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets)
