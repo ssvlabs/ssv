@@ -82,13 +82,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 
 			// P2 - First message deliveries
 			// The weight for the p2 score (w2) may be different through topics
-			// So, we store a list of counters P2c and their associated weights W2
-			// Note: if necessary, we may reduce the size of the log by summing P2c * W2 for all topics and logging this result
-			type P2Score struct {
-				P2Counter float64
-				W2        float64
-			}
-			p2 := make([]*P2Score, 0)
+			// So, we compute the sum P2c * W2 for all topics
+			p2 := 0.0
 
 			// P4 - InvalidMessageDeliveries
 			// The weight should be equal for all topics. So, we can just sum up the counters squared.
@@ -113,12 +108,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 				// Update p4 impact on final score
 				p4Impact += topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * p4CounterSquaredForTopic
 
-				// Store the counter and weight for P2
-				w2 := topicScoreParams.FirstMessageDeliveriesWeight
-				p2 = append(p2, &P2Score{
-					P2Counter: snapshot.FirstMessageDeliveries,
-					W2:        w2,
-				})
+				// Sum up P2c * W2 in P2
+				p2 += snapshot.FirstMessageDeliveries * topicScoreParams.FirstMessageDeliveriesWeight
 			}
 
 			// Get weights for P1 and P4 (w1 and w4), which should be equal for all topics
@@ -152,7 +143,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 				fields.PeerScore(peerScores.Score),
 				zap.Float64("p1_time_in_mesh", p1CounterSum),
 				zap.Float64("w1_time_in_mesh", w1),
-				zap.Any("p2_first_message_deliveries", p2),
+				zap.Float64("p2_first_message_deliveries", p2),
 				zap.Float64("p4_invalid_message_deliveries", p4CounterSum),
 				zap.Float64("w4_invalid_message_deliveries", w4),
 				zap.Float64("p6_ip_colocation_factor", p6),
