@@ -23,10 +23,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > maxPartialSignatureMsgsSize {
+	if len(ssvMessage.Data) > maxEncodedPartialSignatureSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = maxPartialSignatureMsgsSize
+		e.want = maxEncodedPartialSignatureSize
 		return nil, e
 	}
 
@@ -208,7 +208,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
-			e.want = maxConsensusMsgSize
+			e.want = maxSignatures
 			return e
 		}
 	} else if partialSignatureMessageCount > 1 {

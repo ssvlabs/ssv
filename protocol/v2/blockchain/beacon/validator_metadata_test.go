@@ -9,10 +9,10 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
 	"github.com/ssvlabs/ssv/logging"
 )
 
@@ -109,16 +109,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	storageData := make(map[spectypes.ValidatorPK]*ValidatorMetadata)
 	storageMu := sync.Mutex{}
 
-	// storage := NewMockValidatorMetadataStorage()
 	storage := NewMockValidatorMetadataStorage(ctrl)
-	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk spectypes.ValidatorPK, metadata *ValidatorMetadata) error {
-		storageMu.Lock()
-		defer storageMu.Unlock()
-
-		storageData[pk] = metadata
-
-		return nil
-	}).AnyTimes()
 
 	storage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(metadata map[spectypes.ValidatorPK]*ValidatorMetadata) error {
 		storageMu.Lock()
@@ -132,7 +123,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	}).AnyTimes()
 
 	onUpdated := func(data map[spectypes.ValidatorPK]*ValidatorMetadata) error {
-		storage.UpdateValidatorsMetadata(data)
+		require.NoError(t, storage.UpdateValidatorsMetadata(data))
 		for pk, meta := range data {
 			joined := strings.Join(pks, ":")
 

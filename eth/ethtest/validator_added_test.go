@@ -82,7 +82,8 @@ func (input *testValidatorRegisteredInput) prepare(
 	for i, validatorId := range validatorsIds {
 		// Check there are no shares in the state for the current validator
 		valPubKey := validators[validatorId].masterPubKey.Serialize()
-		share := input.nodeStorage.Shares().Get(nil, valPubKey)
+		share, exists := input.nodeStorage.Shares().Get(nil, valPubKey)
+		require.False(input.t, exists)
 		require.Nil(input.t, share)
 
 		// Create event input
@@ -105,7 +106,8 @@ func (input *testValidatorRegisteredInput) produce() {
 	for _, event := range input.events {
 		val := event.validator
 		valPubKey := val.masterPubKey.Serialize()
-		shares := input.nodeStorage.Shares().Get(nil, valPubKey)
+		shares, exists := input.nodeStorage.Shares().Get(nil, valPubKey)
+		require.False(input.t, exists)
 		require.Nil(input.t, shares)
 
 		// Call the contract method

@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -63,7 +64,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committeeID := shares.active.CommitteeID()
 
-	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) *registrystorage.Committee {
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
 			beaconMetadata1 := *shares.active.BeaconMetadata
 			beaconMetadata2 := beaconMetadata1
@@ -71,34 +72,35 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			beaconMetadata3 := beaconMetadata2
 			beaconMetadata3.Index = beaconMetadata2.Index + 1
 
-			share1 := *shares.active
+			share1 := cloneSSVShare(t, shares.active)
 			share1.BeaconMetadata = &beaconMetadata1
-			share2 := share1
+			share2 := cloneSSVShare(t, share1)
 			share2.ValidatorIndex = share1.ValidatorIndex + 1
 			share2.BeaconMetadata = &beaconMetadata2
-			share3 := share2
+			share3 := cloneSSVShare(t, share2)
 			share3.ValidatorIndex = share2.ValidatorIndex + 1
 			share3.BeaconMetadata = &beaconMetadata3
+
 			return &registrystorage.Committee{
 				ID:        id,
 				Operators: committee,
 				Validators: []*ssvtypes.SSVShare{
-					&share1,
-					&share2,
-					&share3,
+					share1,
+					share2,
+					share3,
 				},
 				Indices: []phase0.ValidatorIndex{
 					share1.ValidatorIndex,
 					share2.ValidatorIndex,
 					share3.ValidatorIndex,
 				},
-			}
+			}, true
 		}
 
-		return nil
+		return nil, false
 	}).AnyTimes()
 
-	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) *ssvtypes.SSVShare {
+	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
 		for _, share := range []*ssvtypes.SSVShare{
 			shares.active,
 			shares.liquidated,
@@ -108,10 +110,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			shares.noMetadata,
 		} {
 			if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
-				return share
+				return share, true
 			}
 		}
-		return nil
+		return nil, false
 	}).AnyTimes()
 
 	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
@@ -1639,6 +1641,19 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
 	})
+}
+
+// Deep copy helper function for testing purposes only
+func cloneSSVShare(t *testing.T, original *ssvtypes.SSVShare) *ssvtypes.SSVShare {
+	// json encode original
+	originalJSON, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	// json decode original
+	cloned := new(ssvtypes.SSVShare)
+	require.NoError(t, json.Unmarshal(originalJSON, cloned))
+
+	return cloned
 }
 
 type shareSet struct {
