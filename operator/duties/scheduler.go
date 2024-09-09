@@ -417,6 +417,8 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeD
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
+		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
 
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
@@ -464,7 +466,6 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committee
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).
-		With(fields.Duties(dutyEpoch, duty.ValidatorDuties)).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
