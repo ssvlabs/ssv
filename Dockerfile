@@ -47,10 +47,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 FROM golang:1.22 AS runner
 
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-    dnsutils && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update     && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+  dnsutils=1:9.18.28-1~deb12u2 && \
+  rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
 

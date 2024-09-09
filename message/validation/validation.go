@@ -213,8 +213,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
 
 		// Rule: Cluster does not exist
-		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole duty executor ID
-		if committee == nil {
+		committee, exists := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole duty executor ID
+		if !exists {
 			e := ErrNonExistentCommitteeID
 			e.got = hex.EncodeToString(committeeID[:])
 			return CommitteeInfo{}, e
@@ -231,8 +231,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
-	validator := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
-	if validator == nil {
+	validator, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
+	if !exists {
 		e := ErrUnknownValidator
 		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
 		return CommitteeInfo{}, e

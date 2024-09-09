@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"slices"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -26,7 +27,8 @@ const (
 type SSVShare struct {
 	spectypes.Share
 	Metadata
-	committeeID *spectypes.CommitteeID
+
+	committeeID atomic.Pointer[spectypes.CommitteeID]
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
@@ -58,16 +60,22 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipientAddress = feeRecipient
 }
 
+// CommitteeID safely retrieves or computes the CommitteeID.
 func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
-	if s.committeeID != nil {
-		return *s.committeeID
+	// Load the current value of committeeID atomically.
+	if ptr := s.committeeID.Load(); ptr != nil {
+		return *ptr
 	}
+
+	// Compute the CommitteeID since it's not yet set.
 	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
 	for i, v := range s.Share.Committee {
 		ids[i] = v.Signer
 	}
 	id := ComputeCommitteeID(ids)
-	s.committeeID = &id
+
+	// Create a new pointer and store it atomically.
+	s.committeeID.Store(&id)
 	return id
 }
 

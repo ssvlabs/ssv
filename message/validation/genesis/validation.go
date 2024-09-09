@@ -413,10 +413,11 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 	}
 
 	var share *ssvtypes.SSVShare
+	var exists bool
 	if mv.nodeStorage != nil {
 		shareStorage := mv.nodeStorage.Shares()
-		share = shareStorage.Get(nil, publicKey.Serialize())
-		if share == nil {
+		share, exists = shareStorage.Get(nil, publicKey.Serialize())
+		if !exists {
 			e := ErrUnknownValidator
 			e.got = publicKey.SerializeToHexStr()
 			return nil, descriptor, e
