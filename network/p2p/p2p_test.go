@@ -76,8 +76,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	//pks := []string{hex.EncodeToString(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize())}
-
 	go func() {
 		defer wg.Done()
 		msgCommittee1 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
