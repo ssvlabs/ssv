@@ -48,11 +48,12 @@ const (
 )
 
 const (
-	connManagerGCInterval           = 1 * time.Minute
-	connManagerGCTimeout            = time.Minute
-	peersReportingInterval          = 60 * time.Second
-	peerIdentitiesReportingInterval = 5 * time.Minute
-	topicsReportingInterval         = 180 * time.Second
+	connManagerGCInterval              = 1 * time.Minute
+	connManagerGCTimeout               = time.Minute
+	peersReportingInterval             = 60 * time.Second
+	peerIdentitiesReportingInterval    = 5 * time.Minute
+	topicsReportingInterval            = 180 * time.Second
+	maximumIrrelevantPeersToDisconnect = 3
 )
 
 // PeersIndexProvider holds peers index instance
@@ -294,10 +295,16 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
 
 		// Disconnect from bad peers
-		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
+		disconnectedPeers := connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
+		if disconnectedPeers > 0 {
+			return
+		}
 
 		// Disconnect from irrelevant peers
-		// connMgr.DisconnectFromIrrelevantPeers(logger, n.host.Network(), allPeers, mySubnets)
+		disconnectedPeers = connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
+		if disconnectedPeers > 0 {
+			return
+		}
 
 		// Trim peers according to subnet participation (considering the subnet size)
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
