@@ -166,8 +166,8 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
-	hasQuorum, roots, err := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
-	return hasQuorum, roots, errors.Wrap(err, "could not process pre-consensus partial signature msg")
+	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+	return hasQuorum, roots, nil
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
@@ -218,9 +218,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
 	}
 
-	// update the highest decided slot
-	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
-
 	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
 		return true, nil, errors.Wrap(err, "decided ValidatorConsensusData invalid")
 	}
@@ -229,6 +226,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	if err != nil {
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
+
+	// update the highest decided slot
+	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
 	return true, decidedValue, nil
 }
@@ -239,15 +239,15 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner R
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
-	hasQuorum, roots, err := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
-	return hasQuorum, roots, errors.Wrap(err, "could not process post-consensus partial signature msg")
+	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+	return hasQuorum, roots, nil
 }
 
 // basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
 	signedMsg *spectypes.PartialSignatureMessages,
 	container *ssv.PartialSigContainer,
-) (bool, [][32]byte, error) {
+) (bool, [][32]byte) {
 	roots := make([][32]byte, 0)
 	anyQuorum := false
 
@@ -270,7 +270,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 		}
 	}
 
-	return anyQuorum, roots, nil
+	return anyQuorum, roots
 }
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
