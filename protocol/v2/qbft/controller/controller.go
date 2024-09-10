@@ -145,12 +145,6 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 		return nil, nil
 	}
 
-	// ProcessMsg returns a nil decidedMsg when given a non-commit message
-	// while the instance is decided. In this case, we have nothing new to broadcast.
-	if decidedMsg == nil {
-		return nil, nil
-	}
-
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
 		logger.Debug("❌ failed to broadcast decided message", zap.Error(err))
