@@ -12,6 +12,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 )
 
@@ -24,6 +25,8 @@ const (
 	//
 )
 
+type BadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
@@ -31,15 +34,17 @@ type connGater struct {
 	disable   bool
 	atLimit   func() bool
 	ipLimiter *leakybucket.Collector
+	isBadPeer BadPeerF
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, isBadPeerF BadPeerF) connmgr.ConnectionGater {
 	return &connGater{
 		logger:    logger,
 		disable:   disable,
 		atLimit:   atLimit,
 		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
+		isBadPeer: isBadPeerF,
 	}
 }
 
@@ -79,6 +84,11 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+	isBad := n.isBadPeer(n.logger, id)
+	if isBad {
+		n.logger.Debug("rejecting connection due to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
@@ -108,6 +109,14 @@ func (n *p2pNetwork) initCfg() error {
 	return nil
 }
 
+// Returns whetehr a peer is bad
+func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
+	if n.idx == nil {
+		return false
+	}
+	return n.idx.IsBad(logger, peerID)
+}
+
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	opts, err := n.cfg.Libp2pOptions(logger)
@@ -121,7 +130,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
