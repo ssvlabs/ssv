@@ -385,7 +385,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		},
 		MsgValidator:           msgValidator,
 		ScoreInspector:         scoreInspector,
-		ScoreInspectorInterval: 100 * time.Millisecond,
+		ScoreInspectorInterval: 50 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
 	}
 	db, err := kv.NewInMemory(logger, basedb.Options{})
