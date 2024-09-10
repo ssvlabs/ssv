@@ -62,7 +62,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - bad score
 func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 
-	if pi.HasBadGossipSubScore(logger, id) {
+	if isBad, _ := pi.HasBadGossipSubScore(logger, id); isBad {
 		return true
 	}
 
@@ -208,6 +208,6 @@ func (pi *peersIndex) Clear() {
 	pi.gossipSubScoreIndex.Clear()
 }
 
-func (pi *peersIndex) HasBadGossipSubScore(logger *zap.Logger, peerID peer.ID) bool {
+func (pi *peersIndex) HasBadGossipSubScore(logger *zap.Logger, peerID peer.ID) (bool, float64) {
 	return pi.gossipSubScoreIndex.HasBadGossipSubScore(logger, peerID)
 }

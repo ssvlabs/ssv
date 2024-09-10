@@ -52,13 +52,13 @@ func (g *gossipSubScoreIndex) Clear() {
 	g.score = make(map[peer.ID]float64)
 }
 
-func (g *gossipSubScoreIndex) HasBadGossipSubScore(logger *zap.Logger, peerID peer.ID) bool {
+func (g *gossipSubScoreIndex) HasBadGossipSubScore(logger *zap.Logger, peerID peer.ID) (bool, float64) {
 	score, exists := g.GetGossipSubScore(peerID)
 
 	logger.Debug("GossipSub score check", fields.PeerID(peerID), zap.Float64("score", score), zap.Bool("has", exists), zap.Bool("is bad", (score <= g.graylistThreshold)), zap.Float64("graylist threshold", g.graylistThreshold))
 
 	if !exists {
-		return false
+		return false, 0.0
 	}
-	return (score <= g.graylistThreshold)
+	return (score <= g.graylistThreshold), score
 }

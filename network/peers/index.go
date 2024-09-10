@@ -121,7 +121,7 @@ type GossipSubScoreIndex interface {
 	// Clear clears the score for all peers
 	Clear()
 	// HasBadGossipSubScore returns true if the peer has a bad GossipSub score
-	HasBadGossipSubScore(logger *zap.Logger, peerID peer.ID) bool
+	HasBadGossipSubScore(logger *zap.Logger, peerID peer.ID) (bool, float64)
 }
 
 // Index is a facade interface of this package

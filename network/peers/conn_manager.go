@@ -217,17 +217,14 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 	for _, peerID := range allPeers {
 
 		// Check if peer is bad
-		if c.gossipSubScoreIndex.HasBadGossipSubScore(logger, peerID) {
-
-			// Get GossipSub score for logging
-			gossipSubScore, hasScore := c.gossipSubScoreIndex.GetGossipSubScore(peerID)
+		if isBad, gossipSubScore := c.gossipSubScoreIndex.HasBadGossipSubScore(logger, peerID); isBad {
 
 			// Disconnect
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("Couldn't disconnect from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore), zap.Bool("has GossipSub Score", hasScore))
+				logger.Error("Couldn't disconnect from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore))
 			} else {
-				logger.Debug("Disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore), zap.Bool("has GossipSub Score", hasScore))
+				logger.Debug("Disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore))
 				disconnectedPeers += 1
 			}
 		}
