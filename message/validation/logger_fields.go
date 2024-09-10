@@ -61,9 +61,13 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 		return descriptor
 	}
 
-	descriptor.DutyExecutorID = decodedMessage.GetID().GetDutyExecutorID()
-	descriptor.Role = decodedMessage.GetID().GetRoleType()
-	descriptor.SSVMessageType = decodedMessage.GetType()
+	if decodedMessage.SSVMessage == nil {
+		return descriptor
+	}
+
+	descriptor.DutyExecutorID = decodedMessage.SSVMessage.GetID().GetDutyExecutorID()
+	descriptor.Role = decodedMessage.SSVMessage.GetID().GetRoleType()
+	descriptor.SSVMessageType = decodedMessage.SSVMessage.GetType()
 
 	if mv.logger.Level() == zap.DebugLevel {
 		mv.addDutyIDField(descriptor)
@@ -87,14 +91,14 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 
 func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	if lf.Role == spectypes.RoleCommittee {
-		c := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
-		if c != nil {
+		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
+		if ok {
 			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
 		}
 	} else {
 		// get the validator index from the msgid
-		v := mv.validatorStore.Validator(lf.DutyExecutorID)
-		if v != nil {
+		v, ok := mv.validatorStore.Validator(lf.DutyExecutorID)
+		if ok {
 			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role.String(), v.ValidatorIndex)
 		}
 	}

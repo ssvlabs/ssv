@@ -159,10 +159,9 @@ type Recipients interface {
 }
 
 type SharesStorage interface {
-	Get(txn basedb.Reader, pubKey []byte) *ssvtypes.SSVShare
+	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
-	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
@@ -772,8 +771,6 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDu
 }
 
 func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
-	logger = logger.With(fields.Slot(duty.Slot), fields.Role(duty.RunnerRole()))
-
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType())
 		if err != nil {
