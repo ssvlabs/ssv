@@ -283,6 +283,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 	return func() {
 		allPeers := n.host.Network().Peers()
+
+		logger.Debug("Peers balancing", zap.Int("Num Peers", len(allPeers)), zap.Int("MaxPeers", n.cfg.MaxPeers))
+
 		currentCount := len(allPeers)
 		if currentCount < n.cfg.MaxPeers {
 			_ = n.idx.GetSubnetsStats() // trigger metrics update
