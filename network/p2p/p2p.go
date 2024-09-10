@@ -297,7 +297,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
 
 		// Disconnect from irrelevant peers
-		connMgr.DisconnectFromIrrelevantPeers(logger, n.host.Network(), allPeers, mySubnets)
+		// connMgr.DisconnectFromIrrelevantPeers(logger, n.host.Network(), allPeers, mySubnets)
 
 		// Trim peers according to subnet participation (considering the subnet size)
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)

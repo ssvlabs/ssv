@@ -4,7 +4,9 @@ import (
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"go.uber.org/zap"
 )
 
 // Implements GossipSubScoreIndex
@@ -50,8 +52,11 @@ func (g *gossipSubScoreIndex) Clear() {
 	g.score = make(map[peer.ID]float64)
 }
 
-func (g *gossipSubScoreIndex) HasBadGossipSubScore(peerID peer.ID) bool {
+func (g *gossipSubScoreIndex) HasBadGossipSubScore(logger *zap.Logger, peerID peer.ID) bool {
 	score, exists := g.GetGossipSubScore(peerID)
+
+	logger.Debug("GossipSub score check", fields.PeerID(peerID), zap.Float64("score", score), zap.Bool("has", exists), zap.Bool("is bad", (score <= g.graylistThreshold)), zap.Float64("graylist threshold", g.graylistThreshold))
+
 	if !exists {
 		return false
 	}
