@@ -48,7 +48,7 @@ const (
 )
 
 const (
-	connManagerGCInterval              = 1 * time.Minute
+	connManagerGCInterval              = 10 * time.Second
 	connManagerGCTimeout               = time.Minute
 	peersReportingInterval             = 60 * time.Second
 	peerIdentitiesReportingInterval    = 5 * time.Minute
@@ -286,11 +286,11 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 
 		logger.Debug("Peers balancing", zap.Int("Num Peers", len(allPeers)), zap.Int("MaxPeers", n.cfg.MaxPeers))
 
-		currentCount := len(allPeers)
-		if currentCount < n.cfg.MaxPeers {
-			_ = n.idx.GetSubnetsStats() // trigger metrics update
-			return
-		}
+		// currentCount := len(allPeers)
+		// if currentCount < n.cfg.MaxPeers {
+		// 	_ = n.idx.GetSubnetsStats() // trigger metrics update
+		// 	return
+		// }
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
 
