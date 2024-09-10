@@ -46,7 +46,7 @@ type Committee struct {
 	//sharesMtx sync.RWMutex
 	Shares map[phase0.ValidatorIndex]*spectypes.Share
 
-	Operator *spectypes.CommitteeMember
+	CommitteeMember *spectypes.CommitteeMember
 
 	CreateRunnerFn          CommitteeRunnerFunc
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
@@ -58,7 +58,7 @@ func NewCommittee(
 	cancel context.CancelFunc,
 	logger *zap.Logger,
 	beaconNetwork spectypes.BeaconNetwork,
-	operator *spectypes.CommitteeMember,
+	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
 ) *Committee {
@@ -72,7 +72,7 @@ func NewCommittee(
 		Shares:        make(map[phase0.ValidatorIndex]*spectypes.Share),
 		//Shares:                  share,
 		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
-		Operator:                operator,
+		CommitteeMember:         committeeMember,
 		CreateRunnerFn:          createRunnerFn,
 	}
 }
@@ -188,13 +188,13 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
+	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
 }
 
 // NOT threadsafe
 func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
 	for slot, runner := range c.Runners {
-		opIds := types.OperatorIDsFromOperators(c.Operator.Committee)
+		opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
 		epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
 		committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
 
@@ -247,7 +247,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		}
 
 		// Verify SignedSSVMessage's signature
-		if err := spectypes.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
+		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
 
@@ -313,7 +313,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
-			opIds := types.OperatorIDsFromOperators(c.Operator.Committee)
+			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
 			epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
 			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
@@ -358,7 +358,7 @@ func (c *Committee) MarshalJSON() ([]byte, error) {
 	// Create object and marshal
 	alias := &CommitteeAlias{
 		Runners:         c.Runners,
-		CommitteeMember: c.Operator,
+		CommitteeMember: c.CommitteeMember,
 		Share:           c.Shares,
 	}
 
@@ -382,14 +382,14 @@ func (c *Committee) UnmarshalJSON(data []byte) error {
 
 	// Assign fields
 	c.Runners = aux.Runners
-	c.Operator = aux.Operator
+	c.CommitteeMember = aux.Operator
 	c.Shares = aux.Shares
 
 	return nil
 }
 
 func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
-	if !(c.Operator.CommitteeID.MessageIDBelongs(msg.GetID())) {
+	if !(c.CommitteeMember.CommitteeID.MessageIDBelongs(msg.GetID())) {
 		return errors.New("msg ID doesn't match committee ID")
 	}
 

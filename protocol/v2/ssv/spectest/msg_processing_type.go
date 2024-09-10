@@ -146,7 +146,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		}
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
-		committee = c.Operator.Committee
+		committee = c.CommitteeMember.Committee
 	default:
 		network = v.Network.(*spectestingutils.TestingNetwork)
 		committee = v.Operator.Committee
