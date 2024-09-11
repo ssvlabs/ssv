@@ -36,13 +36,6 @@ func (g *gossipSubScoreIndex) GetGossipSubScore(peerID peer.ID) (float64, bool) 
 	return 0.0, false
 }
 
-func (g *gossipSubScoreIndex) AddScore(peerID peer.ID, score float64) {
-	g.mutex.Lock()
-	defer g.mutex.Unlock()
-
-	g.score[peerID] = score
-}
-
 func (g *gossipSubScoreIndex) SetScores(peerScores map[peer.ID]float64) {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
@@ -56,13 +49,6 @@ func (g *gossipSubScoreIndex) SetScores(peerScores map[peer.ID]float64) {
 
 func (g *gossipSubScoreIndex) clear() {
 	g.score = make(map[peer.ID]float64)
-}
-
-func (g *gossipSubScoreIndex) Clear() {
-	g.mutex.Lock()
-	defer g.mutex.Unlock()
-
-	g.clear()
 }
 
 func (g *gossipSubScoreIndex) HasBadGossipSubScore(peerID peer.ID) (bool, float64) {

@@ -196,16 +196,12 @@ func (pi *peersIndex) Close() error {
 }
 
 // GossipSubScoreIndex methods
-func (pi *peersIndex) AddScore(peerID peer.ID, score float64) {
-	pi.gossipSubScoreIndex.AddScore(peerID, score)
+func (pi *peersIndex) SetScores(scores map[peer.ID]float64) {
+	pi.gossipSubScoreIndex.SetScores(scores)
 }
 
 func (pi *peersIndex) GetGossipSubScore(peerID peer.ID) (float64, bool) {
 	return pi.gossipSubScoreIndex.GetGossipSubScore(peerID)
-}
-
-func (pi *peersIndex) Clear() {
-	pi.gossipSubScoreIndex.Clear()
 }
 
 func (pi *peersIndex) HasBadGossipSubScore(peerID peer.ID) (bool, float64) {
