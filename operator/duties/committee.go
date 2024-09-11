@@ -106,33 +106,35 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
-	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
-	h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeMap)
+	go func() {
+		committeeDuties := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
+		h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeDuties)
+	}()
 
-	// aggregator and contribution duties
-	toExecute := make([]*spectypes.ValidatorDuty, 0, len(attDuties)+len(syncDuties))
-	for _, d := range attDuties {
-		if h.attHandler.shouldExecute(d) {
-			toExecute = append(toExecute, h.attHandler.toSpecDuty(d, spectypes.BNRoleAggregator))
-		}
-	}
-	for _, d := range syncDuties {
-		if h.syncHandler.shouldExecute(d, slot) {
-			toExecute = append(toExecute, h.syncHandler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
-		}
-	}
-
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	go func() {
+		aggregationDuties := h.buildAggregationDuties(attDuties, syncDuties, slot)
+		h.dutiesExecutor.ExecuteDuties(h.logger, aggregationDuties)
+	}()
 }
 
 func (h *CommitteeHandler) processFetching(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
-	h.attHandler.processFetching(ctx, epoch, slot)
-	h.syncHandler.processFetching(ctx, period, slot, true)
+	go func() {
+		h.attHandler.processFetching(ctx, epoch, slot)
+	}()
+
+	go func() {
+		h.syncHandler.processFetching(ctx, period, slot, true)
+	}()
 }
 
 func (h *CommitteeHandler) processSlotTransition(period uint64, epoch phase0.Epoch, slot phase0.Slot) {
-	h.attHandler.processSlotTransition(epoch, slot)
-	h.syncHandler.processSlotTransition(period, slot)
+	go func() {
+		h.attHandler.processSlotTransition(epoch, slot)
+	}()
+
+	go func() {
+		h.syncHandler.processSlotTransition(period, slot)
+	}()
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
@@ -163,6 +165,23 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 	}
 
 	return committeeMap
+}
+
+func (h *CommitteeHandler) buildAggregationDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.ValidatorDuty {
+	// aggregator and contribution duties
+	toExecute := make([]*spectypes.ValidatorDuty, 0, len(attDuties)+len(syncDuties))
+	for _, d := range attDuties {
+		if h.attHandler.shouldExecute(d) {
+			toExecute = append(toExecute, h.attHandler.toSpecDuty(d, spectypes.BNRoleAggregator))
+		}
+	}
+	for _, d := range syncDuties {
+		if h.syncHandler.shouldExecute(d, slot) {
+			toExecute = append(toExecute, h.syncHandler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
+		}
+	}
+
+	return toExecute
 }
 
 func (h *CommitteeHandler) appendBeaconDuty(vc validatorCommitteeDutyMap, c committeeDutiesMap, beaconDuty *spectypes.ValidatorDuty) {
