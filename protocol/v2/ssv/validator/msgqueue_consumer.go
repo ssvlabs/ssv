@@ -68,6 +68,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
+	role := msgID.GetRoleType().String()
+
 	var q queueContainer
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
@@ -134,6 +136,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+
 		if ctx.Err() != nil {
 			break
 		}
@@ -141,6 +144,18 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
+
+		msgLogger := logger
+		slot, err := msg.Slot()
+		if err == nil {
+			msgDutyID := fields.FormatDutyID(v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot, role, v.Share.ValidatorIndex)
+			msgLogger = msgLogger.With(fields.DutyID(msgDutyID))
+		} else {
+			v.logMsg(msgLogger, msg, "❗ could read slot from message",
+				fields.MessageType(msg.SSVMessage.MsgType),
+				zap.Error(err))
+		}
+
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
 			logger.Debug("📬 [TEMPORARY] queue statistics",
@@ -150,8 +165,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
+		if err := handler(msgLogger, msg); err != nil {
+			v.logMsg(msgLogger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
 		}
