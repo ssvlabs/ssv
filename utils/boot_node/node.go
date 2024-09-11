@@ -11,20 +11,18 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/eth/discover"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
 )
-
-var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // Options contains options to create the node
 type Options struct {
@@ -103,8 +101,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
 	cfg := discover.Config{
-		PrivateKey:   privKey,
-		V5ProtocolID: &SSVProtocolID,
+		PrivateKey: privKey,
 	}
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"

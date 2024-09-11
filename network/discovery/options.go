@@ -2,19 +2,17 @@ package discovery
 
 import (
 	"crypto/ecdsa"
-	"github.com/ssvlabs/ssv/logging"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 	"net"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/network/commons"
 	"go.uber.org/zap"
 
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ssvlabs/ssv/eth/discover"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 )
-
-var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // DiscV5Options for creating a new discv5 listener
 type DiscV5Options struct {
@@ -86,8 +84,7 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 // DiscV5Cfg creates discv5 config from the options
 func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, error) {
 	dv5Cfg := discover.Config{
-		PrivateKey:   opts.NetworkKey,
-		V5ProtocolID: &SSVProtocolID,
+		PrivateKey: opts.NetworkKey,
 	}
 	if len(opts.Bootnodes) > 0 {
 		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)
@@ -101,7 +98,7 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 		zapLogger := logger.Named(logging.NameDiscoveryV5Logger)
 		//TODO: this is a workaround for using slog without upgrade go to 1.21
 		zapHandler := compatible_logger.Option{Logger: zapLogger}.NewZapHandler()
-		newLogger := log.NewLogger(zapHandler)
+		newLogger := log.New(zapHandler)
 		dv5Cfg.Log = newLogger
 	}
 
