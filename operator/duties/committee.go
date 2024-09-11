@@ -106,15 +106,11 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
-	go func() {
-		committeeDuties := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
-		h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeDuties)
-	}()
+	committeeDuties := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
+	h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeDuties)
 
-	go func() {
-		aggregationDuties := h.buildAggregationDuties(attDuties, syncDuties, slot)
-		h.dutiesExecutor.ExecuteDuties(h.logger, aggregationDuties)
-	}()
+	aggregationDuties := h.buildAggregationDuties(attDuties, syncDuties, slot)
+	h.dutiesExecutor.ExecuteDuties(h.logger, aggregationDuties)
 }
 
 func (h *CommitteeHandler) processFetching(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
@@ -128,13 +124,8 @@ func (h *CommitteeHandler) processFetching(ctx context.Context, period uint64, e
 }
 
 func (h *CommitteeHandler) processSlotTransition(period uint64, epoch phase0.Epoch, slot phase0.Slot) {
-	go func() {
-		h.attHandler.processSlotTransition(epoch, slot)
-	}()
-
-	go func() {
-		h.syncHandler.processSlotTransition(period, slot)
-	}()
+	h.attHandler.processSlotTransition(epoch, slot)
+	h.syncHandler.processSlotTransition(period, slot)
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
