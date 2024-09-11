@@ -268,8 +268,8 @@ var baseCommitteeWithRunnerSample = func(
 		runnerSample.GetBaseRunner().BeaconNetwork,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
+		shareMap,
 	)
-	c.Shares = shareMap
 
 	return c
 }

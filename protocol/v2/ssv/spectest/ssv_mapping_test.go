@@ -563,6 +563,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
 			return r.(*runner.CommitteeRunner), nil
 		},
+		specCommittee.Share,
 	)
 	tmpSsvCommittee := &validator.Committee{}
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
@@ -580,7 +581,6 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), testingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
 	}
-	c.Shares = specCommittee.Share
 
 	return c
 }

@@ -980,7 +980,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
-		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc)
+		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc, nil)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 
@@ -1270,11 +1270,10 @@ func SetupCommitteeRunners(
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType(),
-			ValueCheckF:  nil, // sets per role type
+			Domain:       options.NetworkConfig.AlanDomainType,
+			ValueCheckF:  valueCheckF,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
-				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
 			Storage:     options.Storage.Get(convert.RunnerRole(role)),
@@ -1282,17 +1281,16 @@ func SetupCommitteeRunners(
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: specqbft.Round(specqbft.CutoffRound),
 		}
-		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType(), options.Operator.CommitteeID[:], role)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.AlanDomainType, options.Operator.CommitteeID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
 
-	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error) {
+	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, slashableValidators, epoch)
+		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
 		crunner, err := runner.NewCommitteeRunner(
 			options.NetworkConfig,
 			shares,

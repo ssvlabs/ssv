@@ -27,7 +27,7 @@ var (
 	runnerExpirySlots = phase0.Slot(34)
 )
 
-type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, slashableValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error)
+type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error)
 
 type Committee struct {
 	logger *zap.Logger
@@ -38,13 +38,9 @@ type Committee struct {
 	BeaconNetwork spectypes.BeaconNetwork
 	Storage       *storage.QBFTStores
 
-	Queues map[phase0.Slot]queueContainer
-
-	//runnersMtx sync.RWMutex
+	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
-
-	//sharesMtx sync.RWMutex
-	Shares map[phase0.ValidatorIndex]*spectypes.Share
+	Shares  map[phase0.ValidatorIndex]*spectypes.Share
 
 	CommitteeMember *spectypes.CommitteeMember
 
@@ -60,17 +56,19 @@ func NewCommittee(
 	beaconNetwork spectypes.BeaconNetwork,
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
-	// share map[phase0.ValidatorIndex]*spectypes.Share, // TODO Shouldn't we pass the shares map here the same way we do in spec?
+	shares map[phase0.ValidatorIndex]*spectypes.Share,
 ) *Committee {
+	if shares == nil {
+		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
+	}
 	return &Committee{
-		logger:        logger,
-		BeaconNetwork: beaconNetwork,
-		ctx:           ctx,
-		cancel:        cancel,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:        make(map[phase0.ValidatorIndex]*spectypes.Share),
-		//Shares:                  share,
+		logger:                  logger,
+		BeaconNetwork:           beaconNetwork,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		Queues:                  make(map[phase0.Slot]queueContainer),
+		Runners:                 make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:                  shares,
 		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
 		CommitteeMember:         committeeMember,
 		CreateRunnerFn:          createRunnerFn,
@@ -131,67 +129,64 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 
-	slashableValidators := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
-	validatorShares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-	toRemove := make([]int, 0)
-	// Remove beacon duties that don't have a share
-	for i, bd := range duty.ValidatorDuties {
-		share, ok := c.Shares[bd.ValidatorIndex]
-		if !ok {
-			toRemove = append(toRemove, i)
+	// Filter out Beacon duties for which we don't have a share.
+	filteredDuty := &spectypes.CommitteeDuty{
+		Slot:            duty.Slot,
+		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
+	}
+	shares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
+	attesters := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
+	for _, beaconDuty := range duty.ValidatorDuties {
+		share, exists := c.Shares[beaconDuty.ValidatorIndex]
+		if !exists {
+			logger.Debug("no share for validator duty",
+				fields.BeaconRole(beaconDuty.Type),
+				zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
 			continue
 		}
-		if bd.Type == spectypes.BNRoleAttester {
-			slashableValidators = append(slashableValidators, share.SharePubKey)
-		}
-		validatorShares[bd.ValidatorIndex] = share
-	}
-	// Remove beacon duties that don't have a share
-	if len(toRemove) > 0 {
-		newDuties, err := removeIndices(duty.ValidatorDuties, toRemove)
-		if err != nil {
-			logger.Warn("could not remove beacon duties", zap.Error(err), zap.Ints("indices", toRemove))
-		} else {
-			duty.ValidatorDuties = newDuties
-		}
-	}
+		shares[beaconDuty.ValidatorIndex] = share
+		filteredDuty.ValidatorDuties = append(filteredDuty.ValidatorDuties, beaconDuty)
 
-	if len(validatorShares) == 0 {
+		if beaconDuty.Type == spectypes.BNRoleAttester {
+			attesters = append(attesters, share.SharePubKey)
+		}
+	}
+	if len(shares) == 0 {
 		return errors.New("no shares for duty's validators")
 	}
+	duty = filteredDuty
 
-	r, err := c.CreateRunnerFn(duty.Slot, validatorShares, slashableValidators)
+	runner, err := c.CreateRunnerFn(duty.Slot, shares, attesters)
 	if err != nil {
 		return errors.Wrap(err, "could not create CommitteeRunner")
 	}
+
 	// Set timeout function.
-	r.GetBaseRunner().TimeoutF = c.onTimeout
-	c.Runners[duty.Slot] = r
-	if _, ok := c.Queues[duty.Slot]; !ok {
+	runner.GetBaseRunner().TimeoutF = c.onTimeout
+	c.Runners[duty.Slot] = runner
+	_, queueExists := c.Queues[duty.Slot]
+	if !queueExists {
 		c.Queues[duty.Slot] = queueContainer{
 			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
 				Slot:               duty.Slot,
-				//Quorum:             options.SSVShare.Share,// TODO
+				Quorum:             c.CommitteeMember.GetQuorum(),
 			},
 		}
-
 	}
 
-	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
-
 	// Prunes all expired committee runners, when new runner is created
+	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
 	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
 		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
+	return runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
 }
 
-// NOT threadsafe
 func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
 	for slot, runner := range c.Runners {
 		opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
@@ -202,40 +197,23 @@ func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.Valida
 			fields.DutyID(committeeDutyID),
 			fields.Slot(slot), fields.Validator(validator[:]),
 		)
+		// TODO: after StopDuty is implemented, if it's not a super fast operation,
+		// then we maybe shouldn't do it under a lock.
 		runner.StopDuty(validator)
 	}
 }
 
 func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 	c.mtx.RLock()
-	defer c.mtx.RUnlock()
-	if pushed := c.Queues[slot].Q.TryPush(dec); !pushed {
+	queue, exists := c.Queues[slot]
+	c.mtx.RUnlock()
+	if !exists {
+		c.logger.Warn("cannot push to non-existing queue", zap.Uint64("slot", uint64(slot)))
+		return
+	}
+	if pushed := queue.Q.TryPush(dec); !pushed {
 		c.logger.Warn("dropping ExecuteDuty message because the queue is full")
 	}
-}
-
-func removeIndices(s []*spectypes.ValidatorDuty, indicesToRemove []int) ([]*spectypes.ValidatorDuty, error) {
-	// Create a set to check for duplicate and invalid indices
-	uniqueIndices := make(map[int]struct{}, len(indicesToRemove))
-	for _, id := range indicesToRemove {
-		if id < 0 || id >= len(s) {
-			return s, fmt.Errorf("index %d out of range of slice with length %d", id, len(s))
-		}
-		if _, exists := uniqueIndices[id]; exists {
-			return s, fmt.Errorf("duplicate index %d in %v", id, indicesToRemove)
-		}
-		uniqueIndices[id] = struct{}{}
-	}
-
-	// Create a result slice excluding marked elements
-	result := make([]*spectypes.ValidatorDuty, 0, len(s)-len(indicesToRemove))
-	for i, item := range s {
-		if _, found := uniqueIndices[i]; !found {
-			result = append(result, item)
-		}
-	}
-
-	return result, nil
 }
 
 // ProcessMessage processes Network Message of all types
@@ -369,9 +347,9 @@ func (c *Committee) MarshalJSON() ([]byte, error) {
 
 func (c *Committee) UnmarshalJSON(data []byte) error {
 	type CommitteeAlias struct {
-		Runners  map[phase0.Slot]*runner.CommitteeRunner
-		Operator *spectypes.CommitteeMember
-		Shares   map[phase0.ValidatorIndex]*spectypes.Share
+		Runners         map[phase0.Slot]*runner.CommitteeRunner
+		CommitteeMember *spectypes.CommitteeMember
+		Shares          map[phase0.ValidatorIndex]*spectypes.Share
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -382,7 +360,7 @@ func (c *Committee) UnmarshalJSON(data []byte) error {
 
 	// Assign fields
 	c.Runners = aux.Runners
-	c.CommitteeMember = aux.Operator
+	c.CommitteeMember = aux.CommitteeMember
 	c.Shares = aux.Shares
 
 	return nil
