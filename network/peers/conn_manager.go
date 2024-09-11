@@ -224,7 +224,7 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 			if err != nil {
 				logger.Error("failed to disconnect from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore))
 			} else {
-				logger.Debug("Disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore))
+				logger.Debug("disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipSubScore))
 				disconnectedPeers += 1
 			}
 		}
