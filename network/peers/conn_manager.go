@@ -222,9 +222,9 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 			// Disconnect
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("Couldn't disconnect from bad peer", fields.PeerID(peerID), zap.Float64("Gossip Score", gossipScore))
+				logger.Error("failed to disconnect from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipScore))
 			} else {
-				logger.Debug("Disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("Gossip Score", gossipScore))
+				logger.Debug("disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
 				disconnectedPeers += 1
 			}
 		}
@@ -249,9 +249,9 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnec
 		if len(sharedSubnets) == 0 {
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("Couldn't disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
+				logger.Error("failed to disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
 			} else {
-				logger.Debug("Disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
+				logger.Debug("disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
 				disconnectedPeers += 1
 				if disconnectedPeers >= disconnectQuota {
 					return disconnectedPeers
