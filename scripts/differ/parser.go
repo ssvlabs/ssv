@@ -143,6 +143,9 @@ func (p *Parser) transformFuncDecl(funcDecl *ast.FuncDecl) {
 	if funcDecl.Type.Params != nil {
 		newList := []*ast.Field{}
 		for _, field := range funcDecl.Type.Params.List {
+			if len(field.Names) == 0 {
+				continue
+			}
 			if !p.containsIdent(field.Names[0].Name) {
 				newList = append(newList, field)
 			}
