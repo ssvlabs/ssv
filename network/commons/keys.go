@@ -1,7 +1,6 @@
 package commons
 
 import (
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"crypto/rsa"
@@ -27,15 +26,16 @@ func ECDSAPrivFromInterface(privkey crypto.PrivKey) (*ecdsa.PrivateKey, error) {
 	privKey.D = k
 	privKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
 
-	ecdhPrivKey, err := ecdh.P256().NewPrivateKey(rawKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not generate ecdh private key")
-	}
-	ecdhPubKey := ecdhPrivKey.PublicKey()
-	pubKeyBytes := ecdhPubKey.Bytes()
+	pubKey := privkey.GetPublic()
 
-	privKey.X = new(big.Int).SetBytes(pubKeyBytes[:len(pubKeyBytes)/2])
-	privKey.Y = new(big.Int).SetBytes(pubKeyBytes[len(pubKeyBytes)/2:])
+	pubKeyBytes, err := pubKey.Raw()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not extract public key")
+	}
+
+	halfLen := len(pubKeyBytes) / 2
+	privKey.PublicKey.X = new(big.Int).SetBytes(pubKeyBytes[:halfLen])
+	privKey.PublicKey.Y = new(big.Int).SetBytes(pubKeyBytes[halfLen:])
 
 	return privKey, nil
 }
