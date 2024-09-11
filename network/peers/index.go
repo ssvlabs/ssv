@@ -115,11 +115,9 @@ type SubnetsIndex interface {
 // GossipSubScoreIndex serves as an interface to get a peer's GossipSub score
 type GossipSubScoreIndex interface {
 	// AddScore adds a score for a peer
-	AddScore(peerID peer.ID, score float64)
+	SetScores(scores map[peer.ID]float64)
 	// GetGossipSubScore returns the peer score and a boolean flag for whether it has such score or not
 	GetGossipSubScore(peerID peer.ID) (float64, bool)
-	// Clear clears the score for all peers
-	Clear()
 	// HasBadGossipSubScore returns true if the peer has a bad GossipSub score
 	HasBadGossipSubScore(peerID peer.ID) (bool, float64)
 }

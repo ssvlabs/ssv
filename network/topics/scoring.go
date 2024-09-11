@@ -190,12 +190,14 @@ func scoreInspector(logger *zap.Logger,
 // Updates the GossipSubScoreIndex with the peers' scores
 func updateGossipSubScoreIndex(gossipSubScoreIndex peers.GossipSubScoreIndex, scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 	// Reset the index
-	gossipSubScoreIndex.Clear()
+	peerScores := make(map[peer.ID]float64)
 
 	// Add the score for each peer
-	for pid, peerScores := range scores {
-		gossipSubScoreIndex.AddScore(pid, peerScores.Score)
+	for pid, ps := range scores {
+		peerScores[pid] = ps.Score
 	}
+
+	gossipSubScoreIndex.SetScores(peerScores)
 }
 
 // topicScoreParams factory for creating scoring params for topics
