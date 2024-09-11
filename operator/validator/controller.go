@@ -198,7 +198,6 @@ type controller struct {
 	genesisValidatorOptions genesisvalidator.Options
 	validatorStore          registrystorage.ValidatorStore
 	validatorsMap           *validators.ValidatorsMap
-	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
 
 	metadataUpdateInterval time.Duration

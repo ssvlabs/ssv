@@ -237,9 +237,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
-			validatorStartFunc := func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			}
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
 				network:           network,
@@ -254,7 +251,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				metrics: validator.NopMetrics{},
 			}
 			ctr := setupController(logger, controllerOptions)
-			ctr.validatorStartFunc = validatorStartFunc
 			ctr.StartValidators()
 		})
 	}
@@ -435,11 +431,6 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 			ctr := setupController(logger, controllerOptions)
 
-			validatorStartFunc := func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			}
-			ctr.validatorStartFunc = validatorStartFunc
-
 			data := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata)
 			data[tc.testPublicKey] = tc.metadata
 
@@ -548,7 +539,6 @@ func TestSetupValidators(t *testing.T) {
 		shares             []*types.SSVShare
 		recipientData      *registrystorage.RecipientData
 		bcResponse         map[phase0.ValidatorIndex]*eth2apiv1.Validator
-		validatorStartFunc func(validator *validators.ValidatorContainer) (bool, error)
 	}{
 		{
 			name:               "setting fee recipient to storage data",
@@ -561,9 +551,6 @@ func TestSetupValidators(t *testing.T) {
 			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			},
 		},
 		{
 			name:               "setting fee recipient to owner address",
@@ -576,9 +563,6 @@ func TestSetupValidators(t *testing.T) {
 			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			},
 		},
 		{
 			name:               "failed to set fee recipient",
@@ -591,9 +575,6 @@ func TestSetupValidators(t *testing.T) {
 			inited:             0,
 			started:            0,
 			bcMockTimes:        0,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			},
 		},
 		{
 			name:               "start share with metadata",
@@ -606,9 +587,6 @@ func TestSetupValidators(t *testing.T) {
 			inited:             1,
 			started:            1,
 			bcMockTimes:        0,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			},
 		},
 		{
 			name:               "start share without metadata",
@@ -621,9 +599,6 @@ func TestSetupValidators(t *testing.T) {
 			recipientFound:     false,
 			bcResponse:         bcResponse,
 			shares:             []*types.SSVShare{shareWithoutMetaData},
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			},
 		},
 		{
 			name:               "failed to get GetValidatorData",
@@ -636,24 +611,6 @@ func TestSetupValidators(t *testing.T) {
 			inited:             0,
 			started:            0,
 			shares:             []*types.SSVShare{shareWithoutMetaData},
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, nil
-			},
-		},
-		{
-			name:               "failed to start validator",
-			shares:             []*types.SSVShare{shareWithMetaData},
-			recipientData:      nil,
-			recipientFound:     false,
-			recipientErr:       nil,
-			recipientMockTimes: 1,
-			bcResponse:         bcResponse,
-			inited:             1,
-			started:            0,
-			bcMockTimes:        0,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
-				return true, errors.New("some error")
-			},
 		},
 	}
 
@@ -709,7 +666,6 @@ func TestSetupValidators(t *testing.T) {
 
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
 			ctr := setupController(logger, controllerOptions)
-			ctr.validatorStartFunc = tc.validatorStartFunc
 			inited, _ := ctr.setupValidators(tc.shares)
 			require.Len(t, inited, tc.inited)
 			// TODO: Alan, should we check for committee too?
