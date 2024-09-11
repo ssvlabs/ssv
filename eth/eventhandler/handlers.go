@@ -54,7 +54,11 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 
 	// throw an error if there is an existing operator with the same public key and different operator id
 	operatorData := eh.operatorDataStore.GetOperatorData()
-	if operatorData.ID != 0 && bytes.Equal(operatorData.PublicKey, event.PublicKey) && operatorData.ID != event.OperatorId {
+	_, found, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, event.PublicKey)
+	if err != nil {
+		return fmt.Errorf("could not get operator data by public key: %w", err)
+	}
+	if found || operatorData.ID != 0 && bytes.Equal(operatorData.PublicKey, event.PublicKey) && operatorData.ID != event.OperatorId {
 		logger.Warn("malformed event: operator registered with the same operator public key",
 			zap.Uint64("expected_operator_id", operatorData.ID))
 		return &MalformedEventError{Err: ErrAlreadyRegistered}

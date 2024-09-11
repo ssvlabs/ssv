@@ -202,6 +202,66 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 	})
 
+	t.Run("test OperatorAdded event handle with duplicated pubkey, but different Id", func(t *testing.T) {
+		op := &testOperator{}
+		op.id = 5
+		op.privateKey = ops[0].privateKey
+
+		encodedPubKey, err := op.privateKey.Public().Base64()
+		require.NoError(t, err)
+
+		// Call the contract method
+		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+		require.NoError(t, err)
+		_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+		require.NoError(t, err)
+
+		sim.Commit()
+
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
+
+		eventsCh := make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+
+		// Check that there is no registered operators
+		operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+		require.NoError(t, err)
+		require.Equal(t, len(ops), len(operators))
+
+		// Handle the event
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.NoError(t, err)
+		blockNum++
+
+		// Check storage for the new operators
+		operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+		require.NoError(t, err)
+		require.Equal(t, len(ops), len(operators))
+
+		// Check if operators in the storage have same attributes
+		for _, log := range block.Logs {
+			operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(log)
+			require.NoError(t, err)
+			fmt.Println(operatorAddedEvent)
+
+			//data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
+			//require.NoError(t, err)
+			//require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
+			//require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
+			//
+			//encodedPubKey, err := ops[i].privateKey.Public().Base64()
+			//require.NoError(t, err)
+			//
+			//require.Equal(t, encodedPubKey, data.PublicKey)
+		}
+	})
+
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
 
 		// Should return MalformedEventError and no changes to the state
