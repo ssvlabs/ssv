@@ -251,7 +251,7 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnec
 			if err != nil {
 				logger.Error("failed to disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
 			} else {
-				logger.Debug("Disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
+				logger.Debug("disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
 				disconnectedPeers += 1
 				if disconnectedPeers >= disconnectQuota {
 					return disconnectedPeers
