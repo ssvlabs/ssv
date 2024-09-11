@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"sync"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -106,26 +107,42 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
-	committeeDuties := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
-	h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeDuties)
+	go func() {
+		committeeDuties := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
+		h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeDuties)
+	}()
 
-	aggregationDuties := h.buildAggregationDuties(attDuties, syncDuties, slot)
-	h.dutiesExecutor.ExecuteDuties(h.logger, aggregationDuties)
+	go func() {
+		aggregationDuties := h.buildAggregationDuties(attDuties, syncDuties, slot)
+		h.dutiesExecutor.ExecuteDuties(h.logger, aggregationDuties)
+	}()
 }
 
 func (h *CommitteeHandler) processFetching(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
 	go func() {
+		defer wg.Done() // Mark this goroutine as done once it completes
 		h.attHandler.processFetching(ctx, epoch, slot)
 	}()
 
 	go func() {
+		defer wg.Done() // Mark this goroutine as done once it completes
 		h.syncHandler.processFetching(ctx, period, slot, true)
 	}()
+
+	wg.Wait()
 }
 
 func (h *CommitteeHandler) processSlotTransition(period uint64, epoch phase0.Epoch, slot phase0.Slot) {
-	h.attHandler.processSlotTransition(epoch, slot)
-	h.syncHandler.processSlotTransition(period, slot)
+	go func() {
+		h.attHandler.processSlotTransition(epoch, slot)
+	}()
+
+	go func() {
+		h.syncHandler.processSlotTransition(period, slot)
+	}()
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
