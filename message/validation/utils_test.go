@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"fmt"
 	"testing"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
