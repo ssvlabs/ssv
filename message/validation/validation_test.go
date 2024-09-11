@@ -1383,6 +1383,23 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
 
+	// Receive a unknown message type from an operator that is not myself should receive an error
+	t.Run("unknown type message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		unknownType := spectypes.MsgType(12345)
+		signedSSVMessage.SSVMessage.MsgType = unknownType
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorContains(t, err, fmt.Sprintf("%s, got %d", ErrUnknownSSVMessageType.Error(), unknownType))
+	})
+
 	// Receive a message with a wrong signature
 	t.Run("wrong signature", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, wrongSignatureVerifier).(*messageValidator)
