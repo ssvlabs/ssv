@@ -595,7 +595,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 }
 
 // reorg previous dependent root changed
-func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_Only(t *testing.T) {
+func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *testing.T) {
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -693,7 +693,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_Only(t *te
 }
 
 // reorg previous dependent root changed and the indices changed as well
-func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Attester_Only(t *testing.T) {
+func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Attester_only(t *testing.T) {
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -809,7 +809,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 }
 
 // reorg previous dependent root changed
-func TestScheduler_Committee_Reorg_Previous_Attester_Only(t *testing.T) {
+func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -831,6 +831,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_Only(t *testing.T) {
 			},
 		}
 	)
+
 	attDuties.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -839,15 +840,13 @@ func TestScheduler_Committee_Reorg_Previous_Attester_Only(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched (handle initial duties)
+	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	currentSlot.Set(phase0.Slot(32))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
+	waitForDuties.Set(true)
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
@@ -859,7 +858,6 @@ func TestScheduler_Committee_Reorg_Previous_Attester_Only(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	waitForDuties.Set(true)
 	currentSlot.Set(phase0.Slot(33))
 	ticker.Send(currentSlot.Get())
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -881,6 +879,8 @@ func TestScheduler_Committee_Reorg_Previous_Attester_Only(t *testing.T) {
 	scheduler.HandleHeadEvent(logger)(e)
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	// no execution should happen in slot 33
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: Ticker with no action
 	currentSlot.Set(phase0.Slot(34))
@@ -895,350 +895,6 @@ func TestScheduler_Committee_Reorg_Previous_Attester_Only(t *testing.T) {
 	// STEP 7: execute reorged duty
 	currentSlot.Set(phase0.Slot(36))
 	aDuties, _ := attDuties.Get(phase0.Epoch(1))
-	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, currentSlot.Get())
-	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
-
-	ticker.Send(currentSlot.Get())
-	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
-}
-
-// reorg previous dependent root changed and the indices changed the same slot
-func TestScheduler_Committee_Reorg_Previous_Indices_Changed_Attester_Only(t *testing.T) {
-	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
-		alanForkEpoch = phase0.Epoch(0)
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
-	)
-	attDuties.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(35),
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
-	})
-
-	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	currentSlot.Set(phase0.Slot(32))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-	startFn()
-
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 2: trigger head event
-	e := &eth2apiv1.Event{
-		Data: &eth2apiv1.HeadEvent{
-			Slot:                      currentSlot.Get(),
-			PreviousDutyDependentRoot: phase0.Root{0x01},
-		},
-	}
-	scheduler.HandleHeadEvent(logger)(e)
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(33))
-	waitForDuties.Set(true)
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 4: trigger reorg
-	e = &eth2apiv1.Event{
-		Data: &eth2apiv1.HeadEvent{
-			Slot:                      currentSlot.Get(),
-			PreviousDutyDependentRoot: phase0.Root{0x02},
-		},
-	}
-	attDuties.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(36),
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
-	})
-	scheduler.HandleHeadEvent(logger)(e)
-	// wait for attester duties to be fetched
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 5: trigger indices change
-	scheduler.indicesChg <- struct{}{}
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	aDuties, _ := attDuties.Get(phase0.Epoch(1))
-	attDuties.Set(phase0.Epoch(1), append(aDuties, &eth2apiv1.AttesterDuty{
-		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		Slot:           phase0.Slot(36),
-		ValidatorIndex: phase0.ValidatorIndex(2),
-	}))
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 6: wait for attester duties to be fetched again for the current epoch
-	currentSlot.Set(phase0.Slot(34))
-	ticker.Send(currentSlot.Get())
-	// wait for attester duties to be fetched
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	// wait for sync committee duties to be fetched
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 7: The first assigned duty should not be executed
-	currentSlot.Set(phase0.Slot(35))
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 8: The second and new from indices change assigned duties should be executed
-	currentSlot.Set(phase0.Slot(36))
-	aDuties, _ = attDuties.Get(phase0.Epoch(1))
-	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, currentSlot.Get())
-	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
-
-	ticker.Send(currentSlot.Get())
-	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
-}
-
-// reorg current dependent root changed
-func TestScheduler_Committee_Reorg_Current_Attester_Only(t *testing.T) {
-	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
-		alanForkEpoch = phase0.Epoch(0)
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-		}
-	)
-	currentSlot.Set(phase0.Slot(48))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-	startFn()
-
-	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(64),
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
-	})
-
-	// STEP 1: wait for attester duties to be fetched for next epoch
-	waitForDuties.Set(true)
-	ticker.Send(currentSlot.Get())
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 2: trigger head event
-	e := &eth2apiv1.Event{
-		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.Get(),
-			CurrentDutyDependentRoot: phase0.Root{0x01},
-		},
-	}
-	scheduler.HandleHeadEvent(logger)(e)
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(49))
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 4: trigger reorg
-	e = &eth2apiv1.Event{
-		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.Get(),
-			CurrentDutyDependentRoot: phase0.Root{0x02},
-		},
-	}
-	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(65),
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
-	})
-	scheduler.HandleHeadEvent(logger)(e)
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 5: wait for attester duties to be fetched again for the current epoch
-	currentSlot.Set(phase0.Slot(50))
-	ticker.Send(currentSlot.Get())
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 6: skip to the next epoch
-	currentSlot.Set(phase0.Slot(51))
-	for slot := currentSlot.Get(); slot < 64; slot++ {
-		ticker.Send(slot)
-		waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-		currentSlot.Set(slot + 1)
-	}
-
-	// STEP 7: The first assigned duty should not be executed
-	// slot = 64
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 8: The second assigned duty should be executed
-	currentSlot.Set(phase0.Slot(65))
-	aDuties, _ := attDuties.Get(phase0.Epoch(2))
-	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, currentSlot.Get())
-	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
-
-	ticker.Send(currentSlot.Get())
-	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
-}
-
-// reorg current dependent root changed including indices change in the same slot
-func TestScheduler_Committee_Reorg_Current_Indices_Changed_Attester_Only(t *testing.T) {
-	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
-		alanForkEpoch = phase0.Epoch(0)
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
-	)
-	currentSlot.Set(phase0.Slot(48))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-	startFn()
-
-	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(48),
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
-	})
-
-	// STEP 1: wait for attester duties to be fetched for next epoch
-	waitForDuties.Set(true)
-	ticker.Send(currentSlot.Get())
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 2: trigger head event
-	e := &eth2apiv1.Event{
-		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.Get(),
-			CurrentDutyDependentRoot: phase0.Root{0x01},
-		},
-	}
-	scheduler.HandleHeadEvent(logger)(e)
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(49))
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 4: trigger reorg
-	e = &eth2apiv1.Event{
-		Data: &eth2apiv1.HeadEvent{
-			Slot:                     currentSlot.Get(),
-			CurrentDutyDependentRoot: phase0.Root{0x02},
-		},
-	}
-	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(65),
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
-	})
-	scheduler.HandleHeadEvent(logger)(e)
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 5: trigger indices change
-	scheduler.indicesChg <- struct{}{}
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	aDuties, _ := attDuties.Get(phase0.Epoch(2))
-	attDuties.Set(phase0.Epoch(2), append(aDuties, &eth2apiv1.AttesterDuty{
-		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		Slot:           phase0.Slot(65),
-		ValidatorIndex: phase0.ValidatorIndex(2),
-	}))
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 6: wait for attester duties to be fetched again for the next epoch due to indices change
-	currentSlot.Set(phase0.Slot(50))
-	ticker.Send(currentSlot.Get())
-	// wait for attester duties to be fetched
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	// wait for sync committee duties to be fetched
-	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 7: The first assigned duty should not be executed
-	currentSlot.Set(phase0.Slot(35))
-	ticker.Send(currentSlot.Get())
-	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 8: The second and new from indices change assigned duties should be executed
-	currentSlot.Set(phase0.Slot(36))
-	aDuties, _ = attDuties.Get(phase0.Epoch(1))
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, currentSlot.Get())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
