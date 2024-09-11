@@ -64,7 +64,11 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusDescriptor, msgSlot, err
 	}
 
-	if maxRound := mv.maxRound(role); msgRound > maxRound {
+	maxRound, err := mv.maxRound(role)
+	if err != nil {
+		return consensusDescriptor, msgSlot, errors.Wrap(err, "failed to get max round")
+	}
+	if msgRound > maxRound {
 		err := ErrRoundTooHigh
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
 		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
@@ -334,16 +338,16 @@ func (mv *messageValidator) isDecidedMessage(signedMsg *genesisspecqbft.SignedMe
 	return signedMsg.Message.MsgType == genesisspecqbft.CommitMsgType && len(signedMsg.Signers) > 1
 }
 
-func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) genesisspecqbft.Round {
+func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) (genesisspecqbft.Round, error) {
 	switch role {
 	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
-		return 12 // TODO: consider calculating based on quick timeout and slow timeout
+		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
 	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleSyncCommittee, genesisspectypes.BNRoleSyncCommitteeContribution:
-		return 6
+		return 6, nil
 	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
-		return 0
+		return 0, nil
 	default:
-		panic("unknown role")
+		return 0, errors.New("unknown role")
 	}
 }
 
@@ -357,16 +361,16 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 	return estimatedRound
 }
 
-func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole) time.Duration {
+func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole) (time.Duration, error) {
 	switch role {
 	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleSyncCommittee:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3
+		return mv.netCfg.Beacon.SlotDurationSec() / 3, nil
 	case genesisspectypes.BNRoleAggregator, genesisspectypes.BNRoleSyncCommitteeContribution:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
+		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2, nil
 	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
-		return 0
+		return 0, nil
 	default:
-		panic("unknown role")
+		return 0, errors.New("unknown role")
 	}
 }
 

@@ -87,7 +87,7 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSign
 			return err
 		}
 	default:
-		panic("unexpected partial signature message type") // should be checked before
+		return errors.New("unexpected partial signature message type") // should be checked before
 	}
 
 	return nil
@@ -113,15 +113,16 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 }
 
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
-func (c *MessageCounts) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) {
+func (c *MessageCounts) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
 	switch messages.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		c.PreConsensus++
 	case spectypes.PostConsensusPartialSig:
 		c.PostConsensus++
 	default:
-		panic("unexpected partial signature message type") // should be checked before
+		return errors.New("unexpected partial signature message type") // should be checked before
 	}
+	return nil
 }
 
 // maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
