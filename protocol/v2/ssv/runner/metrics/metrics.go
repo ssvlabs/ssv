@@ -65,6 +65,11 @@ var (
 		Name: "ssv_instances_decided",
 		Help: "Number of decided QBFT instances",
 	}, []string{"role"})
+	metricsBeaconDataDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_beacon_data_duration_seconds",
+		Help:    "Beacon Data duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
 )
 
 func init() {
@@ -76,6 +81,7 @@ func init() {
 		metricsDutyFullFlowDuration,
 		metricsRolesSubmitted,
 		metricsRolesSubmissionFailures,
+		metricsBeaconDataDuration,
 	}
 	logger := zap.L()
 	for _, metric := range metricsList {
@@ -119,6 +125,7 @@ func NewConsensusMetrics(role spectypes.RunnerRole) ConsensusMetrics {
 		beaconSubmission:        metricsBeaconSubmissionDuration.WithLabelValues(values...),
 		dutyFullFlow:            metricsDutyFullFlowDuration.WithLabelValues(values...),
 		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
+		beaconData:              metricsBeaconDataDuration.WithLabelValues(values...),
 		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
 		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
 		metricsInstancesStarted: metricsInstancesStarted.WithLabelValues(values...),

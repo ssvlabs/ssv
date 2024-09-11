@@ -92,6 +92,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
+	r.metrics.EndPreConsensus()
 
 	share := r.GetShare()
 	if share == nil {

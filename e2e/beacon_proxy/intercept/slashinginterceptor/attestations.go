@@ -80,6 +80,8 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 
 	_, gateway := s.requestContext(ctx)
 
+	s.initializeEpochs(epoch)
+
 	if s.blockedEpoch(epoch) {
 		return []*v1.AttesterDuty{}, nil
 	}
@@ -126,6 +128,22 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 	return duties, nil
 }
 
+func (s *SlashingInterceptor) initializeEpochs(epoch phase0.Epoch) {
+	if !s.IsInterceptorInitialize() {
+		s.startEpoch = epoch + 1
+		s.endEpoch = epoch + 2
+		s.logger.Debug("initialize slashing interceptor epochs",
+			zap.Any("start_epoch", s.startEpoch),
+			zap.Any("end_epoch", s.endEpoch),
+			zap.Any("past_alan_fork", s.pastAlanFork),
+		)
+	}
+}
+
+func (s *SlashingInterceptor) IsInterceptorInitialize() bool {
+	return s.startEpoch != 0 && s.endEpoch != 0
+}
+
 func (s *SlashingInterceptor) InterceptAttestationData(
 	ctx context.Context,
 	slot phase0.Slot,
@@ -141,10 +159,10 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 	if s.blockedEpoch(epoch) {
 		return nil, fmt.Errorf("attestation data requested for blocked epoch %d", epoch)
 	}
-
 	for validatorIndex, state := range s.validators {
 		// Skip validators that are not in the requested committee.
-		if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && firstDuty.CommitteeIndex == committeeIndex {
+		//TODO: REMOVE COMMITTEE INDEX CHECK ONCE PASS FORK
+		if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && (s.pastAlanFork || firstDuty.CommitteeIndex == committeeIndex) {
 			s.logger.Debug("got first attestation data request", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
 			if epoch != s.startEpoch {
@@ -166,8 +184,8 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			state.firstAttestationData[gateway] = data
 			return data, nil
 		}
-
-		if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == committeeIndex {
+		//TODO: REMOVE COMMITTEE INDEX CHECK ONCE PASS FORK
+		if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && (s.pastAlanFork || secondDuty.CommitteeIndex == committeeIndex) {
 			s.logger.Debug("got second attestation data request", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
 			if epoch != s.endEpoch {
@@ -246,7 +264,8 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 			logger := logger.With(zap.Any("validator", validatorIndex))
 
 			// Skip validators that are not in the requested committee.
-			if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && firstDuty.CommitteeIndex == attestation.Data.Index {
+			//TODO: REMOVE COMMITTEE INDEX CHECK ONCE PASS FORK
+			if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && (s.pastAlanFork || firstDuty.CommitteeIndex == attestation.Data.Index) {
 				// Record the submitted attestation.
 				if _, ok := state.firstSubmittedAttestation[gateway]; ok {
 					return nil, fmt.Errorf("first attestation already submitted")
@@ -264,7 +283,8 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 				continue
 			}
 
-			if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == attestation.Data.Index {
+			//TODO: REMOVE COMMITTEE INDEX CHECK ONCE PASS FORK
+			if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && (s.pastAlanFork || secondDuty.CommitteeIndex == attestation.Data.Index) {
 				logger.Debug("got second attestation submission")
 
 				// Record the second submitted attestation.
@@ -282,7 +302,6 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 				if state.attesterTest.Slashable {
 					return nil, fmt.Errorf("misbehavior: slashable attestation was submitted during the end epoch")
 				}
-
 				continue
 			}
 		}
