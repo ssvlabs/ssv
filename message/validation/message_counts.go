@@ -64,7 +64,7 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 			return err
 		}
 	default:
-		return errors.New("unexpected signed message type")
+		return errors.New("unexpected signed message type") // should be checked before
 	}
 
 	return nil
@@ -107,7 +107,7 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 	case specqbft.RoundChangeMsgType:
 		c.RoundChange++
 	default:
-		return errors.New("unexpected signed message type")
+		return errors.New("unexpected signed message type") // should be checked before
 	}
 	return nil
 }

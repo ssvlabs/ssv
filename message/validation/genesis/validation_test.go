@@ -866,7 +866,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
-		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
+		timeToWait, err := validator.waitAfterSlotStart(spectypes.BNRoleProposer)
 		require.NoError(t, err)
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait), nil)
 		require.ErrorContains(t, err, ErrNoDuty.Error())
@@ -874,7 +874,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		dutyStore = dutystore.New()
 		dutyStore.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{}, true)
 		validator = New(netCfg, WithNodeStorage(ns), WithDutyStore(dutyStore)).(*messageValidator)
-		timeToWait, err = validator.waitAfterSlotStart(roleAttester)
+		timeToWait, err = validator.waitAfterSlotStart(spectypes.BNRoleProposer)
 		require.NoError(t, err)
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait), nil)
 		require.NoError(t, err)
