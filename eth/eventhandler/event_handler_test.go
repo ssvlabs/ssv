@@ -202,10 +202,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 	})
 
-	t.Run("test OperatorAdded event handle with duplicated pubkey, but different Id", func(t *testing.T) {
+	t.Run("test OperatorAdded event handle with the same pubkey, but with a different id", func(t *testing.T) {
 		op := &testOperator{}
 		op.id = 5
-		op.privateKey = ops[0].privateKey
+		op.privateKey = ops[1].privateKey
 
 		encodedPubKey, err := op.privateKey.Public().Base64()
 		require.NoError(t, err)
@@ -243,23 +243,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 		require.NoError(t, err)
 		require.Equal(t, len(ops), len(operators))
-
-		// Check if operators in the storage have same attributes
-		for _, log := range block.Logs {
-			operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(log)
-			require.NoError(t, err)
-			fmt.Println(operatorAddedEvent)
-
-			//data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
-			//require.NoError(t, err)
-			//require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
-			//require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
-			//
-			//encodedPubKey, err := ops[i].privateKey.Public().Base64()
-			//require.NoError(t, err)
-			//
-			//require.Equal(t, encodedPubKey, data.PublicKey)
-		}
 	})
 
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {

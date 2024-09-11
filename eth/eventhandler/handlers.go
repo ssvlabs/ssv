@@ -64,7 +64,6 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return &MalformedEventError{Err: ErrAlreadyRegistered}
 	}
 
-	// TODO: consider saving other operators as well
 	exists, err := eh.nodeStorage.SaveOperatorData(txn, od)
 	if err != nil {
 		return fmt.Errorf("save operator data: %w", err)
