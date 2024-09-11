@@ -1383,22 +1383,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
 
-	// Receive a dkg message from an operator that is not myself should receive an error
-	t.Run("dkg message", func(t *testing.T) {
-		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.SSVMessage.MsgType = spectypes.DKGMsgType
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
-
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		require.ErrorIs(t, err, ErrDKGMessage)
-	})
-
 	// Receive a message with a wrong signature
 	t.Run("wrong signature", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, wrongSignatureVerifier).(*messageValidator)

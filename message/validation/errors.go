@@ -92,7 +92,6 @@ var (
 	ErrFullDataHash                            = Error{text: "couldn't hash root", reject: true}
 	ErrUndecodableMessageData                  = Error{text: "message data could not be decoded", reject: true}
 	ErrEventMessage                            = Error{text: "unexpected event message", reject: true}
-	ErrDKGMessage                              = Error{text: "unexpected DKG message", reject: true}
 	ErrUnknownSSVMessageType                   = Error{text: "unknown SSV message type", reject: true}
 	ErrUnknownQBFTMessageType                  = Error{text: "unknown QBFT message type", reject: true}
 	ErrInvalidPartialSignatureType             = Error{text: "unknown partial signature message type", reject: true}
