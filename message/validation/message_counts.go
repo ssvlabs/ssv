@@ -5,6 +5,7 @@ package validation
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -63,7 +64,7 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 			return err
 		}
 	default:
-		panic("unexpected signed message type") // should be checked before
+		return errors.New("unexpected signed message type")
 	}
 
 	return nil
@@ -93,7 +94,7 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSign
 }
 
 // RecordConsensusMessage updates the counts based on the provided consensus message type.
-func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) {
+func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		c.Proposal++
@@ -106,8 +107,9 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 	case specqbft.RoundChangeMsgType:
 		c.RoundChange++
 	default:
-		panic("unexpected signed message type") // should be checked before
+		return errors.New("unexpected signed message type")
 	}
+	return nil
 }
 
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.

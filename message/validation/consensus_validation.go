@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -276,7 +277,11 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// Rule: Round cut-offs for roles:
 	// - 12 (committee and aggregation)
 	// - 6 (other types)
-	if maxRound := mv.maxRound(role); consensusMessage.Round > maxRound {
+	maxRound, err := mv.maxRound(role)
+	if err != nil {
+		return errors.Wrap(err, "failed to get max round")
+	}
+	if consensusMessage.Round > maxRound {
 		err := ErrRoundTooHigh
 		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
 		err.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
@@ -326,8 +331,7 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 		signerState.SeenSigners[encodedOperators] = struct{}{}
 	}
 
-	signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
-	return nil
+	return signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
 }
 
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {
@@ -362,14 +366,14 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 	return nil
 }
 
-func (mv *messageValidator) maxRound(role spectypes.RunnerRole) specqbft.Round {
+func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round, error) {
 	switch role {
 	case spectypes.RoleCommittee, spectypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
-		return 12 // TODO: consider calculating based on quick timeout and slow timeout
+		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
-		return 6
+		return 6, nil
 	default:
-		panic("unknown role")
+		return 0, errors.New("unknown role")
 	}
 }
 

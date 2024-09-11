@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -140,7 +141,10 @@ func (mv *messageValidator) validateConsensusMessage(
 			}
 		}
 
-		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
+		err := signerState.MessageCounts.RecordConsensusMessage(signedMsg)
+		if err != nil {
+			return consensusDescriptor, msgSlot, errors.Wrap(err, "can't record consensus message")
+		}
 	}
 
 	return consensusDescriptor, msgSlot, nil
