@@ -249,7 +249,7 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnec
 		if len(sharedSubnets) == 0 {
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("Couldn't disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
+				logger.Error("failed to disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
 			} else {
 				logger.Debug("Disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
 				disconnectedPeers += 1
