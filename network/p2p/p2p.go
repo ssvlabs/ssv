@@ -275,33 +275,33 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	return nil
 }
 
-// Returns a function that balances the peers in case the maximum number of connections is reached.
-// Balancing is peformed in three steps:
-// - Drops peers with bad GossipSub score.
-// - Drop irrelevant peers that don't have any subnet in common.
-// - tags the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removes the worst peer.
+// Returns a function that balances the peers.
+// Balancing is peformed by:
+// - Dropping peers with bad Gossip score.
+// - Dropping irrelevant peers that don't have any subnet in common.
+// - Tagging the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removing the worst peer.
 func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 	return func() {
 		allPeers := n.host.Network().Peers()
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
+
+		// Disconnect from bad peers
+		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
+
+		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
 		if currentCount < n.cfg.MaxPeers {
 			_ = n.idx.GetSubnetsStats() // trigger metrics update
 			return
 		}
+
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
 
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
 
-		// Disconnect from bad peers
-		disconnectedPeers := connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
-		if disconnectedPeers > 0 {
-			return
-		}
-
 		// Disconnect from irrelevant peers
-		disconnectedPeers = connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
+		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
 		if disconnectedPeers > 0 {
 			return
 		}
