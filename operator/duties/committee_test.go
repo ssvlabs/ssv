@@ -93,7 +93,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -145,7 +145,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -196,7 +196,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -255,7 +255,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -312,7 +312,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -380,10 +380,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	currentSlot.Set(phase0.Slot(1))
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
-	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
-	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(10 * time.Millisecond)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -415,7 +411,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -483,10 +479,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	currentSlot.Set(phase0.Slot(1))
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
-	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
-	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(10 * time.Millisecond)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -518,7 +510,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -576,10 +568,6 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	currentSlot.Set(phase0.Slot(1))
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
-	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
-	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(10 * time.Millisecond)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -612,7 +600,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -710,7 +698,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -799,10 +787,6 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
 	currentSlot.Set(phase0.Slot(65))
 	ticker.Send(currentSlot.Get())
-	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
-	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
-	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(10 * time.Millisecond)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -830,7 +814,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -927,7 +911,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -992,7 +976,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(0)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -1067,7 +1051,7 @@ func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(2)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -1100,7 +1084,6 @@ func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {
 	currentSlot.Set(phase0.Slot(1))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchAttesterDutiesCall, executeAttesterDutiesCall := setupAttesterGenesisDutiesMock(scheduler, attDuties, waitForDuties)
-	_, _ = setupSyncCommitteeDutiesMock(scheduler, activeShares, syncDuties, waitForDuties)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -1154,7 +1137,7 @@ func TestScheduler_Committee_On_Fork(t *testing.T) {
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(attHandler, syncHandler)
 		alanForkEpoch = phase0.Epoch(256)
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
@@ -1195,7 +1178,6 @@ func TestScheduler_Committee_On_Fork(t *testing.T) {
 	currentSlot.Set(phase0.Slot(lastPeriodEpoch * 32))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
 	fetchAttesterDutiesCall, executeAttesterDutiesCall := setupAttesterGenesisDutiesMock(scheduler, attDuties, waitForDuties)
-	_, _ = setupSyncCommitteeDutiesMock(scheduler, activeShares, syncDuties, waitForDuties)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 

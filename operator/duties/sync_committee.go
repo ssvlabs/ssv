@@ -40,26 +40,7 @@ func (h *SyncCommitteeHandler) Name() string {
 	return spectypes.BNRoleSyncCommittee.String()
 }
 
-// HandleDuties manages the duty lifecycle, handling different cases:
-//
-// On First Run:
-//  1. Fetch duties for the current period.
-//  2. If necessary, fetch duties for the next period.
-//  3. Execute duties.
-//
-// On Re-org:
-//  1. Execute duties.
-//  2. If necessary, fetch duties for the next period.
-//
-// On Indices Change:
-//  1. Execute duties.
-//  2. ResetEpoch duties for the current period.
-//  3. Fetch duties for the current period.
-//  4. If necessary, fetch duties for the next period.
-//
-// On Ticker event:
-//  1. Execute duties.
-//  2. If necessary, fetch duties for the next period.
+// HandleDuties manages the duty lifecycle
 func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -83,50 +64,34 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
-			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
+			tickerID := fields.FormatSlotTickerCommitteeID(period, epoch, slot)
+			h.logger.Debug("🛠 ticker event", fields.SlotTickerID(tickerID))
 
-			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			h.processExecution(period, slot)
-			h.processFetching(ctx, period, true)
-			cancel()
-
-			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
-			periodSlots := h.slotsPerPeriod()
-			if uint64(slot)%periodSlots == periodSlots-h.preparationSlots-1 {
-				h.fetchNextPeriod = true
-			}
-
-			// last slot of period
-			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.duties.Reset(period - 1)
+			if !h.network.PastAlanForkAtEpoch(epoch) {
+				h.processExecution(period, slot)
+				h.processFetching(ctx, period, slot, true)
+				h.processSlotTransition(period, slot)
 			}
 
 		case reorgEvent := <-h.reorg:
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			tickerID := fields.FormatSlotTickerCommitteeID(period, epoch, reorgEvent.Slot)
+			h.logger.Info("🔀 reorg event received", fields.SlotTickerID(tickerID), zap.Any("event", reorgEvent))
 
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
-
-			// reset current epoch duties
-			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot) {
-				h.duties.Reset(period + 1)
-				h.fetchNextPeriod = true
+			if !h.network.PastAlanForkAtEpoch(epoch) {
+				h.processReorg(period, reorgEvent)
 			}
 
 		case <-h.indicesChange:
 			slot := h.network.Beacon.EstimatedCurrentSlot()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
-			h.logger.Info("🔁 indices change received", zap.String("period_epoch_slot_pos", buildStr))
+			tickerID := fields.FormatSlotTickerCommitteeID(period, epoch, slot)
+			h.logger.Info("🔁 indices change received", fields.SlotTickerID(tickerID))
 
-			h.fetchCurrentPeriod = true
-
-			// reset next period duties if in appropriate slot range
-			if h.shouldFetchNextPeriod(slot) {
-				h.fetchNextPeriod = true
+			if !h.network.PastAlanForkAtEpoch(epoch) {
+				h.processIndicesChange(period, slot)
 			}
 		}
 	}
@@ -136,13 +101,14 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
 	defer cancel()
 
+	slot := h.network.Beacon.EstimatedCurrentSlot()
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, period, false)
+	h.processFetching(ctx, period, slot, false)
 }
 
-func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
-	ctx, cancel := context.WithCancel(ctx)
+func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot, waitForInitial bool) {
+	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
@@ -163,33 +129,50 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 }
 
 func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot) {
-	// range over duties and execute
 	duties := h.duties.CommitteePeriodDuties(period)
 	if duties == nil {
 		return
 	}
 
-	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d, slot) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommittee))
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommitteeContribution))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-		return
-	}
-
-	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
+	toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
-			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
+			toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommittee))
+			toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommitteeContribution))
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
+}
+
+func (h *SyncCommitteeHandler) processIndicesChange(period uint64, slot phase0.Slot) {
+	h.fetchCurrentPeriod = true
+
+	// reset next period duties if in appropriate slot range
+	if h.shouldFetchNextPeriod(slot) {
+		h.duties.Reset(period + 1)
+		h.fetchNextPeriod = true
+	}
+}
+
+func (h *SyncCommitteeHandler) processReorg(period uint64, reorgEvent ReorgEvent) {
+	if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot) {
+		h.duties.Reset(period + 1)
+		h.fetchNextPeriod = true
+	}
+}
+
+func (h *SyncCommitteeHandler) processSlotTransition(period uint64, slot phase0.Slot) {
+	// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
+	periodSlots := h.slotsPerPeriod()
+	if uint64(slot)%periodSlots == periodSlots-h.preparationSlots-1 {
+		h.fetchNextPeriod = true
+	}
+
+	// last slot of period
+	if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+		h.duties.Reset(period - 1)
+	}
 }
 
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {

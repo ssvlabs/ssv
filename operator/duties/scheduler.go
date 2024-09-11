@@ -135,6 +135,9 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		dutyStore = dutystore.New()
 	}
 
+	attHandler := NewAttesterHandler(dutyStore.Attester)
+	syncCommHandler := NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+
 	s := &Scheduler{
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
@@ -147,11 +150,11 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		blockPropagateDelay: blockPropagationDelay,
 
 		handlers: []dutyHandler{
-			NewAttesterHandler(dutyStore.Attester),
+			attHandler,
 			NewProposerHandler(dutyStore.Proposer),
-			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
+			syncCommHandler,
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
-			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			NewCommitteeHandler(attHandler, syncCommHandler),
 			NewValidatorRegistrationHandler(),
 		},
 
@@ -305,8 +308,8 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 
 		// check for reorg
 		epoch := s.network.Beacon.EstimatedEpochAtSlot(data.Slot)
-		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, data.Slot, data.Slot%32+1)
-		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
+		tickerID := fields.FormatSlotTickerID(epoch, data.Slot)
+		logger := logger.With(fields.SlotTickerID(tickerID))
 		if s.lastBlockEpoch != 0 {
 			if epoch > s.lastBlockEpoch {
 				// Change of epoch.
