@@ -260,7 +260,7 @@ func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan s
 	}
 }
 
-func waitForGenesisDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration) {
+func waitForDutiesFetchGenesis(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration) {
 	select {
 	case <-fetchDutiesCall:
 		logger.Debug("duties fetched")

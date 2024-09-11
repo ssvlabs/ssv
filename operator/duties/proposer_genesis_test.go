@@ -90,7 +90,7 @@ func TestScheduler_Proposer_Genesis_Same_Slot(t *testing.T) {
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
@@ -119,7 +119,7 @@ func TestScheduler_Proposer_Genesis_Diff_Slots(t *testing.T) {
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
 	currentSlot.Set(phase0.Slot(1))
@@ -186,7 +186,7 @@ func TestScheduler_Proposer_Genesis_Indices_Changed(t *testing.T) {
 	// STEP 4: wait for proposer duties to be fetched again
 	currentSlot.Set(phase0.Slot(2))
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 2
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -225,7 +225,7 @@ func TestScheduler_Proposer_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -250,7 +250,7 @@ func TestScheduler_Proposer_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 	// STEP 4: wait for proposer duties to be fetched again
 	currentSlot.Set(phase0.Slot(1))
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for proposer duties to be executed
 	currentSlot.Set(phase0.Slot(2))
@@ -306,7 +306,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current(t *testing.T) {
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
@@ -344,7 +344,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current(t *testing.T) {
 	// The first assigned duty should not be executed
 	currentSlot.Set(phase0.Slot(36))
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
 	currentSlot.Set(phase0.Slot(37))
@@ -382,7 +382,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
@@ -430,7 +430,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 	// The first assigned duty should not be executed
 	currentSlot.Set(phase0.Slot(36))
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
 	currentSlot.Set(phase0.Slot(37))

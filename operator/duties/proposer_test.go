@@ -483,7 +483,7 @@ func TestScheduler_Proposer_On_Fork(t *testing.T) {
 
 	// STEP 1: wait for proposer genesis duties to be fetched
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCallGenesis, executeDutiesCallGenesis, timeout)
 
 	// STEP 2: wait for no action to be taken
 	currentSlot.Set(phase0.Slot(1))

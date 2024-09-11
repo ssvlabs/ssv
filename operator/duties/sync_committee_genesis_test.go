@@ -282,7 +282,7 @@ func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched for next period
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -296,8 +296,8 @@ func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 	// STEP 3: wait for sync committee duties to be fetched again
 	currentSlot.Set(phase0.Slot(256*32 - 2))
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: no action should be taken
 	currentSlot.Set(phase0.Slot(256*32 - 1))
@@ -376,8 +376,8 @@ func TestScheduler_SyncCommittee_Genesis_Multiple_Indices_Changed_Same_Slot(t *t
 	currentSlot.Set(phase0.Slot(256*32 - 2))
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: no action should be taken
 	currentSlot.Set(phase0.Slot(256*32 - 1))
@@ -440,7 +440,7 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &v1.Event{
@@ -476,7 +476,7 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
 	currentSlot.Set(phase0.Slot(256*32 - 1))
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: The first assigned duty should not be executed, but the second one should
 	currentSlot.Set(phase0.Slot(256 * 32))
@@ -542,7 +542,7 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testin
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &v1.Event{
@@ -587,8 +587,8 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testin
 	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
 	currentSlot.Set(phase0.Slot(256*32 - 1))
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: The first assigned duty should not be executed, but the second and the new from indices change should
 	currentSlot.Set(phase0.Slot(256 * 32))
