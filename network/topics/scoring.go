@@ -24,7 +24,7 @@ func DefaultScoringConfig() *ScoringConfig {
 }
 
 // scoreInspector inspects and logs scores.
-// It also updates the GossipSubScoreIndex by resetting it and
+// It also updates the GossipScoreIndex by resetting it and
 // adding the peers' scores.
 // TODO: finalize once validation is in place
 func scoreInspector(logger *zap.Logger,
@@ -32,14 +32,14 @@ func scoreInspector(logger *zap.Logger,
 	logFrequency int,
 	metrics Metrics,
 	peerConnected func(pid peer.ID) bool,
-	gossipSubScoreIndex peers.GossipSubScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
+	gossipScoreIndex peers.GossipScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 
 	inspections := 0
 
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 
-		// Updates the GossipSubScoreIndex in every iteration
-		updateGossipSubScoreIndex(gossipSubScoreIndex, scores)
+		// Updates the GossipScoreIndex in every iteration
+		updateGossipScoreIndex(gossipScoreIndex, scores)
 
 		// Reset metrics before updating them.
 		metrics.ResetPeerScores()
@@ -106,8 +106,8 @@ func scoreInspector(logger *zap.Logger,
 	}
 }
 
-// Updates the GossipSubScoreIndex with the peers' scores
-func updateGossipSubScoreIndex(gossipSubScoreIndex peers.GossipSubScoreIndex, scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+// Updates the GossipScoreIndex with the peers' scores
+func updateGossipScoreIndex(gossipScoreIndex peers.GossipScoreIndex, scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 	// Reset the index
 	peerScores := make(map[peer.ID]float64)
 
@@ -116,7 +116,7 @@ func updateGossipSubScoreIndex(gossipSubScoreIndex peers.GossipSubScoreIndex, sc
 		peerScores[pid] = ps.Score
 	}
 
-	gossipSubScoreIndex.SetScores(peerScores)
+	gossipScoreIndex.SetScores(peerScores)
 }
 
 // topicScoreParams factory for creating scoring params for topics

@@ -7,26 +7,26 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-// Implements GossipSubScoreIndex
-type gossipSubScoreIndex struct {
+// Implements GossipScoreIndex
+type gossipScoreIndex struct {
 	score map[peer.ID]float64
 	mutex sync.Mutex
 
 	graylistThreshold float64
 }
 
-func NewGossipSubScoreIndex() *gossipSubScoreIndex {
+func NewGossipScoreIndex() *gossipScoreIndex {
 
 	graylistThreshold := params.PeerScoreThresholds().GraylistThreshold
 
-	return &gossipSubScoreIndex{
+	return &gossipScoreIndex{
 		score:             make(map[peer.ID]float64),
 		mutex:             sync.Mutex{},
 		graylistThreshold: graylistThreshold,
 	}
 }
 
-func (g *gossipSubScoreIndex) GetGossipSubScore(peerID peer.ID) (float64, bool) {
+func (g *gossipScoreIndex) GetGossipScore(peerID peer.ID) (float64, bool) {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 
@@ -36,7 +36,7 @@ func (g *gossipSubScoreIndex) GetGossipSubScore(peerID peer.ID) (float64, bool) 
 	return 0.0, false
 }
 
-func (g *gossipSubScoreIndex) SetScores(peerScores map[peer.ID]float64) {
+func (g *gossipScoreIndex) SetScores(peerScores map[peer.ID]float64) {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 
@@ -47,12 +47,12 @@ func (g *gossipSubScoreIndex) SetScores(peerScores map[peer.ID]float64) {
 	}
 }
 
-func (g *gossipSubScoreIndex) clear() {
+func (g *gossipScoreIndex) clear() {
 	g.score = make(map[peer.ID]float64)
 }
 
-func (g *gossipSubScoreIndex) HasBadGossipSubScore(peerID peer.ID) (bool, float64) {
-	score, exists := g.GetGossipSubScore(peerID)
+func (g *gossipScoreIndex) HasBadGossipScore(peerID peer.ID) (bool, float64) {
+	score, exists := g.GetGossipScore(peerID)
 	if !exists {
 		return false, 0.0
 	}
