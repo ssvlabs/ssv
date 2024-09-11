@@ -30,7 +30,7 @@ type ConnManager interface {
 	TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
 	// TrimPeers will trim unprotected peers.
 	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
-	// DisconnectFromBadPeers will disconnect from bad peers according to their GossipSub scores. It returns the number of disconnected peers.
+	// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int
 	// DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
 	DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int
@@ -46,12 +46,12 @@ type connManager struct {
 
 // NewConnManager creates a new conn manager.
 // multiple instances can be created, but concurrency is not supported.
-func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex, gossipSubScoreIndex GossipScoreIndex) ConnManager {
+func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex, gossipScoreIndex GossipScoreIndex) ConnManager {
 	return &connManager{
 		logger:           logger,
 		connManager:      connMgr,
 		subnetsIdx:       subnetsIdx,
-		gossipScoreIndex: gossipSubScoreIndex,
+		gossipScoreIndex: gossipScoreIndex,
 	}
 }
 
@@ -222,7 +222,7 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 			// Disconnect
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("failed to disconnect from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipScore))
+				logger.Error("failed to disconnect from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
 			} else {
 				logger.Debug("disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
 				disconnectedPeers += 1

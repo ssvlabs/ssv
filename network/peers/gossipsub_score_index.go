@@ -7,7 +7,7 @@ import (
 	"github.com/ssvlabs/ssv/network/topics/params"
 )
 
-// Implements GossipSubScoreIndex
+// Implements GossipScoreIndex
 type gossipScoreIndex struct {
 	score map[peer.ID]float64
 	mutex sync.Mutex
