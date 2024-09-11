@@ -38,20 +38,20 @@ type ConnManager interface {
 
 // connManager implements ConnManager
 type connManager struct {
-	logger              *zap.Logger
-	connManager         connmgrcore.ConnManager
-	subnetsIdx          SubnetsIndex
-	gossipSubScoreIndex GossipSubScoreIndex
+	logger           *zap.Logger
+	connManager      connmgrcore.ConnManager
+	subnetsIdx       SubnetsIndex
+	gossipScoreIndex GossipScoreIndex
 }
 
 // NewConnManager creates a new conn manager.
 // multiple instances can be created, but concurrency is not supported.
-func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex, gossipSubScoreIndex GossipSubScoreIndex) ConnManager {
+func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex, gossipSubScoreIndex GossipScoreIndex) ConnManager {
 	return &connManager{
-		logger:              logger,
-		connManager:         connMgr,
-		subnetsIdx:          subnetsIdx,
-		gossipSubScoreIndex: gossipSubScoreIndex,
+		logger:           logger,
+		connManager:      connMgr,
+		subnetsIdx:       subnetsIdx,
+		gossipScoreIndex: gossipSubScoreIndex,
 	}
 }
 
@@ -209,7 +209,7 @@ func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 	return PeerScore(score)
 }
 
-// DisconnectFromBadPeers will disconnect from bad peers according to their GossipSub scores. It returns the number of disconnected peers.
+// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int {
 
 	disconnectedPeers := 0
@@ -217,14 +217,14 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 	for _, peerID := range allPeers {
 
 		// Check if peer is bad
-		if isBad, gossipSubScore := c.gossipSubScoreIndex.HasBadGossipSubScore(peerID); isBad {
+		if isBad, gossipScore := c.gossipScoreIndex.HasBadGossipScore(peerID); isBad {
 
 			// Disconnect
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("Couldn't disconnect from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore))
+				logger.Error("Couldn't disconnect from bad peer", fields.PeerID(peerID), zap.Float64("Gossip Score", gossipScore))
 			} else {
-				logger.Debug("Disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("GossipSub Score", gossipSubScore))
+				logger.Debug("Disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("Gossip Score", gossipScore))
 				disconnectedPeers += 1
 			}
 		}

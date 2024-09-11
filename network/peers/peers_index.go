@@ -35,12 +35,12 @@ type peersIndex struct {
 
 	maxPeers MaxPeersProvider
 
-	gossipSubScoreIndex GossipSubScoreIndex
+	gossipSubScoreIndex GossipScoreIndex
 }
 
 // NewPeersIndex creates a new Index
 func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
-	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration, gossipSubScoreIndex GossipSubScoreIndex) *peersIndex {
+	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration, gossipScoreIndex GossipScoreIndex) *peersIndex {
 
 	return &peersIndex{
 		network:             network,
@@ -51,7 +51,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 		selfLock:            &sync.RWMutex{},
 		maxPeers:            maxPeers,
 		netKeyProvider:      netKeyProvider,
-		gossipSubScoreIndex: gossipSubScoreIndex,
+		gossipSubScoreIndex: gossipScoreIndex,
 	}
 }
 
@@ -62,7 +62,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - bad score
 func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 
-	if isBad, _ := pi.HasBadGossipSubScore(id); isBad {
+	if isBad, _ := pi.HasBadGossipScore(id); isBad {
 		return true
 	}
 
@@ -200,10 +200,10 @@ func (pi *peersIndex) SetScores(scores map[peer.ID]float64) {
 	pi.gossipSubScoreIndex.SetScores(scores)
 }
 
-func (pi *peersIndex) GetGossipSubScore(peerID peer.ID) (float64, bool) {
-	return pi.gossipSubScoreIndex.GetGossipSubScore(peerID)
+func (pi *peersIndex) GetGossipScore(peerID peer.ID) (float64, bool) {
+	return pi.gossipSubScoreIndex.GetGossipScore(peerID)
 }
 
-func (pi *peersIndex) HasBadGossipSubScore(peerID peer.ID) (bool, float64) {
-	return pi.gossipSubScoreIndex.HasBadGossipSubScore(peerID)
+func (pi *peersIndex) HasBadGossipScore(peerID peer.ID) (bool, float64) {
+	return pi.gossipSubScoreIndex.HasBadGossipScore(peerID)
 }

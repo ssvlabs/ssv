@@ -43,7 +43,7 @@ func scoreInspector(logger *zap.Logger,
 	peerConnected func(pid peer.ID) bool,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
-	gossipSubScoreIndex peers.GossipSubScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
+	gossipSubScoreIndex peers.GossipScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 
 	inspections := 0
 
@@ -188,7 +188,7 @@ func scoreInspector(logger *zap.Logger,
 }
 
 // Updates the GossipSubScoreIndex with the peers' scores
-func updateGossipSubScoreIndex(gossipSubScoreIndex peers.GossipSubScoreIndex, scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+func updateGossipSubScoreIndex(gossipSubScoreIndex peers.GossipScoreIndex, scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 	// Reset the index
 	peerScores := make(map[peer.ID]float64)
 

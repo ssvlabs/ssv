@@ -112,14 +112,14 @@ type SubnetsIndex interface {
 	GetSubnetsStats() *SubnetsStats
 }
 
-// GossipSubScoreIndex serves as an interface to get a peer's GossipSub score
-type GossipSubScoreIndex interface {
+// GossipScoreIndex serves as an interface to get a peer's Gossip score
+type GossipScoreIndex interface {
 	// AddScore adds a score for a peer
 	SetScores(scores map[peer.ID]float64)
-	// GetGossipSubScore returns the peer score and a boolean flag for whether it has such score or not
-	GetGossipSubScore(peerID peer.ID) (float64, bool)
-	// HasBadGossipSubScore returns true if the peer has a bad GossipSub score
-	HasBadGossipSubScore(peerID peer.ID) (bool, float64)
+	// GetGossipScore returns the peer score and a boolean flag for whether it has such score or not
+	GetGossipScore(peerID peer.ID) (float64, bool)
+	// HasBadGossipScore returns true if the peer has a bad Gossip score
+	HasBadGossipScore(peerID peer.ID) (bool, float64)
 }
 
 // Index is a facade interface of this package
@@ -130,5 +130,5 @@ type Index interface {
 	ScoreIndex
 	SubnetsIndex
 	io.Closer
-	GossipSubScoreIndex
+	GossipScoreIndex
 }

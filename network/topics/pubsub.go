@@ -117,7 +117,7 @@ type CommitteesProvider interface {
 }
 
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, committeesProvider CommitteesProvider, gossipSubScoreIndex peers.GossipSubScoreIndex) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, committeesProvider CommitteesProvider, gossipSubScoreIndex peers.GossipScoreIndex) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
