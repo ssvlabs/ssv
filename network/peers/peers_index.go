@@ -35,28 +35,37 @@ type peersIndex struct {
 	self     *records.NodeInfo
 
 	maxPeers MaxPeersProvider
+
+	gossipSubScoreIndex GossipSubScoreIndex
 }
 
 // NewPeersIndex creates a new Index
 func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
-	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) *peersIndex {
+	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration, gossipSubScoreIndex GossipSubScoreIndex) *peersIndex {
 	return &peersIndex{
-		network:        network,
-		scoreIdx:       newScoreIndex(),
-		SubnetsIndex:   NewSubnetsIndex(subnetsCount),
-		PeerInfoIndex:  NewPeerInfoIndex(),
-		self:           self,
-		selfLock:       &sync.RWMutex{},
-		maxPeers:       maxPeers,
-		netKeyProvider: netKeyProvider,
+		network:             network,
+		scoreIdx:            newScoreIndex(),
+		SubnetsIndex:        NewSubnetsIndex(subnetsCount),
+		PeerInfoIndex:       NewPeerInfoIndex(),
+		self:                self,
+		selfLock:            &sync.RWMutex{},
+		maxPeers:            maxPeers,
+		netKeyProvider:      netKeyProvider,
+		gossipSubScoreIndex: gossipSubScoreIndex,
 	}
 }
 
 // IsBad returns whether the given peer is bad.
 // a peer is considered to be bad if one of the following applies:
+// - bad GossipSub score
 // - pruned (that was not expired)
 // - bad score
 func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
+
+	if isBad, _ := pi.HasBadGossipSubScore(id); isBad {
+		return true
+	}
+
 	// TODO: check scores
 	threshold := -10000.0
 	scores, err := pi.GetScore(id, "")
@@ -64,6 +73,7 @@ func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 		// logger.Debug("could not read score", zap.Error(err))
 		return false
 	}
+
 	for _, score := range scores {
 		if score.Value < threshold {
 			logger.Debug("bad peer (low score)")
@@ -218,4 +228,17 @@ func (pi *peersIndex) Close() error {
 		return errors.Wrap(err, "could not close peerstore")
 	}
 	return nil
+}
+
+// GossipSubScoreIndex methods
+func (pi *peersIndex) SetScores(scores map[peer.ID]float64) {
+	pi.gossipSubScoreIndex.SetScores(scores)
+}
+
+func (pi *peersIndex) GetGossipSubScore(peerID peer.ID) (float64, bool) {
+	return pi.gossipSubScoreIndex.GetGossipSubScore(peerID)
+}
+
+func (pi *peersIndex) HasBadGossipSubScore(peerID peer.ID) (bool, float64) {
+	return pi.gossipSubScoreIndex.HasBadGossipSubScore(peerID)
 }

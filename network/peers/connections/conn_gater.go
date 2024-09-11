@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -24,20 +25,24 @@ const (
 	//
 )
 
+type BadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
 	logger    *zap.Logger // struct logger to implement connmgr.ConnectionGater
 	atLimit   func() bool
 	ipLimiter *leakybucket.Collector
+	isBadPeer BadPeerF
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, atLimit func() bool) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, atLimit func() bool, isBadPeerF BadPeerF) connmgr.ConnectionGater {
 	return &connGater{
 		logger:    logger,
 		atLimit:   atLimit,
 		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
+		isBadPeer: isBadPeerF,
 	}
 }
 
@@ -74,6 +79,11 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+	isBad := n.isBadPeer(n.logger, id)
+	if isBad {
+		n.logger.Debug("rejecting connection due to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 

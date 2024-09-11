@@ -43,11 +43,12 @@ const (
 )
 
 const (
-	connManagerGCInterval           = 3 * time.Minute
-	connManagerGCTimeout            = time.Minute
-	peersReportingInterval          = 60 * time.Second
-	peerIdentitiesReportingInterval = 5 * time.Minute
-	topicsReportingInterval         = 180 * time.Second
+	connManagerGCInterval              = 3 * time.Minute
+	connManagerGCTimeout               = time.Minute
+	peersReportingInterval             = 60 * time.Second
+	peerIdentitiesReportingInterval    = 5 * time.Minute
+	topicsReportingInterval            = 180 * time.Second
+	maximumIrrelevantPeersToDisconnect = 3
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -245,6 +246,11 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	return nil
 }
 
+// Returns a function that balances the peers in case the maximum number of connections is reached.
+// Balancing is peformed in three steps:
+// - Drops peers with bad GossipSub score.
+// - Drop irrelevant peers that don't have any subnet in common.
+// - tags the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removes the worst peer.
 func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 	return func() {
 		allPeers := n.host.Network().Peers()
@@ -256,8 +262,22 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
 
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
 		mySubnets := records.Subnets(n.subnets).Clone()
+
+		// Disconnect from bad peers
+		disconnectedPeers := connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
+		if disconnectedPeers > 0 {
+			return
+		}
+
+		// Disconnect from irrelevant peers
+		disconnectedPeers = connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
+		if disconnectedPeers > 0 {
+			return
+		}
+
+		// Trim peers according to subnet participation (considering the subnet size)
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}

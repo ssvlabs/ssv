@@ -107,7 +107,7 @@ func (cfg *PubSubConfig) initScoring() {
 }
 
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, gossipSubScoreIndex peers.GossipSubScoreIndex) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -147,7 +147,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 			peerConnected := func(pid peer.ID) bool {
 				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
 			}
-			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected)
+			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected, gossipSubScoreIndex)
 		}
 
 		if inspectInterval == 0 {
