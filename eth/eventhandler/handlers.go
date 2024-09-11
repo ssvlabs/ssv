@@ -25,12 +25,13 @@ import (
 const encryptedKeyLength = 256
 
 var (
-	ErrAlreadyRegistered            = fmt.Errorf("operator registered with the same operator public key")
-	ErrOperatorDataNotFound         = fmt.Errorf("operator data not found")
-	ErrIncorrectSharesLength        = fmt.Errorf("shares length is not correct")
-	ErrSignatureVerification        = fmt.Errorf("signature verification failed")
-	ErrShareBelongsToDifferentOwner = fmt.Errorf("share already exists and belongs to different owner")
-	ErrValidatorShareNotFound       = fmt.Errorf("validator share not found")
+	ErrAlreadyRegisteredWithSamePubkey = fmt.Errorf("operator registered with the same operator public key")
+	ErrAlreadyRegisteredWithSameId     = fmt.Errorf("operator registered with the same ID")
+	ErrOperatorDataNotFound            = fmt.Errorf("operator data not found")
+	ErrIncorrectSharesLength           = fmt.Errorf("shares length is not correct")
+	ErrSignatureVerification           = fmt.Errorf("signature verification failed")
+	ErrShareBelongsToDifferentOwner    = fmt.Errorf("share already exists and belongs to different owner")
+	ErrValidatorShareNotFound          = fmt.Errorf("validator share not found")
 )
 
 // TODO: make sure all handlers are tested properly:
@@ -60,7 +61,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	if existsById {
 		logger.Warn("malformed event: operator registered with ID",
 			zap.Uint64("expected_operator_id", event.OperatorId))
-		return &MalformedEventError{Err: ErrAlreadyRegistered}
+		return &MalformedEventError{Err: ErrAlreadyRegisteredWithSameId}
 	}
 
 	// throw an error if there is an existing operator with the same public key
@@ -71,7 +72,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	if foundByPubKey && operatorData.ID != 0 && bytes.Equal(operatorData.PublicKey, event.PublicKey) && operatorData.ID != event.OperatorId {
 		logger.Warn("malformed event: operator registered with the same operator public key",
 			zap.Uint64("expected_operator_id", operatorData.ID))
-		return &MalformedEventError{Err: ErrAlreadyRegistered}
+		return &MalformedEventError{Err: ErrAlreadyRegisteredWithSamePubkey}
 	}
 
 	exists, err := eh.nodeStorage.SaveOperatorData(txn, od)

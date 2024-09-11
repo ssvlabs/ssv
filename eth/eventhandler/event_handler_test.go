@@ -206,7 +206,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("test OperatorAdded event handle with the same pubkey, but with a different id", func(t *testing.T) {
 			op := &testOperator{}
 			op.privateKey = ops[2].privateKey
-			op.id = 5
+			op.id = 8
 
 			encodedPubKey, err := op.privateKey.Public().Base64()
 			require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
-				OperatorId: ops[1].id,
+				OperatorId: op.id,
 				Owner:      testAddr,
 				PublicKey:  encodedPubKey,
 			})
@@ -243,11 +243,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
-				OperatorId: ops[1].id,
+				OperatorId: op.id,
 				Owner:      testAddr,
 				PublicKey:  encodedPubKey,
 			})
-			require.ErrorContains(t, err, "operator registered with the same operator public key")
+			require.ErrorContains(t, err, "operator registered with the same ID")
 
 			// check no operators were added
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
