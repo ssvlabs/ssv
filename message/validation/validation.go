@@ -14,7 +14,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -163,7 +162,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		}
 
 	default:
-		return decodedMessage, errors.New("unreachable: message type assertion should have been done")
+		return decodedMessage, fmt.Errorf("unreachable: message type assertion should have been done")
 	}
 
 	return decodedMessage, nil

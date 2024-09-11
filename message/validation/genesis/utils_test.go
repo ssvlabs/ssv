@@ -1,9 +1,9 @@
 package validation
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -71,7 +71,7 @@ func TestRecordConsensusMessage(t *testing.T) {
 			},
 			initialCounts:  MessageCounts{},
 			expectedCounts: MessageCounts{},
-			expectedError:  errors.New("unexpected signed message type"),
+			expectedError:  fmt.Errorf("unexpected signed message type"),
 		},
 	}
 
@@ -112,7 +112,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				},
 				limits: MessageCounts{Proposal: 1},
 			},
-			expectedError: errors.New("too many messages of same type per round, got proposal, having pre-consensus: 0, proposal: 2, prepare: 0, commit: 0, decided: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("too many messages of same type per round, got proposal, having pre-consensus: 0, proposal: 2, prepare: 0, commit: 0, decided: 0, round change: 0, post-consensus: 0"),
 		},
 		{
 			name: "PrepareMessage_ExceedsLimit_ReturnsError",
@@ -123,7 +123,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				},
 				limits: MessageCounts{Prepare: 1},
 			},
-			expectedError: errors.New("too many messages of same type per round, got prepare, having pre-consensus: 0, proposal: 0, prepare: 2, commit: 0, decided: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("too many messages of same type per round, got prepare, having pre-consensus: 0, proposal: 0, prepare: 2, commit: 0, decided: 0, round change: 0, post-consensus: 0"),
 		},
 		{
 			name: "CommitMessageWithSingleOperator_ExceedsLimit_ReturnsError",
@@ -135,7 +135,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				},
 				limits: MessageCounts{Commit: 0},
 			},
-			expectedError: errors.New("too many messages of same type per round, got commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 2, decided: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("too many messages of same type per round, got commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 2, decided: 0, round change: 0, post-consensus: 0"),
 		},
 		{
 			name: "CommitMessageWithManyOperators_ExceedsLimit_ReturnsError",
@@ -147,7 +147,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				},
 				limits: MessageCounts{Commit: 1},
 			},
-			expectedError: errors.New("too many messages of same type per round, got decided, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 2, decided: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("too many messages of same type per round, got decided, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 2, decided: 0, round change: 0, post-consensus: 0"),
 		},
 		{
 			name: "RoundChangeMessage_ExceedsLimit_ReturnsError",
@@ -158,7 +158,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				},
 				limits: MessageCounts{RoundChange: 1},
 			},
-			expectedError: errors.New("too many messages of same type per round, got round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 0, round change: 2, post-consensus: 0"),
+			expectedError: fmt.Errorf("too many messages of same type per round, got round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 0, round change: 2, post-consensus: 0"),
 		},
 		{
 			name: "UnexpectedMessageType_ReturnsError",
@@ -167,7 +167,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				signedSSVMessage: &specqbft.SignedMessage{Message: specqbft.Message{MsgType: specqbft.MessageType(12345)}},
 				limits:           MessageCounts{},
 			},
-			expectedError: errors.New("unexpected signed message type"),
+			expectedError: fmt.Errorf("unexpected signed message type"),
 		},
 		{
 			name: "ValidProposalMessage_HappyFlow",

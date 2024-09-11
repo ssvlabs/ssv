@@ -1,10 +1,10 @@
 package validation
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
@@ -110,7 +110,7 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType genesisspect
 	case genesisspectypes.BNRoleVoluntaryExit:
 		return msgType == genesisspectypes.VoluntaryExitPartialSig, nil
 	default:
-		return false, errors.New("invalid role") // role validity should be checked before
+		return false, fmt.Errorf("invalid role") // role validity should be checked before
 	}
 }
 

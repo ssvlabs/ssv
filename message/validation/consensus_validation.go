@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -279,7 +278,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - 6 (other types)
 	maxRound, err := mv.maxRound(role)
 	if err != nil {
-		return errors.Wrap(err, "failed to get max round")
+		return fmt.Errorf("failed to get max round: %w", err)
 	}
 	if consensusMessage.Round > maxRound {
 		err := ErrRoundTooHigh
@@ -373,7 +372,7 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		return 6, nil
 	default:
-		return 0, errors.New("unknown role")
+		return 0, fmt.Errorf("unknown role")
 	}
 }
 

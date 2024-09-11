@@ -3,7 +3,6 @@ package validation
 import (
 	"testing"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -44,7 +43,7 @@ func TestMessageValidator_maxRound(t *testing.T) {
 			name: "Unknown role",
 			role: spectypes.RunnerRole(999),
 			want: 0,
-			err:  errors.New("unknown role"),
+			err:  fmt.Errorf("unknown role"),
 		},
 	}
 
@@ -111,7 +110,7 @@ func TestRecordConsensusMessage(t *testing.T) {
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.MessageType(12345)},
 			expectedCounts:   MessageCounts{},
-			expectedError:    errors.New("unexpected signed message type"),
+			expectedError:    fmt.Errorf("unexpected signed message type"),
 		},
 	}
 
@@ -152,7 +151,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
 				limits:           MessageCounts{Proposal: 0},
 			},
-			expectedError: errors.New("message is duplicated, got proposal, having pre-consensus: 0, proposal: 2, prepare: 0, commit: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got proposal, having pre-consensus: 0, proposal: 2, prepare: 0, commit: 0, round change: 0, post-consensus: 0"),
 		},
 		{
 			name: "PrepareMessage_ExceedsLimit_ReturnsError",
@@ -162,7 +161,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
 				limits:           MessageCounts{Prepare: 0},
 			},
-			expectedError: errors.New("message is duplicated, got prepare, having pre-consensus: 0, proposal: 0, prepare: 2, commit: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got prepare, having pre-consensus: 0, proposal: 0, prepare: 2, commit: 0, round change: 0, post-consensus: 0"),
 		},
 		{
 			name: "CommitMessageWithSingleOperator_ExceedsLimit_ReturnsError",
@@ -172,7 +171,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
 				limits:           MessageCounts{Commit: 0},
 			},
-			expectedError: errors.New("message is duplicated, got commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 2, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 2, round change: 0, post-consensus: 0"),
 		},
 		{
 			name: "RoundChangeMessage_ExceedsLimit_ReturnsError",
@@ -182,7 +181,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
 				limits:           MessageCounts{RoundChange: 0},
 			},
-			expectedError: errors.New("message is duplicated, got round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 2, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 2, post-consensus: 0"),
 		},
 		{
 			name: "UnexpectedMessageType_ReturnsError",
@@ -192,7 +191,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				msg:              &specqbft.Message{MsgType: specqbft.MessageType(12345)},
 				limits:           MessageCounts{},
 			},
-			expectedError: errors.New("unexpected signed message type"),
+			expectedError: fmt.Errorf("unexpected signed message type"),
 		},
 		{
 			name: "ValidProposalMessage_HappyFlow",

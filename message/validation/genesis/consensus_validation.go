@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -66,7 +65,7 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	maxRound, err := mv.maxRound(role)
 	if err != nil {
-		return consensusDescriptor, msgSlot, errors.Wrap(err, "failed to get max round")
+		return consensusDescriptor, msgSlot, fmt.Errorf("failed to get max round: %w", err)
 	}
 	if msgRound > maxRound {
 		err := ErrRoundTooHigh
@@ -147,7 +146,7 @@ func (mv *messageValidator) validateConsensusMessage(
 
 		err := signerState.MessageCounts.RecordConsensusMessage(signedMsg)
 		if err != nil {
-			return consensusDescriptor, msgSlot, errors.Wrap(err, "can't record consensus message")
+			return consensusDescriptor, msgSlot, fmt.Errorf("can't record consensus message: %w", err)
 		}
 	}
 
@@ -347,7 +346,7 @@ func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) (genesiss
 	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		return 0, nil
 	default:
-		return 0, errors.New("unknown role")
+		return 0, fmt.Errorf("unknown role")
 	}
 }
 
@@ -370,7 +369,7 @@ func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole)
 	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		return 0, nil
 	default:
-		return 0, errors.New("unknown role")
+		return 0, fmt.Errorf("unknown role")
 	}
 }
 
