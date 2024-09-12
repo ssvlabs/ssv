@@ -171,7 +171,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 2: Exit validator
 		{
-			validatorCtrl.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			validatorCtrl.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 			shares := nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))

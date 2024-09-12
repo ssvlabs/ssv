@@ -108,7 +108,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 	return nil
 }
 
-func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
 	logger := c.taskLogger("ExitValidator",
 		fields.PubKey(pubKey[:]),
 		fields.BlockNumber(blockNumber),
@@ -116,6 +116,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 	)
 
 	exitDesc := duties.ExitDescriptor{
+		OwnValidator:   ownValidator,
 		PubKey:         pubKey,
 		ValidatorIndex: validatorIndex,
 		BlockNumber:    blockNumber,
