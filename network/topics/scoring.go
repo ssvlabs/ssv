@@ -201,7 +201,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets(), topicCommittees)
+		opts := params.NewSubnetTopicOpts(totalValidators, commons.Subnets(), topicCommittees)
 
 		// Generate topic parameters
 		tp, err := params.TopicParams(opts)
@@ -224,7 +224,7 @@ func validatorTopicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(strin
 		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
 			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
 		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOptsValidators(int(totalValidators), commons.Subnets())
+		opts := params.NewSubnetTopicOptsValidators(totalValidators, commons.Subnets())
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))

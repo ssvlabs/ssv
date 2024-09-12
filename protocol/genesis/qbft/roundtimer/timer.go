@@ -49,7 +49,7 @@ type RoundTimer struct {
 	// result holds the result of the timer
 	done OnRoundTimeoutF
 	// round is the current round of the timer
-	round int64
+	round uint64
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
@@ -120,10 +120,10 @@ func (t *RoundTimer) RoundTimeout(height genesisspecqbft.Height, round genesissp
 	// Calculate additional timeout based on round
 	var additionalTimeout time.Duration
 	if round <= t.timeoutOptions.quickThreshold {
-		additionalTimeout = time.Duration(int(round)) * t.timeoutOptions.quick
+		additionalTimeout = time.Duration(round) * t.timeoutOptions.quick
 	} else {
 		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick
-		slowPortion := time.Duration(int(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
+		slowPortion := time.Duration(round-t.timeoutOptions.quickThreshold) * t.timeoutOptions.slow
 		additionalTimeout = quickPortion + slowPortion
 	}
 
@@ -147,12 +147,12 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 
 // Round returns a round.
 func (t *RoundTimer) Round() genesisspecqbft.Round {
-	return genesisspecqbft.Round(atomic.LoadInt64(&t.round))
+	return genesisspecqbft.Round(atomic.LoadUint64(&t.round))
 }
 
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height genesisspecqbft.Height, round genesisspecqbft.Round) {
-	atomic.StoreInt64(&t.round, int64(round))
+	atomic.StoreUint64(&t.round, uint64(round))
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer

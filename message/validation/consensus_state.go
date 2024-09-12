@@ -50,7 +50,7 @@ func (os *OperatorState) Get(slot phase0.Slot) *SignerState {
 	os.mu.RLock()
 	defer os.mu.RUnlock()
 
-	s := os.state[int(uint64(slot)%uint64(len(os.state)))]
+	s := os.state[(uint64(slot) % uint64(len(os.state)))]
 	if s == nil || s.Slot != slot {
 		return nil
 	}
@@ -62,7 +62,7 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 	os.mu.Lock()
 	defer os.mu.Unlock()
 
-	os.state[int(slot)%len(os.state)] = state
+	os.state[uint64(slot)%uint64(len(os.state))] = state
 	if slot > os.maxSlot {
 		os.maxSlot = slot
 	}

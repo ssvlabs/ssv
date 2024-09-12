@@ -247,5 +247,5 @@ func isDecidedMesssage(s *State, sm *genesisspecqbft.SignedMessage) bool {
 		return false
 	}
 	return sm.Message.MsgType == genesisspecqbft.CommitMsgType &&
-		len(sm.Signers) > int(s.Quorum)
+		uint64(len(sm.Signers)) > s.Quorum
 }

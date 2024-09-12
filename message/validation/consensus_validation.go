@@ -424,12 +424,12 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 }
 
 func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) types.OperatorID {
-	firstRoundIndex := 0
+	firstRoundIndex := uint64(0)
 	if height != specqbft.FirstHeight {
-		firstRoundIndex += int(height) % len(committee)
+		firstRoundIndex += uint64(height) % uint64(len(committee))
 	}
 
-	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(committee)
+	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
 	return committee[index]
 }
 

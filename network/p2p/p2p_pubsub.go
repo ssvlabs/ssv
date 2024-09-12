@@ -172,14 +172,14 @@ func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
 	return nil
 }
 
-func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint) error {
+func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet int) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if subnet >= uint(commons.Subnets()) {
+	if subnet >= commons.Subnets() {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(int(subnet)), false); err != nil {
+	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(subnet), false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
 	}
 	return nil

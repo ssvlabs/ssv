@@ -287,20 +287,20 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 	logger = logger.With(fields.Slot(signedMsg.Slot))
 
 	// TODO: (Alan) revert?
-	indices := make([]int, len(signedMsg.Messages))
+	indices := make([]uint64, len(signedMsg.Messages))
 	signers := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
 		signers[i] = msg.Signer
-		indices[i] = int(msg.ValidatorIndex)
+		indices[i] = uint64(msg.ValidatorIndex)
 	}
 	logger = logger.With(fields.ConsensusTime(cr.metrics.GetConsensusTime()))
 
 	logger.Debug("🧩 got partial signatures",
 		zap.Bool("quorum", quorum),
 		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
-		zap.Int("signer", int(signedMsg.Messages[0].Signer)),
+		zap.Uint64("signer", signedMsg.Messages[0].Signer),
 		zap.Int("sigs", len(roots)),
-		zap.Ints("validators", indices))
+		zap.Uint64s("validators", indices))
 
 	if !quorum {
 		return nil
@@ -355,7 +355,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			// Reconstruct signature
 			share := cr.BaseRunner.Share[validator]
 			pubKey := share.ValidatorPubKey
-			vlogger := logger.With(zap.Int("validator_index", int(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
+			vlogger := logger.With(zap.Uint64("validator_index", uint64(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
 
 			sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root,
 				pubKey[:], validator)

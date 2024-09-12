@@ -201,6 +201,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole, slot phase0.Slot) *zap.Logger {
 	logger = logger.With(fields.Slot(slot))
+	// #nosec G115
 	if dutyID, ok := v.dutyIDs.Get(spectypes.RunnerRole(role)); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}

@@ -404,7 +404,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 
 			// Unsubscribe from the removed subnets.
 			for _, subnet := range removedSubnets {
-				if err := n.unsubscribeSubnet(logger, uint(subnet)); err != nil {
+				if err := n.unsubscribeSubnet(logger, subnet); err != nil {
 					logger.Debug("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
 					errs = errors.Join(errs, err)
 				} else {

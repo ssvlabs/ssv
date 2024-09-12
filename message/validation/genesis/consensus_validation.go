@@ -434,11 +434,11 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *g
 }
 
 func (mv *messageValidator) roundRobinProposer(height genesisspecqbft.Height, round genesisspecqbft.Round, share *ssvtypes.SSVShare) genesisspectypes.OperatorID {
-	firstRoundIndex := 0
+	firstRoundIndex := uint64(0)
 	if height != genesisspecqbft.FirstHeight {
-		firstRoundIndex += int(height) % len(share.Committee)
+		firstRoundIndex += uint64(height) % uint64(len(share.Committee))
 	}
 
-	index := (firstRoundIndex + int(round) - int(genesisspecqbft.FirstRound)) % len(share.Committee)
+	index := (firstRoundIndex + uint64(round) - uint64(genesisspecqbft.FirstRound)) % uint64(len(share.Committee))
 	return share.Committee[index].Signer
 }

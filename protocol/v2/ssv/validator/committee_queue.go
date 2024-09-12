@@ -156,15 +156,15 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(sm.Height)),
-			zap.Int64("msg_round", int64(sm.Round)),
-			zap.Int64("consensus_msg_type", int64(sm.MsgType)),
+			zap.Uint64("msg_height", uint64(sm.Height)),
+			zap.Uint64("msg_round", uint64(sm.Round)),
+			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Messages[0].Signer)),
+			zap.Uint64("signer", psm.Messages[0].Signer),
 			fields.Slot(psm.Slot),
 		}
 	}

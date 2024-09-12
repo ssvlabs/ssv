@@ -99,7 +99,8 @@ func ValidatorSubnet(validatorPKHex string) int {
 		return -1
 	}
 	val := hexToUint64(validatorPKHex[:10])
-	return int(val % SubnetsCount)
+
+	return int(val % SubnetsCount) // nolint:gosec
 }
 
 // CommitteeSubnet returns the subnet for the given committee

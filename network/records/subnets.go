@@ -144,7 +144,7 @@ func getCharMask(str string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		maskData = append(maskData, uint8(val))
+		maskData = append(maskData, uint8(val)) // nolint:gosec
 	}
 	return maskData, nil
 }
