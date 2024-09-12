@@ -49,7 +49,7 @@ type RoundTimer struct {
 	// result holds the result of the timer
 	done OnRoundTimeoutF
 	// round is the current round of the timer
-	round uint64
+	round int64
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
@@ -147,12 +147,12 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 
 // Round returns a round.
 func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadUint64(&t.round))
+	return specqbft.Round(atomic.LoadInt64(&t.round))
 }
 
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreUint64(&t.round, uint64(round))
+	atomic.StoreInt64(&t.round, int64(round)) // nolint:sec
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer
