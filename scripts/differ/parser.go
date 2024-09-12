@@ -85,7 +85,9 @@ func (p *Parser) addElement(n ast.Node) bool {
 
 	// Get the code.
 	var buf bytes.Buffer
-	printer.Fprint(&buf, p.fset, n)
+	if err := printer.Fprint(&buf, p.fset, n); err != nil {
+		log.Fatal(err)
+	}
 	code := regexpRemains.ReplaceAllString(buf.String(), "")
 
 	// Get the file.

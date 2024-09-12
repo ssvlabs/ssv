@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/golang/gddo/httputil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -18,12 +19,15 @@ type HandlerFunc func(http.ResponseWriter, *http.Request) error
 func Handler(h HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := h(w, r); err != nil {
-			//nolint:all
-			switch e := err.(type) {
-			case render.Renderer:
-				render.Render(w, r, e)
-			default:
-				render.Render(w, r, Error(err))
+			var renderer render.Renderer
+			if errors.As(err, &renderer) {
+				if renderErr := render.Render(w, r, renderer); renderErr != nil {
+					http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+				}
+			} else {
+				if renderErr := render.Render(w, r, Error(err)); renderErr != nil {
+					http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+				}
 			}
 		}
 	}
