@@ -14,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/message"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
-	genesisqueue "github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
+	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
 )
 
@@ -168,15 +168,15 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *genesisqueue.GenesisSSVMessa
 	case genesisspectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*genesisspecqbft.SignedMessage)
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(sm.Message.Height)),
-			zap.Int64("msg_round", int64(sm.Message.Round)),
-			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
+			zap.Uint64("msg_height", uint64(sm.Message.Height)),
+			zap.Uint64("msg_round", uint64(sm.Message.Round)),
+			zap.Uint64("consensus_msg_type", uint64(sm.Message.MsgType)),
 			zap.Any("signers", sm.Signers),
 		}
 	case genesisspectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Signer)),
+			zap.Uint64("signer", psm.Signer),
 			fields.Slot(psm.Message.Slot),
 		}
 	}

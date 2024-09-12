@@ -212,7 +212,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType.DomainType()))
+		zap.Uint16("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType.DomainType()))
 
 	return nil
 }
@@ -364,10 +364,10 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 }
 
 // newUDPListener creates a udp server
-func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, error) {
+func newUDPListener(bindIP net.IP, port uint16, network string) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
-		Port: port,
+		Port: int(port),
 	}
 	conn, err := net.ListenUDP(network, udpAddr)
 	if err != nil {

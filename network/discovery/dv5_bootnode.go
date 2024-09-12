@@ -14,7 +14,7 @@ import (
 type BootnodeOptions struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Bootnode private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
-	Port       int    `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
+	Port       uint16 `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
 }
 
 // Bootnode represents a bootnode used for tests

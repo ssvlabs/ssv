@@ -2,13 +2,15 @@ package discovery
 
 import (
 	"crypto/ecdsa"
-	"github.com/ssvlabs/ssv/logging"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 	"net"
 
+	"github.com/ssvlabs/ssv/logging"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
+
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/network/commons"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/commons"
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -26,9 +28,9 @@ type DiscV5Options struct {
 	// BindIP is the IP to bind to the UDP listener
 	BindIP string
 	// Port is the UDP port used by discv5
-	Port int
+	Port uint16
 	// TCPPort is the TCP port exposed in the ENR
-	TCPPort int
+	TCPPort uint16
 	// NetworkKey is the private key used to create the peer.ID if the node
 	NetworkKey *ecdsa.PrivateKey
 	// Bootnodes is a list of bootstrapper nodes

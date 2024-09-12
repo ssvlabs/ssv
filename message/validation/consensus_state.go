@@ -50,7 +50,7 @@ func (os *OperatorState) Get(slot phase0.Slot) *SignerState {
 	os.mu.RLock()
 	defer os.mu.RUnlock()
 
-	s := os.state[int(slot)%len(os.state)]
+	s := os.state[int(uint64(slot)%uint64(len(os.state)))]
 	if s == nil || s.Slot != slot {
 		return nil
 	}

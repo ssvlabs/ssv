@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
