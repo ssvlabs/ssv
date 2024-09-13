@@ -40,11 +40,10 @@ type CommitteeRunner struct {
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
-	stoppedValidators map[spectypes.ValidatorPK]struct{}
-	submittedDuties   map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
-
-	started time.Time
-	metrics metrics.ConsensusMetrics
+	submittedDuties        map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
+	validAttesterDutyCheck func(spectypes.ValidatorPK, spectypes.Duty) bool
+	started                time.Time
+	metrics                metrics.ConsensusMetrics
 }
 
 func NewCommitteeRunner(
@@ -65,15 +64,21 @@ func NewCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		beacon:            beacon,
-		network:           network,
-		signer:            signer,
-		operatorSigner:    operatorSigner,
-		valCheck:          valCheck,
-		stoppedValidators: make(map[spectypes.ValidatorPK]struct{}),
-		submittedDuties:   make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
-		metrics:           metrics.NewConsensusMetrics(spectypes.RoleCommittee),
+		beacon:         beacon,
+		network:        network,
+		signer:         signer,
+		operatorSigner: operatorSigner,
+		valCheck:       valCheck,
+		validAttesterDutyCheck: func(pk spectypes.ValidatorPK, duty spectypes.Duty) bool {
+			return true // by default we don't check validator are stopped or not
+		},
+		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
+		metrics:         metrics.NewConsensusMetrics(spectypes.RoleCommittee),
 	}
+}
+
+func (cr *CommitteeRunner) SetValidAttesterDutyCheck(checker func(valPk spectypes.ValidatorPK, duty spectypes.Duty) bool) {
+	cr.validAttesterDutyCheck = checker
 }
 
 func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
@@ -88,11 +93,6 @@ func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty,
 
 func (cr *CommitteeRunner) Encode() ([]byte, error) {
 	return json.Marshal(cr)
-}
-
-// StopDuty stops the duty for the given validator
-func (cr *CommitteeRunner) StopDuty(validator spectypes.ValidatorPK) {
-	cr.stoppedValidators[validator] = struct{}{}
 }
 
 func (cr *CommitteeRunner) Decode(data []byte) error {
@@ -141,8 +141,6 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		signer         spectypes.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       specqbft.ProposedValueCheckF
-		//
-		//stoppedValidators map[spectypes.ValidatorPK]struct{}
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -158,7 +156,6 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	cr.signer = aux.signer
 	cr.operatorSigner = aux.operatorSigner
 	cr.valCheck = aux.valCheck
-	//cr.stoppedValidators = aux.stoppedValidators
 	return nil
 }
 
@@ -216,6 +213,10 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		switch duty.Type {
 		case spectypes.BNRoleAttester:
+			// duty.pubkey duty.slot
+			// check if we can progress for this validator (its highest attesting slot is <= to the duty.slot)
+			//if  >= =>>> continue // we can't progress for this validator
+
 			attestationData := constructAttestationData(beaconVote, duty)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				spectypes.DomainAttester)
@@ -307,7 +308,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 	}
 
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
-	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects()
+	attestationMap, committeeMap, beaconObjects, skippedValidatorDuties, err := cr.expectedPostConsensusRootsAndBeaconObjects()
 	if err != nil {
 		return errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
 	}
@@ -341,7 +342,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		)
 
 		for _, validator := range validators {
-
+			// Skip if validator is stopped or has higher attesting slot
+			if _, isSkipped := skippedValidatorDuties[validator]; isSkipped {
+				continue
+			}
 			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
 			if !cr.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root) {
 				continue
@@ -466,17 +470,23 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		return anyErr
 	}
 
+	// TODO: WARNING check how to check all validators duties are done if we can have stopped validators
 	// Check if duty has terminated (runner has submitted for all duties)
-	if cr.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
+	if cr.HasSubmittedAllValidatorDuties(attestationMap, committeeMap, 0) {
 		cr.BaseRunner.State.Finished = true
 	}
 	return nil
 }
 
 // HasSubmittedAllValidatorDuties -- Returns true if the runner has done submissions for all validators for the given slot
-func (cr *CommitteeRunner) HasSubmittedAllValidatorDuties(attestationMap map[phase0.ValidatorIndex][32]byte, syncCommitteeMap map[phase0.ValidatorIndex][32]byte) bool {
+func (cr *CommitteeRunner) HasSubmittedAllValidatorDuties(
+	attestationMap map[phase0.ValidatorIndex][32]byte,
+	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
+	stoppedValidatorsCount int,
+) bool {
 	// Expected total
-	expectedTotalSubmissions := len(attestationMap) + len(syncCommitteeMap)
+	// #TODO: either calc the total or check this on totalSubmissions++  } else {
+	expectedTotalSubmissions := len(attestationMap) + len(syncCommitteeMap) - stoppedValidatorsCount
 
 	totalSubmissions := 0
 
@@ -484,6 +494,8 @@ func (cr *CommitteeRunner) HasSubmittedAllValidatorDuties(attestationMap map[pha
 	for valIdx := range attestationMap {
 		if cr.HasSubmitted(spectypes.BNRoleAttester, valIdx) {
 			totalSubmissions++
+		} else {
+			// TODO: Another aproach is to check if the validator is stopped, then +1 also
 		}
 	}
 	// Add submitted sync committee duties
@@ -553,27 +565,33 @@ func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot,
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot, error error,
+	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot,
+	skippedValidatorDuties map[phase0.ValidatorIndex]*spectypes.ValidatorDuty,
+	error error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot)
+	skippedValidatorDuties = make(map[phase0.ValidatorIndex]*spectypes.ValidatorDuty)
+
 	duty := cr.BaseRunner.State.StartingDuty
 	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(beaconVoteData); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
+		return nil, nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {
 			continue
 		}
-		_, stopped := cr.stoppedValidators[spectypes.ValidatorPK(validatorDuty.PubKey)]
-		if stopped {
+
+		if cr.validAttesterDutyCheck(spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty) {
+			skippedValidatorDuties[validatorDuty.ValidatorIndex] = validatorDuty
 			continue
 		}
+
 		slot := validatorDuty.DutySlot()
 		epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
 		switch validatorDuty.Type {
@@ -632,7 +650,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 			beaconObjects[validatorDuty.ValidatorIndex][root] = syncMsg
 		}
 	}
-	return attestationMap, syncCommitteeMap, beaconObjects, nil
+	return attestationMap, syncCommitteeMap, beaconObjects, skippedValidatorDuties, nil
 }
 
 func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {

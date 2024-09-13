@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -16,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -77,6 +75,14 @@ func NewCommittee(
 	}
 }
 
+func (c *Committee) ValidAttesterDuty(valPk spectypes.ValidatorPK, duty spectypes.Duty) bool {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	currentHighestAttesterSlot, found := c.HighestAttestingSlotMap[valPk]
+	return found && currentHighestAttesterSlot >= duty.DutySlot()
+}
+
 func (c *Committee) AddShare(share *spectypes.Share) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -87,7 +93,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if share, exist := c.Shares[validatorIndex]; exist {
-		c.stopValidator(c.logger, share.ValidatorPubKey)
+		c.stopValidator(share.ValidatorPubKey)
 		delete(c.Shares, validatorIndex)
 	}
 }
@@ -176,11 +182,17 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		}
 	}
 	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
+
 	for k, v := range c.Shares {
 		sharesCopy[k] = v
+		if currentHighestSlot, found := c.HighestAttestingSlotMap[v.ValidatorPubKey]; !found || currentHighestSlot < duty.Slot {
+			c.HighestAttestingSlotMap[v.ValidatorPubKey] = duty.Slot
+		}
 	}
+
 	// <--
 	r := c.CreateRunnerFn(duty.Slot, sharesCopy, slashableValidators)
+	r.SetValidAttesterDutyCheck(c.ValidAttesterDuty)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
 	c.Runners[duty.Slot] = r
@@ -207,14 +219,8 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 }
 
 // NOT threadsafe
-func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
-	for slot, runner := range c.Runners {
-		logger.Debug("trying to stop duty for validator",
-			fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
-			zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
-		)
-		runner.StopDuty(validator)
-	}
+func (c *Committee) stopValidator(validator spectypes.ValidatorPK) {
+	delete(c.HighestAttestingSlotMap, validator)
 }
 
 func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
