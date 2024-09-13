@@ -18,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -95,18 +94,6 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		for _, subtest := range subtests {
 			typedTest.Tests = append(typedTest.Tests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
 		}
-
-		return &runnable{
-			name: typedTest.TestName(),
-			test: func(t *testing.T) {
-				typedTest.Run(t)
-			},
-		}
-	case reflect.TypeOf(&partialsigmessage.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
-		byts, err := json.Marshal(test)
-		require.NoError(t, err)
-		typedTest := &partialsigmessage.MsgSpecTest{}
-		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
 			name: typedTest.TestName(),

@@ -1,11 +1,10 @@
 package validation
 
 import (
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -27,6 +26,7 @@ type LoggerFields struct {
 	SSVMessageType spectypes.MsgType
 	Slot           phase0.Slot
 	Consensus      *ConsensusFields
+	DutyID         string
 }
 
 // AsZapFields returns zap logging fields for the descriptor.
@@ -36,6 +36,10 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 		fields.Role(d.Role),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
+	}
+
+	if d.DutyID != "" {
+		result = append(result, fields.DutyID(d.DutyID))
 	}
 
 	if d.Consensus != nil {
@@ -57,9 +61,17 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 		return descriptor
 	}
 
-	descriptor.DutyExecutorID = decodedMessage.GetID().GetDutyExecutorID()
-	descriptor.Role = decodedMessage.GetID().GetRoleType()
-	descriptor.SSVMessageType = decodedMessage.GetType()
+	if decodedMessage.SSVMessage == nil {
+		return descriptor
+	}
+
+	descriptor.DutyExecutorID = decodedMessage.SSVMessage.GetID().GetDutyExecutorID()
+	descriptor.Role = decodedMessage.SSVMessage.GetID().GetRoleType()
+	descriptor.SSVMessageType = decodedMessage.SSVMessage.GetType()
+
+	if mv.logger.Level() == zap.DebugLevel {
+		mv.addDutyIDField(descriptor)
+	}
 
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
@@ -75,6 +87,21 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	}
 
 	return descriptor
+}
+
+func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
+	if lf.Role == spectypes.RoleCommittee {
+		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
+		if ok {
+			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
+		}
+	} else {
+		// get the validator index from the msgid
+		v, ok := mv.validatorStore.Validator(lf.DutyExecutorID)
+		if ok {
+			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role.String(), v.ValidatorIndex)
+		}
+	}
 }
 
 // LoggerFields provides details about a message. It's used for logging and metrics.

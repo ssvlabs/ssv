@@ -10,7 +10,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -220,7 +220,8 @@ func TestEthExecLayer(t *testing.T) {
 
 			for _, event := range valRemove.events {
 				valPubKey := event.validator.masterPubKey.Serialize()
-				valShare := nodeStorage.Shares().Get(nil, valPubKey)
+				valShare, exists := nodeStorage.Shares().Get(nil, valPubKey)
+				require.False(t, exists)
 				require.Nil(t, valShare)
 			}
 		}

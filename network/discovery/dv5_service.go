@@ -134,7 +134,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		)
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			logger.Debug("discovered peer was dropped", zap.Error(err))
+			logger.Debug("skipped discovered peer", zap.Error(err))
 			return
 		}
 		handler(e)

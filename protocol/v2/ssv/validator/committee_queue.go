@@ -6,19 +6,19 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -29,9 +29,9 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 		return
 	}
 
-	v.mtx.RLock() // read v.Queues
-	q, ok := v.Queues[slot]
-	v.mtx.RUnlock()
+	c.mtx.RLock() // read v.Queues
+	q, ok := c.Queues[slot]
+	c.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
 			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
@@ -42,9 +42,9 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
-		v.mtx.Lock()
-		v.Queues[slot] = q
-		v.mtx.Unlock()
+		c.mtx.Lock()
+		c.Queues[slot] = q
+		c.mtx.Unlock()
 		logger.Debug("missing queue for slot created", fields.Slot(slot))
 	}
 
@@ -73,7 +73,7 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Committee) ConsumeQueue(
+func (c *Committee) ConsumeQueue(
 	ctx context.Context,
 	q queueContainer,
 	logger *zap.Logger,
@@ -98,28 +98,25 @@ func (v *Committee) ConsumeQueue(
 		}
 
 		filter := queue.FilterAny
-		if !runner.HasRunningDuty() {
-			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.SSVMessage) bool {
-				e, ok := m.Body.(*types.EventMsg)
-				if !ok {
-					return false
-				}
-				return e.Type == types.ExecuteDuty
-			}
-		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
-			// for the current height and round.
+			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
+					return m.MsgType != spectypes.SSVPartialSignatureMsgType
+				}
+
+				if sm.Round != state.Round { // allow next round or change round messages.
 					return true
 				}
 
-				if sm.Height != state.Height || sm.Round != state.Round {
-					return true
-				}
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+			}
+		} else if runningInstance != nil && !runningInstance.State.Decided {
+			filter = func(ssvMessage *queue.SSVMessage) bool {
+				// don't read post consensus until decided
+				return ssvMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
@@ -143,7 +140,7 @@ func (v *Committee) ConsumeQueue(
 
 		// Handle the message.
 		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
+			c.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
 		}
@@ -153,7 +150,7 @@ func (v *Committee) ConsumeQueue(
 	return nil
 }
 
-func (v *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
+func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:

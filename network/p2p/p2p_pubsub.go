@@ -56,8 +56,8 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 	} else {
-		val := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
-		if val == nil {
+		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if !exists {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
 		topics = commons.CommitteeTopicID(val.CommitteeID())
@@ -123,8 +123,8 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	share := n.nodeStorage.ValidatorStore().Validator(pk[:])
-	if share == nil {
+	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	if !exists {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
@@ -141,7 +141,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 // subscribeCommittee handles the subscription logic for committee subnets
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	n.interfaceLogger.Debug("subscribing to committee", fields.CommitteeID(cid))
-	status, found := n.activeCommittees.GetOrInsert(string(cid[:]), validatorStatusSubscribing)
+	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
@@ -159,7 +159,7 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
 	pkHex := hex.EncodeToString(pk[:])
 	n.interfaceLogger.Debug("subscribing to validator", zap.String("validator", pkHex))
-	status, found := n.activeValidators.GetOrInsert(pkHex, validatorStatusSubscribing)
+	status, found := n.activeValidators.GetOrSet(pkHex, validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
@@ -196,17 +196,22 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 		if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
 			return nil
 		}
-		n.activeValidators.Del(pkHex)
+		n.activeValidators.Delete(pkHex)
 	}
 
-	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
+	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	if !exists {
+		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
+	}
+
+	cmtid := share.CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
 		}
 	}
-	n.activeCommittees.Del(string(cmtid[:]))
+	n.activeCommittees.Delete(string(cmtid[:]))
 	return nil
 }
 

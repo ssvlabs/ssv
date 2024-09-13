@@ -160,5 +160,10 @@ func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
 	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
-	return p.nodes["event syncer"].Healthy(ctx)
+
+	es, ok := p.nodes["event syncer"]
+	if !ok {
+		return fmt.Errorf("event syncer not found")
+	}
+	return es.Healthy(ctx)
 }

@@ -11,8 +11,7 @@ import (
 
 const (
 	// Network Topology
-	gossipSubD          = 8
-	minActiveValidators = 200
+	gossipSubD = 8
 
 	// Overall parameters
 	totalTopicsWeight = 4.0
@@ -144,13 +143,6 @@ func (o *Options) defaults() {
 	}
 }
 
-func (o *Options) validate() error {
-	if o.Network.ActiveValidators < minActiveValidators {
-		return ErrLowValidatorsCount
-	}
-	return nil
-}
-
 // maxScore attainable by a peer
 func (o *Options) maxScore() float64 {
 	return (o.Topic.MaxTimeInMeshScore + o.Topic.MaxFirstDeliveryScore) * o.Network.TotalTopicsWeight
@@ -203,10 +195,7 @@ func NewSubnetTopicOptsValidators(activeValidators, subnets int) *Options {
 // implementation is based on ETH2.0, with alignments to ssv:
 // https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c
 func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
-	// Validate options
-	if err := opts.validate(); err != nil {
-		return nil, err
-	}
+	var err error
 
 	// Set to default if not set
 	opts.defaults()
@@ -218,16 +207,22 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 
 	// P2
 	firstMessageDeliveriesDecay := scoreDecay(opts.Network.OneEpochDuration*opts.Topic.FirstDeliveryDecayEpochs, decayInterval)
-	firstMessageDeliveriesCap, err := decayConvergence(firstMessageDeliveriesDecay, 2*(expectedMessagesPerDecayInterval)/float64(opts.Topic.D))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not calculate decay convergence for first message delivery cap")
+	firstMessageDeliveriesCap := 1.0
+	if expectedMessagesPerDecayInterval > 0 {
+		firstMessageDeliveriesCap, err = decayConvergence(firstMessageDeliveriesDecay, 2*(expectedMessagesPerDecayInterval)/float64(opts.Topic.D))
+		if err != nil {
+			return nil, errors.Wrap(err, "could not calculate decay convergence for first message delivery cap")
+		}
 	}
 
 	// P3
 	meshMessageDeliveriesDecay := scoreDecay(opts.Network.OneEpochDuration*opts.Topic.MeshDeliveryDecayEpochs, decayInterval)
-	meshMessageDeliveriesThreshold, err := decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerDecayInterval * opts.Topic.MeshDeliveryDampeningFactor))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
+	meshMessageDeliveriesThreshold := 1.0
+	if expectedMessagesPerDecayInterval > 0 {
+		meshMessageDeliveriesThreshold, err = decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerDecayInterval * opts.Topic.MeshDeliveryDampeningFactor))
+		if err != nil {
+			return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
+		}
 	}
 	var meshMessageDeliveriesWeight float64
 	if meshScoringEnabled {
@@ -270,5 +265,49 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 		InvalidMessageDeliveriesWeight: invalidMessageDeliveriesWeight,
 	}
 
+	params = sanitizeTopicParams(params)
+
 	return params, nil
+}
+
+// Sanitizes a pubsub.TopicScoreParams by assigning default values in case a parameter is NaN or Inf
+func sanitizeTopicParams(params *pubsub.TopicScoreParams) *pubsub.TopicScoreParams {
+
+	sanitizeParameter := func(value float64, defaultValue float64) float64 {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return defaultValue
+		}
+		return value
+	}
+
+	defaultDecay := 0.001
+	defaultWeight := 0.0
+	defaultCap := 1.0
+	defaultThreshold := 1.0
+	defaultInvalidWeight := -0.1
+
+	// P1
+	params.TimeInMeshCap = sanitizeParameter(params.TimeInMeshCap, defaultCap)
+	params.TimeInMeshWeight = sanitizeParameter(params.TimeInMeshWeight, defaultWeight)
+
+	// P2
+	params.FirstMessageDeliveriesDecay = sanitizeParameter(params.FirstMessageDeliveriesDecay, defaultDecay)
+	params.FirstMessageDeliveriesCap = sanitizeParameter(params.FirstMessageDeliveriesCap, defaultCap)
+	params.FirstMessageDeliveriesWeight = sanitizeParameter(params.FirstMessageDeliveriesWeight, defaultWeight)
+
+	// P3
+	params.MeshMessageDeliveriesDecay = sanitizeParameter(params.MeshMessageDeliveriesDecay, defaultDecay)
+	params.MeshMessageDeliveriesThreshold = sanitizeParameter(params.MeshMessageDeliveriesThreshold, defaultThreshold)
+	params.MeshMessageDeliveriesWeight = sanitizeParameter(params.MeshMessageDeliveriesWeight, defaultWeight)
+	params.MeshMessageDeliveriesCap = sanitizeParameter(params.MeshMessageDeliveriesCap, defaultCap)
+
+	// P3b
+	params.MeshFailurePenaltyDecay = sanitizeParameter(params.MeshFailurePenaltyDecay, defaultDecay)
+	params.MeshFailurePenaltyWeight = sanitizeParameter(params.MeshFailurePenaltyWeight, defaultWeight)
+
+	// P4
+	params.InvalidMessageDeliveriesDecay = sanitizeParameter(params.InvalidMessageDeliveriesDecay, defaultDecay)
+	params.InvalidMessageDeliveriesWeight = sanitizeParameter(params.InvalidMessageDeliveriesWeight, defaultInvalidWeight)
+
+	return params
 }
