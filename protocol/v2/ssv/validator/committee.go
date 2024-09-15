@@ -221,9 +221,21 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty, c.Operator.GetQuorum())
 }
 
-// NOT threadsafe
 func (c *Committee) stopValidator(validator spectypes.ValidatorPK) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
 	delete(c.HighestAttestingSlotMap, validator)
+
+	slot := c.BeaconNetwork.EstimatedCurrentSlot()
+	opIds := types.OperatorIDsFromOperators(c.Operator.Committee)
+	epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
+	committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
+
+	c.logger.Debug("stopped validator",
+		fields.DutyID(committeeDutyID),
+		fields.Slot(slot), fields.Validator(validator[:]),
+	)
 }
 
 func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
