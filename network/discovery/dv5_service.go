@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -25,9 +25,6 @@ import (
 var (
 	defaultDiscoveryInterval = time.Millisecond * 100
 	publishENRTimeout        = time.Minute
-
-	publishStateReady   = int32(0)
-	publishStatePending = int32(1)
 )
 
 // NodeProvider is an interface for managing ENRs
@@ -53,23 +50,24 @@ type DiscV5Service struct {
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
-	publishState int32
-	conn         *net.UDPConn
+	conn *net.UDPConn
 
 	domainType networkconfig.DomainTypeProvider
 	subnets    []byte
+
+	publishDeadline time.Time
+	publishMutex    sync.Mutex
 }
 
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:          ctx,
-		cancel:       cancel,
-		publishState: publishStateReady,
-		conns:        discOpts.ConnIndex,
-		subnetsIdx:   discOpts.SubnetsIdx,
-		domainType:   discOpts.DomainType,
-		subnets:      discOpts.DiscV5Opts.Subnets,
+		ctx:        ctx,
+		cancel:     cancel,
+		conns:      discOpts.ConnIndex,
+		subnetsIdx: discOpts.SubnetsIdx,
+		domainType: discOpts.DomainType,
+		subnets:    discOpts.DiscV5Opts.Subnets,
 	}
 
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
@@ -300,14 +298,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
-	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
-	defer done()
-	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
-		// pending
-		logger.Debug("pending publish ENR")
-		return
-	}
-
+	// Update the ENR with the current domain type.
 	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.domainType.DomainType())
 	if err != nil {
 		logger.Error("could not set domain type", zap.Error(err))
@@ -319,21 +310,47 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 		return
 	}
 
-	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
-	dvs.discover(ctx, func(e PeerEvent) {
-		metricPublishEnrPings.Inc()
-		err := dvs.dv5Listener.Ping(e.Node)
-		if err != nil {
-			if err.Error() == "RPC timeout" {
-				// ignore
-				return
-			}
-			logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
-			return
+	dvs.publishMutex.Lock()
+	existingDeadline := dvs.publishDeadline
+	dvs.publishDeadline = time.Now().Add(publishENRTimeout)
+	if !existingDeadline.IsZero() {
+		// Extend deadline of ongoing publish.
+		dvs.publishMutex.Unlock()
+		return
+	}
+	dvs.publishMutex.Unlock()
+
+	// Publish the ENR to the network.
+	for {
+		func() {
+			ctx, cancel := context.WithDeadline(dvs.ctx, dvs.publishDeadline)
+			defer cancel()
+
+			dvs.discover(ctx, func(e PeerEvent) {
+				metricPublishEnrPings.Inc()
+				err := dvs.dv5Listener.Ping(e.Node)
+				if err != nil {
+					if err.Error() == "RPC timeout" {
+						// ignore
+						return
+					}
+					logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
+					return
+				}
+				metricPublishEnrPongs.Inc()
+				// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
+			}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
+		}()
+
+		dvs.publishMutex.Lock()
+		done := time.Now().After(dvs.publishDeadline)
+		if done {
+			dvs.publishDeadline = time.Time{}
+			dvs.publishMutex.Unlock()
+			break
 		}
-		metricPublishEnrPongs.Inc()
-		// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
-	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
+		dvs.publishMutex.Unlock()
+	}
 }
 
 func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
