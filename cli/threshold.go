@@ -47,8 +47,8 @@ var createThresholdCmd = &cobra.Command{
 		// https://github.com/ethereum/eth2-ssv/issues/22
 		// currently support 4, 7, 10, 13 nodes threshold 3f+1. need to align based open the issue to
 		// support k(2f+1) and n (3f+1) and allow to pass it as flag
-		f := ssvtypes.ComputeF(int(keysCount))
-		privKeys, err := threshold.Create(baseKey.Serialize(), f, keysCount)
+		quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(int(keysCount))
+		privKeys, err := threshold.Create(baseKey.Serialize(), quorum, keysCount)
 		if err != nil {
 			logger.Fatal("failed to turn a private key into a threshold key", zap.Error(err))
 		}
