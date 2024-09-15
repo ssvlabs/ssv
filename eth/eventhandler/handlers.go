@@ -25,13 +25,13 @@ import (
 const encryptedKeyLength = 256
 
 var (
-	ErrAlreadyRegisteredWithSamePubkey = fmt.Errorf("operator registered with the same operator public key")
-	ErrAlreadyRegisteredWithSameId     = fmt.Errorf("operator registered with the same ID")
-	ErrOperatorDataNotFound            = fmt.Errorf("operator data not found")
-	ErrIncorrectSharesLength           = fmt.Errorf("shares length is not correct")
-	ErrSignatureVerification           = fmt.Errorf("signature verification failed")
-	ErrShareBelongsToDifferentOwner    = fmt.Errorf("share already exists and belongs to different owner")
-	ErrValidatorShareNotFound          = fmt.Errorf("validator share not found")
+	ErrOperatorPubkeyAlreadyExists  = fmt.Errorf("operator public key already exists")
+	ErrOperatorIDAlreadyExists      = fmt.Errorf("operator ID already exists")
+	ErrOperatorDataNotFound         = fmt.Errorf("operator data not found")
+	ErrIncorrectSharesLength        = fmt.Errorf("shares length is not correct")
+	ErrSignatureVerification        = fmt.Errorf("signature verification failed")
+	ErrShareBelongsToDifferentOwner = fmt.Errorf("share already exists and belongs to different owner")
+	ErrValidatorShareNotFound       = fmt.Errorf("validator share not found")
 )
 
 // TODO: make sure all handlers are tested properly:
@@ -59,9 +59,9 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return fmt.Errorf("could not check if operator exists: %w", err)
 	}
 	if existsById {
-		logger.Warn("malformed event: operator registered with ID",
-			zap.Uint64("expected_operator_id", event.OperatorId))
-		return &MalformedEventError{Err: ErrAlreadyRegisteredWithSameId}
+		logger.Warn("malformed event: operator ID already exists",
+			fields.OperatorID(event.OperatorId))
+		return &MalformedEventError{Err: ErrOperatorIDAlreadyExists}
 	}
 
 	// throw an error if there is an existing operator with the same public key
@@ -70,9 +70,9 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return fmt.Errorf("could not get operator data by public key: %w", err)
 	}
 	if foundByPubKey && operatorData.ID != 0 && bytes.Equal(operatorData.PublicKey, event.PublicKey) && operatorData.ID != event.OperatorId {
-		logger.Warn("malformed event: operator registered with the same operator public key",
-			zap.Uint64("expected_operator_id", operatorData.ID))
-		return &MalformedEventError{Err: ErrAlreadyRegisteredWithSamePubkey}
+		logger.Warn("malformed event: operator public key already exists",
+			fields.OperatorPubKey(operatorData.PublicKey))
+		return &MalformedEventError{Err: ErrOperatorPubkeyAlreadyExists}
 	}
 
 	exists, err := eh.nodeStorage.SaveOperatorData(txn, od)
