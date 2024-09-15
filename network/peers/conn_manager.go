@@ -99,7 +99,6 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 // according to the number of shared subnets,
 // while considering subnets with low peer count to be more important.
 func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) map[peer.ID]PeerScore {
-
 	// If we have less than n peers, just return all as the best peers
 	peerScores := make(map[peer.ID]PeerScore)
 	if len(allPeers) < n {
@@ -211,21 +210,16 @@ func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 
 // DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int {
-
 	disconnectedPeers := 0
-
 	for _, peerID := range allPeers {
-
-		// Check if peer is bad
+		// Disconnect if peer has bad gossip score.
 		if isBad, gossipScore := c.gossipScoreIndex.HasBadGossipScore(peerID); isBad {
-
-			// Disconnect
 			err := c.disconnect(peerID, net)
 			if err != nil {
 				logger.Error("failed to disconnect from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
 			} else {
 				logger.Debug("disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
-				disconnectedPeers += 1
+				disconnectedPeers++
 			}
 		}
 	}
@@ -235,30 +229,24 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 
 // DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
 func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int {
-
 	disconnectedPeers := 0
-
 	for _, peerID := range allPeers {
-		// Get peer's subnets
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
-
-		// Get shared subnets
 		sharedSubnets := records.SharedSubnets(mySubnets, peerSubnets, len(mySubnets))
 
-		// If there's no common subnet, disconnects
+		// If there's no common subnet, disconnect from peer.
 		if len(sharedSubnets) == 0 {
 			err := c.disconnect(peerID, net)
 			if err != nil {
 				logger.Error("failed to disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
 			} else {
 				logger.Debug("disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
-				disconnectedPeers += 1
+				disconnectedPeers++
 				if disconnectedPeers >= disconnectQuota {
 					return disconnectedPeers
 				}
 			}
 		}
 	}
-
 	return disconnectedPeers
 }

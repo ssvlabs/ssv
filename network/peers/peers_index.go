@@ -61,7 +61,6 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - pruned (that was not expired)
 // - bad score
 func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
-
 	if isBad, _ := pi.HasBadGossipScore(id); isBad {
 		return true
 	}

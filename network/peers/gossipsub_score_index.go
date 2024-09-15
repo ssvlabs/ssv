@@ -10,7 +10,7 @@ import (
 // Implements GossipScoreIndex
 type gossipScoreIndex struct {
 	score map[peer.ID]float64
-	mutex sync.Mutex
+	mutex sync.RWMutex
 
 	graylistThreshold float64
 }
@@ -21,14 +21,13 @@ func NewGossipScoreIndex() *gossipScoreIndex {
 
 	return &gossipScoreIndex{
 		score:             make(map[peer.ID]float64),
-		mutex:             sync.Mutex{},
 		graylistThreshold: graylistThreshold,
 	}
 }
 
 func (g *gossipScoreIndex) GetGossipScore(peerID peer.ID) (float64, bool) {
-	g.mutex.Lock()
-	defer g.mutex.Unlock()
+	g.mutex.RLock()
+	defer g.mutex.RUnlock()
 
 	if score, exists := g.score[peerID]; exists {
 		return score, true
