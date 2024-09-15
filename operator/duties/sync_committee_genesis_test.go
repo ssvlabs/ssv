@@ -21,11 +21,10 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func setupSyncCommitteeGenesisDutiesMock(
+func setupGenesisDutiesMockSyncCommittee(
 	s *Scheduler,
 	activeShares []*ssvtypes.SSVShare,
 	dutiesMap *hashmap.Map[uint64, []*v1.SyncCommitteeDuty],
-	waitForDuties *SafeValue[bool],
 ) (chan struct{}, chan []*genesisspectypes.Duty) {
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*genesisspectypes.Duty)
@@ -59,9 +58,7 @@ func setupSyncCommitteeGenesisDutiesMock(
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-			if waitForDuties.Get() {
-				fetchDutiesCall <- struct{}{}
-			}
+			fetchDutiesCall <- struct{}{}
 			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
@@ -80,7 +77,7 @@ func setupSyncCommitteeGenesisDutiesMock(
 	return fetchDutiesCall, executeDutiesCall
 }
 
-func expectedExecutedGenesisSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*genesisspectypes.Duty {
+func expectedExecutedDutiesSyncCommitteeGenesis(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*genesisspectypes.Duty {
 	expectedDuties := make([]*genesisspectypes.Duty, 0)
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommittee))
@@ -91,12 +88,11 @@ func expectedExecutedGenesisSyncCommitteeDuties(handler *SyncCommitteeHandler, d
 
 func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot  = &SafeValue[phase0.Slot]{}
+		forkEpoch    = goclient.FarFutureEpoch
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{{
 			Share: spectypes.Share{
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
@@ -115,34 +111,35 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
 	currentSlot.Set(phase0.Slot(1))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeGenesisDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupGenesisDutiesMockSyncCommittee(scheduler, activeShares, dutiesMap)
 	startFn()
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected := expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 2: expect sync committee duties to be executed at the same period
 	currentSlot.Set(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected = expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
 	currentSlot.Set(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected = expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
 	firstSlotOfNextPeriod := scheduler.network.Beacon.GetEpochFirstSlot(scheduler.network.Beacon.FirstEpochOfSyncPeriod(1))
@@ -157,12 +154,11 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Genesis_Current_Next_Periods(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot  = &SafeValue[phase0.Slot]{}
+		forkEpoch    = goclient.FarFutureEpoch
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{
 			{
 				Share: spectypes.Share{
 					Committee: []*spectypes.ShareMember{
@@ -197,44 +193,46 @@ func TestScheduler_SyncCommittee_Genesis_Current_Next_Periods(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
 	currentSlot.Set(phase0.Slot(256*32 - 49))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeGenesisDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupGenesisDutiesMockSyncCommittee(scheduler, activeShares, dutiesMap)
 	startFn()
 
 	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected := expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 2: wait for sync committee duties to be executed
 	currentSlot.Set(phase0.Slot(256*32 - 48))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected = expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: wait for sync committee duties to be executed
 	currentSlot.Set(phase0.Slot(256*32 - 47))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected = expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// ...
 
 	// STEP 4: new period, wait for sync committee duties to be executed
 	currentSlot.Set(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
-	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected = expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -243,12 +241,11 @@ func TestScheduler_SyncCommittee_Genesis_Current_Next_Periods(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot  = &SafeValue[phase0.Slot]{}
+		forkEpoch    = goclient.FarFutureEpoch
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{
 			{
 				Share: spectypes.Share{
 					Committee: []*spectypes.ShareMember{
@@ -269,7 +266,7 @@ func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeGenesisDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupGenesisDutiesMockSyncCommittee(scheduler, activeShares, dutiesMap)
 	startFn()
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
@@ -279,9 +276,9 @@ func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for sync committee duties to be fetched for next period
-	waitForDuties.Set(true)
+	// STEP 1: wait for sync committee duties to be fetched for current and next period
 	ticker.Send(currentSlot.Get())
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
@@ -307,11 +304,11 @@ func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 	// STEP 5: execute duties
 	currentSlot.Set(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected := expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -320,12 +317,11 @@ func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Genesis_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot  = &SafeValue[phase0.Slot]{}
+		forkEpoch    = goclient.FarFutureEpoch
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{
 			{
 				Share: spectypes.Share{
 					Committee: []*spectypes.ShareMember{
@@ -346,12 +342,13 @@ func TestScheduler_SyncCommittee_Genesis_Multiple_Indices_Changed_Same_Slot(t *t
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeGenesisDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupGenesisDutiesMockSyncCommittee(scheduler, activeShares, dutiesMap)
 	startFn()
 
-	// STEP 1: wait for no action to be taken
+	// STEP 1: wait for sync committee duties to be fetched for current and next period
 	ticker.Send(currentSlot.Get())
-	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -374,7 +371,6 @@ func TestScheduler_SyncCommittee_Genesis_Multiple_Indices_Changed_Same_Slot(t *t
 
 	// STEP 4: wait for sync committee duties to be fetched again
 	currentSlot.Set(phase0.Slot(256*32 - 2))
-	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
 	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -387,11 +383,11 @@ func TestScheduler_SyncCommittee_Genesis_Multiple_Indices_Changed_Same_Slot(t *t
 	// STEP 6: The first assigned duty should not be executed, but the second one should
 	currentSlot.Set(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected := expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -401,12 +397,11 @@ func TestScheduler_SyncCommittee_Genesis_Multiple_Indices_Changed_Same_Slot(t *t
 // reorg current dependent root changed
 func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot  = &SafeValue[phase0.Slot]{}
+		forkEpoch    = goclient.FarFutureEpoch
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{
 			{
 				Share: spectypes.Share{
 					Committee: []*spectypes.ShareMember{
@@ -427,7 +422,7 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeGenesisDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupGenesisDutiesMockSyncCommittee(scheduler, activeShares, dutiesMap)
 	startFn()
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
@@ -438,8 +433,8 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 	})
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
-	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -481,11 +476,11 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 	// STEP 6: The first assigned duty should not be executed, but the second one should
 	currentSlot.Set(phase0.Slot(256 * 32))
 	duties, _ := dutiesMap.Get(1)
-	expected := expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected := expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -495,12 +490,11 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 // reorg current dependent root changed including indices change in the same slot
 func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot  = &SafeValue[phase0.Slot]{}
+		forkEpoch    = goclient.FarFutureEpoch
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{
 			{
 				Share: spectypes.Share{
 					Committee: []*spectypes.ShareMember{
@@ -529,7 +523,7 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testin
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeGenesisDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupGenesisDutiesMockSyncCommittee(scheduler, activeShares, dutiesMap)
 	startFn()
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
@@ -540,8 +534,8 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testin
 	})
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
-	waitForDuties.Set(true)
 	ticker.Send(currentSlot.Get())
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -593,11 +587,11 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testin
 	// STEP 6: The first assigned duty should not be executed, but the second and the new from indices change should
 	currentSlot.Set(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected := expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -606,12 +600,11 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testin
 
 func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot  = &SafeValue[phase0.Slot]{}
+		forkEpoch    = goclient.FarFutureEpoch
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{{
 			Share: spectypes.Share{
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
@@ -629,31 +622,32 @@ func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 
 	currentSlot.Set(phase0.Slot(0))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeGenesisDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupGenesisDutiesMockSyncCommittee(scheduler, activeShares, dutiesMap)
 	startFn()
 
 	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected := expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesFetchGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 2: expect sync committee duties to be executed at the same period
 	currentSlot.Set(phase0.Slot(1))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected = expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration
 	startTime := time.Now()
 	currentSlot.Set(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	expected = expectedExecutedDutiesSyncCommitteeGenesis(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.Get())
@@ -665,7 +659,7 @@ func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 		},
 	}
 	scheduler.HandleHeadEvent(logger)(e)
-	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecutionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
 
 	// Stop scheduler & wait for graceful exit.

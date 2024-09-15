@@ -317,7 +317,7 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 	}
 }
 
-func waitForGenesisDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration, expectedDuties []*genesisspectypes.Duty) {
+func waitForDutiesExecutionGenesis(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration, expectedDuties []*genesisspectypes.Duty) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")

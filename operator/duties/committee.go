@@ -20,6 +20,8 @@ type CommitteeHandler struct {
 
 	attHandler  *AttesterHandler
 	syncHandler *SyncCommitteeHandler
+
+	firstRun bool
 }
 
 type committeeDuty struct {
@@ -32,6 +34,7 @@ func NewCommitteeHandler(attHandler *AttesterHandler, syncHandler *SyncCommittee
 	h := &CommitteeHandler{
 		attHandler:  attHandler,
 		syncHandler: syncHandler,
+		firstRun:    true,
 	}
 
 	return h
@@ -59,6 +62,9 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			tickerID := fields.FormatSlotTickerCommitteeID(period, epoch, slot)
 
 			if !h.network.PastAlanForkAtEpoch(epoch) {
+				if h.firstRun {
+					h.firstRun = false
+				}
 				h.logger.Debug("🛠 ticker event",
 					fields.SlotTickerID(tickerID),
 					zap.String("status", "alan not forked yet"),
@@ -67,12 +73,12 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			}
 			h.logger.Debug("🛠 ticker event", fields.SlotTickerID(tickerID))
 
+			if h.firstRun {
+				h.processFirstRun(ctx, period, epoch, slot)
+			}
 			h.processExecution(period, epoch, slot)
 			if h.indicesChanged {
-				h.attHandler.duties.Reset(epoch)
-				// we should not reset sync committee duties here as it is necessary for message validation
-				// but this can lead to executing duties for deleted/liquidated validators
-				h.indicesChanged = false
+				h.processIndicesChange(period, epoch, slot)
 			}
 			h.processFetching(ctx, period, epoch, slot)
 			h.processSlotTransition(period, epoch, slot)
@@ -94,10 +100,26 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Info("🔁 indices change received", fields.SlotTickerID(tickerID))
 
 			h.indicesChanged = true
-			h.attHandler.processIndicesChange(epoch, slot)
-			h.syncHandler.processIndicesChange(period, slot)
 		}
 	}
+}
+
+func (h *CommitteeHandler) processFirstRun(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		h.attHandler.processFirstRun(ctx, epoch, slot)
+	}()
+
+	go func() {
+		defer wg.Done()
+		h.syncHandler.processFirstRun(ctx, period, slot)
+	}()
+
+	wg.Wait()
+	h.firstRun = false
 }
 
 func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, slot phase0.Slot) {
@@ -120,16 +142,22 @@ func (h *CommitteeHandler) processFetching(ctx context.Context, period uint64, e
 	wg.Add(2)
 
 	go func() {
-		defer wg.Done() // Mark this goroutine as done once it completes
+		defer wg.Done()
 		h.attHandler.processFetching(ctx, epoch, slot)
 	}()
 
 	go func() {
-		defer wg.Done() // Mark this goroutine as done once it completes
+		defer wg.Done()
 		h.syncHandler.processFetching(ctx, period, slot, true)
 	}()
 
 	wg.Wait()
+}
+
+func (h *CommitteeHandler) processIndicesChange(period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+	h.attHandler.processIndicesChange(epoch, slot)
+	h.syncHandler.processIndicesChange(period, slot)
+	h.indicesChanged = false
 }
 
 func (h *CommitteeHandler) processSlotTransition(period uint64, epoch phase0.Epoch, slot phase0.Slot) {

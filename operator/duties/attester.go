@@ -21,13 +21,15 @@ type AttesterHandler struct {
 	duties            *dutystore.Duties[eth2apiv1.AttesterDuty]
 	fetchCurrentEpoch bool
 	fetchNextEpoch    bool
+
+	firstRun bool
 }
 
 func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty]) *AttesterHandler {
 	h := &AttesterHandler{
-		duties: duties,
+		duties:   duties,
+		firstRun: true,
 	}
-	h.fetchCurrentEpoch = true
 	return h
 }
 
@@ -39,8 +41,6 @@ func (h *AttesterHandler) Name() string {
 func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
-
-	h.fetchNextEpoch = true
 
 	next := h.ticker.Next()
 	for {
@@ -56,10 +56,12 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", fields.SlotTickerID(tickerID))
 
 			if !h.network.PastAlanForkAtEpoch(epoch) {
+				if h.firstRun {
+					h.processFirstRun(ctx, epoch, slot)
+				}
 				h.processExecution(epoch, slot)
 				if h.indicesChanged {
-					h.duties.Reset(epoch)
-					h.indicesChanged = false
+					h.processIndicesChange(epoch, slot)
 				}
 				h.processFetching(ctx, epoch, slot)
 				h.processSlotTransition(epoch, slot)
@@ -82,19 +84,19 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			if !h.network.PastAlanForkAtEpoch(epoch) {
 				h.indicesChanged = true
-				h.processIndicesChange(epoch, slot)
 			}
 		}
 	}
 }
 
-func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
-	defer cancel()
-
-	slot := h.network.Beacon.EstimatedCurrentSlot()
-	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+func (h *AttesterHandler) processFirstRun(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	h.fetchCurrentEpoch = true
 	h.processFetching(ctx, epoch, slot)
+
+	if uint64(slot)%h.network.Beacon.SlotsPerEpoch() > h.network.Beacon.SlotsPerEpoch()/2-1 {
+		h.fetchNextEpoch = true
+	}
+	h.firstRun = false
 }
 
 func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
@@ -109,7 +111,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		h.fetchCurrentEpoch = false
 	}
 
-	if h.fetchNextEpoch && h.shouldFetchNexEpoch(slot) {
+	if h.fetchNextEpoch {
 		if err := h.fetchAndProcessDuties(ctx, epoch+1); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
@@ -136,6 +138,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 }
 
 func (h *AttesterHandler) processIndicesChange(epoch phase0.Epoch, slot phase0.Slot) {
+	h.duties.Reset(epoch)
 	h.fetchCurrentEpoch = true
 
 	// reset next epoch duties if in appropriate slot range
@@ -143,6 +146,8 @@ func (h *AttesterHandler) processIndicesChange(epoch phase0.Epoch, slot phase0.S
 		h.duties.Reset(epoch + 1)
 		h.fetchNextEpoch = true
 	}
+
+	h.indicesChanged = false
 }
 
 func (h *AttesterHandler) processReorg(ctx context.Context, epoch phase0.Epoch, reorgEvent ReorgEvent) {
@@ -290,5 +295,5 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 }
 
 func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
-	return uint64(slot)%h.network.Beacon.SlotsPerEpoch() > h.network.Beacon.SlotsPerEpoch()/2-2
+	return uint64(slot)%h.network.Beacon.SlotsPerEpoch() >= h.network.Beacon.SlotsPerEpoch()/2-1
 }

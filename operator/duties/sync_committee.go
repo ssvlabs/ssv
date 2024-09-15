@@ -26,13 +26,15 @@ type SyncCommitteeHandler struct {
 	// preparationSlots is the number of slots ahead of the sync committee
 	// period change at which to prepare the relevant duties.
 	preparationSlots uint64
+	firstRun         bool
 }
 
 func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitteeHandler {
 	h := &SyncCommitteeHandler{
-		duties: duties,
+		duties:   duties,
+		firstRun: true,
 	}
-	h.fetchCurrentPeriod = true
+
 	return h
 }
 
@@ -49,10 +51,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	// The 1.5 epochs timing helps ensure setup occurs when the beacon node is likely less busy.
 	h.preparationSlots = h.network.Beacon.SlotsPerEpoch() * 3 / 2
 
-	if h.shouldFetchNextPeriod(h.network.Beacon.EstimatedCurrentSlot()) {
-		h.fetchNextPeriod = true
-	}
-
 	next := h.ticker.Next()
 	for {
 		select {
@@ -68,7 +66,13 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", fields.SlotTickerID(tickerID))
 
 			if !h.network.PastAlanForkAtEpoch(epoch) {
+				if h.firstRun {
+					h.processFirstRun(ctx, period, slot)
+				}
 				h.processExecution(period, slot)
+				if h.indicesChanged {
+					h.processIndicesChange(period, slot)
+				}
 				h.processFetching(ctx, period, slot, true)
 				h.processSlotTransition(period, slot)
 			}
@@ -91,20 +95,21 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Info("🔁 indices change received", fields.SlotTickerID(tickerID))
 
 			if !h.network.PastAlanForkAtEpoch(epoch) {
-				h.processIndicesChange(period, slot)
+				h.indicesChanged = true
 			}
 		}
 	}
 }
 
-func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
-	defer cancel()
-
-	slot := h.network.Beacon.EstimatedCurrentSlot()
-	epoch := h.network.Beacon.EstimatedCurrentEpoch()
-	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+func (h *SyncCommitteeHandler) processFirstRun(ctx context.Context, period uint64, slot phase0.Slot) {
+	h.fetchCurrentPeriod = true
 	h.processFetching(ctx, period, slot, false)
+
+	periodSlots := h.slotsPerPeriod()
+	if uint64(slot)%periodSlots > periodSlots-h.preparationSlots-1 {
+		h.fetchNextPeriod = true
+	}
+	h.firstRun = false
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot, waitForInitial bool) {
@@ -146,6 +151,8 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 }
 
 func (h *SyncCommitteeHandler) processIndicesChange(period uint64, slot phase0.Slot) {
+	// we should not reset sync committee duties here as it is necessary for message validation
+	// but this can lead to executing duties for deleted/liquidated validators
 	h.fetchCurrentPeriod = true
 
 	// reset next period duties if in appropriate slot range
@@ -153,6 +160,8 @@ func (h *SyncCommitteeHandler) processIndicesChange(period uint64, slot phase0.S
 		h.duties.Reset(period + 1)
 		h.fetchNextPeriod = true
 	}
+
+	h.indicesChanged = false
 }
 
 func (h *SyncCommitteeHandler) processReorg(period uint64, reorgEvent ReorgEvent) {
@@ -302,7 +311,7 @@ func calculateSubscriptions(endEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommi
 
 func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
 	periodSlots := h.slotsPerPeriod()
-	return uint64(slot)%periodSlots > periodSlots-h.preparationSlots-2
+	return uint64(slot)%periodSlots >= periodSlots-h.preparationSlots-1
 }
 
 func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
