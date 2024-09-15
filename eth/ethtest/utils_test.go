@@ -10,8 +10,9 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ekm"
@@ -281,14 +282,14 @@ func setupOperatorStorage(
 	return nodeStorage, operatorData
 }
 
-func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
+func simTestBackend(testAddresses []*ethcommon.Address) *simulator.Backend {
 	genesis := types.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
 		genesis[*testAddr] = types.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
-	return simulator.NewSimulatedBackend(
-		genesis, 50_000_000,
+	return simulator.NewBackend(genesis,
+		simulated.WithBlockGasLimit(50_000_000),
 	)
 }

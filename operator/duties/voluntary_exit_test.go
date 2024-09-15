@@ -147,7 +147,7 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 	scheduler.executionClient.(*MockExecutionClient).EXPECT().BlockByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
 			blockByNumberCalls.Add(1)
-			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, nil, trie.NewStackTrie(nil))
+			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, trie.NewStackTrie(nil))
 			return expectedBlock, nil
 		},
 	).AnyTimes()

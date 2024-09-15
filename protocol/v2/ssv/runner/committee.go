@@ -56,7 +56,10 @@ func NewCommitteeRunner(
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
-) Runner {
+) (Runner, error) {
+	if len(share) == 0 {
+		return nil, errors.New("no shares")
+	}
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
@@ -73,7 +76,7 @@ func NewCommitteeRunner(
 		stoppedValidators: make(map[spectypes.ValidatorPK]struct{}),
 		submittedDuties:   make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
 		metrics:           metrics.NewConsensusMetrics(spectypes.RoleCommittee),
-	}
+	}, nil
 }
 
 func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
@@ -225,14 +228,14 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
 			// TODO: revert log
-			adr, err := attestationData.HashTreeRoot()
+			attDataRoot, err := attestationData.HashTreeRoot()
 			if err != nil {
 				return errors.Wrap(err, "failed to hash attestation data")
 			}
 			logger.Debug("signed attestation data", zap.Int("validator_index", int(duty.ValidatorIndex)),
 				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
-				zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
+				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)

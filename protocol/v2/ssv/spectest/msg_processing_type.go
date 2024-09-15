@@ -146,7 +146,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		}
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
-		committee = c.Operator.Committee
+		committee = c.CommitteeMember.Committee
 	default:
 		network = v.Network.(*spectestingutils.TestingNetwork)
 		committee = v.Operator.Committee
@@ -240,8 +240,8 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
-		return runner.NewCommitteeRunner(
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error) {
+		r, err := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			controller.NewController(
@@ -256,7 +256,8 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetSigner(),
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
-		).(*runner.CommitteeRunner)
+		)
+		return r.(*runner.CommitteeRunner), err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -267,8 +268,8 @@ var baseCommitteeWithRunnerSample = func(
 		runnerSample.GetBaseRunner().BeaconNetwork,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
+		shareMap,
 	)
-	c.Shares = shareMap
 
 	return c
 }
