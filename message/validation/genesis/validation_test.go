@@ -875,7 +875,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		dutyStore = dutystore.New()
 		dutyStore.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
-			{ValidatorIndex: validatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+			{Slot: slot, ValidatorIndex: validatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
 		})
 		validator = New(netCfg, WithNodeStorage(ns), WithDutyStore(dutyStore)).(*messageValidator)
 		timeToWait, err = validator.waitAfterSlotStart(spectypes.BNRoleProposer)
