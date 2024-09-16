@@ -5,10 +5,8 @@ import (
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"math/big"
 
 	"github.com/btcsuite/btcd/btcec/v2"
-	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
 )
@@ -21,23 +19,9 @@ func ECDSAPrivFromInterface(privkey crypto.PrivKey) (*ecdsa.PrivateKey, error) {
 		return nil, errors.Wrap(err, "could not convert ecdsa.PrivateKey")
 	}
 
-	privKey := new(ecdsa.PrivateKey)
-	k := new(big.Int).SetBytes(rawKey)
-	privKey.D = k
-	privKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
+	privKey, _ := btcec.PrivKeyFromBytes(rawKey)
 
-	pubKey := privkey.GetPublic()
-
-	pubKeyBytes, err := pubKey.Raw()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not extract public key")
-	}
-
-	halfLen := len(pubKeyBytes) / 2
-	privKey.PublicKey.X = new(big.Int).SetBytes(pubKeyBytes[:halfLen])
-	privKey.PublicKey.Y = new(big.Int).SetBytes(pubKeyBytes[halfLen:])
-
-	return privKey, nil
+	return privKey.ToECDSA(), nil
 }
 
 // ECDSAPrivToInterface converts ecdsa.PrivateKey to crypto.PrivKey
