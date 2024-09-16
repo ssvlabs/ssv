@@ -88,12 +88,10 @@ var (
 	ErrWrongSignersLength                  = Error{text: "decided signers size is not between quorum and committee size", reject: true}
 	ErrDifferentProposalData               = Error{text: "different proposal data", reject: true}
 	ErrEventMessage                        = Error{text: "event messages are not broadcast", reject: true}
-	ErrDKGMessage                          = Error{text: "DKG messages are not supported", reject: true}
 	ErrMalformedPrepareJustifications      = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications     = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications  = Error{text: "malformed round change justifications", reject: true}
 	ErrUnexpectedRoundChangeJustifications = Error{text: "round change justifications unexpected for this message type", reject: true}
-	ErrInvalidJustifications               = Error{text: "invalid justifications", reject: true}
 	ErrTooManyDutiesPerEpoch               = Error{text: "too many duties per epoch", reject: true}
 	ErrNoDuty                              = Error{text: "no duty for this epoch", reject: true}
 	ErrDeserializePublicKey                = Error{text: "deserialize public key", reject: true}

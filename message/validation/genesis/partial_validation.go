@@ -1,11 +1,13 @@
 package validation
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -27,7 +29,11 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	role := msgID.GetRoleType()
-	if !mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role) {
+	matchesRole, err := mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role)
+	if err != nil {
+		return msgSlot, err
+	}
+	if !matchesRole {
 		return msgSlot, ErrPartialSignatureTypeRoleMismatch
 	}
 
@@ -66,7 +72,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		signerState.ResetSlot(msgSlot, genesisspecqbft.FirstRound, newEpoch)
 	}
 
-	signerState.MessageCounts.RecordPartialSignatureMessage(signedMsg)
+	if err := signerState.MessageCounts.RecordPartialSignatureMessage(signedMsg); err != nil {
+		return msgSlot, err
+	}
 
 	return msgSlot, nil
 }
@@ -85,24 +93,24 @@ func (mv *messageValidator) validPartialSigMsgType(msgType genesisspectypes.Part
 	}
 }
 
-func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType genesisspectypes.PartialSigMsgType, role genesisspectypes.BeaconRole) bool {
+func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType genesisspectypes.PartialSigMsgType, role genesisspectypes.BeaconRole) (bool, error) {
 	switch role {
 	case genesisspectypes.BNRoleAttester:
-		return msgType == genesisspectypes.PostConsensusPartialSig
+		return msgType == genesisspectypes.PostConsensusPartialSig, nil
 	case genesisspectypes.BNRoleAggregator:
-		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.SelectionProofPartialSig
+		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.SelectionProofPartialSig, nil
 	case genesisspectypes.BNRoleProposer:
-		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.RandaoPartialSig
+		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.RandaoPartialSig, nil
 	case genesisspectypes.BNRoleSyncCommittee:
-		return msgType == genesisspectypes.PostConsensusPartialSig
+		return msgType == genesisspectypes.PostConsensusPartialSig, nil
 	case genesisspectypes.BNRoleSyncCommitteeContribution:
-		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.ContributionProofs
+		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.ContributionProofs, nil
 	case genesisspectypes.BNRoleValidatorRegistration:
-		return msgType == genesisspectypes.ValidatorRegistrationPartialSig
+		return msgType == genesisspectypes.ValidatorRegistrationPartialSig, nil
 	case genesisspectypes.BNRoleVoluntaryExit:
-		return msgType == genesisspectypes.VoluntaryExitPartialSig
+		return msgType == genesisspectypes.VoluntaryExitPartialSig, nil
 	default:
-		panic("invalid role") // role validity should be checked before
+		return false, fmt.Errorf("invalid role") // role validity should be checked before
 	}
 }
 

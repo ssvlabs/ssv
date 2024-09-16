@@ -22,7 +22,7 @@ func TestTagBestPeers(t *testing.T) {
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	si := NewSubnetsIndex(len(allSubs))
 
-	cm := NewConnManager(zap.NewNop(), connMgrMock, si).(*connManager)
+	cm := NewConnManager(zap.NewNop(), connMgrMock, si, nil).(*connManager)
 
 	pids, err := createPeerIDs(50)
 	require.NoError(t, err)
