@@ -63,7 +63,7 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 			return err
 		}
 	default:
-		panic("unexpected signed message type") // should be checked before
+		return fmt.Errorf("unexpected signed message type") // should be checked before
 	}
 
 	return nil
@@ -86,14 +86,14 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSign
 			return err
 		}
 	default:
-		panic("unexpected partial signature message type") // should be checked before
+		return fmt.Errorf("unexpected partial signature message type") // should be checked before
 	}
 
 	return nil
 }
 
 // RecordConsensusMessage updates the counts based on the provided consensus message type.
-func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) {
+func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		c.Proposal++
@@ -106,20 +106,22 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 	case specqbft.RoundChangeMsgType:
 		c.RoundChange++
 	default:
-		panic("unexpected signed message type") // should be checked before
+		return fmt.Errorf("unexpected signed message type") // should be checked before
 	}
+	return nil
 }
 
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
-func (c *MessageCounts) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) {
+func (c *MessageCounts) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
 	switch messages.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		c.PreConsensus++
 	case spectypes.PostConsensusPartialSig:
 		c.PostConsensus++
 	default:
-		panic("unexpected partial signature message type") // should be checked before
+		return fmt.Errorf("unexpected partial signature message type") // should be checked before
 	}
+	return nil
 }
 
 // maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.

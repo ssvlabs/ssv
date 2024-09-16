@@ -60,7 +60,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	}
 
 	// test output message (in asynchronous order)
-	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.Operator.Committee)
+	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
 
 	// test beacon broadcasted msgs
 	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
@@ -180,7 +180,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	require.NoError(t, err)
 
 	committee.Shares = specCommittee.Share
-	committee.Operator = &specCommittee.CommitteeMember
+	committee.CommitteeMember = &specCommittee.CommitteeMember
 	//for _, r := range committee.Runners {
 	//	r.BaseRunner.BeaconNetwork = spectypes.BeaconTestNetwork
 	//}
