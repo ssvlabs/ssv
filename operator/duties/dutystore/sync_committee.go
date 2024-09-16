@@ -61,6 +61,9 @@ func (d *SyncCommitteeDuties) Duty(period uint64, validatorIndex phase0.Validato
 }
 
 func (d *SyncCommitteeDuties) Set(period uint64, duties []StoreSyncCommitteeDuty) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.m[period] = make(map[phase0.ValidatorIndex]StoreSyncCommitteeDuty)
 	for _, duty := range duties {
 		d.m[period][duty.ValidatorIndex] = duty
