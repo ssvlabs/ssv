@@ -198,6 +198,7 @@ type controller struct {
 	genesisValidatorOptions genesisvalidator.Options
 	validatorStore          registrystorage.ValidatorStore
 	validatorsMap           *validators.ValidatorsMap
+	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
 
 	metadataUpdateInterval time.Duration
@@ -1065,13 +1066,20 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 	return nil
 }
 
+func (c *controller) validatorStart(validator *validators.ValidatorContainer) (bool, error) {
+	if c.validatorStartFunc == nil {
+		return validator.Start(c.logger)
+	}
+	return c.validatorStartFunc(validator)
+}
+
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validators.ValidatorContainer) (bool, error) {
 	c.reportValidatorStatus(v.Share().ValidatorPubKey[:], v.Share().BeaconMetadata)
 	if v.Share().BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	started, err := v.Start(c.logger)
+	started, err := c.validatorStart(v)
 	if err != nil {
 		c.metrics.ValidatorError(v.Share().ValidatorPubKey[:])
 		return false, errors.Wrap(err, "could not start validator")
@@ -1079,8 +1087,6 @@ func (c *controller) startValidator(v *validators.ValidatorContainer) (bool, err
 	if started {
 		c.recentlyStartedValidators++
 	}
-
-	c.recentlyStartedValidators++
 
 	return true, nil
 }

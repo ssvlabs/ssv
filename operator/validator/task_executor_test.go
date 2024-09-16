@@ -52,6 +52,9 @@ func TestController_LiquidateCluster(t *testing.T) {
 	}
 	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
+	validatorStartFunc := func(validator *validators.ValidatorContainer) (bool, error) {
+		return true, nil
+	}
 	controllerOptions := MockControllerOptions{
 		beacon:            bc,
 		network:           network,
@@ -63,6 +66,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 		metrics:           validator.NopMetrics{},
 	}
 	ctr := setupController(logger, controllerOptions)
+	ctr.validatorStartFunc = validatorStartFunc
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
 	_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
@@ -116,6 +120,9 @@ func TestController_StopValidator(t *testing.T) {
 	}
 	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
+	validatorStartFunc := func(validator *validators.ValidatorContainer) (bool, error) {
+		return true, nil
+	}
 	controllerOptions := MockControllerOptions{
 		beacon:            bc,
 		network:           network,
@@ -130,6 +137,7 @@ func TestController_StopValidator(t *testing.T) {
 		signer:  signer,
 	}
 	ctr := setupController(logger, controllerOptions)
+	ctr.validatorStartFunc = validatorStartFunc
 
 	require.NoError(t, signer.AddShare(secretKey))
 
@@ -167,7 +175,9 @@ func TestController_ReactivateCluster(t *testing.T) {
 	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t)
 	defer ctrl.Finish()
 	mockValidatorsMap := validators.New(context.TODO())
-
+	validatorStartFunc := func(validator *validators.ValidatorContainer) (bool, error) {
+		return true, nil
+	}
 	controllerOptions := MockControllerOptions{
 		beacon:            bc,
 		network:           network,
@@ -187,6 +197,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 		signer:  signer,
 	}
 	ctr := setupController(logger, controllerOptions)
+	ctr.validatorStartFunc = validatorStartFunc
 	ctr.indicesChange = make(chan struct{})
 
 	require.NoError(t, signer.AddShare(secretKey))
