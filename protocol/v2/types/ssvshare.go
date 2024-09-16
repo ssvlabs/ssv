@@ -87,8 +87,8 @@ func (s *SSVShare) OperatorIDs() []spectypes.OperatorID {
 	return ids
 }
 
-func (s *SSVShare) HasQuorum(cnt int) bool {
-	return uint64(cnt) >= s.Quorum()
+func (s *SSVShare) HasQuorum(cnt uint64) bool {
+	return cnt >= s.Quorum()
 }
 
 func (s *SSVShare) Quorum() uint64 {
@@ -122,7 +122,7 @@ func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuo
 }
 
 func ComputeF(committeeSize int) uint64 {
-	return uint64(committeeSize-1) / 3
+	return uint64(committeeSize-1) / 3 // nolint:gosec  //disable G115
 }
 
 func ValidCommitteeSize(committeeSize int) bool {

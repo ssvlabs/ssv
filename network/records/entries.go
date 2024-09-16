@@ -72,7 +72,7 @@ func GetDomainTypeEntry(record *enr.Record, key ENRKey) (spectypes.DomainType, e
 func SetSubnetsEntry(node *enode.LocalNode, subnets []byte) error {
 	subnetsVec := bitfield.NewBitvector128()
 	for i, subnet := range subnets {
-		subnetsVec.SetBitAt(uint64(i), subnet > 0)
+		subnetsVec.SetBitAt(uint64(i), subnet > 0) //nolint:gosec  //disable G115
 	}
 	node.Set(enr.WithEntry("subnets", &subnetsVec))
 	return nil

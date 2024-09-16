@@ -222,7 +222,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: spectypes.OperatorID(nodeIndex + 1)})
+	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: spectypes.OperatorID(nodeIndex + 1)}) // nolint:gosec  //disable G115
 
 	mr := metricsreporter.New()
 	p, err := New(logger, cfg, mr)

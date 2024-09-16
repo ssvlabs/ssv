@@ -60,7 +60,7 @@ func (s Subnets) Clone() Subnets {
 func (s Subnets) String() string {
 	subnetsVec := bitfield.NewBitvector128()
 	for subnet, val := range s {
-		subnetsVec.SetBitAt(uint64(subnet), val > uint8(0))
+		subnetsVec.SetBitAt(uint64(subnet), val > uint8(0)) //nolint:gosec  //disable G115
 	}
 	return hex.EncodeToString(subnetsVec.Bytes())
 }

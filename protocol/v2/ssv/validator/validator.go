@@ -162,7 +162,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if err := qbftMsg.Validate(); err != nil {
 			return errors.Wrap(err, "invalid qbft Message")
 		}
-		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height))
+		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height)) // nolint:gosec  //disable G115
 		logger = logger.With(fields.Height(qbftMsg.Height))
 		return dutyRunner.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
@@ -172,7 +172,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), signedMsg.Slot)
+		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), signedMsg.Slot) // nolint:gosec  //disable G115
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")

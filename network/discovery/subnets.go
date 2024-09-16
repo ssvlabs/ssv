@@ -29,7 +29,7 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (int, error) {
 		return 0, err
 	}
 
-	if val >= uint64(commons.Subnets()) {
+	if val >= uint64(commons.Subnets()) { // nolint:gosec  //disable G115
 		return 0, errValueOutOfRange
 	}
 

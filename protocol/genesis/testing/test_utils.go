@@ -39,7 +39,7 @@ func GenerateBLSKeys(oids ...genesisspectypes.OperatorID) (map[genesisspectypes.
 		sk.SetByCSPRNG()
 
 		nodes = append(nodes, &genesisspectypes.Operator{
-			OperatorID: genesisspectypes.OperatorID(i),
+			OperatorID: genesisspectypes.OperatorID(i), // nolint:gosec  //disable G115
 			PubKey:     sk.GetPublicKey().Serialize(),
 		})
 		sks[oid] = sk

@@ -39,7 +39,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 	var lastErr error
 	for i, runData := range test.RunInstanceData {
-		height := genesisspecqbft.Height(i)
+		height := genesisspecqbft.Height(i) // nolint:gosec  //disable G115
 		if runData.Height != nil {
 			height = *runData.Height
 		}

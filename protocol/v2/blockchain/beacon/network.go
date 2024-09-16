@@ -99,7 +99,7 @@ func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
 	if time < genesis {
 		return 0
 	}
-	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds()))
+	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds())) //nolint:gosec  //disable G115
 }
 
 // EstimatedCurrentEpoch estimates the current epoch

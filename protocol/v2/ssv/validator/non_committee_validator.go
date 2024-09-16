@@ -54,7 +54,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		Domain:      opts.NetworkConfig.DomainType(),
 		Storage:     opts.Storage.Get(identifier.GetRoleType()),
 		Network:     opts.Network,
-		CutOffRound: specqbft.Round(specqbft.CutoffRound),
+		CutOffRound: specqbft.Round(specqbft.CutoffRound), // nolint:gosec  //disable G115
 	}
 
 	// TODO: does the specific operator matters?
@@ -145,7 +145,7 @@ func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) conv
 		}
 		return convert.RoleSyncCommittee
 	}
-	return convert.RunnerRole(msg.MsgID.GetRoleType())
+	return convert.RunnerRole(msg.MsgID.GetRoleType()) // nolint:gosec  //disable G115
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators

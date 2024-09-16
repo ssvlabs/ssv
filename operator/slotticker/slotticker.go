@@ -72,7 +72,7 @@ func (s *slotTicker) Next() <-chan time.Time {
 		default:
 		}
 	}
-	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1
+	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1 //nolint:gosec  //disable G115
 	if nextSlot <= s.slot {
 		// We've already ticked for this slot, so we need to wait for the next one.
 		nextSlot = s.slot + 1

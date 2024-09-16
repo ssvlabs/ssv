@@ -351,12 +351,12 @@ func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) (genesiss
 }
 
 func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) genesisspecqbft.Round {
-	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) {
+	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) { // nolint:gosec  //disable G115
 		return currentQuickRound
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
-	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
+	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout) // nolint:gosec  //disable G115
 	return estimatedRound
 }
 
@@ -416,7 +416,7 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *g
 		e.got = len(m.Signers)
 		return e
 
-	case !share.HasQuorum(len(m.Signers)) || len(m.Signers) > len(share.Committee):
+	case !share.HasQuorum(uint64(len(m.Signers))) || len(m.Signers) > len(share.Committee):
 		e := ErrWrongSignersLength
 		e.want = fmt.Sprintf("between %v and %v", share.Quorum(), len(share.Committee))
 		e.got = len(m.Signers)

@@ -95,7 +95,7 @@ func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
 	f := (committeeSize - 1) / 3
-	return uint64(f*2 + 1), uint64(f + 1)
+	return uint64(f*2 + 1), uint64(f + 1) // nolint:gosec  //disable G115
 }
 
 func ValidCommitteeSize(committeeSize int) bool {
