@@ -95,7 +95,7 @@ func (n Network) EstimatedCurrentSlot() phase0.Slot {
 
 // EstimatedSlotAtTime estimates slot at the given time
 func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
-	genesis := int64(n.MinGenesisTime()) //nolint:gosec
+	genesis := int64(n.MinGenesisTime()) //nolint:gosec //disable G115
 	if time < genesis {
 		return 0
 	}

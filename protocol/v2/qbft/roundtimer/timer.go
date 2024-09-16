@@ -120,10 +120,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	// Calculate additional timeout based on round
 	var additionalTimeout time.Duration
 	if round <= t.timeoutOptions.quickThreshold {
-		additionalTimeout = time.Duration(round) * t.timeoutOptions.quick //nolint:gosec
+		additionalTimeout = time.Duration(round) * t.timeoutOptions.quick //nolint:gosec //disable G115
 	} else {
-		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick          //nolint:gosec
-		slowPortion := time.Duration(int(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow //nolint:gosec
+		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick          //nolint:gosec //disable G115
+		slowPortion := time.Duration(int(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow //nolint:gosec //disable G115
 		additionalTimeout = quickPortion + slowPortion
 	}
 
@@ -152,7 +152,7 @@ func (t *RoundTimer) Round() specqbft.Round {
 
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreInt64(&t.round, int64(round)) //nolint:gosec
+	atomic.StoreInt64(&t.round, int64(round)) //nolint:gosec //disable G115
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer
