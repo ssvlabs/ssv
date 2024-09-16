@@ -220,7 +220,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				Owner:      testAddr,
 				PublicKey:  encodedPubKey,
 			})
-			require.ErrorContains(t, err, "operator registered with the same operator public key")
+			require.ErrorContains(t, err, "operator public key already exists")
 
 			// check no operators were added
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -247,7 +247,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				Owner:      testAddr,
 				PublicKey:  encodedPubKey,
 			})
-			require.ErrorContains(t, err, "operator registered with the same ID")
+			require.ErrorContains(t, err, "operator ID already exists")
 
 			// check no operators were added
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
