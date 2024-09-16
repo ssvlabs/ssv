@@ -220,7 +220,8 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 		Operator: spectestingutils.TestingCommitteeMember(keySet),
 	}
 
-	options.DutyRunners = validator.SetupRunners(ctx, logger, options)
+	options.DutyRunners, err = validator.SetupRunners(ctx, logger, options)
+	require.NoError(t, err)
 	val := protocolvalidator.NewValidator(ctx, cancel, options)
 	node.UseMessageRouter(newMsgRouter(logger, val))
 	started, err := val.Start(logger)

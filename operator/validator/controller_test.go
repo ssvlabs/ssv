@@ -306,7 +306,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-			MsgType: spectypes.DKGMsgType,
+			MsgType: 123,
 			MsgID:   identifier,
 			Data:    []byte("data"),
 		},

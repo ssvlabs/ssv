@@ -487,9 +487,6 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 		case spectypes.MsgType(ssvmessage.SSVEventMsgType):
 			return nil, descriptor, ErrEventMessage
 
-		case spectypes.DKGMsgType:
-			return nil, descriptor, ErrDKGMessage
-
 		default:
 			return nil, descriptor, ErrUnknownSSVMessageType
 		}

@@ -162,7 +162,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		}
 
 	default:
-		panic("unreachable: message type assertion should have been done")
+		return decodedMessage, fmt.Errorf("unreachable: message type assertion should have been done")
 	}
 
 	return decodedMessage, nil

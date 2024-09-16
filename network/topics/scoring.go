@@ -32,18 +32,35 @@ type topicScoreSnapshot struct {
 	*pubsub.TopicScoreSnapshot
 }
 
-// scoreInspector inspects scores and updates the score index accordingly
+// scoreInspector inspects and logs scores.
+// It also updates the GossipScoreIndex by resetting it and
+// adding the peers' scores.
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency int, metrics Metrics, peerConnected func(pid peer.ID) bool, peerScoreParams *pubsub.PeerScoreParams, topicScoreParamsFactory func(string) *pubsub.TopicScoreParams) pubsub.ExtendedPeerScoreInspectFn {
+func scoreInspector(logger *zap.Logger,
+	scoreIdx peers.ScoreIndex,
+	logFrequency int,
+	metrics Metrics,
+	peerConnected func(pid peer.ID) bool,
+	peerScoreParams *pubsub.PeerScoreParams,
+	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
+	gossipScoreIndex peers.GossipScoreIndex,
+) pubsub.ExtendedPeerScoreInspectFn {
 	inspections := 0
 
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+		// Update gossipScoreIndex.
+		peerScores := make(map[peer.ID]float64)
+		for pid, ps := range scores {
+			peerScores[pid] = ps.Score
+		}
+		gossipScoreIndex.SetScores(peerScores)
 
+		// Skip if it's not time to log yet.
 		if inspections%logFrequency != 0 {
-			// Don't log yet.
 			inspections++
 			return
 		}
+		inspections++
 
 		// Reset metrics before updating them.
 		metrics.ResetPeerScores()
@@ -168,8 +185,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
-
-		inspections++
 	}
 }
 
