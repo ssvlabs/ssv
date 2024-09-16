@@ -2,8 +2,9 @@ package duties
 
 import (
 	"context"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"math/big"
+
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -162,7 +163,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, err
 	}
 
-	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) //nolint:gosec
 
 	h.blockSlots[blockNumber] = blockSlot
 	for k, v := range h.blockSlots {

@@ -34,7 +34,8 @@ func (msg MessageID) GetRoleType() RunnerRole {
 
 func NewMsgID(domain spectypes.DomainType, dutyExecutorID []byte, role RunnerRole) MessageID {
 	roleByts := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roleByts, uint32(role))
+	// TODO: Update after spec-ssv repo fixes this https://github.com/ssvlabs/ssv-spec/issues/501
+	binary.LittleEndian.PutUint32(roleByts, uint32(role)) // //nolint:gosec
 
 	return newMessageID(domain[:], roleByts, dutyExecutorID)
 }

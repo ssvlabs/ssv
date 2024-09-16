@@ -430,7 +430,7 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
-var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
+var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 	spectypes.RoleCommittee:  64,
 	spectypes.RoleProposer:   4,
 	spectypes.RoleAggregator: 4,

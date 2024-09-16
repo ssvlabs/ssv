@@ -79,7 +79,7 @@ func (n Network) GetBeaconNetwork() spectypes.BeaconNetwork {
 // GetSlotStartTime returns the start time for the given slot
 func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
-	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
+	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0) //nolint:gosec
 	return start
 }
 
@@ -95,7 +95,7 @@ func (n Network) EstimatedCurrentSlot() phase0.Slot {
 
 // EstimatedSlotAtTime estimates slot at the given time
 func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
-	genesis := int64(n.MinGenesisTime())
+	genesis := int64(n.MinGenesisTime()) //nolint:gosec
 	if time < genesis {
 		return 0
 	}

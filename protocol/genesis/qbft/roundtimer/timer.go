@@ -122,8 +122,8 @@ func (t *RoundTimer) RoundTimeout(height genesisspecqbft.Height, round genesissp
 	if round <= t.timeoutOptions.quickThreshold {
 		additionalTimeout = time.Duration(round) * t.timeoutOptions.quick //nolint:gosec
 	} else {
-		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick
-		slowPortion := time.Duration(round-t.timeoutOptions.quickThreshold) * t.timeoutOptions.slow
+		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick     //nolint:gosec
+		slowPortion := time.Duration(round-t.timeoutOptions.quickThreshold) * t.timeoutOptions.slow //nolint:gosec
 		additionalTimeout = quickPortion + slowPortion
 	}
 
