@@ -218,11 +218,16 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
-	h.duties.Reset(period)
+	dutyDescriptors := make([]dutystore.DutyDescriptor[eth2apiv1.SyncCommitteeDuty], 0, len(duties))
 	for _, d := range duties {
 		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
-		h.duties.Add(period, d.ValidatorIndex, d, inCommitteeDuty)
+		dutyDescriptors = append(dutyDescriptors, dutystore.DutyDescriptor[eth2apiv1.SyncCommitteeDuty]{
+			ValidatorIndex: d.ValidatorIndex,
+			Duty:           d,
+			InCommittee:    inCommitteeDuty,
+		})
 	}
+	h.duties.Set(period, dutyDescriptors)
 
 	h.prepareDutiesResultLog(period, duties, start)
 

@@ -9,12 +9,12 @@ import (
 
 type SyncCommitteeDuties struct {
 	mu sync.RWMutex
-	m  map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]
+	m  map[uint64]map[phase0.ValidatorIndex]DutyDescriptor[eth2apiv1.SyncCommitteeDuty]
 }
 
 func NewSyncCommitteeDuties() *SyncCommitteeDuties {
 	return &SyncCommitteeDuties{
-		m: make(map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]),
+		m: make(map[uint64]map[phase0.ValidatorIndex]DutyDescriptor[eth2apiv1.SyncCommitteeDuty]),
 	}
 }
 
@@ -29,8 +29,8 @@ func (d *SyncCommitteeDuties) CommitteePeriodDuties(period uint64) []*eth2apiv1.
 
 	var duties []*eth2apiv1.SyncCommitteeDuty
 	for _, descriptor := range descriptorMap {
-		if descriptor.inCommittee {
-			duties = append(duties, descriptor.duty)
+		if descriptor.InCommittee {
+			duties = append(duties, descriptor.Duty)
 		}
 	}
 
@@ -51,20 +51,13 @@ func (d *SyncCommitteeDuties) Duty(period uint64, validatorIndex phase0.Validato
 		return nil
 	}
 
-	return descriptor.duty
+	return descriptor.Duty
 }
 
-func (d *SyncCommitteeDuties) Add(period uint64, validatorIndex phase0.ValidatorIndex, duty *eth2apiv1.SyncCommitteeDuty, inCommittee bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if _, ok := d.m[period]; !ok {
-		d.m[period] = make(map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty])
-	}
-
-	d.m[period][validatorIndex] = dutyDescriptor[eth2apiv1.SyncCommitteeDuty]{
-		duty:        duty,
-		inCommittee: inCommittee,
+func (d *SyncCommitteeDuties) Set(period uint64, duties []DutyDescriptor[eth2apiv1.SyncCommitteeDuty]) {
+	d.m[period] = make(map[phase0.ValidatorIndex]DutyDescriptor[eth2apiv1.SyncCommitteeDuty])
+	for _, duty := range duties {
+		d.m[period][duty.ValidatorIndex] = duty
 	}
 }
 

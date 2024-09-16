@@ -11,19 +11,21 @@ type Duty interface {
 	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty | eth2apiv1.SyncCommitteeDuty
 }
 
-type dutyDescriptor[D Duty] struct {
-	duty        *D
-	inCommittee bool
+type DutyDescriptor[D Duty] struct {
+	Slot           phase0.Slot
+	ValidatorIndex phase0.ValidatorIndex
+	Duty           *D
+	InCommittee    bool
 }
 
 type Duties[D Duty] struct {
 	mu sync.RWMutex
-	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D]
+	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]DutyDescriptor[D]
 }
 
 func NewDuties[D Duty]() *Duties[D] {
 	return &Duties[D]{
-		m: make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D]),
+		m: make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]DutyDescriptor[D]),
 	}
 }
 
@@ -43,8 +45,8 @@ func (d *Duties[D]) CommitteeSlotDuties(epoch phase0.Epoch, slot phase0.Slot) []
 
 	var duties []*D
 	for _, descriptor := range descriptorMap {
-		if descriptor.inCommittee {
-			duties = append(duties, descriptor.duty)
+		if descriptor.InCommittee {
+			duties = append(duties, descriptor.Duty)
 		}
 	}
 
@@ -70,22 +72,19 @@ func (d *Duties[D]) ValidatorDuty(epoch phase0.Epoch, slot phase0.Slot, validato
 		return nil
 	}
 
-	return descriptor.duty
+	return descriptor.Duty
 }
 
-func (d *Duties[D]) Add(epoch phase0.Epoch, slot phase0.Slot, validatorIndex phase0.ValidatorIndex, duty *D, inCommittee bool) {
+func (d *Duties[D]) Set(epoch phase0.Epoch, duties []DutyDescriptor[D]) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if _, ok := d.m[epoch]; !ok {
-		d.m[epoch] = make(map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D])
-	}
-	if _, ok := d.m[epoch][slot]; !ok {
-		d.m[epoch][slot] = make(map[phase0.ValidatorIndex]dutyDescriptor[D])
-	}
-	d.m[epoch][slot][validatorIndex] = dutyDescriptor[D]{
-		duty:        duty,
-		inCommittee: inCommittee,
+	d.m[epoch] = make(map[phase0.Slot]map[phase0.ValidatorIndex]DutyDescriptor[D])
+	for _, duty := range duties {
+		if _, ok := d.m[epoch][duty.Slot]; !ok {
+			d.m[epoch][duty.Slot] = make(map[phase0.ValidatorIndex]DutyDescriptor[D])
+		}
+		d.m[epoch][duty.Slot][duty.ValidatorIndex] = duty
 	}
 }
 
