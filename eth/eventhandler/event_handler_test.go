@@ -203,6 +203,59 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 	})
 
+	t.Run("test OperatorAdded event fails for malformed event data", func(t *testing.T) {
+		t.Run("test OperatorAdded event handle with the same pubkey, but with a different id", func(t *testing.T) {
+			op := &testOperator{}
+			op.privateKey = ops[2].privateKey
+			op.id = 8
+
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
+				OperatorId: op.id,
+				Owner:      testAddr,
+				PublicKey:  encodedPubKey,
+			})
+			require.ErrorContains(t, err, "operator public key already exists")
+
+			// check no operators were added
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+		})
+		t.Run("test OperatorAdded event handle with existing id and new pubkey", func(t *testing.T) {
+			privateKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			op := &testOperator{}
+			op.id = ops[2].id
+			op.privateKey = privateKey
+
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
+				OperatorId: op.id,
+				Owner:      testAddr,
+				PublicKey:  encodedPubKey,
+			})
+			require.ErrorContains(t, err, "operator ID already exists")
+
+			// check no operators were added
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+		})
+	})
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
 
 		// Should return MalformedEventError and no changes to the state
