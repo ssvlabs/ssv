@@ -190,7 +190,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return uint64(options.TotalValidators), uint64(options.ActiveValidators), uint64(options.MyValidators), nil
+			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
 		}
 	}
 
@@ -241,7 +241,7 @@ type LocalNetOptions struct {
 	Nodes                                           int
 	MinConnected                                    int
 	UseDiscv5                                       bool
-	TotalValidators, ActiveValidators, MyValidators int
+	TotalValidators, ActiveValidators, MyValidators uint64
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
 	Shares                                          []*ssvtypes.SSVShare
