@@ -146,8 +146,6 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 1: Add more validators
 		{
-			validatorCtrl.EXPECT().StartValidator(gomock.Any()).AnyTimes()
-
 			// Check current nonce before start
 			nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 			require.NoError(t, err)

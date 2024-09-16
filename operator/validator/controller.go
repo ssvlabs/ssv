@@ -137,7 +137,6 @@ type Controller interface {
 	IndicesChangeChan() chan struct{}
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
-	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
@@ -618,17 +617,7 @@ func (c *controller) startValidators(validators []*validators.ValidatorContainer
 		}
 	}
 
-	for _, vc := range committees {
-		s, err := c.startCommittee(vc)
-		if err != nil {
-			c.logger.Error("could not start committee", zap.Error(err))
-			errs = append(errs, err)
-			continue
-		}
-		if s {
-			started++
-		}
-	}
+	started += len(committees)
 
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.SizeValidators()),
 		zap.Int("failures", len(errs)),
@@ -690,10 +679,6 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 			vc, found := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
 			if found {
 				vc.AddShare(&v.Share().Share)
-				_, err := c.startCommittee(vc)
-				if err != nil {
-					c.logger.Warn("could not start committee", zap.Error(err))
-				}
 			}
 		} else {
 			c.logger.Info("starting new validator", fields.PubKey(share.ValidatorPubKey[:]))
@@ -1034,7 +1019,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 }
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
-	v, vc, err := c.onShareInit(share)
+	v, _, err := c.onShareInit(share)
 	if err != nil || v == nil {
 		return false, err
 	}
@@ -1043,11 +1028,8 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	vcstarted, err := c.startCommittee(vc)
-	if err != nil {
-		return false, err
-	}
-	return started && vcstarted, nil
+
+	return started, nil
 }
 
 func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
@@ -1091,8 +1073,6 @@ func (c *controller) validatorStart(validator *validators.ValidatorContainer) (b
 	return c.validatorStartFunc(validator)
 }
 
-//func (c *controller) startValidatorAndCommittee(v *val)
-
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validators.ValidatorContainer) (bool, error) {
 	c.reportValidatorStatus(v.Share().ValidatorPubKey[:], v.Share().BeaconMetadata)
@@ -1107,22 +1087,6 @@ func (c *controller) startValidator(v *validators.ValidatorContainer) (bool, err
 	if started {
 		c.recentlyStartedValidators++
 	}
-
-	return true, nil
-}
-
-func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
-	//TODO alan: currently nothing to start in committee?
-	// c.logger.Debug("committee started ", zap.String("committee_id", hex.EncodeToString(vc.Operator.ClusterID[:])))
-	//cstarted, err := vc.Start() // TODO alan : make it testable
-	//if err != nil {
-	//	// todo alan: metrics
-	//	//c.metrics.ValidatorError(vc.Share.ValidatorPubKey[:])
-	//	return false, errors.Wrap(err, "could not start committee")
-	//}
-	//if cstarted {
-	//	c.recentlyStartedCommittees++
-	//}
 
 	return true, nil
 }
