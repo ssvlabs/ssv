@@ -7,14 +7,20 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+type StoreSyncCommitteeDuty struct {
+	ValidatorIndex phase0.ValidatorIndex
+	Duty           *eth2apiv1.SyncCommitteeDuty
+	InCommittee    bool
+}
+
 type SyncCommitteeDuties struct {
 	mu sync.RWMutex
-	m  map[uint64]map[phase0.ValidatorIndex]DutyDescriptor[eth2apiv1.SyncCommitteeDuty]
+	m  map[uint64]map[phase0.ValidatorIndex]StoreSyncCommitteeDuty
 }
 
 func NewSyncCommitteeDuties() *SyncCommitteeDuties {
 	return &SyncCommitteeDuties{
-		m: make(map[uint64]map[phase0.ValidatorIndex]DutyDescriptor[eth2apiv1.SyncCommitteeDuty]),
+		m: make(map[uint64]map[phase0.ValidatorIndex]StoreSyncCommitteeDuty),
 	}
 }
 
@@ -54,8 +60,8 @@ func (d *SyncCommitteeDuties) Duty(period uint64, validatorIndex phase0.Validato
 	return descriptor.Duty
 }
 
-func (d *SyncCommitteeDuties) Set(period uint64, duties []DutyDescriptor[eth2apiv1.SyncCommitteeDuty]) {
-	d.m[period] = make(map[phase0.ValidatorIndex]DutyDescriptor[eth2apiv1.SyncCommitteeDuty])
+func (d *SyncCommitteeDuties) Set(period uint64, duties []StoreSyncCommitteeDuty) {
+	d.m[period] = make(map[phase0.ValidatorIndex]StoreSyncCommitteeDuty)
 	for _, duty := range duties {
 		d.m[period][duty.ValidatorIndex] = duty
 	}

@@ -210,9 +210,9 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
-	dutyDescriptors := make([]dutystore.DutyDescriptor[eth2apiv1.AttesterDuty], 0, len(duties))
+	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.AttesterDuty], 0, len(duties))
 	for _, d := range duties {
-		dutyDescriptors = append(dutyDescriptors, dutystore.DutyDescriptor[eth2apiv1.AttesterDuty]{
+		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.AttesterDuty]{
 			Slot:           d.Slot,
 			ValidatorIndex: d.ValidatorIndex,
 			Duty:           d,
@@ -220,7 +220,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		})
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
-	h.duties.Set(epoch, dutyDescriptors)
+	h.duties.Set(epoch, storeDuties)
 
 	h.logger.Debug("🗂 got duties",
 		fields.Count(len(duties)),

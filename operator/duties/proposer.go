@@ -181,10 +181,10 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	h.duties.ResetEpoch(epoch)
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
-	dutyDescriptors := make([]dutystore.DutyDescriptor[eth2apiv1.ProposerDuty], 0, len(duties))
+	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0, len(duties))
 	for _, d := range duties {
 		_, inCommitteeDuty := selfIndicesSet[d.ValidatorIndex]
-		dutyDescriptors = append(dutyDescriptors, dutystore.DutyDescriptor[eth2apiv1.ProposerDuty]{
+		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
 			Slot:           d.Slot,
 			ValidatorIndex: d.ValidatorIndex,
 			Duty:           d,
@@ -192,7 +192,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		})
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
-	h.duties.Set(epoch, dutyDescriptors)
+	h.duties.Set(epoch, storeDuties)
 
 	h.logger.Debug("📚 got duties",
 		fields.Count(len(duties)),

@@ -8,10 +8,10 @@ import (
 )
 
 type Duty interface {
-	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty | eth2apiv1.SyncCommitteeDuty
+	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty
 }
 
-type DutyDescriptor[D Duty] struct {
+type StoreDuty[D Duty] struct {
 	Slot           phase0.Slot
 	ValidatorIndex phase0.ValidatorIndex
 	Duty           *D
@@ -20,12 +20,12 @@ type DutyDescriptor[D Duty] struct {
 
 type Duties[D Duty] struct {
 	mu sync.RWMutex
-	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]DutyDescriptor[D]
+	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]
 }
 
 func NewDuties[D Duty]() *Duties[D] {
 	return &Duties[D]{
-		m: make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]DutyDescriptor[D]),
+		m: make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]),
 	}
 }
 
@@ -75,14 +75,14 @@ func (d *Duties[D]) ValidatorDuty(epoch phase0.Epoch, slot phase0.Slot, validato
 	return descriptor.Duty
 }
 
-func (d *Duties[D]) Set(epoch phase0.Epoch, duties []DutyDescriptor[D]) {
+func (d *Duties[D]) Set(epoch phase0.Epoch, duties []StoreDuty[D]) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.m[epoch] = make(map[phase0.Slot]map[phase0.ValidatorIndex]DutyDescriptor[D])
+	d.m[epoch] = make(map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
 	for _, duty := range duties {
 		if _, ok := d.m[epoch][duty.Slot]; !ok {
-			d.m[epoch][duty.Slot] = make(map[phase0.ValidatorIndex]DutyDescriptor[D])
+			d.m[epoch][duty.Slot] = make(map[phase0.ValidatorIndex]StoreDuty[D])
 		}
 		d.m[epoch][duty.Slot][duty.ValidatorIndex] = duty
 	}
