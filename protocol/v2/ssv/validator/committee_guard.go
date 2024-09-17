@@ -2,7 +2,6 @@ package validator
 
 import (
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -59,11 +58,10 @@ func (a *CommitteeDutyGuard) ValidDuty(role spectypes.BeaconRole, validator spec
 	}
 	runningSlot, exists := duties[validator]
 	if !exists {
-		log.Printf("duties length: %d", len(duties))
-		return fmt.Errorf("duty doesn't exist")
+		return fmt.Errorf("duty not found")
 	}
-	if runningSlot > slot {
-		return fmt.Errorf("duty already running at a higher slot %d", runningSlot)
+	if runningSlot != slot {
+		return fmt.Errorf("slot mismatch: duty is running at slot %d", runningSlot)
 	}
 	return nil
 }
