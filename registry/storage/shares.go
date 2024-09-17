@@ -16,6 +16,7 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 var sharesPrefix = []byte("shares")
@@ -105,7 +106,7 @@ func (s *storageShare) Decode(data []byte) error {
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode storageShare: %w", err)
 	}
-	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(len(s.Committee))
+	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(conversion.LenUint64(s.Committee))
 	return nil
 }
 
@@ -262,7 +263,7 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 			PubKey:     c.SharePubKey,
 		}
 	}
-	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(committee))
+	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(conversion.LenUint64(committee))
 	stShare := &storageShare{
 		Share: Share{
 			ValidatorPubKey:     share.ValidatorPubKey[:],

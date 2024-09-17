@@ -92,7 +92,7 @@ func ToMultiAddr(node *enode.Node) (ma.Multiaddr, error) {
 	if ip.To4() == nil && ip.To16() == nil {
 		return nil, errors.Errorf("invalid ip address: %s", ipAddr)
 	}
-	port := uint(node.TCP()) // nolint:gosec  //disable G115
+	port := node.TCP()
 	var s string
 	if ip.To4() != nil {
 		s = fmt.Sprintf("/ip4/%s/%s/%d/p2p/%s", ipAddr, "tcp", port, id.String())

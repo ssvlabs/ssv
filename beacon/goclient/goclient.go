@@ -23,6 +23,7 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 const (
@@ -263,8 +264,8 @@ func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
 func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds())) //nolint:gosec //disable G115
-	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)                          //nolint:gosec //disable G115
+	duration := time.Second * conversion.TimeDurationFromUint64(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
+	startTime := conversion.TimeUnixFromUint64(gc.network.MinGenesisTime()).Add(duration)
 	return startTime
 }
 

@@ -207,7 +207,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 		return ibftCommittee[i].OperatorID < ibftCommittee[j].OperatorID
 	})
 
-	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(len(splitKeys))
+	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(splitKeys)))
 
 	return &storageShare{
 		Share: Share{

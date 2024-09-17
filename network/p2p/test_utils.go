@@ -131,7 +131,7 @@ func (mockSignatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
 	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
@@ -222,7 +222,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: spectypes.OperatorID(nodeIndex + 1)}) // nolint:gosec  //disable G115
+	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
 
 	mr := metricsreporter.New()
 	p, err := New(logger, cfg, mr)
@@ -237,7 +237,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 }
 
 type LocalNetOptions struct {
-	MessageValidatorProvider                        func(int) validation.MessageValidator
+	MessageValidatorProvider                        func(uint64) validation.MessageValidator
 	Nodes                                           int
 	MinConnected                                    int
 	UseDiscv5                                       bool
@@ -256,7 +256,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 			return nil, err
 		}
 	}
-	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex int, keys testing.NodeKeys) network.P2PNetwork {
+	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
 		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
 		if err != nil {

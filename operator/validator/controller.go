@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
+	"github.com/ssvlabs/ssv/utils/conversion"
 
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -1002,7 +1003,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		}
 	}
 
-	f := ssvtypes.ComputeF(len(share.Committee))
+	f := ssvtypes.ComputeF(conversion.LenUint64(share.Committee))
 
 	operatorPEM, err := base64.StdEncoding.DecodeString(string(c.operatorDataStore.GetOperatorData().PublicKey))
 	if err != nil {

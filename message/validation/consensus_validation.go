@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -81,7 +82,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	committee []spectypes.OperatorID,
 ) error {
 	signers := signedSSVMessage.OperatorIDs
-	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(conversion.LenUint64(committee))
 	msgType := consensusMessage.MsgType
 
 	if len(signers) > 1 {

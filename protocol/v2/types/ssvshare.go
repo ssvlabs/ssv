@@ -16,6 +16,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 const (
@@ -92,7 +93,7 @@ func (s *SSVShare) HasQuorum(cnt uint64) bool {
 }
 
 func (s *SSVShare) Quorum() uint64 {
-	q, _ := ComputeQuorumAndPartialQuorum(len(s.Committee))
+	q, _ := ComputeQuorumAndPartialQuorum(conversion.LenUint64(s.Committee))
 	return q
 }
 
@@ -116,16 +117,16 @@ func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	return hash
 }
 
-func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
+func ComputeQuorumAndPartialQuorum(committeeSize uint64) (quorum uint64, partialQuorum uint64) {
 	f := ComputeF(committeeSize)
 	return f*2 + 1, f + 1
 }
 
-func ComputeF(committeeSize int) uint64 {
-	return uint64(committeeSize-1) / 3 // nolint:gosec  //disable G115
+func ComputeF(committeeSize uint64) uint64 {
+	return (committeeSize - 1) / 3
 }
 
-func ValidCommitteeSize(committeeSize int) bool {
+func ValidCommitteeSize(committeeSize uint64) bool {
 	f := ComputeF(committeeSize)
 	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
 }
@@ -160,5 +161,5 @@ func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID 
 		binary.LittleEndian.PutUint32(bytes[i*4:], uint32(v)) // nolint:gosec
 	}
 	// Hash
-	return spectypes.CommitteeID(sha256.Sum256(bytes))
+	return sha256.Sum256(bytes)
 }
