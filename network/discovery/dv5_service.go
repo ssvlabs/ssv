@@ -60,12 +60,13 @@ type DiscV5Service struct {
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:        ctx,
-		cancel:     cancel,
-		conns:      discOpts.ConnIndex,
-		subnetsIdx: discOpts.SubnetsIdx,
-		domainType: discOpts.DomainType,
-		subnets:    discOpts.DiscV5Opts.Subnets,
+		ctx:         ctx,
+		cancel:      cancel,
+		conns:       discOpts.ConnIndex,
+		subnetsIdx:  discOpts.SubnetsIdx,
+		domainType:  discOpts.DomainType,
+		subnets:     discOpts.DiscV5Opts.Subnets,
+		publishLock: make(chan struct{}, 1),
 	}
 
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
@@ -310,7 +311,7 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
 	defer done()
 
-	// Acquire publish lock to prevent concurrent ENR updates.
+	// Acquire publish lock to prevent parallel publishing.
 	select {
 	case <-ctx.Done():
 		return
