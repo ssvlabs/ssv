@@ -149,12 +149,12 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 
 // Round returns a round.
 func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadInt64(&t.round)) //nolint:gosec  //disable G115
+	return specqbft.Round(atomic.LoadInt64(&t.round)) // #nosec G115
 }
 
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreInt64(&t.round, int64(round)) //nolint:gosec //disable G115
+	atomic.StoreInt64(&t.round, int64(round)) // #nosec G115
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer

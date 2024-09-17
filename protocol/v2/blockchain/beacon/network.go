@@ -5,8 +5,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
@@ -80,8 +78,8 @@ func (n Network) GetBeaconNetwork() spectypes.BeaconNetwork {
 
 // GetSlotStartTime returns the start time for the given slot
 func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
-	timeSinceGenesisStart := conversion.TimeDurationFromUint64(uint64(slot) * uint64(n.SlotDurationSec().Seconds()))
-	start := time.Unix(n.MinGenesisTime(), 0).Add(timeSinceGenesisStart)
+	timeSinceGenesisStart := int64(uint64(slot) * uint64(n.SlotDurationSec().Seconds())) // #nosec G115
+	start := time.Unix(n.MinGenesisTime()+timeSinceGenesisStart, 0)
 	return start
 }
 
