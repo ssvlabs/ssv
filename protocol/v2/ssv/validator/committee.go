@@ -183,13 +183,6 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
-	// Update the attesterSlots map.
-	for _, beaconDuty := range duty.ValidatorDuties {
-		if err := c.dutyGuard.StartDuty(beaconDuty.Type, spectypes.ValidatorPK(beaconDuty.PubKey), duty.Slot); err != nil {
-			return fmt.Errorf("invalid attester duty: %w", err)
-		}
-	}
-
 	logger.Info("ℹ️ starting duty processing")
 	err = runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
 	if err != nil {
