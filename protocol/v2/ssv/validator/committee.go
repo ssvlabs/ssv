@@ -414,8 +414,8 @@ func (a *CommitteeDutyGuard) Stop(validator spectypes.ValidatorPK) {
 }
 
 func (a *CommitteeDutyGuard) ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 
 	duties, ok := a.duties[role]
 	if !ok {
