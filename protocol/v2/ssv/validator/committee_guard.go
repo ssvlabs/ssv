@@ -24,6 +24,7 @@ func NewCommitteeDutyGuard() *CommitteeDutyGuard {
 	}
 }
 
+// StartDuty records a started duty. If a duty is already running at the same or higher slot, it returns an error.
 func (a *CommitteeDutyGuard) StartDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -40,6 +41,7 @@ func (a *CommitteeDutyGuard) StartDuty(role spectypes.BeaconRole, validator spec
 	return nil
 }
 
+// StopValidator removes any running duties for a validator.
 func (a *CommitteeDutyGuard) StopValidator(validator spectypes.ValidatorPK) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -48,6 +50,7 @@ func (a *CommitteeDutyGuard) StopValidator(validator spectypes.ValidatorPK) {
 	delete(a.duties[spectypes.BNRoleSyncCommittee], validator)
 }
 
+// ValidDuty checks if a duty is still valid for execution.
 func (a *CommitteeDutyGuard) ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
