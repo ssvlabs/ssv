@@ -27,7 +27,7 @@ var (
 	runnerExpirySlots = phase0.Slot(34)
 )
 
-type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error)
+type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error)
 
 type Committee struct {
 	logger *zap.Logger
@@ -44,8 +44,8 @@ type Committee struct {
 
 	CommitteeMember *spectypes.CommitteeMember
 
-	CreateRunnerFn       CommitteeRunnerFunc
-	runningAttesterSlots map[spectypes.ValidatorPK]phase0.Slot
+	dutyGuard      *CommitteeDutyGuard
+	CreateRunnerFn CommitteeRunnerFunc
 }
 
 // NewCommittee creates a new cluster
@@ -62,16 +62,16 @@ func NewCommittee(
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
 	}
 	return &Committee{
-		logger:               logger,
-		BeaconNetwork:        beaconNetwork,
-		ctx:                  ctx,
-		cancel:               cancel,
-		Queues:               make(map[phase0.Slot]queueContainer),
-		Runners:              make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:               shares,
-		runningAttesterSlots: make(map[spectypes.ValidatorPK]phase0.Slot),
-		CommitteeMember:      committeeMember,
-		CreateRunnerFn:       createRunnerFn,
+		logger:          logger,
+		BeaconNetwork:   beaconNetwork,
+		ctx:             ctx,
+		cancel:          cancel,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:          shares,
+		CommitteeMember: committeeMember,
+		CreateRunnerFn:  createRunnerFn,
+		dutyGuard:       NewCommitteeDutyGuard(),
 	}
 }
 
@@ -85,7 +85,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if share, exist := c.Shares[validatorIndex]; exist {
-		delete(c.runningAttesterSlots, share.ValidatorPubKey)
+		c.dutyGuard.Stop(share.ValidatorPubKey)
 		delete(c.Shares, validatorIndex)
 	}
 }
@@ -156,7 +156,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 	duty = filteredDuty
 
-	runner, err := c.CreateRunnerFn(duty.Slot, shares, attesters)
+	runner, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
 		return errors.Wrap(err, "could not create CommitteeRunner")
 	}
@@ -185,13 +185,8 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	// Update the attesterSlots map.
 	for _, beaconDuty := range duty.ValidatorDuties {
-		if beaconDuty.Type == spectypes.BNRoleAttester {
-			pk := spectypes.ValidatorPK(beaconDuty.PubKey)
-			runningSlot, exists := c.runningAttesterSlots[pk]
-			if exists && runningSlot >= duty.Slot {
-				return fmt.Errorf("attester duty already running at slot %d", runningSlot)
-			}
-			c.runningAttesterSlots[pk] = duty.Slot
+		if err := c.dutyGuard.Start(beaconDuty.Type, spectypes.ValidatorPK(beaconDuty.PubKey), duty.Slot); err != nil {
+			return fmt.Errorf("invalid attester duty: %w", err)
 		}
 	}
 
@@ -199,20 +194,6 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	err = runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
 	if err != nil {
 		return errors.Wrap(err, "runner failed to start duty")
-	}
-	return nil
-}
-
-func (c *Committee) validAttesterDuty(validator spectypes.ValidatorPK, slot phase0.Slot) error {
-	c.mtx.RLock()
-	defer c.mtx.RUnlock()
-
-	runningSlot, exists := c.runningAttesterSlots[validator]
-	if !exists {
-		return fmt.Errorf("duty doesn't exist")
-	}
-	if runningSlot >= slot {
-		return fmt.Errorf("duty already running at slot %d", runningSlot)
 	}
 	return nil
 }
@@ -389,5 +370,59 @@ func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
 		return errors.New("msg data is invalid")
 	}
 
+	return nil
+}
+
+// CommitteeDutyGuard guarantees exclusive execution of one duty per validator,
+// and prevents execution of stopped duties.
+type CommitteeDutyGuard struct {
+	duties map[spectypes.BeaconRole]map[spectypes.ValidatorPK]phase0.Slot
+	mu     sync.RWMutex
+}
+
+func NewCommitteeDutyGuard() *CommitteeDutyGuard {
+	return &CommitteeDutyGuard{
+		duties: map[spectypes.BeaconRole]map[spectypes.ValidatorPK]phase0.Slot{
+			spectypes.BNRoleAttester:      {},
+			spectypes.BNRoleSyncCommittee: {},
+		},
+	}
+}
+
+func (a *CommitteeDutyGuard) Start(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	switch role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+		runningSlot, exists := a.duties[role][validator]
+		if exists && runningSlot >= slot {
+			return fmt.Errorf("duty already running at slot %d", runningSlot)
+		}
+		a.duties[role][validator] = slot
+	default:
+		return fmt.Errorf("unknown role %d", role)
+	}
+	return nil
+}
+
+func (a *CommitteeDutyGuard) Stop(validator spectypes.ValidatorPK) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.duties[spectypes.BNRoleAttester], validator)
+	delete(a.duties[spectypes.BNRoleSyncCommittee], validator)
+}
+
+func (a *CommitteeDutyGuard) ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	runningSlot, exists := a.duties[role][validator]
+	if !exists {
+		return fmt.Errorf("duty doesn't exist")
+	}
+	if runningSlot >= slot {
+		return fmt.Errorf("duty already running at slot %d", runningSlot)
+	}
 	return nil
 }

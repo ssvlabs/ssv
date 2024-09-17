@@ -24,16 +24,18 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-type ValidAttesterDutyFunc func(validator spectypes.ValidatorPK, slot phase0.Slot) error
+type CommitteeDutyGuard interface {
+	ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
+}
 
 type CommitteeRunner struct {
-	BaseRunner        *BaseRunner
-	network           specqbft.Network
-	beacon            beacon.BeaconNode
-	signer            spectypes.BeaconSigner
-	operatorSigner    ssvtypes.OperatorSigner
-	valCheck          specqbft.ProposedValueCheckF
-	validAttesterDuty ValidAttesterDutyFunc
+	BaseRunner     *BaseRunner
+	network        specqbft.Network
+	beacon         beacon.BeaconNode
+	signer         spectypes.BeaconSigner
+	operatorSigner ssvtypes.OperatorSigner
+	valCheck       specqbft.ProposedValueCheckF
+	dutyGuard      CommitteeDutyGuard
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 
@@ -50,7 +52,7 @@ func NewCommitteeRunner(
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
-	validAttesterDuty ValidAttesterDutyFunc,
+	dutyGuard CommitteeDutyGuard,
 ) (Runner, error) {
 	if len(share) == 0 {
 		return nil, errors.New("no shares")
@@ -63,14 +65,14 @@ func NewCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		beacon:            beacon,
-		network:           network,
-		signer:            signer,
-		operatorSigner:    operatorSigner,
-		valCheck:          valCheck,
-		submittedDuties:   make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
-		metrics:           metrics.NewConsensusMetrics(spectypes.RoleCommittee),
-		validAttesterDuty: validAttesterDuty,
+		beacon:          beacon,
+		network:         network,
+		signer:          signer,
+		operatorSigner:  operatorSigner,
+		valCheck:        valCheck,
+		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
+		metrics:         metrics.NewConsensusMetrics(spectypes.RoleCommittee),
+		dutyGuard:       dutyGuard,
 	}, nil
 }
 
@@ -205,12 +207,12 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
 	validDuties := 0
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		if err := cr.dutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
+			logger.Debug("invalid duty", fields.BeaconRole(duty.Type), zap.Error(err))
+			continue
+		}
 		switch duty.Type {
 		case spectypes.BNRoleAttester:
-			if err := cr.validAttesterDuty(spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
-				logger.Debug("invalid attester duty", zap.Error(err))
-				continue
-			}
 			validDuties++
 			attestationData := constructAttestationData(beaconVote, duty)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
@@ -573,16 +575,15 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 		if validatorDuty == nil {
 			continue
 		}
+		if err := cr.dutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
+			logger.Debug("invalid duty", fields.BeaconRole(validatorDuty.Type), zap.Error(err))
+			continue
+		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
 		slot := validatorDuty.DutySlot()
 		epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
-			if err := cr.validAttesterDuty(spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
-				logger.Debug("attester duty no longer valid", zap.Error(err))
-				continue
-			}
-
 			// Attestation object
 			attestationData := constructAttestationData(beaconVote, validatorDuty)
 			aggregationBitfield := bitfield.NewBitlist(validatorDuty.CommitteeLength)
