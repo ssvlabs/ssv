@@ -85,7 +85,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if share, exist := c.Shares[validatorIndex]; exist {
-		c.dutyGuard.Stop(share.ValidatorPubKey)
+		c.dutyGuard.StopValidator(share.ValidatorPubKey)
 		delete(c.Shares, validatorIndex)
 	}
 }
@@ -185,7 +185,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	// Update the attesterSlots map.
 	for _, beaconDuty := range duty.ValidatorDuties {
-		if err := c.dutyGuard.Start(beaconDuty.Type, spectypes.ValidatorPK(beaconDuty.PubKey), duty.Slot); err != nil {
+		if err := c.dutyGuard.StartDuty(beaconDuty.Type, spectypes.ValidatorPK(beaconDuty.PubKey), duty.Slot); err != nil {
 			return fmt.Errorf("invalid attester duty: %w", err)
 		}
 	}
@@ -374,7 +374,7 @@ func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
 }
 
 // CommitteeDutyGuard guarantees exclusive execution of one duty per validator,
-// and prevents execution of stopped duties.
+// and prevents execution of stopped validators.
 type CommitteeDutyGuard struct {
 	duties map[spectypes.BeaconRole]map[spectypes.ValidatorPK]phase0.Slot
 	mu     sync.RWMutex
@@ -389,7 +389,7 @@ func NewCommitteeDutyGuard() *CommitteeDutyGuard {
 	}
 }
 
-func (a *CommitteeDutyGuard) Start(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error {
+func (a *CommitteeDutyGuard) StartDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -405,7 +405,7 @@ func (a *CommitteeDutyGuard) Start(role spectypes.BeaconRole, validator spectype
 	return nil
 }
 
-func (a *CommitteeDutyGuard) Stop(validator spectypes.ValidatorPK) {
+func (a *CommitteeDutyGuard) StopValidator(validator spectypes.ValidatorPK) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
