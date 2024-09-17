@@ -393,22 +393,22 @@ func (a *CommitteeDutyGuard) Start(role spectypes.BeaconRole, validator spectype
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
-		runningSlot, exists := a.duties[role][validator]
-		if exists && runningSlot >= slot {
-			return fmt.Errorf("duty already running at slot %d", runningSlot)
-		}
-		a.duties[role][validator] = slot
-	default:
+	duties, ok := a.duties[role]
+	if !ok {
 		return fmt.Errorf("unknown role %d", role)
 	}
+	runningSlot, exists := duties[validator]
+	if exists && runningSlot >= slot {
+		return fmt.Errorf("duty already running at slot %d", runningSlot)
+	}
+	duties[validator] = slot
 	return nil
 }
 
 func (a *CommitteeDutyGuard) Stop(validator spectypes.ValidatorPK) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
 	delete(a.duties[spectypes.BNRoleAttester], validator)
 	delete(a.duties[spectypes.BNRoleSyncCommittee], validator)
 }
@@ -417,7 +417,11 @@ func (a *CommitteeDutyGuard) ValidDuty(role spectypes.BeaconRole, validator spec
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	runningSlot, exists := a.duties[role][validator]
+	duties, ok := a.duties[role]
+	if !ok {
+		return fmt.Errorf("unknown role %d", role)
+	}
+	runningSlot, exists := duties[validator]
 	if !exists {
 		return fmt.Errorf("duty doesn't exist")
 	}
