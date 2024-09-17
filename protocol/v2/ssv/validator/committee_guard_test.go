@@ -81,4 +81,15 @@ func TestCommitteeDutyGuard(t *testing.T) {
 			require.ErrorContains(t, err, "slot mismatch: duty is running at slot 4")
 		}
 	}
+
+	// Stop validator 0x2 to verify both duties are stopped:
+	{
+		guard.StopValidator(spectypes.ValidatorPK{0x2})
+
+		err := guard.ValidDuty(spectypes.BNRoleAttester, spectypes.ValidatorPK{0x2}, 4)
+		require.EqualError(t, err, "duty not found")
+
+		err = guard.ValidDuty(spectypes.BNRoleSyncCommittee, spectypes.ValidatorPK{0x2}, 4)
+		require.EqualError(t, err, "duty not found")
+	}
 }
