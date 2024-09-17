@@ -25,6 +25,7 @@ import (
 )
 
 type CommitteeDutyGuard interface {
+	StartDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
 	ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
 }
 
@@ -35,7 +36,7 @@ type CommitteeRunner struct {
 	signer         spectypes.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-	dutyGuard      CommitteeDutyGuard
+	DutyGuard      CommitteeDutyGuard
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 
@@ -72,11 +73,21 @@ func NewCommitteeRunner(
 		valCheck:        valCheck,
 		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
 		metrics:         metrics.NewConsensusMetrics(spectypes.RoleCommittee),
-		dutyGuard:       dutyGuard,
+		DutyGuard:       dutyGuard,
 	}, nil
 }
 
 func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	d, ok := duty.(*spectypes.CommitteeDuty)
+	if !ok {
+		return errors.New("duty is not a CommitteeDuty")
+	}
+	for _, validatorDuty := range d.ValidatorDuties {
+		err := cr.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), d.DutySlot())
+		if err != nil {
+			return err
+		}
+	}
 	err := cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
 	if err != nil {
 		return err
@@ -207,8 +218,8 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
 	validDuties := 0
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
-		if err := cr.dutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
-			logger.Debug("invalid duty", fields.BeaconRole(duty.Type), zap.Error(err))
+		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
+			logger.Debug("invalid duty", fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
 			continue
 		}
 		switch duty.Type {
@@ -575,8 +586,8 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 		if validatorDuty == nil {
 			continue
 		}
-		if err := cr.dutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
-			logger.Debug("invalid duty", fields.BeaconRole(validatorDuty.Type), zap.Error(err))
+		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
+			logger.Debug("invalid duty", fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 			continue
 		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
