@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -55,8 +54,7 @@ type DiscV5Service struct {
 	domainType networkconfig.DomainTypeProvider
 	subnets    []byte
 
-	publishDeadline time.Time
-	publishMutex    sync.Mutex
+	publishLock chan struct{}
 }
 
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
@@ -298,7 +296,6 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
-	// Update the ENR with the current domain type.
 	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.domainType.DomainType())
 	if err != nil {
 		logger.Error("could not set domain type", zap.Error(err))
@@ -310,47 +307,34 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 		return
 	}
 
-	dvs.publishMutex.Lock()
-	existingDeadline := dvs.publishDeadline
-	dvs.publishDeadline = time.Now().Add(publishENRTimeout)
-	if !existingDeadline.IsZero() {
-		// Extend deadline of ongoing publish.
-		dvs.publishMutex.Unlock()
+	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+	defer done()
+
+	// Acquire publish lock to prevent concurrent ENR updates.
+	select {
+	case <-ctx.Done():
 		return
+	case dvs.publishLock <- struct{}{}:
 	}
-	dvs.publishMutex.Unlock()
+	defer func() {
+		// Release lock.
+		<-dvs.publishLock
+	}()
 
-	// Publish the ENR to the network.
-	for {
-		func() {
-			ctx, cancel := context.WithDeadline(dvs.ctx, dvs.publishDeadline)
-			defer cancel()
-
-			dvs.discover(ctx, func(e PeerEvent) {
-				metricPublishEnrPings.Inc()
-				err := dvs.dv5Listener.Ping(e.Node)
-				if err != nil {
-					if err.Error() == "RPC timeout" {
-						// ignore
-						return
-					}
-					logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
-					return
-				}
-				metricPublishEnrPongs.Inc()
-				// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
-			}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
-		}()
-
-		dvs.publishMutex.Lock()
-		done := time.Now().After(dvs.publishDeadline)
-		if done {
-			dvs.publishDeadline = time.Time{}
-			dvs.publishMutex.Unlock()
-			break
+	dvs.discover(ctx, func(e PeerEvent) {
+		metricPublishEnrPings.Inc()
+		err := dvs.dv5Listener.Ping(e.Node)
+		if err != nil {
+			if err.Error() == "RPC timeout" {
+				// ignore
+				return
+			}
+			logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
+			return
 		}
-		dvs.publishMutex.Unlock()
-	}
+		metricPublishEnrPongs.Inc()
+		// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
+	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
 }
 
 func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
