@@ -10,6 +10,13 @@ import (
 func TestCommitteeDutyGuard(t *testing.T) {
 	guard := NewCommitteeDutyGuard()
 
+	// Unsupported role:
+	err := guard.StartDuty(spectypes.BNRoleProposer, spectypes.ValidatorPK{0x1}, 1)
+	require.EqualError(t, err, "unsupported role 2")
+	err = guard.ValidDuty(spectypes.BNRoleProposer, spectypes.ValidatorPK{0x1}, 1)
+	require.EqualError(t, err, "unsupported role 2")
+
+	// Comprehensive test for both roles:
 	for _, role := range []spectypes.BeaconRole{spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee} {
 		err := guard.ValidDuty(role, spectypes.ValidatorPK{0x1}, 1)
 		require.EqualError(t, err, "duty not found")
@@ -82,11 +89,23 @@ func TestCommitteeDutyGuard(t *testing.T) {
 		}
 	}
 
+	// Stop non-existing validator:
+	{
+		guard.StopValidator(spectypes.ValidatorPK{0x3})
+
+		// Pre-check that validator 0x2 is unchanged:
+		err := guard.ValidDuty(spectypes.BNRoleAttester, spectypes.ValidatorPK{0x2}, 4)
+		require.NoError(t, err)
+
+		err = guard.ValidDuty(spectypes.BNRoleSyncCommittee, spectypes.ValidatorPK{0x2}, 3)
+		require.EqualError(t, err, "slot mismatch: duty is running at slot 4")
+	}
+
 	// Stop validator 0x2 to verify both duties are stopped:
 	{
 		guard.StopValidator(spectypes.ValidatorPK{0x2})
 
-		err := guard.ValidDuty(spectypes.BNRoleAttester, spectypes.ValidatorPK{0x2}, 4)
+		err = guard.ValidDuty(spectypes.BNRoleAttester, spectypes.ValidatorPK{0x2}, 4)
 		require.EqualError(t, err, "duty not found")
 
 		err = guard.ValidDuty(spectypes.BNRoleSyncCommittee, spectypes.ValidatorPK{0x2}, 4)

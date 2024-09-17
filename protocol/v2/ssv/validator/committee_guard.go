@@ -30,7 +30,7 @@ func (a *CommitteeDutyGuard) StartDuty(role spectypes.BeaconRole, validator spec
 
 	duties, ok := a.duties[role]
 	if !ok {
-		return fmt.Errorf("unknown role %d", role)
+		return fmt.Errorf("unsupported role %d", role)
 	}
 	runningSlot, exists := duties[validator]
 	if exists && runningSlot >= slot {
@@ -54,7 +54,7 @@ func (a *CommitteeDutyGuard) ValidDuty(role spectypes.BeaconRole, validator spec
 
 	duties, ok := a.duties[role]
 	if !ok {
-		return fmt.Errorf("unknown role %d", role)
+		return fmt.Errorf("unsupported role %d", role)
 	}
 	runningSlot, exists := duties[validator]
 	if !exists {
