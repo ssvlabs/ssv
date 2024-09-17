@@ -2,6 +2,11 @@ package conversion
 
 import (
 	"time"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 )
 
 // LenUint64 - Returns the length of the slice as uint64, due length can't be negative
@@ -15,4 +20,21 @@ func TimeDurationFromUint64(t uint64) time.Duration {
 
 func TimeUnixFromUint64(t uint64) time.Time {
 	return time.Unix(int64(t), 0) // #nosec G115
+}
+
+func BeaconRoleToConvertRole(beaconRole spectypes.BeaconRole) convert.RunnerRole {
+	return convert.RunnerRole(beaconRole) // #nosec G115
+}
+
+func BeaconRoleToRunnerRole(beaconRole spectypes.BeaconRole) spectypes.RunnerRole {
+	return spectypes.RunnerRole(beaconRole) // #nosec G115
+}
+
+func RunnerRoleToBeaconRole(role spectypes.RunnerRole) spectypes.BeaconRole {
+	return spectypes.BeaconRole(role) // #nosec G115
+}
+
+// TODO fix the type in spec and remove this func
+func CutoffRoundUint64() uint64 {
+	return uint64(specqbft.CutoffRound) // #nosec G115
 }

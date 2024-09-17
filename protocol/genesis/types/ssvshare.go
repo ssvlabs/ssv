@@ -16,6 +16,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 const (
@@ -50,7 +51,7 @@ func (s *SSVShare) Decode(data []byte) error {
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode SSVShare: %w", err)
 	}
-	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(len(s.Committee))
+	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(conversion.LenUint64(s.Committee))
 	return nil
 }
 
@@ -93,9 +94,9 @@ func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	return hash
 }
 
-func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
+func ComputeQuorumAndPartialQuorum(committeeSize uint64) (quorum uint64, partialQuorum uint64) {
 	f := (committeeSize - 1) / 3
-	return uint64(f*2 + 1), uint64(f + 1) // nolint:gosec  //disable G115
+	return f*2 + 1, f + 1
 }
 
 func ValidCommitteeSize(committeeSize int) bool {

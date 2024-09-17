@@ -21,7 +21,7 @@ const (
 
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
-func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) ([]byte, error) {
+func UpdateSubnets(node *enode.LocalNode, count int, added []uint64, removed []uint64) ([]byte, error) {
 	subnets, err := GetSubnetsEntry(node.Node().Record())
 	if err != nil && !errors.Is(err, ErrEntryNotFound) {
 		return nil, errors.Wrap(err, "could not read subnets entry")

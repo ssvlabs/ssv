@@ -1,6 +1,6 @@
 package convert
 
-type RunnerRole uint64
+type RunnerRole int32
 
 const (
 	RoleAttester RunnerRole = iota

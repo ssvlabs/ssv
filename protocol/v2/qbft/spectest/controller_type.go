@@ -40,14 +40,15 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	}
 
 	var lastErr error
-	for i, runData := range test.RunInstanceData {
-		height := specqbft.Height(i) // nolint:gosec  //disable G115
+	height := specqbft.Height(0)
+	for _, runData := range test.RunInstanceData {
 		if runData.Height != nil {
 			height = *runData.Height
 		}
 		if err := runInstanceWithData(t, logger, height, contr, runData); err != nil {
 			lastErr = err
 		}
+		height++
 	}
 
 	if len(test.ExpectedError) != 0 {

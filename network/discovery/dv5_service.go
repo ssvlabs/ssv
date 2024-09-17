@@ -263,7 +263,7 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	if len(subnets) == 0 {
 		return false, nil
 	}
@@ -280,7 +280,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) (u
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	logger = logger.Named(logging.NameDiscoveryService)
 
 	if len(subnets) == 0 {

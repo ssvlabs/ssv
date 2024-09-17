@@ -1241,10 +1241,10 @@ func SetupCommitteeRunners(
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Storage:     options.Storage.Get(convert.RunnerRole(role)), // nolint:gosec  //disable G115
+			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: specqbft.Round(specqbft.CutoffRound), // nolint:gosec  //disable G115
+			CutOffRound: specqbft.Round(conversion.CutoffRoundUint64()),
 		}
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.AlanDomainType, options.Operator.CommitteeID[:], role)
@@ -1304,10 +1304,10 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:     options.Storage.Get(convert.RunnerRole(role)), //nolint:gosec  //disable G115
+			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: specqbft.Round(specqbft.CutoffRound), //nolint:gosec  //disable G115
+			CutOffRound: specqbft.Round(conversion.CutoffRoundUint64()),
 		}
 		config.ValueCheckF = valueCheckF
 

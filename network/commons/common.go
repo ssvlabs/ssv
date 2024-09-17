@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -26,6 +27,8 @@ const (
 
 	// SubnetsCount returns the subnet count for genesis
 	SubnetsCount uint64 = 128
+
+	UnknownSubnetId = math.MaxUint64
 
 	// UnknownSubnet is used when a validator public key is invalid
 	UnknownSubnet = "unknown"
@@ -65,8 +68,8 @@ func DecodeGenesisSignedSSVMessage(encoded []byte) ([]byte, genesisspectypes.Ope
 }
 
 // SubnetTopicID returns the topic to use for the given subnet
-func SubnetTopicID(subnet int) string {
-	if subnet < 0 {
+func SubnetTopicID(subnet uint64) string {
+	if subnet == UnknownSubnetId {
 		return UnknownSubnet
 	}
 	return fmt.Sprintf("%d", subnet)
@@ -80,7 +83,7 @@ func ValidatorTopicID(pkByts []byte) []string {
 }
 
 func CommitteeTopicID(cid spectypes.CommitteeID) []string {
-	return []string{strconv.Itoa(CommitteeSubnet(cid))}
+	return []string{fmt.Sprintf("%d", CommitteeSubnet(cid))}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -94,19 +97,19 @@ func GetTopicBaseName(topicName string) string {
 }
 
 // ValidatorSubnet returns the subnet for the given validator
-func ValidatorSubnet(validatorPKHex string) int {
+func ValidatorSubnet(validatorPKHex string) uint64 {
 	if len(validatorPKHex) < 10 {
-		return -1
+		return UnknownSubnetId
 	}
 	val := hexToUint64(validatorPKHex[:10])
 
-	return int(val % SubnetsCount) // nolint:gosec
+	return val % SubnetsCount
 }
 
 // CommitteeSubnet returns the subnet for the given committee
-func CommitteeSubnet(cid spectypes.CommitteeID) int {
+func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(SubnetsCount))
-	return int(subnet.Int64())
+	return subnet.Uint64()
 }
 
 // MsgIDFunc is the function that maps a message to a msg_id
@@ -133,7 +136,7 @@ func Subnets() int {
 // Topics returns the available topics for this fork.
 func Topics() []string {
 	topics := make([]string, Subnets())
-	for i := 0; i < Subnets(); i++ {
+	for i := uint64(0); i < SubnetsCount; i++ {
 		topics[i] = GetTopicFullName(SubnetTopicID(i))
 	}
 	return topics

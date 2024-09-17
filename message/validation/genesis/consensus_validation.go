@@ -351,12 +351,12 @@ func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) (genesiss
 }
 
 func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) genesisspecqbft.Round {
-	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) { // nolint:gosec  //disable G115
+	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) {
 		return currentQuickRound
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
-	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout) // nolint:gosec  //disable G115
+	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
 	return estimatedRound
 }
 

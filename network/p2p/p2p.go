@@ -377,19 +377,23 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
-		addedSubnets := make([]int, 0)
-		for subnet, active := range updatedSubnets {
+		addedSubnets := make([]uint64, 0)
+		subnet := uint64(0)
+		for _, active := range updatedSubnets {
 			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
 				addedSubnets = append(addedSubnets, subnet)
 			}
+			subnet++
 		}
 
 		// Compute the not anymore registered subnets.
-		removedSubnets := make([]int, 0)
-		for subnet, active := range registeredSubnets {
+		removedSubnets := make([]uint64, 0)
+		subnet = uint64(0)
+		for _, active := range registeredSubnets {
 			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
 				removedSubnets = append(removedSubnets, subnet)
 			}
+			subnet++
 		}
 
 		registeredSubnets = updatedSubnets
@@ -423,12 +427,12 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 
 			// Unsubscribe from the removed subnets.
-			for _, subnet := range removedSubnets {
-				if err := n.unsubscribeSubnet(logger, subnet); err != nil {
-					logger.Debug("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
+			for _, removedSubnet := range removedSubnets {
+				if err := n.unsubscribeSubnet(logger, removedSubnet); err != nil {
+					logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
 					errs = errors.Join(errs, err)
 				} else {
-					logger.Debug("unsubscribed from subnet", zap.Int("subnet", subnet))
+					logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
 				}
 			}
 		}
