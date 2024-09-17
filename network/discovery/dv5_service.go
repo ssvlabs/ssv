@@ -297,6 +297,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
+	// Update own node record.
 	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.domainType.DomainType())
 	if err != nil {
 		logger.Error("could not set domain type", zap.Error(err))
@@ -308,10 +309,10 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 		return
 	}
 
+	// Acquire publish lock to prevent parallel publishing.
 	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
 	defer done()
 
-	// Acquire publish lock to prevent parallel publishing.
 	select {
 	case <-ctx.Done():
 		return
@@ -322,10 +323,17 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 		<-dvs.publishLock
 	}()
 
+	// Collect some metrics.
+	start := time.Now()
+	pings, errs := 0, 0
+	peerIDs := map[peer.ID]struct{}{}
+
+	// Publish ENR.
 	dvs.discover(ctx, func(e PeerEvent) {
 		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
+			errs++
 			if err.Error() == "RPC timeout" {
 				// ignore
 				return
@@ -334,8 +342,16 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 			return
 		}
 		metricPublishEnrPongs.Inc()
-		// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
+		pings++
+		peerIDs[e.AddrInfo.ID] = struct{}{}
 	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
+
+	// Log metrics.
+	logger.Debug("done publishing ENR",
+		fields.Duration(start),
+		zap.Int("unique_peers", len(peerIDs)),
+		zap.Int("pings", pings),
+		zap.Int("errors", errs))
 }
 
 func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
