@@ -23,10 +23,6 @@ func TimeDurationFromUint64(t uint64) time.Duration {
 	return time.Duration(t) // #nosec G115
 }
 
-func TimeUnixFromUint64(t uint64) time.Time {
-	return time.Unix(int64(t), 0) // #nosec G115
-}
-
 func BeaconRoleToConvertRole(beaconRole spectypes.BeaconRole) convert.RunnerRole {
 	return convert.RunnerRole(beaconRole) // #nosec G115
 }
