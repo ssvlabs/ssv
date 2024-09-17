@@ -91,7 +91,7 @@ func TestVoluntaryExitHandler_HandleGenesisDuties(t *testing.T) {
 	t.Run("slot = 5, block = 1 - executing duty, fetching block number", func(t *testing.T) {
 		currentSlot.Set(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.Get())
-		waitForGenesisDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[:1])
+		waitForDutiesExecutionGenesis(t, logger, nil, executeDutiesCall, timeout, expectedDuties[:1])
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -100,7 +100,7 @@ func TestVoluntaryExitHandler_HandleGenesisDuties(t *testing.T) {
 	t.Run("slot = 5, block = 1 - executing another duty, no block number fetch", func(t *testing.T) {
 		currentSlot.Set(phase0.Slot(sameBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.Get())
-		waitForGenesisDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[1:2])
+		waitForDutiesExecutionGenesis(t, logger, nil, executeDutiesCall, timeout, expectedDuties[1:2])
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -116,7 +116,7 @@ func TestVoluntaryExitHandler_HandleGenesisDuties(t *testing.T) {
 	t.Run("slot = 6, block = 1 - executing new duty, fetching block number", func(t *testing.T) {
 		currentSlot.Set(phase0.Slot(newBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.Get())
-		waitForGenesisDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[2:3])
+		waitForDutiesExecutionGenesis(t, logger, nil, executeDutiesCall, timeout, expectedDuties[2:3])
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
@@ -125,7 +125,7 @@ func TestVoluntaryExitHandler_HandleGenesisDuties(t *testing.T) {
 	t.Run("slot = 10, block = 5 - executing past duty, fetching block number", func(t *testing.T) {
 		currentSlot.Set(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone + 1)
 		ticker.Send(currentSlot.Get())
-		waitForGenesisDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[3:4])
+		waitForDutiesExecutionGenesis(t, logger, nil, executeDutiesCall, timeout, expectedDuties[3:4])
 		require.EqualValues(t, 4, blockByNumberCalls.Load())
 	})
 

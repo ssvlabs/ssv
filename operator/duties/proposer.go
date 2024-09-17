@@ -34,24 +34,7 @@ func (h *ProposerHandler) Name() string {
 	return spectypes.BNRoleProposer.String()
 }
 
-// HandleDuties manages the duty lifecycle, handling different cases:
-//
-// On First Run:
-//  1. Fetch duties for the current epoch.
-//  2. Execute duties.
-//
-// On Re-org (current dependent root changed):
-//  1. Fetch duties for the current epoch.
-//  2. Execute duties.
-//
-// On Indices Change:
-//  1. Execute duties.
-//  2. ResetEpoch duties for the current epoch.
-//  3. Fetch duties for the current epoch.
-//
-// On Ticker event:
-//  1. Execute duties.
-//  2. If necessary, fetch duties for the current epoch.
+// HandleDuties manages the duty lifecycle
 func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -65,47 +48,47 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
+			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			tickerID := fields.FormatSlotTickerID(epoch, slot)
+			h.logger.Debug("🛠 ticker event", fields.SlotTickerID(tickerID))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.indicesChanged = false
-				h.processFetching(ctx, currentEpoch)
-				h.processExecution(currentEpoch, slot)
+				h.processFetching(ctx, epoch)
+				h.processExecution(epoch, slot)
 			} else {
-				h.processExecution(currentEpoch, slot)
+				h.processExecution(epoch, slot)
 				if h.indicesChanged {
 					h.indicesChanged = false
-					h.processFetching(ctx, currentEpoch)
+					h.processFetching(ctx, epoch)
 				}
 			}
 			cancel()
 
 			// last slot of epoch
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
-				h.duties.ResetEpoch(currentEpoch - 1)
+				h.duties.Reset(epoch - 1)
 				h.fetchFirst = true
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
+			epoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
+			tickerID := fields.FormatSlotTickerID(epoch, reorgEvent.Slot)
+			h.logger.Info("🔀 reorg event received", fields.SlotTickerID(tickerID), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
 			if reorgEvent.Current {
-				h.duties.ResetEpoch(currentEpoch)
+				h.duties.Reset(epoch)
 				h.fetchFirst = true
 			}
 
 		case <-h.indicesChange:
 			slot := h.network.Beacon.EstimatedCurrentSlot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
+			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			tickerID := fields.FormatSlotTickerID(epoch, slot)
+			h.logger.Info("🔁 indices change received", fields.SlotTickerID(tickerID))
 
 			h.indicesChanged = true
 		}
@@ -178,7 +161,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
 
-	h.duties.ResetEpoch(epoch)
+	h.duties.Reset(epoch)
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {

@@ -81,9 +81,9 @@ const (
 	FieldRole                = "role"
 	FieldRound               = "round"
 	FieldSlot                = "slot"
+	FieldSlotTickerID        = "slot_ticker_id"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubmissionTime      = "submission_time"
-	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "sync_offset"
 	FieldSyncResults         = "sync_results"
@@ -91,6 +91,7 @@ const (
 	FieldToBlock             = "to_block"
 	FieldTook                = "took"
 	FieldTopic               = "topic"
+	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldTxHash              = "tx_hash"
 	FieldType                = "type"
 	FieldUpdatedENRLocalNode = "updated_enr"
@@ -407,4 +408,16 @@ func Type(v any) zapcore.Field {
 
 func FormatDuration(val time.Duration) string {
 	return strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
+}
+
+func FormatSlotTickerID(epoch phase0.Epoch, slot phase0.Slot) string {
+	return fmt.Sprintf("e%v-s%v-#%v", epoch, slot, slot%32+1)
+}
+
+func FormatSlotTickerCommitteeID(period uint64, epoch phase0.Epoch, slot phase0.Slot) string {
+	return fmt.Sprintf("p%v-%s", period, FormatSlotTickerID(epoch, slot))
+}
+
+func SlotTickerID(val string) zap.Field {
+	return zap.String(FieldSlotTickerID, val)
 }
