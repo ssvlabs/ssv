@@ -76,16 +76,18 @@ func (d *Duties[D]) ValidatorDuty(epoch phase0.Epoch, slot phase0.Slot, validato
 }
 
 func (d *Duties[D]) Set(epoch phase0.Epoch, duties []StoreDuty[D]) {
+	mapped := make(map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
+	for _, duty := range duties {
+		if _, ok := mapped[duty.Slot]; !ok {
+			mapped[duty.Slot] = make(map[phase0.ValidatorIndex]StoreDuty[D])
+		}
+		mapped[duty.Slot][duty.ValidatorIndex] = duty
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.m[epoch] = make(map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
-	for _, duty := range duties {
-		if _, ok := d.m[epoch][duty.Slot]; !ok {
-			d.m[epoch][duty.Slot] = make(map[phase0.ValidatorIndex]StoreDuty[D])
-		}
-		d.m[epoch][duty.Slot][duty.ValidatorIndex] = duty
-	}
+	d.m[epoch] = mapped
 }
 
 func (d *Duties[D]) ResetEpoch(epoch phase0.Epoch) {
