@@ -33,7 +33,7 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
 		return 0, errValueOutOfRange
 	}
 
-	return val, nil //nolint:gosec //disable G115
+	return val, nil
 }
 
 // isSubnet checks if the given string is a subnet string

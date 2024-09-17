@@ -377,14 +377,22 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
-		return currentQuickRound
+func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (specqbft.Round, error) {
+	delta, err := conversion.SafeTimeDurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	if currentQuickRound := specqbft.FirstRound + specqbft.Round(delta); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+		return currentQuickRound, nil
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
-	return estimatedRound
+	delta, err = conversion.SafeTimeDurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(delta)
+	return estimatedRound, nil
 }
 
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
@@ -408,7 +416,11 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	estimatedRound := specqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
+		currentEstimatedRound, err := mv.currentEstimatedRound(sinceSlotStart)
+		if err != nil {
+			return err
+		}
+		estimatedRound = currentEstimatedRound
 	}
 
 	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now

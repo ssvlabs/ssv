@@ -5,6 +5,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
@@ -17,7 +19,7 @@ type Network struct {
 
 type BeaconNetwork interface {
 	ForkVersion() [4]byte
-	MinGenesisTime() uint64
+	MinGenesisTime() int64
 	SlotDurationSec() time.Duration
 	SlotsPerEpoch() uint64
 	EstimatedCurrentSlot() phase0.Slot
@@ -59,11 +61,11 @@ func NewLocalTestNetwork(network spectypes.BeaconNetwork) Network {
 }
 
 // MinGenesisTime returns min genesis time value
-func (n Network) MinGenesisTime() uint64 {
+func (n Network) MinGenesisTime() int64 {
 	if n.LocalTestNet {
 		return 1689072978
 	}
-	return n.BeaconNetwork.MinGenesisTime()
+	return int64(n.BeaconNetwork.MinGenesisTime()) // #nosec G115
 }
 
 // GetNetwork returns the network
@@ -78,8 +80,8 @@ func (n Network) GetBeaconNetwork() spectypes.BeaconNetwork {
 
 // GetSlotStartTime returns the start time for the given slot
 func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
-	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
-	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0) //nolint:gosec
+	timeSinceGenesisStart := conversion.TimeDurationFromUint64(uint64(slot) * uint64(n.SlotDurationSec().Seconds()))
+	start := time.Unix(n.MinGenesisTime(), 0).Add(timeSinceGenesisStart)
 	return start
 }
 
@@ -95,11 +97,11 @@ func (n Network) EstimatedCurrentSlot() phase0.Slot {
 
 // EstimatedSlotAtTime estimates slot at the given time
 func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
-	genesis := int64(n.MinGenesisTime()) //nolint:gosec //disable G115
+	genesis := n.MinGenesisTime()
 	if time < genesis {
 		return 0
 	}
-	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds())) //nolint:gosec  //disable G115
+	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds())) //#nosec G115
 }
 
 // EstimatedCurrentEpoch estimates the current epoch

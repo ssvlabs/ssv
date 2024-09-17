@@ -163,7 +163,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, err
 	}
 
-	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) //nolint:gosec //disable G115
+	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 	for k, v := range h.blockSlots {

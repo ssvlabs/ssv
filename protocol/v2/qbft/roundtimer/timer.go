@@ -9,6 +9,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
@@ -120,10 +122,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	// Calculate additional timeout based on round
 	var additionalTimeout time.Duration
 	if round <= t.timeoutOptions.quickThreshold {
-		additionalTimeout = time.Duration(round) * t.timeoutOptions.quick //nolint:gosec //disable G115
+		additionalTimeout = conversion.TimeDurationFromUint64(uint64(round)) * t.timeoutOptions.quick
 	} else {
-		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick          //nolint:gosec //disable G115
-		slowPortion := time.Duration(int(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow //nolint:gosec //disable G115
+		quickPortion := conversion.TimeDurationFromUint64(uint64(t.timeoutOptions.quickThreshold)) * t.timeoutOptions.quick
+		slowPortion := conversion.TimeDurationFromUint64(uint64(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
 		additionalTimeout = quickPortion + slowPortion
 	}
 

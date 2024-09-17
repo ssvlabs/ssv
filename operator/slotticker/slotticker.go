@@ -5,6 +5,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
@@ -72,13 +74,13 @@ func (s *slotTicker) Next() <-chan time.Time {
 		default:
 		}
 	}
-	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1 //nolint:gosec  //disable G115
+	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1 // #nosec G115
 	if nextSlot <= s.slot {
 		// We've already ticked for this slot, so we need to wait for the next one.
 		nextSlot = s.slot + 1
 		s.logger.Debug("double tick", zap.Uint64("slot", uint64(s.slot)))
 	}
-	nextSlotStartTime := s.genesisTime.Add(time.Duration(nextSlot) * s.slotDuration) //nolint:gosec //disable G115
+	nextSlotStartTime := s.genesisTime.Add(conversion.TimeDurationFromUint64(uint64(nextSlot)) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
 	s.slot = nextSlot
 	return s.timer.C()

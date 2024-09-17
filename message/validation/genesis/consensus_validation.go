@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -81,7 +82,10 @@ func (mv *messageValidator) validateConsensusMessage(
 	estimatedRound := genesisspecqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
+		estimatedRound, err = mv.currentEstimatedRound(sinceSlotStart)
+		if err != nil {
+			return consensusDescriptor, msgSlot, err
+		}
 	}
 
 	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
@@ -350,14 +354,22 @@ func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) (genesiss
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) genesisspecqbft.Round {
-	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) {
-		return currentQuickRound
+func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (genesisspecqbft.Round, error) {
+	delta, err := conversion.SafeTimeDurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(delta); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) {
+		return currentQuickRound, nil
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
-	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
-	return estimatedRound
+	delta, err = conversion.SafeTimeDurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(delta)
+	return estimatedRound, nil
 }
 
 func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole) (time.Duration, error) {
