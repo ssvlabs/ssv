@@ -28,7 +28,7 @@ func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig networkconfig.Ne
 }
 
 func TestNewDiscV5Service(t *testing.T) {
-	dvs := testingService(t)
+	dvs := testingDiscovery(t)
 
 	assert.NotNil(t, dvs.dv5Listener)
 	assert.NotNil(t, dvs.conns)
@@ -44,14 +44,14 @@ func TestNewDiscV5Service(t *testing.T) {
 }
 
 func TestDiscV5Service_Close(t *testing.T) {
-	dvs := testingService(t)
+	dvs := testingDiscovery(t)
 
 	err := dvs.Close()
 	assert.NoError(t, err)
 }
 
 func TestDiscV5Service_RegisterSubnets(t *testing.T) {
-	dvs := testingService(t)
+	dvs := testingDiscovery(t)
 
 	// Register subnets 1, 3, and 5
 	updated, err := dvs.RegisterSubnets(testLogger, 1, 3, 5)
@@ -90,7 +90,7 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 }
 
 func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
-	dvs := testingService(t)
+	dvs := testingDiscovery(t)
 
 	// Register subnets first
 	_, err := dvs.RegisterSubnets(testLogger, 1, 2, 3)
@@ -144,7 +144,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	opts := createServiceOptions(t, testNetConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig)
 	service, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 	dvs := service.(*DiscV5Service)
@@ -172,7 +172,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	opts := createServiceOptions(t, testNetConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig)
 
 	service, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 }
 
 func TestDiscV5Service_Node(t *testing.T) {
-	dvs := testingService(t)
+	dvs := testingDiscovery(t)
 
 	// Replace listener
 	err := dvs.conn.Close()
@@ -235,7 +235,7 @@ func TestDiscV5Service_Node(t *testing.T) {
 }
 
 func TestDiscV5Service_checkPeer(t *testing.T) {
-	dvs := testingService(t)
+	dvs := testingDiscovery(t)
 
 	// Valid peer
 	err := dvs.checkPeer(testLogger, ToPeerEvent(NewTestingNode(t)))
@@ -290,7 +290,7 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 
 	t.Run("Post-Fork", func(t *testing.T) {
 		netConfig := PostForkNetworkConfig()
-		dvs := testingServiceForNetworkConfig(t, netConfig)
+		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
 
 		// Check listener type
 		_, ok := dvs.dv5Listener.(*forkListener)
@@ -310,7 +310,7 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 	t.Run("Pre-Fork", func(t *testing.T) {
 
 		netConfig := PreForkNetworkConfig()
-		dvs := testingServiceForNetworkConfig(t, netConfig)
+		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
 
 		// Check listener type
 		_, ok := dvs.dv5Listener.(*discover.UDPv5)

@@ -37,7 +37,8 @@ var (
 	testTCPPort = 13001
 )
 
-func createServiceOptions(t *testing.T, networkConfig networkconfig.NetworkConfig) *Options {
+// Options for the discovery service
+func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkConfig) *Options {
 	// Generate key
 	privKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -56,7 +57,7 @@ func createServiceOptions(t *testing.T, networkConfig networkconfig.NetworkConfi
 		EnableLogging: false,
 	}
 
-	// Service options
+	// Discovery options
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
 	connectionIndex := NewMockConnection()
@@ -69,8 +70,9 @@ func createServiceOptions(t *testing.T, networkConfig networkconfig.NetworkConfi
 	}
 }
 
-func testingServiceForNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
-	opts := createServiceOptions(t, netConfig)
+// Testing discovery with a given NetworkConfig
+func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
+	opts := testingDiscoveryOptions(t, netConfig)
 	service, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, service)
@@ -81,20 +83,12 @@ func testingServiceForNetworkConfig(t *testing.T, netConfig networkconfig.Networ
 	return dvs
 }
 
-func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
+// Testing discovery service
+func testingDiscovery(t *testing.T) *DiscV5Service {
+	return testingDiscoveryWithNetworkConfig(t, testNetConfig)
 }
 
-func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
-}
-
-func testingService(t *testing.T) *DiscV5Service {
-	return testingServiceForNetworkConfig(t, testNetConfig)
-}
-
+// NetworkConfig with fork epoch
 func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
 	n := networkconfig.HoleskyStage
 	return networkconfig.NetworkConfig{
@@ -105,25 +99,35 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 		GenesisEpoch:         n.GenesisEpoch,
 		RegistrySyncOffset:   n.RegistrySyncOffset,
 		RegistryContractAddr: n.RegistryContractAddr,
-		AlanForkEpoch:        forkEpoch,
 		Bootnodes:            n.Bootnodes,
+		// Fork epoch
+		AlanForkEpoch: forkEpoch,
 	}
 }
 
-// Mock enode.LocalNode
+// NetworkConfig for staying in pre-fork
+func PreForkNetworkConfig() networkconfig.NetworkConfig {
+	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
+	return testingNetConfigWithForkEpoch(forkEpoch)
+}
+
+// NetworkConfig for staying in post-fork
+func PostForkNetworkConfig() networkconfig.NetworkConfig {
+	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
+	return testingNetConfigWithForkEpoch(forkEpoch)
+}
+
+// Testing LocalNode
 func NewLocalNode(t *testing.T) *enode.LocalNode {
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
-	// Encoding and decoding (hack so that SignV4 works)
-	hexPrivKey := hex.EncodeToString(crypto.FromECDSA(nodeKey))
-	sk, err := crypto.HexToECDSA(hexPrivKey)
+	// Create local node
+	localNode, err := records.CreateLocalNode(nodeKey, t.TempDir(), net.IP(testIP), testPort, testTCPPort)
 	require.NoError(t, err)
 
-	localNode, err := records.CreateLocalNode(sk, t.TempDir(), net.IP(testIP), testPort, testTCPPort)
-	require.NoError(t, err)
-
+	// Set entries
 	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType())
 	require.NoError(t, err)
 	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.NextDomainType())
@@ -134,7 +138,7 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 	return localNode
 }
 
-// Mock enode.Node
+// Testing node
 func NewTestingNode(t *testing.T) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, mockSubnets(1))
 }
@@ -167,6 +171,7 @@ func CustomNode(t *testing.T,
 	setDomainType bool, domainType spectypes.DomainType,
 	setNextDomainType bool, nextDomainType spectypes.DomainType,
 	setSubnets bool, subnets []byte) *enode.Node {
+
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -178,24 +183,23 @@ func CustomNode(t *testing.T,
 
 	// Create record
 	record := enr.Record{}
+
+	// Set entries
 	record.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
 	record.Set(enr.UDP(12000))
 	record.Set(enr.TCP(13000))
-
 	if setDomainType {
 		record.Set(records.DomainTypeEntry{
 			Key:        records.KeyDomainType,
 			DomainType: domainType,
 		})
 	}
-
 	if setNextDomainType {
 		record.Set(records.DomainTypeEntry{
 			Key:        records.KeyNextDomainType,
 			DomainType: nextDomainType,
 		})
 	}
-
 	if setSubnets {
 		subnetsVec := bitfield.NewBitvector128()
 		for i, subnet := range subnets {
@@ -215,6 +219,7 @@ func CustomNode(t *testing.T,
 	return node
 }
 
+// Transform node into PeerEvent
 func ToPeerEvent(node *enode.Node) PeerEvent {
 	addrInfo, err := ToPeer(node)
 	if err != nil {
@@ -310,7 +315,6 @@ func (mc *MockConnection) IsBad(logger *zap.Logger, id peer.ID) bool {
 	return false
 }
 
-// Helper functions for testing
 func (mc *MockConnection) SetConnectedness(id peer.ID, conn network.Connectedness) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
