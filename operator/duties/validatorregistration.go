@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"encoding/hex"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
@@ -10,10 +11,15 @@ import (
 	"go.uber.org/zap"
 )
 
-const validatorRegistrationEpochInterval = uint64(10)
+const validatorRegistrationEpochInterval = uint64(2)
 
 type ValidatorRegistrationHandler struct {
 	baseHandler
+}
+
+type validatorRegistration struct {
+	validatorIndex phase0.ValidatorIndex
+	feeRecipient   string
 }
 
 func NewValidatorRegistrationHandler() *ValidatorRegistrationHandler {
@@ -43,7 +49,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(validatorRegistrationEpochInterval))
 
-			var validators []phase0.ValidatorIndex
+			var vrs []validatorRegistration
 			for _, share := range shares {
 				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
 					continue
@@ -69,11 +75,14 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 					}})
 				}
 
-				validators = append(validators, share.BeaconMetadata.Index)
+				vrs = append(vrs, validatorRegistration{
+					validatorIndex: share.BeaconMetadata.Index,
+					feeRecipient:   hex.EncodeToString(share.FeeRecipientAddress[:]),
+				})
 			}
 			h.logger.Debug("validator registration duties sent",
 				zap.Uint64("slot", uint64(slot)),
-				zap.Any("validators", validators))
+				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
 			continue
