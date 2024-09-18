@@ -224,7 +224,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 	validDuties := 0
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
-			logger.Debug("invalid duty", fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+			logger.Warn("duty is no longer valid", fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
 			continue
 		}
 		switch duty.Type {
@@ -594,7 +594,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			continue
 		}
 		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
-			logger.Debug("invalid duty", fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
+			logger.Warn("duty is no longer valid", fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 			continue
 		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
