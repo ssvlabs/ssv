@@ -216,28 +216,26 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		protocolID = DefaultSSVProtocolID
 	}
 
-	// TODO: Uncomment the code below for the release that deprecates the pre-fork discovery service
+	// After the Alan fork, on a restart, we only use the discovery with the ProtocolID restriction
+	if dvs.networkConfig.PastAlanFork() {
+		dv5Cfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID))
+		if err != nil {
+			return err
+		}
+		dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
+		if err != nil {
+			return errors.Wrap(err, "could not create discV5 listener")
+		}
+		dvs.dv5Listener = dv5Listener
+		dvs.bootnodes = dv5Cfg.Bootnodes
 
-	// After the Alan fork, we use only the discovery with the ProtocolID restriction
-	// if dvs.networkConfig.PastAlanFork() {
-	// 	dv5Cfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID))
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
-	// 	if err != nil {
-	// 		return errors.Wrap(err, "could not create discV5 listener")
-	// 	}
-	// 	dvs.dv5Listener = dv5Listener
-	// 	dvs.bootnodes = dv5Cfg.Bootnodes
+		logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
+			zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.NetworkConfig.DomainType()))
 
-	// 	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-	// 		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.NetworkConfig.DomainType()))
+		return nil
+	}
 
-	// 	return nil
-	// }
-
-	// Post-Fork: Discovery with ProtocolID restriction
+	// New discovery, with ProtocolID restriction, to be kept post-fork
 	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
 	sharedConn := &sharedUDPConn{udpConn, unhandled}
 
@@ -259,7 +257,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		fields.ProtocolID(protocolID),
 	)
 
-	// Pre-Fork: Discovery without ProtocolID restriction
+	// Previous discovery, without ProtocolID restriction, to be discontinued after the fork
 	dv5PreForkCfg, err := opts.DiscV5Cfg(logger)
 	if err != nil {
 		return err
@@ -278,7 +276,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		fields.ProtocolID(protocolID),
 	)
 
-	dvs.dv5Listener = newForkListener(dv5PreForkListener, dv5PostForkListener)
+	dvs.dv5Listener = newForkListener(dv5PreForkListener, dv5PostForkListener, dvs.networkConfig)
 	dvs.bootnodes = append(dv5PostForkCfg.Bootnodes, dv5PreForkCfg.Bootnodes...)
 
 	return nil
