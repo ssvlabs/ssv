@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -30,7 +29,7 @@ type SharesListFunc = func(filters ...SharesFilter) []*types.SSVShare
 // Shares is the interface for managing shares.
 type Shares interface {
 	// Get returns the share for the given public key, or nil if not found.
-	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
+	Get(txn basedb.Reader, pubKey []byte) (*types.SSVShare, bool)
 
 	// List returns a list of shares, filtered by the given filters (if any).
 	List(txn basedb.Reader, filters ...SharesFilter) []*types.SSVShare
@@ -48,8 +47,7 @@ type Shares interface {
 	// Drop deletes all shares.
 	Drop() error
 
-	// UpdateValidatorMetadata updates validator metadata.
-	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
+	// UpdateValidatorsMetadata updates the metadata of the given validators
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
@@ -124,9 +122,11 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 	}
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
-		func(pk []byte) *types.SSVShare { return storage.Get(nil, pk) },
+		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 	)
-	storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...)
+	if err := storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...); err != nil {
+		return nil, nil, err
+	}
 	return storage, storage.validatorStore, nil
 }
 
@@ -151,15 +151,20 @@ func (s *sharesStorage) load() error {
 	})
 }
 
-func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) *types.SSVShare {
+func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return s.unsafeGet(pubKey)
 }
 
-func (s *sharesStorage) unsafeGet(pubKey []byte) *types.SSVShare {
-	return s.shares[hex.EncodeToString(pubKey)]
+func (s *sharesStorage) unsafeGet(pubKey []byte) (*types.SSVShare, bool) {
+	share := s.shares[hex.EncodeToString(pubKey)]
+	if share == nil {
+		return nil, false
+	}
+
+	return share, true
 }
 
 func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.SSVShare {
@@ -198,6 +203,13 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	if len(shares) == 0 {
 		return nil
 	}
+
+	for _, share := range shares {
+		if share == nil {
+			return fmt.Errorf("nil share")
+		}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -232,8 +244,12 @@ func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVSha
 		s.shares[key] = share
 	}
 
-	s.validatorStore.handleSharesUpdated(updateShares...)
-	s.validatorStore.handleSharesAdded(addShares...)
+	if err := s.validatorStore.handleSharesUpdated(updateShares...); err != nil {
+		return err
+	}
+	if err := s.validatorStore.handleSharesAdded(addShares...); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -300,60 +316,53 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 }
 
 func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
-	err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-		err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
-		if err != nil {
-			return err
-		}
-
-		delete(s.shares, hex.EncodeToString(pubKey))
-		return nil
-	}()
-	if err != nil {
+	// Delete the share from the database
+	if err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey)); err != nil {
 		return err
 	}
 
-	// TODO: (Alan) fix hack to avoid double-locking mutex
-	s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
-
-	return nil
-}
-
-// UpdateValidatorMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
-	if metadata == nil {
-		return nil
-	}
-
-	share := s.Get(nil, pk[:])
+	share := s.shares[hex.EncodeToString(pubKey)]
 	if share == nil {
 		return nil
 	}
 
-	share.SetMetadataLastUpdated(time.Now())
-	share.BeaconMetadata = metadata
-	share.Share.ValidatorIndex = metadata.Index
+	// Remove the share from local storage map
+	delete(s.shares, hex.EncodeToString(pubKey))
 
-	return s.Save(nil, share)
+	// Remove the share from the validator store. This method will handle its own locking.
+	if err := s.validatorStore.handleShareRemoved(share); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-// UpdateValidatorMetadata updates the metadata of the given validator
+// UpdateValidatorsMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	s.mu.RLock()
 	var shares []*types.SSVShare
-	for pk, metadata := range data {
-		share := s.unsafeGet(pk[:])
-		if share == nil {
-			continue
+
+	func() {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+
+		for pk, metadata := range data {
+			if metadata == nil {
+				continue
+			}
+
+			share, exists := s.unsafeGet(pk[:])
+			if !exists {
+				continue
+			}
+
+			share.BeaconMetadata = metadata
+			share.Share.ValidatorIndex = metadata.Index
+			shares = append(shares, share)
 		}
-		share.BeaconMetadata = metadata
-		share.Share.ValidatorIndex = metadata.Index
-		shares = append(shares, share)
-	}
-	s.mu.RUnlock()
+	}()
 
 	saveShares := func(sshares []*types.SSVShare) error {
 		s.mu.Lock()

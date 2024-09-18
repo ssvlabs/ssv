@@ -22,16 +22,6 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 		With(fields...)
 }
 
-func (c *controller) StartValidator(share *types.SSVShare) error {
-	// logger := c.taskLogger("StartValidator", fields.PubKey(share.ValidatorPubKey))
-
-	// Since we don't yet have the Beacon metadata for this validator,
-	// we can't yet start it. Starting happens in `UpdateValidatorMetaDataLoop`,
-	// so this task is currently a no-op.
-
-	return nil
-}
-
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
@@ -108,7 +98,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 	return nil
 }
 
-func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
 	logger := c.taskLogger("ExitValidator",
 		fields.PubKey(pubKey[:]),
 		fields.BlockNumber(blockNumber),
@@ -116,6 +106,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 	)
 
 	exitDesc := duties.ExitDescriptor{
+		OwnValidator:   ownValidator,
 		PubKey:         pubKey,
 		ValidatorIndex: validatorIndex,
 		BlockNumber:    blockNumber,

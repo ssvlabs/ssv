@@ -83,7 +83,6 @@ type ExecutionClient interface {
 type ValidatorProvider interface {
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
-	Validator(pubKey []byte) *types.SSVShare
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
@@ -414,10 +413,12 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Valida
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
-	for committeeID, duty := range duties {
-		committeeID := committeeID
-		duty := duty
-		logger := s.loggerWithCommitteeDutyContext(logger, committeeID, duty)
+	for _, committee := range duties {
+		duty := committee.duty
+		logger := s.loggerWithCommitteeDutyContext(logger, committee)
+		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
+
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
@@ -425,7 +426,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeD
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			s.dutyExecutor.ExecuteCommitteeDuty(logger, committeeID, duty)
+			s.dutyExecutor.ExecuteCommitteeDuty(logger, committee.id, duty)
 		}()
 	}
 }
@@ -455,12 +456,15 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Va
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
-func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) *zap.Logger {
+func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
+	duty := committeeDuty.duty
 	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
+
 	return logger.
-		With(fields.CommitteeID(committeeID)).
+		With(fields.CommitteeID(committeeDuty.id)).
+		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).
-		With(fields.Duties(dutyEpoch, duty.ValidatorDuties)).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).

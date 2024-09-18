@@ -4,14 +4,15 @@ import (
 	"crypto/ecdsa"
 	"net"
 
+	"github.com/ssvlabs/ssv/logging"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
+
+	"github.com/ssvlabs/ssv/network/commons"
+
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/network/commons"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 )
 
 var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
@@ -117,7 +118,7 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger, funcOpts ...func(config
 		zapLogger := logger.Named(logging.NameDiscoveryV5Logger)
 		//TODO: this is a workaround for using slog without upgrade go to 1.21
 		zapHandler := compatible_logger.Option{Logger: zapLogger}.NewZapHandler()
-		newLogger := log.NewLogger(zapHandler)
+		newLogger := log.New(zapHandler)
 		dv5Cfg.Log = newLogger
 	}
 

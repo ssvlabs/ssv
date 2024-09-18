@@ -7,6 +7,7 @@ import (
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,6 +17,15 @@ func TestTopicScoreParams(t *testing.T) {
 		opts        func() *Options
 		expectedErr error
 	}{
+		{
+			"subnet topic 0 validators",
+			func() *Options {
+				validators := 0
+				opts := NewSubnetTopicOpts(validators, 128, []*storage.Committee{})
+				return opts
+			},
+			nil,
+		},
 		{
 			"subnet topic 1k validators",
 			func() *Options {

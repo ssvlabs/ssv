@@ -12,19 +12,14 @@ import (
 	"strings"
 	"time"
 
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
-
-	"github.com/ssvlabs/ssv/logging"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -39,14 +34,14 @@ import (
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
 	"github.com/ssvlabs/ssv/exporter/convert"
-
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
-
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
+	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
@@ -63,6 +58,7 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
+	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -381,7 +377,9 @@ var StartNodeCmd = &cobra.Command{
 			operatorPrivKey,
 			keyManager,
 		)
-		nodeProber.AddNode("event syncer", eventSyncer)
+		if len(cfg.LocalEventsPath) == 0 {
+			nodeProber.AddNode("event syncer", eventSyncer)
+		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()

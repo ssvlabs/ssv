@@ -1,6 +1,10 @@
 package topics
 
 import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -23,18 +27,40 @@ func DefaultScoringConfig() *ScoringConfig {
 	}
 }
 
-// scoreInspector inspects scores and updates the score index accordingly
+type topicScoreSnapshot struct {
+	topic string
+	*pubsub.TopicScoreSnapshot
+}
+
+// scoreInspector inspects and logs scores.
+// It also updates the GossipScoreIndex by resetting it and
+// adding the peers' scores.
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency int, metrics Metrics, peerConnected func(pid peer.ID) bool, peerScoreParams *pubsub.PeerScoreParams, topicScoreParamsFactory func(string) *pubsub.TopicScoreParams) pubsub.ExtendedPeerScoreInspectFn {
+func scoreInspector(logger *zap.Logger,
+	scoreIdx peers.ScoreIndex,
+	logFrequency int,
+	metrics Metrics,
+	peerConnected func(pid peer.ID) bool,
+	peerScoreParams *pubsub.PeerScoreParams,
+	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
+	gossipScoreIndex peers.GossipScoreIndex,
+) pubsub.ExtendedPeerScoreInspectFn {
 	inspections := 0
 
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+		// Update gossipScoreIndex.
+		peerScores := make(map[peer.ID]float64)
+		for pid, ps := range scores {
+			peerScores[pid] = ps.Score
+		}
+		gossipScoreIndex.SetScores(peerScores)
 
+		// Skip if it's not time to log yet.
 		if inspections%logFrequency != 0 {
-			// Don't log yet.
 			inspections++
 			return
 		}
+		inspections++
 
 		// Reset metrics before updating them.
 		metrics.ResetPeerScores()
@@ -54,10 +80,10 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 		for pid, peerScores := range scores {
 
 			// Store topic snapshot for topics with invalid messages
-			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
+			filtered := []*topicScoreSnapshot{}
 			for topic, snapshot := range peerScores.Topics {
 				if snapshot.InvalidMessageDeliveries != 0 {
-					filtered[topic] = snapshot
+					filtered = append(filtered, &topicScoreSnapshot{topic, snapshot})
 				}
 			}
 
@@ -73,13 +99,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 
 			// P2 - First message deliveries
 			// The weight for the p2 score (w2) may be different through topics
-			// So, we store a list of counters P2c and their associated weights W2
-			// Note: if necessary, we may reduce the size of the log by summing P2c * W2 for all topics and logging this result
-			type P2Score struct {
-				P2Counter float64
-				W2        float64
-			}
-			p2 := make([]*P2Score, 0)
+			// So, we compute the sum P2c * W2 for all topics
+			p2 := 0.0
 
 			// P4 - InvalidMessageDeliveries
 			// The weight should be equal for all topics. So, we can just sum up the counters squared.
@@ -104,12 +125,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 				// Update p4 impact on final score
 				p4Impact += topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * p4CounterSquaredForTopic
 
-				// Store the counter and weight for P2
-				w2 := topicScoreParams.FirstMessageDeliveriesWeight
-				p2 = append(p2, &P2Score{
-					P2Counter: snapshot.FirstMessageDeliveries,
-					W2:        w2,
-				})
+				// Sum up P2c * W2 in P2
+				p2 += snapshot.FirstMessageDeliveries * topicScoreParams.FirstMessageDeliveriesWeight
 			}
 
 			// Get weights for P1 and P4 (w1 and w4), which should be equal for all topics
@@ -134,20 +151,23 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 			metrics.PeerScore(pid, peerScores.Score)
 			metrics.PeerP4Score(pid, p4Impact)
 
+			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
+			invalidMessagesStats := formatInvalidMessageStats(filtered)
+
 			// Log.
 			fields := []zap.Field{
 				fields.PeerID(pid),
 				fields.PeerScore(peerScores.Score),
 				zap.Float64("p1_time_in_mesh", p1CounterSum),
 				zap.Float64("w1_time_in_mesh", w1),
-				zap.Any("p2_first_message_deliveries", p2),
+				zap.Float64("p2_first_message_deliveries", p2),
 				zap.Float64("p4_invalid_message_deliveries", p4CounterSum),
 				zap.Float64("w4_invalid_message_deliveries", w4),
 				zap.Float64("p6_ip_colocation_factor", p6),
 				zap.Float64("w6_ip_colocation_factor", w6),
 				zap.Float64("p7_behaviour_penalty", p7),
 				zap.Float64("w7_behaviour_penalty", w7),
-				zap.Any("invalid_messages", filtered),
+				zap.String("invalid_messages", invalidMessagesStats),
 			}
 			if peerConnected(pid) {
 				fields = append(fields, zap.Bool("connected", true))
@@ -165,8 +185,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
-
-		inspections++
 	}
 }
 
@@ -248,4 +266,32 @@ func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*
 		}
 	}
 	return topicCommittees
+}
+
+// formatInvalidMessageStats returns the subnets in a small format topicNum=ti,fmd,mmd,imd
+func formatInvalidMessageStats(filtered []*topicScoreSnapshot) string {
+	fmtFloat := func(n float64) string {
+		if math.Trunc(n) == n {
+			return strconv.FormatInt(int64(n), 10)
+		}
+		return strconv.FormatFloat(math.Round(n*100)/100, 'f', -1, 64)
+	}
+	var b strings.Builder
+	i := 0
+	for _, snapshot := range filtered {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(
+			&b,
+			"%s=%s,%s,%s,%s",
+			commons.GetTopicBaseName(snapshot.topic),
+			fmtFloat(snapshot.TimeInMesh.Seconds()),
+			fmtFloat(snapshot.FirstMessageDeliveries),
+			fmtFloat(snapshot.MeshMessageDeliveries),
+			fmtFloat(snapshot.InvalidMessageDeliveries),
+		)
+		i++
+	}
+	return b.String()
 }

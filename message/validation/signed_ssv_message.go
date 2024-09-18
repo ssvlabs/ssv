@@ -113,9 +113,6 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	case ssvmessage.SSVEventMsgType:
 		// Rule: Event message
 		return ErrEventMessage
-	case spectypes.DKGMsgType:
-		// Rule: DKG message
-		return ErrDKGMessage
 	default:
 		// Unknown message type
 		e := ErrUnknownSSVMessageType

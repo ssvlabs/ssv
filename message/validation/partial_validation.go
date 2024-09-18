@@ -23,10 +23,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > maxPartialSignatureMsgsSize {
+	if len(ssvMessage.Data) > maxEncodedPartialSignatureSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = maxPartialSignatureMsgsSize
+		e.want = maxEncodedPartialSignatureSize
 		return nil, e
 	}
 
@@ -55,7 +55,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, e
 	}
 
-	mv.updatePartialSignatureState(partialSignatureMessages, state, signer)
+	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer); err != nil {
+		return nil, err
+	}
 
 	return partialSignatureMessages, nil
 }
@@ -208,7 +210,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
-			e.want = maxConsensusMsgSize
+			e.want = maxSignatures
 			return e
 		}
 	} else if partialSignatureMessageCount > 1 {
@@ -225,7 +227,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
 	state *consensusState,
 	signer spectypes.OperatorID,
-) {
+) error {
 	stateBySlot := state.GetOrCreate(signer)
 	messageSlot := partialSignatureMessages.Slot
 	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
@@ -236,7 +238,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 
-	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
+	return signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

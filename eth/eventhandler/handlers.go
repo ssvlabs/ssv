@@ -25,7 +25,8 @@ import (
 const encryptedKeyLength = 256
 
 var (
-	ErrAlreadyRegistered            = fmt.Errorf("operator registered with the same operator public key")
+	ErrOperatorPubkeyAlreadyExists  = fmt.Errorf("operator public key already exists")
+	ErrOperatorIDAlreadyExists      = fmt.Errorf("operator ID already exists")
 	ErrOperatorDataNotFound         = fmt.Errorf("operator data not found")
 	ErrIncorrectSharesLength        = fmt.Errorf("shares length is not correct")
 	ErrSignatureVerification        = fmt.Errorf("signature verification failed")
@@ -52,15 +53,28 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		ID:           event.OperatorId,
 	}
 
-	// throw an error if there is an existing operator with the same public key and different operator id
-	operatorData := eh.operatorDataStore.GetOperatorData()
-	if operatorData.ID != 0 && bytes.Equal(operatorData.PublicKey, event.PublicKey) && operatorData.ID != event.OperatorId {
-		logger.Warn("malformed event: operator registered with the same operator public key",
-			zap.Uint64("expected_operator_id", operatorData.ID))
-		return &MalformedEventError{Err: ErrAlreadyRegistered}
+	// throw an error if operator with the same operator id already exists
+	existsById, err := eh.nodeStorage.OperatorsExist(txn, []spectypes.OperatorID{event.OperatorId})
+	if err != nil {
+		return fmt.Errorf("could not check if operator exists: %w", err)
+	}
+	if existsById {
+		logger.Warn("malformed event: operator ID already exists",
+			fields.OperatorID(event.OperatorId))
+		return &MalformedEventError{Err: ErrOperatorIDAlreadyExists}
 	}
 
-	// TODO: consider saving other operators as well
+	// throw an error if there is an existing operator with the same public key
+	operatorData, pubkeyExists, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, event.PublicKey)
+	if err != nil {
+		return fmt.Errorf("could not get operator data by public key: %w", err)
+	}
+	if pubkeyExists {
+		logger.Warn("malformed event: operator public key already exists",
+			fields.OperatorPubKey(operatorData.PublicKey))
+		return &MalformedEventError{Err: ErrOperatorPubkeyAlreadyExists}
+	}
+
 	exists, err := eh.nodeStorage.SaveOperatorData(txn, od)
 	if err != nil {
 		return fmt.Errorf("save operator data: %w", err)
@@ -70,7 +84,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return nil
 	}
 
-	if bytes.Equal(event.PublicKey, operatorData.PublicKey) {
+	if bytes.Equal(event.PublicKey, eh.operatorDataStore.GetOperatorData().PublicKey) {
 		eh.operatorDataStore.SetOperatorData(od)
 		logger = logger.With(zap.Bool("own_operator", true))
 	}
@@ -175,9 +189,8 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
-	validatorShare := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-
-	if validatorShare == nil {
+	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if !exists {
 		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
@@ -339,8 +352,8 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	logger.Debug("processing event")
 
 	// TODO: handle metrics
-	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-	if share == nil {
+	share, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if !exists {
 		logger.Warn("malformed event: could not find validator share")
 		return emptyPK, &MalformedEventError{Err: ErrValidatorShareNotFound}
 	}
@@ -473,8 +486,8 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	logger.Debug("processing event")
 	defer logger.Debug("processed event")
 
-	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-	if share == nil {
+	share, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if !exists {
 		logger.Warn("malformed event: could not find validator share")
 		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
 	}

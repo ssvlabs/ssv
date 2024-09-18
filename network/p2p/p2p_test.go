@@ -78,13 +78,23 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
-		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
-		require.NoError(t, node1.Broadcast(msg1.SSVMessage.GetID(), msg1))
+		msgCommittee1 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
+		msgCommittee3 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
+		msgProposer := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
+		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
+		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
+
+		require.NoError(t, node1.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msg3.SSVMessage.GetID(), msg3))
+		require.NoError(t, node2.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
+		require.NoError(t, node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		<-time.After(time.Millisecond * 20)
+		require.NoError(t, node2.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
+		<-time.After(time.Millisecond * 20)
+		require.NoError(t, node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
+		<-time.After(time.Millisecond * 20)
+		require.NoError(t, node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Add(1)
@@ -92,17 +102,24 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		msg1 := generateMsg(spectestingutils.Testing4SharesSet(), 1)
-		msg2 := generateMsg(spectestingutils.Testing4SharesSet(), 2)
-		msg3 := generateMsg(spectestingutils.Testing4SharesSet(), 3)
+		msgCommittee1 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
+		msgCommittee2 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 2)
+		msgCommittee3 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
+		msgProposer := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
+		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
+		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
+
 		require.NoError(t, err)
 
 		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node1.Broadcast(msg2.SSVMessage.GetID(), msg2))
+		require.NoError(t, node1.Broadcast(msgCommittee2.SSVMessage.GetID(), msgCommittee2))
 
 		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msg1.SSVMessage.GetID(), msg1))
-		require.NoError(t, node1.Broadcast(msg3.SSVMessage.GetID(), msg3))
+		require.NoError(t, node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		require.NoError(t, node1.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
+		require.NoError(t, node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
+		require.NoError(t, node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
+		require.NoError(t, node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Wait()
@@ -126,7 +143,36 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}
 }
 
-func generateMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
+func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round, nonCommitteeRole spectypes.RunnerRole) *spectypes.SignedSSVMessage {
+	if nonCommitteeRole == spectypes.RoleCommittee {
+		panic("committee role shouldn't be used here")
+	}
+	netCfg := networkconfig.TestNetwork
+	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
+
+	fullData := spectestingutils.TestingQBFTFullData
+
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType(), ks.ValidatorPK.Serialize(), nonCommitteeRole)
+
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
+		Height:     height,
+		Round:      round,
+		Identifier: nonCommitteeIdentifier[:],
+		Root:       sha256.Sum256(fullData),
+
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+
+	leader := roundLeader(ks, height, round)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+	signedSSVMessage.FullData = fullData
+
+	return signedSSVMessage
+}
+
+func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
 	netCfg := networkconfig.TestNetwork
 	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
 

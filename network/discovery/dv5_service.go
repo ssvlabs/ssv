@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -25,9 +24,6 @@ import (
 var (
 	defaultDiscoveryInterval = time.Millisecond * 100
 	publishENRTimeout        = time.Minute
-
-	publishStateReady   = int32(0)
-	publishStatePending = int32(1)
 )
 
 // NodeProvider is an interface for managing ENRs
@@ -62,12 +58,13 @@ type DiscV5Service struct {
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
-	publishState int32
-	conn         *net.UDPConn
-	sharedConn   *sharedUDPConn
+	conn       *net.UDPConn
+	sharedConn *sharedUDPConn
 
 	networkConfig networkconfig.NetworkConfig
 	subnets       []byte
+
+	publishLock chan struct{}
 }
 
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
@@ -75,11 +72,11 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 	dvs := DiscV5Service{
 		ctx:           ctx,
 		cancel:        cancel,
-		publishState:  publishStateReady,
 		conns:         discOpts.ConnIndex,
 		subnetsIdx:    discOpts.SubnetsIdx,
 		networkConfig: discOpts.NetworkConfig,
 		subnets:       discOpts.DiscV5Opts.Subnets,
+		publishLock:   make(chan struct{}, 1),
 	}
 
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
@@ -147,7 +144,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		)
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			logger.Debug("discovered peer was dropped", zap.Error(err))
+			logger.Debug("skipped discovered peer", zap.Error(err))
 			return
 		}
 		handler(e)
@@ -377,14 +374,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
-	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
-	defer done()
-	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
-		// pending
-		logger.Debug("pending publish ENR")
-		return
-	}
-
+	// Update own node record.
 	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.networkConfig.DomainType())
 	if err != nil {
 		logger.Error("could not set domain type", zap.Error(err))
@@ -396,11 +386,33 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 		return
 	}
 
-	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
+	// Acquire publish lock to prevent parallel publishing.
+	// If there's an ongoing goroutine, it would now start publishing the record updated above,
+	// and if it's done before the new deadline, this goroutine would pick up where it left off.
+	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+	defer done()
+
+	select {
+	case <-ctx.Done():
+		return
+	case dvs.publishLock <- struct{}{}:
+	}
+	defer func() {
+		// Release lock.
+		<-dvs.publishLock
+	}()
+
+	// Collect some metrics.
+	start := time.Now()
+	pings, errs := 0, 0
+	peerIDs := map[peer.ID]struct{}{}
+
+	// Publish ENR.
 	dvs.discover(ctx, func(e PeerEvent) {
 		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
+			errs++
 			if err.Error() == "RPC timeout" {
 				// ignore
 				return
@@ -409,8 +421,16 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 			return
 		}
 		metricPublishEnrPongs.Inc()
-		// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
+		pings++
+		peerIDs[e.AddrInfo.ID] = struct{}{}
 	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
+
+	// Log metrics.
+	logger.Debug("done publishing ENR",
+		fields.Duration(start),
+		zap.Int("unique_peers", len(peerIDs)),
+		zap.Int("pings", pings),
+		zap.Int("errors", errs))
 }
 
 func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
