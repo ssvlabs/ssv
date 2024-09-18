@@ -310,6 +310,9 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 	}
 
 	// Acquire publish lock to prevent parallel publishing.
+	// If there's an ongoing goroutine, it would now start publishing the record updated above,
+	// and if it's done in less than publishENRTimeout, this goroutine would pick up where it left
+	// up until the new deadline.
 	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
 	defer done()
 
