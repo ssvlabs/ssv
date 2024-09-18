@@ -49,12 +49,11 @@ var (
 )
 
 type taskExecutor interface {
-	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
-	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
 type EventHandler struct {
@@ -266,9 +265,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, nil
 		}
 
-		task := NewStartValidatorTask(eh.taskExecutor, share)
-
-		return task, nil
+		return nil, nil
 
 	case ValidatorRemoved:
 		validatorRemovedEvent, err := eh.eventParser.ParseValidatorRemoved(event)
@@ -418,7 +415,13 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, nil
 		}
 
-		task := NewExitValidatorTask(eh.taskExecutor, exitDescriptor.PubKey, exitDescriptor.BlockNumber, exitDescriptor.ValidatorIndex)
+		task := NewExitValidatorTask(
+			eh.taskExecutor,
+			exitDescriptor.PubKey,
+			exitDescriptor.BlockNumber,
+			exitDescriptor.ValidatorIndex,
+			exitDescriptor.OwnValidator,
+		)
 		return task, nil
 
 	default:

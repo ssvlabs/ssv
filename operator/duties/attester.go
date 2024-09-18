@@ -80,10 +80,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			h.processExecution(currentEpoch, slot)
-			if h.indicesChanged {
-				h.duties.ResetEpoch(currentEpoch)
-				h.indicesChanged = false
-			}
 			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
@@ -129,7 +125,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
-			h.indicesChanged = true
 			h.fetchCurrentEpoch = true
 
 			// reset next epoch duties if in appropriate slot range
@@ -215,10 +210,17 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
+	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.AttesterDuty], 0, len(duties))
 	for _, d := range duties {
-		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
+		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.AttesterDuty]{
+			Slot:           d.Slot,
+			ValidatorIndex: d.ValidatorIndex,
+			Duty:           d,
+			InCommittee:    true,
+		})
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
+	h.duties.Set(epoch, storeDuties)
 
 	h.logger.Debug("🗂 got duties",
 		fields.Count(len(duties)),
