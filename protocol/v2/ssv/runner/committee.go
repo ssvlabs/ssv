@@ -24,6 +24,10 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+var (
+	ErrNoValidDuties = errors.New("no valid duties")
+)
+
 type CommitteeDutyGuard interface {
 	StartDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
 	ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
@@ -327,7 +331,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		return errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
 	}
 	if len(beaconObjects) == 0 {
-		return errors.New("no valid duties")
+		cr.BaseRunner.State.Finished = true
+		return ErrNoValidDuties
 	}
 
 	var anyErr error
