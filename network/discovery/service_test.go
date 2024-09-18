@@ -119,6 +119,26 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig networkconfig.NetworkConfig) {
+	// Check domain entry
+	domainEntry := records.DomainTypeEntry{
+		Key:        records.KeyDomainType,
+		DomainType: spectypes.DomainType{},
+	}
+	err := localNode.Node().Record().Load(&domainEntry)
+	require.NoError(t, err)
+	require.Equal(t, netConfig.DomainType(), domainEntry.DomainType)
+
+	// Check next domain entry
+	nextDomainEntry := records.DomainTypeEntry{
+		Key:        records.KeyNextDomainType,
+		DomainType: spectypes.DomainType{},
+	}
+	err = localNode.Node().Record().Load(&nextDomainEntry)
+	require.NoError(t, err)
+	require.Equal(t, netConfig.NextDomainType(), nextDomainEntry.DomainType)
+}
+
 func TestDiscV5Service_PublishENR(t *testing.T) {
 	logger := zap.NewNop()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -130,17 +150,21 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	dvs := service.(*DiscV5Service)
 
 	// Replace listener
-	err = dvs.conn.Close()
+	localNode := dvs.Self()
+	err = dvs.Close()
 	require.NoError(t, err)
-	dvs.dv5Listener = NewMockListener(dvs.Self(), []*enode.Node{NewTestingNode(t)})
+	dvs.dv5Listener = NewMockListener(localNode, []*enode.Node{NewTestingNode(t)})
 
+	// Check LocalNode has the correct domain and next domain entries
+	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
+
+	// Change network config
+	dvs.networkConfig = networkconfig.HoleskyStage
 	// Test PublishENR method
 	dvs.PublishENR(logger)
 
-	// Verify that the publish state is reset to ready
-	assert.Eventually(t, func() bool {
-		return dvs.publishState == publishStateReady
-	}, time.Second, 10*time.Millisecond)
+	// Check LocalNode has been updated
+	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.HoleskyStage)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
