@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -17,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/stretchr/testify/require"
@@ -27,7 +29,75 @@ var (
 	testLogger    = zap.NewNop()
 	testCtx       = context.Background()
 	testNetConfig = networkconfig.Holesky
+
+	testIP      = "127.0.0.1"
+	testBindIP  = "127.0.0.1"
+	testPort    = 12001
+	testTCPPort = 13001
 )
+
+func createServiceOptions(t *testing.T, networkConfig networkconfig.NetworkConfig) *Options {
+	// Generate key
+	privKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	// Discv5 options
+	discV5Opts := &DiscV5Options{
+		StoragePath: t.TempDir(),
+		IP:          testIP,
+		BindIP:      testBindIP,
+
+		Port:          testPort,
+		TCPPort:       testTCPPort,
+		NetworkKey:    privKey,
+		Bootnodes:     networkConfig.Bootnodes,
+		Subnets:       mockSubnets(1),
+		EnableLogging: false,
+	}
+
+	// Service options
+	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
+	connectionIndex := NewMockConnection()
+
+	return &Options{
+		DiscV5Opts:    discV5Opts,
+		ConnIndex:     connectionIndex,
+		SubnetsIdx:    subnetsIndex,
+		NetworkConfig: networkConfig,
+	}
+}
+
+func testingServiceForNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
+	opts := createServiceOptions(t, netConfig)
+	service, err := newDiscV5Service(testCtx, testLogger, opts)
+	require.NoError(t, err)
+	require.NotNil(t, service)
+
+	dvs, ok := service.(*DiscV5Service)
+	require.True(t, ok)
+
+	return dvs
+}
+
+func testingService(t *testing.T) *DiscV5Service {
+	return testingServiceForNetworkConfig(t, testNetConfig)
+}
+
+func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
+	n := networkconfig.HoleskyStage
+	return networkconfig.NetworkConfig{
+		Name:                 n.Name,
+		Beacon:               n.Beacon,
+		GenesisDomainType:    n.GenesisDomainType,
+		AlanDomainType:       n.AlanDomainType,
+		GenesisEpoch:         n.GenesisEpoch,
+		RegistrySyncOffset:   n.RegistrySyncOffset,
+		RegistryContractAddr: n.RegistryContractAddr,
+		AlanForkEpoch:        forkEpoch,
+		Bootnodes:            n.Bootnodes,
+	}
+}
 
 // Mock enode.Node
 func NewTestingNode(t *testing.T) *enode.Node {
@@ -241,7 +311,6 @@ func NewMockListener(localNode *enode.LocalNode, nodes []*enode.Node) *MockListe
 	return &MockListener{
 		localNode: localNode,
 		nodes:     nodes,
-		closed:    false,
 	}
 }
 

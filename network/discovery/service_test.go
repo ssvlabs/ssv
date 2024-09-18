@@ -5,67 +5,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-var (
-	testIP      = "127.0.0.1"
-	testBindIP  = "127.0.0.1"
-	testPort    = 12001
-	testTCPPort = 13001
-)
+func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig networkconfig.NetworkConfig) {
 
-func createServiceOptions(t *testing.T, networkConfig networkconfig.NetworkConfig) *Options {
-	// Generate key
-	privKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
+	require.Len(t, dvs.bootnodes, len(netConfig.Bootnodes))
 
-	// Discv5 options
-	discV5Opts := &DiscV5Options{
-		StoragePath: t.TempDir(),
-		IP:          testIP,
-		BindIP:      testBindIP,
-
-		Port:          testPort,
-		TCPPort:       testTCPPort,
-		NetworkKey:    privKey,
-		Bootnodes:     networkConfig.Bootnodes,
-		Subnets:       mockSubnets(1),
-		EnableLogging: false,
+	for _, bootnode := range netConfig.Bootnodes {
+		nodes, err := ParseENR(nil, false, bootnode)
+		require.NoError(t, err)
+		require.Contains(t, dvs.bootnodes, nodes[0])
 	}
-
-	// Service options
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
-	connectionIndex := NewMockConnection()
-
-	return &Options{
-		DiscV5Opts:    discV5Opts,
-		ConnIndex:     connectionIndex,
-		SubnetsIdx:    subnetsIndex,
-		NetworkConfig: networkConfig,
-	}
-}
-
-func testingService(t *testing.T) *DiscV5Service {
-	opts := createServiceOptions(t, testNetConfig)
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
-	require.NoError(t, err)
-	require.NotNil(t, service)
-
-	dvs, ok := service.(*DiscV5Service)
-	require.True(t, ok)
-
-	return dvs
 }
 
 func TestNewDiscV5Service(t *testing.T) {
@@ -77,11 +36,7 @@ func TestNewDiscV5Service(t *testing.T) {
 	assert.NotNil(t, dvs.networkConfig)
 
 	// Check bootnodes
-	for _, bootnode := range testNetConfig.Bootnodes {
-		nodes, err := ParseENR(nil, false, bootnode)
-		require.NoError(t, err)
-		require.Contains(t, dvs.bootnodes, nodes[0])
-	}
+	CheckBootnodes(t, dvs, testNetConfig)
 
 	// Close
 	err := dvs.Close()
@@ -301,4 +256,42 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	subnets[10] = 1
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
+}
+
+func TestDiscV5ServicePostFork(t *testing.T) {
+	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 10
+	netConfig := testingNetConfigWithForkEpoch(forkEpoch)
+	dvs := testingServiceForNetworkConfig(t, netConfig)
+
+	_, ok := dvs.dv5Listener.(*forkListener)
+	require.False(t, ok)
+
+	_, ok = dvs.dv5Listener.(*discover.UDPv5)
+	require.True(t, ok)
+
+	// Check bootnodes
+	CheckBootnodes(t, dvs, netConfig)
+
+	// Close
+	err := dvs.Close()
+	require.NoError(t, err)
+}
+
+func TestDiscV5ServicePreFork(t *testing.T) {
+	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
+	netConfig := testingNetConfigWithForkEpoch(forkEpoch)
+	dvs := testingServiceForNetworkConfig(t, netConfig)
+
+	_, ok := dvs.dv5Listener.(*discover.UDPv5)
+	require.False(t, ok)
+
+	_, ok = dvs.dv5Listener.(*forkListener)
+	require.True(t, ok)
+
+	// Check bootnodes
+	CheckBootnodes(t, dvs, netConfig)
+
+	// Close
+	err := dvs.Close()
+	require.NoError(t, err)
 }
