@@ -263,7 +263,8 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 		}
 	}
 	if validDuties == 0 {
-		return errors.New("no valid duties")
+		cr.BaseRunner.State.Finished = true
+		return ErrNoValidDuties
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
