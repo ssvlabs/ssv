@@ -675,10 +675,9 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
 			}
-			vc, found := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
-			if found {
+			_ = c.validatorsMap.UpdateCommitteeAtomic(v.Share().CommitteeID(), func(vc *validator.Committee) {
 				vc.AddShare(&v.Share().Share)
-			}
+			})
 		} else {
 			c.logger.Info("starting new validator", fields.PubKey(share.ValidatorPubKey[:]))
 
@@ -866,20 +865,11 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// stop instance
 	v.Stop()
 	c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
-	vc, ok := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
-	if ok {
+
+	if !c.validatorsMap.UpdateCommitteeAtomic(v.Share().CommitteeID(), func(vc *validator.Committee) {
 		vc.RemoveShare(v.Share().Share.ValidatorIndex)
-		if len(vc.Shares) == 0 {
-			deletedCommittee := c.validatorsMap.RemoveCommittee(v.Share().CommitteeID())
-			if deletedCommittee == nil {
-				c.logger.Warn("could not find committee to remove on no validators",
-					fields.CommitteeID(v.Share().CommitteeID()),
-					fields.PubKey(pubKey[:]),
-				)
-				return
-			}
-			deletedCommittee.Stop()
-		}
+	}) {
+		c.logger.Warn("committee not found", fields.PubKey(pubKey[:]))
 	}
 }
 
@@ -944,36 +934,39 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		c.printShare(v.Share(), "get validator")
 	}
 
+	var foundVC *validator.Committee
+
 	// Start a committee validator.
-	vc, found := c.validatorsMap.GetCommittee(operator.CommitteeID)
-	if !found {
-		// Share context with both the validator and the runners,
-		// so that when the validator is stopped, the runners are stopped as well.
-		ctx, cancel := context.WithCancel(c.ctx)
-
-		opts := c.validatorOptions
-		opts.SSVShare = share
-		opts.Operator = operator
-
-		committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
-
-		logger := c.logger.With([]zap.Field{
-			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
-			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
-		}...)
-
-		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
-
-		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc, nil)
-		vc.AddShare(&share.Share)
-		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
-
-		c.printShare(share, "setup committee done")
-
-	} else {
+	if found = c.validatorsMap.UpdateCommitteeAtomic(operator.CommitteeID, func(vc *validator.Committee) {
 		vc.AddShare(&share.Share)
 		c.printShare(share, "added share to committee")
+		foundVC = vc
+	}); found {
+		return v, foundVC, nil
 	}
+
+	// Share context with both the validator and the runners,
+	// so that when the validator is stopped, the runners are stopped as well.
+	ctx, cancel := context.WithCancel(c.ctx)
+
+	opts := c.validatorOptions
+	opts.SSVShare = share
+	opts.Operator = operator
+
+	committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
+
+	logger := c.logger.With([]zap.Field{
+		zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
+		zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
+	}...)
+
+	committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
+
+	vc := validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc, nil)
+	vc.AddShare(&share.Share)
+	c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
+
+	c.printShare(share, "setup committee done")
 
 	return v, vc, nil
 }
