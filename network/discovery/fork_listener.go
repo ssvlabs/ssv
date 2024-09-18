@@ -3,7 +3,6 @@ package discovery
 import (
 	"sync"
 
-	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -12,13 +11,13 @@ import (
 // Before the fork, it performs operations on both services.
 // Aftet the fork, it performs operations only on the post-fork service.
 type forkListener struct {
-	preForkListener  *discover.UDPv5
-	postForkListener *discover.UDPv5
+	preForkListener  listener
+	postForkListener listener
 	closeOnce        sync.Once
 	netCfg           networkconfig.NetworkConfig
 }
 
-func newForkListener(preFork, postFork *discover.UDPv5, netConfig networkconfig.NetworkConfig) *forkListener {
+func newForkListener(preFork, postFork listener, netConfig networkconfig.NetworkConfig) *forkListener {
 	return &forkListener{
 		preForkListener:  preFork,
 		postForkListener: postFork,
