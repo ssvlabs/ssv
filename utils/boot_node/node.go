@@ -20,11 +20,10 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
 )
-
-var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // Options contains options to create the node
 type Options struct {
@@ -104,7 +103,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	}
 	cfg := discover.Config{
 		PrivateKey:   privKey,
-		V5ProtocolID: &SSVProtocolID,
+		V5ProtocolID: &discovery.DefaultSSVProtocolID,
 	}
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"
