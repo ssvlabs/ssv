@@ -64,6 +64,7 @@ type DiscV5Service struct {
 
 	publishState int32
 	conn         *net.UDPConn
+	sharedConn   *sharedUDPConn
 
 	networkConfig networkconfig.NetworkConfig
 	subnets       []byte
@@ -97,6 +98,9 @@ func (dvs *DiscV5Service) Close() error {
 		if err := dvs.conn.Close(); err != nil {
 			return err
 		}
+	}
+	if dvs.sharedConn != nil {
+		close(dvs.sharedConn.unhandled)
 	}
 	if dvs.dv5Listener != nil {
 		dvs.dv5Listener.Close()
@@ -245,6 +249,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	// New discovery, with ProtocolID restriction, to be kept post-fork
 	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
 	sharedConn := &sharedUDPConn{udpConn, unhandled}
+	dvs.sharedConn = sharedConn
 
 	dv5PostForkCfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
 	if err != nil {
@@ -284,7 +289,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	)
 
 	dvs.dv5Listener = newForkListener(dv5PreForkListener, dv5PostForkListener, dvs.networkConfig)
-	dvs.bootnodes = append(dv5PostForkCfg.Bootnodes, dv5PreForkCfg.Bootnodes...)
+	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil
 }
