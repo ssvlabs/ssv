@@ -181,10 +181,17 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	}
 
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
-	if !dvs.limitNodeFilter(e.Node) && !dvs.sharedSubnetsFilter(1)(e.Node) {
+
+	// Filters
+	if dvs.limitNodeFilter(e.Node) {
+		metricRejectedNodes.Inc()
+		return errors.New("reached limit")
+	}
+	if !dvs.sharedSubnetsFilter(1)(e.Node) {
 		metricRejectedNodes.Inc()
 		return errors.New("no shared subnets")
 	}
+
 	metricFoundNodes.Inc()
 	return nil
 }

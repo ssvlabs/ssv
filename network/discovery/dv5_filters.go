@@ -8,9 +8,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// limitNodeFilter checks if limit exceeded
+// limitNodeFilter returns true if the limit is exceeded
 func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-	return !dvs.conns.AtLimit(libp2pnetwork.DirOutbound)
+	return dvs.conns.AtLimit(libp2pnetwork.DirOutbound)
 }
 
 //// forkVersionFilter checks if the node has the same fork version
@@ -64,7 +64,8 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 	}
 }
 
-// sharedSubnetsFilter checks if the node has an interest in the given subnet
+// sharedSubnetsFilter returns a function that
+// returns true if the peer has at least [n] subnets in common
 func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		if n == 0 {
