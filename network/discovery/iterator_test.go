@@ -4,69 +4,15 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-// MockIterator is a basic mock implementation of the enode.Iterator interface.
-type MockIterator struct {
-	nodes    []*enode.Node
-	position int
-	closed   bool
-}
-
-func NewMockIterator(nodes []*enode.Node) *MockIterator {
-	return &MockIterator{
-		nodes:    nodes,
-		position: -1,
-	}
-}
-
-func (m *MockIterator) Next() bool {
-	if m.closed || m.position >= len(m.nodes)-1 {
-		return false
-	}
-	m.position++
-	return true
-}
-
-func (m *MockIterator) Node() *enode.Node {
-	if m.closed || m.position == -1 || m.position >= len(m.nodes) {
-		return nil
-	}
-	return m.nodes[m.position]
-}
-
-func (m *MockIterator) Close() {
-	m.closed = true
-}
-
-// MockIdentityScheme for mocking enode.Node
-type MockIdentityScheme struct {
-	Addr [32]byte
-}
-
-func (is *MockIdentityScheme) Verify(r *enr.Record, sig []byte) error {
-	return nil
-}
-func (is *MockIdentityScheme) NodeAddr(r *enr.Record) []byte {
-	return is.Addr[:]
-}
-
-// Mock enode.Node
-func NewTestingNode(t *testing.T, id byte) *enode.Node {
-	node, err := enode.New(&MockIdentityScheme{Addr: [32]byte{id}}, &enr.Record{})
-	require.NoError(t, err)
-	return node
-}
 
 func TestPreAndPostForkIterator_Next(t *testing.T) {
 	// Mock nodes
-	node1 := NewTestingNode(t, 1)
-	node2 := NewTestingNode(t, 2)
-	node3 := NewTestingNode(t, 3)
-	node4 := NewTestingNode(t, 4)
+	node1 := NewTestingNode(t)
+	node2 := NewTestingNode(t)
+	node3 := NewTestingNode(t)
+	node4 := NewTestingNode(t)
 
 	// Mock iterators
 	preFork := NewMockIterator([]*enode.Node{node3, node4})  // preFork has 2 nodes
@@ -94,8 +40,8 @@ func TestPreAndPostForkIterator_Next(t *testing.T) {
 
 func TestPreAndPostForkIterator_PostForkEmpty(t *testing.T) {
 	// Mock nodes
-	node1 := NewTestingNode(t, 1)
-	node2 := NewTestingNode(t, 2)
+	node1 := NewTestingNode(t)
+	node2 := NewTestingNode(t)
 
 	// Mock iterators
 	preFork := NewMockIterator([]*enode.Node{node2, node1}) // preFork has 2 nodes
@@ -117,8 +63,8 @@ func TestPreAndPostForkIterator_PostForkEmpty(t *testing.T) {
 
 func TestPreAndPostForkIterator_PreForkEmpty(t *testing.T) {
 	// Mock nodes
-	node1 := NewTestingNode(t, 1)
-	node2 := NewTestingNode(t, 2)
+	node1 := NewTestingNode(t)
+	node2 := NewTestingNode(t)
 
 	// Mock iterators
 	preFork := NewMockIterator([]*enode.Node{})              // preFork has no node
