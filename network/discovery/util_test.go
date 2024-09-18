@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -80,6 +81,16 @@ func testingServiceForNetworkConfig(t *testing.T, netConfig networkconfig.Networ
 	return dvs
 }
 
+func PreForkNetworkConfig() networkconfig.NetworkConfig {
+	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
+	return testingNetConfigWithForkEpoch(forkEpoch)
+}
+
+func PostForkNetworkConfig() networkconfig.NetworkConfig {
+	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
+	return testingNetConfigWithForkEpoch(forkEpoch)
+}
+
 func testingService(t *testing.T) *DiscV5Service {
 	return testingServiceForNetworkConfig(t, testNetConfig)
 }
@@ -97,6 +108,30 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 		AlanForkEpoch:        forkEpoch,
 		Bootnodes:            n.Bootnodes,
 	}
+}
+
+// Mock enode.LocalNode
+func NewLocalNode(t *testing.T) *enode.LocalNode {
+	// Generate key
+	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// Encoding and decoding (hack so that SignV4 works)
+	hexPrivKey := hex.EncodeToString(crypto.FromECDSA(nodeKey))
+	sk, err := crypto.HexToECDSA(hexPrivKey)
+	require.NoError(t, err)
+
+	localNode, err := records.CreateLocalNode(sk, t.TempDir(), net.IP(testIP), testPort, testTCPPort)
+	require.NoError(t, err)
+
+	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType())
+	require.NoError(t, err)
+	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.NextDomainType())
+	require.NoError(t, err)
+	err = records.SetSubnetsEntry(localNode, mockSubnets(1))
+	require.NoError(t, err)
+
+	return localNode
 }
 
 // Mock enode.Node
@@ -302,33 +337,44 @@ func (mc *MockConnection) SetIsBad(id peer.ID, isBad bool) {
 
 // Mock listener
 type MockListener struct {
-	localNode *enode.LocalNode
-	nodes     []*enode.Node
-	closed    bool
+	localNode         *enode.LocalNode
+	nodes             []*enode.Node
+	closed            bool
+	nodesForPingError []*enode.Node
 }
 
 func NewMockListener(localNode *enode.LocalNode, nodes []*enode.Node) *MockListener {
 	return &MockListener{
-		localNode: localNode,
-		nodes:     nodes,
+		localNode:         localNode,
+		nodes:             nodes,
+		nodesForPingError: make([]*enode.Node, 0),
 	}
 }
 
-func (l MockListener) Lookup(enode.ID) []*enode.Node {
+func (l *MockListener) Lookup(enode.ID) []*enode.Node {
 	return l.nodes
 }
-func (l MockListener) RandomNodes() enode.Iterator {
+func (l *MockListener) RandomNodes() enode.Iterator {
 	return NewMockIterator(l.nodes)
 }
-func (l MockListener) AllNodes() []*enode.Node {
+func (l *MockListener) AllNodes() []*enode.Node {
 	return l.nodes
 }
-func (l MockListener) Ping(*enode.Node) error {
+func (l *MockListener) Ping(node *enode.Node) error {
+	nodeStr := node.String()
+	for _, storedNode := range l.nodesForPingError {
+		if storedNode.String() == nodeStr {
+			return errors.New("failed ping")
+		}
+	}
 	return nil
 }
-func (l MockListener) LocalNode() *enode.LocalNode {
+func (l *MockListener) LocalNode() *enode.LocalNode {
 	return l.localNode
 }
-func (l MockListener) Close() {
+func (l *MockListener) Close() {
 	l.closed = true
+}
+func (l *MockListener) SetNodesForPingError(nodes []*enode.Node) {
+	l.nodesForPingError = nodes
 }
