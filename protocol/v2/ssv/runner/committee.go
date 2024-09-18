@@ -89,7 +89,8 @@ func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty,
 	for _, validatorDuty := range d.ValidatorDuties {
 		err := cr.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), d.DutySlot())
 		if err != nil {
-			return err
+			return fmt.Errorf("could not start %s duty at slot %d for validator %x: %w",
+				validatorDuty.Type, d.DutySlot(), validatorDuty.PubKey, err)
 		}
 	}
 	err := cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
