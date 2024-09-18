@@ -145,6 +145,7 @@ func (c *Committee) ConsumeQueue(
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
 			if errors.Is(err, runner.ErrNoValidDuties) {
+				// Stop the queue consumer if the runner no longer has any valid duties.
 				break
 			}
 		}
