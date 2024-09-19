@@ -1,7 +1,6 @@
 package testing
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
@@ -56,9 +55,6 @@ var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.Te
 
 var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valCheck genesisspecqbft.ProposedValueCheckF, keySet *spectestingutils.TestKeySet) runner.Runner {
 	share := spectestingutils.TestingShare(keySet)
-	getFeeRecipientFunc := func() bellatrix.ExecutionAddress {
-		return share.FeeRecipientAddress
-	}
 	identifier := genesisspectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], role)
 	net := spectestingutils.NewTestingNetwork()
 	km := spectestingutils.NewTestingKeyManager()
@@ -148,7 +144,6 @@ var baseRunner = func(logger *zap.Logger, role genesisspectypes.BeaconRole, valC
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
-			getFeeRecipientFunc,
 		)
 	case genesisspectypes.BNRoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
