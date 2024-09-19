@@ -477,7 +477,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.started)))
+			fields.TotalConsensusTime(time.Since(cr.started)),
+			zap.Uint64("first_slot", uint64(syncCommitteeMessages[0].Slot)),
+			zap.Any("sync_msgs", syncCommitteeMessages))
 
 		// Record successful submissions
 		for validator := range syncCommitteeMessagesToSubmit {
@@ -636,6 +638,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 				BeaconBlockRoot: beaconVote.BlockRoot,
 				ValidatorIndex:  validatorDuty.ValidatorIndex,
 			}
+			logger.Debug("constructing sync committee message", zap.Uint64("duty_slot", uint64(slot)))
 
 			// Root
 			domain, err := cr.GetBeaconNode().DomainData(epoch, spectypes.DomainSyncCommittee)
