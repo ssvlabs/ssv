@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -31,8 +30,6 @@ type ValidatorRegistrationRunner struct {
 
 	metrics metrics.ConsensusMetrics
 }
-
-type FeeRecipientGetter func() bellatrix.ExecutionAddress
 
 func NewValidatorRegistrationRunner(
 	domainType spectypes.DomainType,
