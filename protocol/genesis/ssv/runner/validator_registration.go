@@ -29,8 +29,7 @@ type ValidatorRegistrationRunner struct {
 	signer   genesisspectypes.KeyManager
 	valCheck qbft.ProposedValueCheckF
 
-	getFeeRecipient FeeRecipientGetter
-	metrics         metrics.ConsensusMetrics
+	metrics metrics.ConsensusMetrics
 }
 
 type FeeRecipientGetter func() bellatrix.ExecutionAddress
@@ -42,7 +41,6 @@ func NewValidatorRegistrationRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
-	getFeeRecipient FeeRecipientGetter,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
@@ -52,11 +50,10 @@ func NewValidatorRegistrationRunner(
 			Share:          share,
 		},
 
-		beacon:          beacon,
-		network:         network,
-		signer:          signer,
-		getFeeRecipient: getFeeRecipient,
-		metrics:         metrics.NewConsensusMetrics(genesisspectypes.BNRoleValidatorRegistration),
+		beacon:  beacon,
+		network: network,
+		signer:  signer,
+		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleValidatorRegistration),
 	}
 }
 
@@ -91,7 +88,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	feeRecipient := r.getFeeRecipient()
+	feeRecipient := r.BaseRunner.Share.FeeRecipientAddress
 	if err := r.beacon.SubmitValidatorRegistration(r.GetShare().ValidatorPubKey, feeRecipient, specSig); err != nil {
 		return errors.Wrap(err, "could not submit validator registration")
 	}
@@ -126,8 +123,8 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
-	feeRecipient := r.getFeeRecipient()
-	logger.Debug("executing validator registration duty", zap.String("state_fee_recipient", hex.EncodeToString(feeRecipient[:])))
+	logger.Debug("executing validator registration duty",
+		zap.String("state_fee_recipient", hex.EncodeToString(r.BaseRunner.Share.FeeRecipientAddress[:])))
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")
@@ -178,7 +175,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.Vali
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
 
 	return &v1.ValidatorRegistration{
-		FeeRecipient: r.getFeeRecipient(),
+		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
 		GasLimit:     genesisspectypes.DefaultGasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
