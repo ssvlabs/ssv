@@ -1375,6 +1375,9 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 	}
 
 	share := genesisssvtypes.ConvertToGenesisShare(&options.SSVShare.Share, options.Operator)
+	getFeeRecipientFunc := func() bellatrix.ExecutionAddress {
+		return options.SSVShare.Share.FeeRecipientAddress
+	}
 
 	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *genesisqbftcontroller.Controller {
 		config := &genesisqbft.Config{
@@ -1424,7 +1427,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			qbftCtrl := buildController(genesisspectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = genesisrunner.NewSyncCommitteeAggregatorRunner(genesisDomainType, genesisBeaconNetwork, share, qbftCtrl, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, syncCommitteeContributionValueCheckF, 0)
 		case genesisspectypes.BNRoleValidatorRegistration:
-			runners[role] = genesisrunner.NewValidatorRegistrationRunner(genesisDomainType, genesisBeaconNetwork, share, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
+			runners[role] = genesisrunner.NewValidatorRegistrationRunner(genesisDomainType, genesisBeaconNetwork, share, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer, getFeeRecipientFunc)
 		case genesisspectypes.BNRoleVoluntaryExit:
 			runners[role] = genesisrunner.NewVoluntaryExitRunner(genesisDomainType, genesisBeaconNetwork, share, options.GenesisBeacon, options.GenesisOptions.Network, options.GenesisOptions.Signer)
 		}

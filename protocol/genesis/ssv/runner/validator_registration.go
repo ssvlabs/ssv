@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -28,8 +29,11 @@ type ValidatorRegistrationRunner struct {
 	signer   genesisspectypes.KeyManager
 	valCheck qbft.ProposedValueCheckF
 
-	metrics metrics.ConsensusMetrics
+	getFeeRecipient FeeRecipientGetter
+	metrics         metrics.ConsensusMetrics
 }
+
+type FeeRecipientGetter func() bellatrix.ExecutionAddress
 
 func NewValidatorRegistrationRunner(
 	domainType spectypes.DomainType,
@@ -38,6 +42,7 @@ func NewValidatorRegistrationRunner(
 	beacon genesisspecssv.BeaconNode,
 	network genesisspecssv.Network,
 	signer genesisspectypes.KeyManager,
+	getFeeRecipient FeeRecipientGetter,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
@@ -47,10 +52,11 @@ func NewValidatorRegistrationRunner(
 			Share:          share,
 		},
 
-		beacon:  beacon,
-		network: network,
-		signer:  signer,
-		metrics: metrics.NewConsensusMetrics(genesisspectypes.BNRoleValidatorRegistration),
+		beacon:          beacon,
+		network:         network,
+		signer:          signer,
+		getFeeRecipient: getFeeRecipient,
+		metrics:         metrics.NewConsensusMetrics(genesisspectypes.BNRoleValidatorRegistration),
 	}
 }
 
@@ -85,12 +91,13 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+	feeRecipient := r.getFeeRecipient()
+	if err := r.beacon.SubmitValidatorRegistration(r.GetShare().ValidatorPubKey, feeRecipient, specSig); err != nil {
 		return errors.Wrap(err, "could not submit validator registration")
 	}
 
 	logger.Debug("validator registration submitted successfully",
-		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
+		fields.FeeRecipient(feeRecipient[:]),
 		zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	r.GetState().Finished = true
@@ -119,7 +126,8 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
-	logger.Debug("executing validator registration duty", zap.String("state_fee_recipient", hex.EncodeToString(r.BaseRunner.Share.FeeRecipientAddress[:])))
+	feeRecipient := r.getFeeRecipient()
+	logger.Debug("executing validator registration duty", zap.String("state_fee_recipient", hex.EncodeToString(feeRecipient[:])))
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")
@@ -165,12 +173,12 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *gene
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {
 	pk := phase0.BLSPubKey{}
-	copy(pk[:], r.BaseRunner.Share.ValidatorPubKey)
+	copy(pk[:], r.GetShare().ValidatorPubKey)
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
 
 	return &v1.ValidatorRegistration{
-		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
+		FeeRecipient: r.getFeeRecipient(),
 		GasLimit:     genesisspectypes.DefaultGasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
