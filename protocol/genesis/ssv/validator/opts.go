@@ -6,10 +6,11 @@ import (
 
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/networkconfig"
+	genesisbeacon "github.com/ssvlabs/ssv/protocol/genesis/blockchain/beacon"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -18,8 +19,9 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
+	NetworkConfig     networkconfig.NetworkConfig
 	Network           genesisspecqbft.Network
-	BeaconNetwork     beacon.BeaconNetwork
+	Beacon            genesisbeacon.BeaconNode
 	Storage           *genesisibftstorage.QBFTStores
 	SSVShare          *types.SSVShare
 	Signer            genesisspectypes.KeyManager
@@ -31,6 +33,7 @@ type Options struct {
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator
 	Metrics           Metrics
+	Graffiti          []byte
 }
 
 func (o *Options) defaults() {

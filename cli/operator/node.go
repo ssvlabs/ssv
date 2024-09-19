@@ -270,7 +270,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
-		cfg.SSVOptions.ValidatorOptions.GenesisBeacon = genesisgoclient.NewAdapter(consensusClient)
+		cfg.SSVOptions.ValidatorOptions.Genesis.Beacon = genesisgoclient.NewAdapter(consensusClient)
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
@@ -280,7 +280,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
-		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.KeyManager = &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
+		cfg.SSVOptions.ValidatorOptions.Genesis.KeyManager = &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
 
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -331,8 +331,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
-		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
+		cfg.SSVOptions.ValidatorOptions.Genesis.StorageMap = genesisStorageMap
+		cfg.SSVOptions.ValidatorOptions.Genesis.Network = &genesisP2pNetwork
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
