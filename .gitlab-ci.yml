@@ -18,7 +18,7 @@ variables:
   #PRODUCTION
   ACCOUNT_ID_INFRA_PROD: 764289642555
   AWS_REGION_INFRA_PROD: "us-west-2"
-  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
+  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_PROD.amazonaws.com/$IMAGE_NAME
   APP_REPLICAS_INFRA_PROD: "1"
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
   PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
@@ -120,14 +120,14 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - main
+    - deploy/main-to-holesky-prod
 
 Deploy nodes to prod:
   stage: deploy
   tags:
     - blox-infra-prod
   script:
-    - apk add bash
+    - apk add bash curl
     - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
     - export SSV_EXPORTER_CPU_LIMIT=$PROD_SSV_EXPORTER_CPU_LIMIT
     - export SSV_EXPORTER_MEM_LIMIT=$PROD_SSV_EXPORTER_MEM_LIMIT
@@ -159,7 +159,7 @@ Deploy nodes to prod:
     # - .k8/production/mainnet/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
 
   only:
-    - main
+    - deploy/main-to-holesky-prod
 
 Deploy exporter to prod:
   stage: deploy
