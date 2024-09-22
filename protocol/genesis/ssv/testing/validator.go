@@ -21,7 +21,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 		cancel,
 		validator.Options{
 			Network:       spectestingutils.NewTestingNetwork(),
-			BeaconNetwork: networkconfig.TestNetwork.Beacon,
+			NetworkConfig: networkconfig.TestNetwork,
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet),
 			},
