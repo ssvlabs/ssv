@@ -107,7 +107,7 @@ DIR=".k8/production/holesky"
 DEPLOY_FILES=(
   # "ssv-node-holesky-1-deployment.yml"
   # "ssv-node-holesky-2-deployment.yml"
-  # "ssv-node-holesky-3-deployment.yml"
+  "ssv-node-holesky-3-deployment.yml"
   "ssv-node-holesky-4-deployment.yml"
 )
 
