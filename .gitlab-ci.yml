@@ -136,6 +136,11 @@ Deploy nodes to prod:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
+    - mkdir ~/.kube/
+    - echo $PROD_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
     # +-------------------------------+
     # |  🟠 Deploy SSV Holesky nodes  |
     # +-------------------------------+
