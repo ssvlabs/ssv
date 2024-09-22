@@ -396,7 +396,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		t.Fatal(err)
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore, nil)
+	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore)
 	require.NoError(t, err)
 
 	p = &P{
