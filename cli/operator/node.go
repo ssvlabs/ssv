@@ -111,7 +111,7 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 
-		cfg.DBOptions.Path = "./data/afreshdb2"
+		cfg.DBOptions.Path = "./data/afreshdbxx"
 
 		defer logging.CapturePanic(logger)
 
