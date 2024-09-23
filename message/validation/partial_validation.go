@@ -3,6 +3,7 @@ package validation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"time"
@@ -11,6 +12,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
@@ -234,8 +236,23 @@ func (mv *messageValidator) updatePartialSignatureState(
 
 	signerState := stateBySlot.Get(messageSlot)
 	if signerState == nil || signerState.Slot != messageSlot {
+		wasNil := signerState == nil
+		wasSlot := 0
+		if !wasNil {
+			wasSlot = int(signerState.Slot)
+		}
 		signerState = NewSignerState(messageSlot, specqbft.FirstRound)
 		stateBySlot.Set(messageSlot, messageEpoch, signerState)
+		zap.L().Debug("updatePartialSignatureState/NewSignerState",
+			zap.String("executorID", hex.EncodeToString(stateBySlot.executorID)),
+			zap.Uint64("signer", uint64(signer)),
+			zap.String("role", stateBySlot.role.String()),
+			zap.Uint64("message_slot", uint64(messageSlot)),
+			zap.Uint64("message_epoch", uint64(messageEpoch)),
+			zap.Bool("previous_slot", signerState.Slot < messageSlot),
+			zap.Bool("was_nil", wasNil),
+			zap.Int("was_slot", wasSlot),
+		)
 	}
 
 	return signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
