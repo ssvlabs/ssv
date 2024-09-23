@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"encoding/hex"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -18,6 +19,8 @@ type consensusID struct {
 type consensusState struct {
 	state           map[spectypes.OperatorID]*OperatorState
 	storedSlotCount phase0.Slot
+	role            spectypes.RunnerRole
+	executorID      []byte
 	mu              sync.Mutex
 }
 
@@ -27,6 +30,8 @@ func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) *OperatorStat
 
 	if _, ok := cs.state[signer]; !ok {
 		cs.state[signer] = newOperatorState(cs.storedSlotCount)
+		cs.state[signer].role = cs.role
+		cs.state[signer].executorID = cs.executorID
 	}
 
 	return cs.state[signer]
@@ -39,6 +44,8 @@ type OperatorState struct {
 	maxEpoch        phase0.Epoch
 	lastEpochDuties int
 	prevEpochDuties int
+	role            spectypes.RunnerRole
+	executorID      []byte
 }
 
 func newOperatorState(size phase0.Slot) *OperatorState {
@@ -64,6 +71,8 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 	defer os.mu.Unlock()
 
 	zap.L().Debug("OperatorState.Set/Start",
+		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
 		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
@@ -86,6 +95,8 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 	}
 
 	zap.L().Debug("OperatorState.Set/End",
+		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
 		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
@@ -106,6 +117,8 @@ func (os *OperatorState) DutyCount(epoch phase0.Epoch) int {
 	defer os.mu.RUnlock()
 
 	zap.L().Debug("OperatorState.DutyCount/Start",
+		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
 		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
@@ -120,6 +133,8 @@ func (os *OperatorState) DutyCount(epoch phase0.Epoch) int {
 	}
 
 	zap.L().Debug("OperatorState.DutyCount/End",
+		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
 		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
