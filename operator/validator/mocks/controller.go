@@ -10,22 +10,21 @@
 package mocks
 
 import (
-	"reflect"
+	reflect "reflect"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
+	common "github.com/ethereum/go-ethereum/common"
+	types "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	network "github.com/ssvlabs/ssv/network"
+	duties "github.com/ssvlabs/ssv/operator/duties"
+	validators "github.com/ssvlabs/ssv/operator/validators"
+	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	storage "github.com/ssvlabs/ssv/registry/storage"
+	basedb "github.com/ssvlabs/ssv/storage/basedb"
+	gomock "go.uber.org/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockController is a mock of Controller interface.
@@ -225,6 +224,20 @@ func (m *MockController) StartNetworkHandlers() {
 func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers))
+}
+
+// StartValidator mocks base method.
+func (m *MockController) StartValidator(share *types1.SSVShare) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartValidator", share)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartValidator indicates an expected call of StartValidator.
+func (mr *MockControllerMockRecorder) StartValidator(share any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidator", reflect.TypeOf((*MockController)(nil).StartValidator), share)
 }
 
 // StartValidators mocks base method.

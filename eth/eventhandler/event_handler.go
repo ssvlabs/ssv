@@ -49,6 +49,7 @@ var (
 )
 
 type taskExecutor interface {
+	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
@@ -265,7 +266,9 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, nil
 		}
 
-		return nil, nil
+		task := NewStartValidatorTask(eh.taskExecutor, share)
+
+		return task, nil
 
 	case ValidatorRemoved:
 		validatorRemovedEvent, err := eh.eventParser.ParseValidatorRemoved(event)

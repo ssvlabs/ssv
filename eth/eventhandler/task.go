@@ -12,6 +12,26 @@ type Task interface {
 	Execute() error
 }
 
+type startValidatorExecutor interface {
+	StartValidator(share *types.SSVShare) error
+}
+
+type StartValidatorTask struct {
+	executor startValidatorExecutor
+	share    *types.SSVShare
+}
+
+func NewStartValidatorTask(executor startValidatorExecutor, share *types.SSVShare) *StartValidatorTask {
+	return &StartValidatorTask{
+		executor: executor,
+		share:    share,
+	}
+}
+
+func (t StartValidatorTask) Execute() error {
+	return t.executor.StartValidator(t.share)
+}
+
 type stopValidatorExecutor interface {
 	StopValidator(pubKey spectypes.ValidatorPK) error
 }
