@@ -110,7 +110,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
-		cfg.DBOptions.Path = "./data/freshdb-new8"
+		cfg.DBOptions.Path = "./data/freshdb-new9"
 
 		defer logging.CapturePanic(logger)
 
