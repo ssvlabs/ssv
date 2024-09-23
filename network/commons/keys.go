@@ -5,6 +5,7 @@ import (
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/btcsuite/btcd/btcec/v2"
