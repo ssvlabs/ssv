@@ -32,6 +32,7 @@ func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) *OperatorStat
 		cs.state[signer] = newOperatorState(cs.storedSlotCount)
 		cs.state[signer].role = cs.role
 		cs.state[signer].executorID = cs.executorID
+		cs.state[signer].signer = signer
 	}
 
 	return cs.state[signer]
@@ -46,6 +47,7 @@ type OperatorState struct {
 	prevEpochDuties int
 	role            spectypes.RunnerRole
 	executorID      []byte
+	signer          spectypes.OperatorID
 }
 
 func newOperatorState(size phase0.Slot) *OperatorState {
@@ -72,6 +74,7 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 
 	zap.L().Debug("OperatorState.Set/Start",
 		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.Uint64("signer", uint64(os.signer)),
 		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
@@ -96,6 +99,7 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 
 	zap.L().Debug("OperatorState.Set/End",
 		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.Uint64("signer", uint64(os.signer)),
 		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
@@ -118,6 +122,7 @@ func (os *OperatorState) DutyCount(epoch phase0.Epoch) int {
 
 	zap.L().Debug("OperatorState.DutyCount/Start",
 		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.Uint64("signer", uint64(os.signer)),
 		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
@@ -134,6 +139,7 @@ func (os *OperatorState) DutyCount(epoch phase0.Epoch) int {
 
 	zap.L().Debug("OperatorState.DutyCount/End",
 		zap.String("executorID", hex.EncodeToString(os.executorID)),
+		zap.Uint64("signer", uint64(os.signer)),
 		zap.String("role", os.role.String()),
 		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
 		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
