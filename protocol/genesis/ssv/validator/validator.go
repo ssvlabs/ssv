@@ -107,10 +107,6 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *genesisspectypes.Duty) e
 		logger = logger.With(fields.Height(specqbft.Height(baseRunner.QBFTController.Height)))
 	}
 
-	if duty.Type == genesisspectypes.BNRoleValidatorRegistration {
-		logger = logger.With(fields.FeeRecipient(v.Share.FeeRecipientAddress[:]))
-	}
-
 	logger.Info("ℹ️ starting duty processing")
 
 	return dutyRunner.StartNewDuty(logger, duty)

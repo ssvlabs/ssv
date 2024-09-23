@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -85,13 +84,12 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	feeRecipient := r.BaseRunner.Share.FeeRecipientAddress
-	if err := r.beacon.SubmitValidatorRegistration(r.GetShare().ValidatorPubKey, feeRecipient, specSig); err != nil {
+	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
 		return errors.Wrap(err, "could not submit validator registration")
 	}
 
 	logger.Debug("validator registration submitted successfully",
-		fields.FeeRecipient(feeRecipient[:]),
+		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
 		zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	r.GetState().Finished = true
@@ -120,8 +118,6 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.Duty) error {
-	logger.Debug("executing validator registration duty",
-		zap.String("state_fee_recipient", hex.EncodeToString(r.BaseRunner.Share.FeeRecipientAddress[:])))
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")
@@ -167,7 +163,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *gene
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {
 	pk := phase0.BLSPubKey{}
-	copy(pk[:], r.GetShare().ValidatorPubKey)
+	copy(pk[:], r.BaseRunner.Share.ValidatorPubKey)
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
 
