@@ -5,6 +5,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
 // consensusID uniquely identifies a public key and role pair to keep track of state.
@@ -62,17 +63,35 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 	os.mu.Lock()
 	defer os.mu.Unlock()
 
+	zap.L().Debug("OperatorState.Set/Start",
+		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
+		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
+		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
+		zap.Uint64("os.prevEpochDuties", uint64(os.prevEpochDuties)),
+		zap.Uint64("given_slot", uint64(slot)),
+		zap.Uint64("given_epoch", uint64(epoch)))
+
 	os.state[int(slot)%len(os.state)] = state
 	if slot > os.maxSlot {
 		os.maxSlot = slot
 	}
+
 	if epoch > os.maxEpoch {
+		// Epoch transition.
 		os.maxEpoch = epoch
 		os.prevEpochDuties = os.lastEpochDuties
 		os.lastEpochDuties = 1
 	} else {
 		os.lastEpochDuties++
 	}
+
+	zap.L().Debug("OperatorState.Set/End",
+		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
+		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
+		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
+		zap.Uint64("os.prevEpochDuties", uint64(os.prevEpochDuties)),
+		zap.Uint64("given_slot", uint64(slot)),
+		zap.Uint64("given_epoch", uint64(epoch)))
 }
 
 func (os *OperatorState) MaxSlot() phase0.Slot {
@@ -86,11 +105,26 @@ func (os *OperatorState) DutyCount(epoch phase0.Epoch) int {
 	os.mu.RLock()
 	defer os.mu.RUnlock()
 
+	zap.L().Debug("OperatorState.DutyCount/Start",
+		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
+		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
+		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
+		zap.Uint64("os.prevEpochDuties", uint64(os.prevEpochDuties)),
+		zap.Uint64("given_epoch", uint64(epoch)))
+
 	if epoch == os.maxEpoch {
 		return os.lastEpochDuties
 	}
 	if epoch == os.maxEpoch-1 {
 		return os.prevEpochDuties
 	}
+
+	zap.L().Debug("OperatorState.DutyCount/End",
+		zap.Uint64("os.maxEpoch", uint64(os.maxEpoch)),
+		zap.Uint64("os.maxSlot", uint64(os.maxSlot)),
+		zap.Uint64("os.lastEpochDuties", uint64(os.lastEpochDuties)),
+		zap.Uint64("os.prevEpochDuties", uint64(os.prevEpochDuties)),
+		zap.Uint64("given_epoch", uint64(epoch)))
+
 	return 0 // unused because messages from too old epochs must be rejected in advance
 }
