@@ -572,15 +572,33 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		identifier := spectypes.NewMsgID(netCfg.DomainType(), ks.ValidatorPK.Serialize(), role)
 		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
 
+		// First duty.
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot))
 		require.NoError(t, err)
 
+		// Second duty.
 		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+4))
 		require.NoError(t, err)
 
+		// Second duty (another message).
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4, func(qbftMessage *specqbft.Message) {
+			qbftMessage.MsgType = specqbft.RoundChangeMsgType
+		})
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+4))
+		require.NoError(t, err)
+
+		// Third duty.
+		// TODO: this should fail, see https://github.com/ssvlabs/ssv/pull/1758
 		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+8))
+		require.NoError(t, err)
+
+		// Third duty (another message).
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8, func(qbftMessage *specqbft.Message) {
+			qbftMessage.MsgType = specqbft.RoundChangeMsgType
+		})
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+8))
 		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
 	})

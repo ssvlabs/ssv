@@ -14,7 +14,6 @@ var Mainnet = NetworkConfig{
 	GenesisDomainType:    spectypes.GenesisMainnet,
 	AlanDomainType:       spectypes.AlanMainnet,
 	GenesisEpoch:         218450,
-	AlanForkEpoch:        9999999999,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: "0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1",
 	Bootnodes: []string{

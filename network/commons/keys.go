@@ -6,6 +6,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 
+	gcrypto "github.com/ethereum/go-ethereum/crypto"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
@@ -20,8 +22,9 @@ func ECDSAPrivFromInterface(privkey crypto.PrivKey) (*ecdsa.PrivateKey, error) {
 	}
 
 	privKey, _ := btcec.PrivKeyFromBytes(rawKey)
-
-	return privKey.ToECDSA(), nil
+	ecdsaKey := privKey.ToECDSA()
+	ecdsaKey.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
+	return ecdsaKey, nil
 }
 
 // ECDSAPrivToInterface converts ecdsa.PrivateKey to crypto.PrivKey

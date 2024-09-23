@@ -54,17 +54,20 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 func (mv *messageValidator) validateDutyCount(
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
-	validatorIndexCount int,
+	validatorIndices []phase0.ValidatorIndex,
 	signerStateBySlot *OperatorState,
 ) error {
 	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot))
 
-	dutyLimit, exists := mv.dutyLimit(msgID, msgSlot, validatorIndexCount)
+	dutyLimit, exists := mv.dutyLimit(msgID, msgSlot, validatorIndices)
 	if !exists {
 		return nil
 	}
 
-	if dutyCount >= dutyLimit {
+	// Check if the duty count exceeds or equals the duty limit.
+	// This validation occurs before the state is updated, which is why
+	// the first count starts at 0 and we use an inclusive comparison (>=).
+	if dutyCount > dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
 		err.want = fmt.Sprintf("less than %v", dutyLimit)
@@ -74,7 +77,7 @@ func (mv *messageValidator) validateDutyCount(
 	return nil
 }
 
-func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slot, validatorIndexCount int) (int, bool) {
+func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slot, validatorIndices []phase0.ValidatorIndex) (int, bool) {
 	switch msgID.GetRoleType() {
 	case spectypes.RoleVoluntaryExit:
 		pk := phase0.BLSPubKey{}
@@ -86,7 +89,24 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 		return 2, true
 
 	case spectypes.RoleCommittee:
-		return 2 * validatorIndexCount, true
+		validatorIndexCount := len(validatorIndices)
+		slotsPerEpoch := int(mv.netCfg.Beacon.SlotsPerEpoch())
+
+		// Skip duty search if validators * 2 exceeds slots per epoch,
+		// as the maximum duties per epoch is capped at the number of slots.
+		// This avoids unnecessary checks.
+		if validatorIndexCount < slotsPerEpoch/2 {
+			// Check if there is at least one validator in the sync committee.
+			// If so, the duty limit is equal to the number of slots per epoch.
+			period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
+			for _, i := range validatorIndices {
+				if mv.dutyStore.SyncCommittee.Duty(period, i) != nil {
+					return slotsPerEpoch, true
+				}
+			}
+		}
+
+		return min(slotsPerEpoch, 2*validatorIndexCount), true
 
 	default:
 		return 0, false
