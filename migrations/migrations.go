@@ -26,6 +26,7 @@ var (
 		migration_1_example,
 		migration_2_encrypt_shares,
 		migration_3_drop_registry_data,
+		migration_4_add_version_to_configlock,
 	}
 )
 
@@ -56,6 +57,7 @@ type Options struct {
 	NodeStorage operatorstorage.Storage
 	DbPath      string
 	Network     beacon.Network
+	Version     string
 }
 
 // nolint

@@ -168,7 +168,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
+		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents, cmd.Parent().Version)
 
 		ekmHashedKey, err := operatorPrivKey.EKMHash()
 		if err != nil {
@@ -420,27 +420,44 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
-func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
+func verifyConfig(
+	logger *zap.Logger,
+	nodeStorage operatorstorage.Storage,
+	networkName string,
+	usingLocalEvents bool,
+	version string,
+) {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
-		logger.Fatal("could not check saved local events config", zap.Error(err))
+		logger.Fatal("failed to get stored config", zap.Error(err))
 	}
+
+	//// TODO(Aleg) should not fail check what if received latest
+	//if !semver.IsValid(version) {
+	//	logger.Fatal("invalid version format", zap.String("version", version))
+	//}
 
 	currentConfig := &operatorstorage.ConfigLock{
 		NetworkName:      networkName,
 		UsingLocalEvents: usingLocalEvents,
+		Version:          version,
 	}
 
 	if foundConfig {
-		if err := storedConfig.EnsureSameWith(currentConfig); err != nil {
+		if err := storedConfig.ValidateCompatibility(currentConfig); err != nil {
 			err = fmt.Errorf("incompatible config change: %w", err)
 			logger.Fatal(err.Error())
 		}
-	} else {
-		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
-			err = fmt.Errorf("failed to store config: %w", err)
-			logger.Fatal(err.Error())
+
+		// Only save if the versions are different
+		if currentConfig.Version == storedConfig.Version {
+			return
 		}
+	}
+
+	if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
+		err = fmt.Errorf("failed to store config: %w", err)
+		logger.Fatal(err.Error())
 	}
 }
 
