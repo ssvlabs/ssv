@@ -88,9 +88,11 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		validVersion := "v0.0.0-test"
-		require.Panics(t, func() {
-			verifyConfig(logger, nodeStorage, testNetworkName, true, validVersion)
-		})
+		require.PanicsWithValue(t,
+			"incompatible config change: invalid stored version format: invalid-version. The database must be removed or reinitialized",
+			func() {
+				verifyConfig(logger, nodeStorage, testNetworkName, true, validVersion)
+			})
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -152,7 +154,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first",
+			"incompatible config change: network mismatch. Stored network testnet1 does not match current network testnet. The database must be removed or reinitialized",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true, testingVersion) },
 		)
 
@@ -173,7 +175,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first",
+			"incompatible config change: network mismatch. Stored network testnet1 does not match current network testnet. The database must be removed or reinitialized",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true, testingVersion) },
 		)
 
@@ -194,7 +196,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"incompatible config change: can't switch on localevents, database must be removed first",
+			"incompatible config change: enabling local events is not allowed. The database must be removed or reinitialized",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true, testingVersion) },
 		)
 
@@ -215,7 +217,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"incompatible config change: can't switch off localevents, database must be removed first",
+			"incompatible config change: disabling local events is not allowed. The database must be removed or reinitialized",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, false, testingVersion) },
 		)
 
