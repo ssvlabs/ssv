@@ -76,7 +76,7 @@ func (l *forkListener) Ping(node *enode.Node) error {
 	if err != nil {
 		return l.preForkListener.Ping(node)
 	}
-	return err
+	return nil
 }
 
 // Returns the LocalNode using the post-fork listener.
