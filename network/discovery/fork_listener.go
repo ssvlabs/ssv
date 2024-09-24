@@ -135,8 +135,8 @@ func (i *preAndPostForkIterator) Node() *enode.Node {
 
 	if i.hasChangedToPreForkIterator {
 		return i.preForkIterator.Node()
-	} 
-	
+	}
+
 	return i.postForkIterator.Node()
 }
 
@@ -154,7 +154,7 @@ func (i *preAndPostForkIterator) Next() bool {
 	if hasNext {
 		return true
 	}
-	
+
 	i.hasChangedToPreForkIterator = true
 	return i.preForkIterator.Next()
 }
