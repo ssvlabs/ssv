@@ -104,12 +104,12 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
-
 		logger, err := setupGlobal()
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
+
+		commons.SetBuildData(logger, cmd.Parent().Short, cmd.Parent().Version)
 
 		defer logging.CapturePanic(logger)
 

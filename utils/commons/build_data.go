@@ -3,6 +3,7 @@ package commons
 import (
 	"fmt"
 
+	"go.uber.org/zap"
 	"golang.org/x/mod/semver"
 )
 
@@ -12,13 +13,13 @@ var (
 )
 
 // SetBuildData updates local vars for build data
-func SetBuildData(app string, ver string) {
+func SetBuildData(logger *zap.Logger, app string, ver string) {
 	appName = app
-	version = normalizeVersion(ver)
+	version = normalizeVersion(logger, ver)
 }
 
 // normalizeVersion ensures the version starts with "v" and is valid semver.
-func normalizeVersion(ver string) string {
+func normalizeVersion(logger *zap.Logger, ver string) string {
 	if ver == "" {
 		return version // Return the default version if no version provided
 	}
@@ -29,7 +30,7 @@ func normalizeVersion(ver string) string {
 			ver = "v" + ver
 		} else {
 			// Invalid version, fallback to default version
-			fmt.Printf("Invalid version format: %s, defaulting to %s\n", ver, version)
+			logger.Warn("Invalid version format", zap.String("version", ver), zap.String("default", version))
 			ver = version
 		}
 	}
