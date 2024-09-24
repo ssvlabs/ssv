@@ -937,11 +937,11 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 	var foundVC *validator.Committee
 
 	// Start a committee validator.
-	if found = c.validatorsMap.UpdateCommitteeAtomic(operator.CommitteeID, func(vc *validator.Committee) {
+	if c.validatorsMap.UpdateCommitteeAtomic(operator.CommitteeID, func(vc *validator.Committee) {
 		vc.AddShare(&share.Share)
 		c.printShare(share, "added share to committee")
 		foundVC = vc
-	}); found {
+	}) {
 		return v, foundVC, nil
 	}
 
