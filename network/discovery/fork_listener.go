@@ -153,8 +153,8 @@ func (i *preAndPostForkIterator) Next() bool {
 	hasNext := i.postForkIterator.Next()
 	if hasNext {
 		return true
-	} else {
-		i.hasChangedToPreForkIterator = true
-		return i.preForkIterator.Next()
 	}
+	
+	i.hasChangedToPreForkIterator = true
+	return i.preForkIterator.Next()
 }
