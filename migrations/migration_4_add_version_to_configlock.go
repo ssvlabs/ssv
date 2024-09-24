@@ -31,8 +31,6 @@ var migration_4_add_version_to_configlock = Migration{
 
 			// If config is found, check if version is missing and update it
 			if config.Version == "" {
-
-				// TODO(Aleg) we need to check for version validity - check what version we receive when running locally
 				config.Version = opt.Version
 
 				// Save the updated config back atomically

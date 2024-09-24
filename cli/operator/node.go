@@ -432,11 +432,6 @@ func verifyConfig(
 		logger.Fatal("failed to get stored config", zap.Error(err))
 	}
 
-	//// TODO(Aleg) should not fail check what if received latest
-	//if !semver.IsValid(version) {
-	//	logger.Fatal("invalid version format", zap.String("version", version))
-	//}
-
 	currentConfig := &operatorstorage.ConfigLock{
 		NetworkName:      networkName,
 		UsingLocalEvents: usingLocalEvents,
