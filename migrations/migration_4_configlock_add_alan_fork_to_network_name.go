@@ -31,9 +31,12 @@ var migration_4_configlock_add_alan_fork_to_network_name = Migration{
 				return nil
 			}
 
-			// TODO: Consider using AlanMainnet DomainType from spec instead of AlanForkName.
-			// The issue is that DomainType applies only after the fork has occurred.
-			config.NetworkName = fmt.Sprintf("%s:%s", config.NetworkName, networkconfig.AlanForkName)
+			networkConfig, err := networkconfig.GetNetworkConfigByName(config.NetworkName)
+			if err != nil {
+				return fmt.Errorf("failed to get network config by name: %w", err)
+			}
+
+			config.NetworkName = networkConfig.AlanForkNetworkName()
 			if err := nodeStorage.SaveConfig(txn, config); err != nil {
 				return fmt.Errorf("failed to save config: %w", err)
 			}

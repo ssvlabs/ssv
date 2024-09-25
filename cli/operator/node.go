@@ -168,8 +168,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		networkName := fmt.Sprintf("%s:%s", networkConfig.Name, networkconfig.AlanForkName)
-		if err := validateConfig(nodeStorage, networkName, usingLocalEvents); err != nil {
+		if err := validateConfig(nodeStorage, networkConfig.AlanForkNetworkName(), usingLocalEvents); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 

@@ -21,7 +21,7 @@ var SupportedConfigs = map[string]NetworkConfig{
 	HoleskyE2E.Name:   HoleskyE2E,
 }
 
-var AlanForkName = "alan"
+var alanForkName = "alan"
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
@@ -58,6 +58,10 @@ func (n NetworkConfig) String() string {
 	}
 
 	return string(b)
+}
+
+func (n NetworkConfig) AlanForkNetworkName() string {
+	return fmt.Sprintf("%s:%s", n.Name, alanForkName)
 }
 
 func (n NetworkConfig) PastAlanFork() bool {
