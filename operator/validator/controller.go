@@ -955,10 +955,9 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 	committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
 
-	logger := c.logger.With([]zap.Field{
+	logger := c.logger.With(
 		zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
-		zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
-	}...)
+		zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])))
 
 	committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
