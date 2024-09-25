@@ -21,7 +21,7 @@ var SupportedConfigs = map[string]NetworkConfig{
 	HoleskyE2E.Name:   HoleskyE2E,
 }
 
-var alanForkName = "alan"
+const alanForkName = "alan"
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
