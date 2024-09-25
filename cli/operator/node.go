@@ -422,11 +422,7 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
-func validateConfig(
-	nodeStorage operatorstorage.Storage,
-	networkName string,
-	usingLocalEvents bool,
-) error {
+func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) error {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
 		return fmt.Errorf("failed to get stored config: %w", err)
