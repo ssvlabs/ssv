@@ -7,18 +7,18 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-// forkListener wraps a pre-fork and a post-fork listener.
+// forkingDV5Listener wraps a pre-fork and a post-fork listener.
 // Before the fork, it performs operations on both services.
 // Aftet the fork, it performs operations only on the post-fork service.
-type forkListener struct {
+type forkingDV5Listener struct {
 	preForkListener  listener
 	postForkListener listener
 	closeOnce        sync.Once
 	netCfg           networkconfig.NetworkConfig
 }
 
-func newForkListener(preFork, postFork listener, netConfig networkconfig.NetworkConfig) *forkListener {
-	return &forkListener{
+func newForkingDV5Listener(preFork, postFork listener, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
+	return &forkingDV5Listener{
 		preForkListener:  preFork,
 		postForkListener: postFork,
 		netCfg:           netConfig,
@@ -27,7 +27,7 @@ func newForkListener(preFork, postFork listener, netConfig networkconfig.Network
 
 // Before the fork, returns the result of a Lookup in both pre and post-fork services.
 // After the fork, returns only the result from the post-fork service.
-func (l *forkListener) Lookup(id enode.ID) []*enode.Node {
+func (l *forkingDV5Listener) Lookup(id enode.ID) []*enode.Node {
 	if l.netCfg.PastAlanFork() {
 		l.closePreForkListener()
 		return l.postForkListener.Lookup(id)
@@ -40,7 +40,7 @@ func (l *forkListener) Lookup(id enode.ID) []*enode.Node {
 
 // Before the fork, returns an iterator for both pre and post-fork services.
 // After the fork, returns only the iterator from the post-fork service.
-func (l *forkListener) RandomNodes() enode.Iterator {
+func (l *forkingDV5Listener) RandomNodes() enode.Iterator {
 	if l.netCfg.PastAlanFork() {
 		l.closePreForkListener()
 		return l.postForkListener.RandomNodes()
@@ -53,7 +53,7 @@ func (l *forkListener) RandomNodes() enode.Iterator {
 
 // Before the fork, returns all nodes from the pre and post-fork listeners.
 // After the fork, returns only the result from the post-fork service.
-func (l *forkListener) AllNodes() []*enode.Node {
+func (l *forkingDV5Listener) AllNodes() []*enode.Node {
 	if l.netCfg.PastAlanFork() {
 		l.closePreForkListener()
 		return l.postForkListener.AllNodes()
@@ -66,7 +66,7 @@ func (l *forkListener) AllNodes() []*enode.Node {
 
 // Sends a ping in the post-fork service.
 // Before the fork, it also tries to ping with the pre-fork service in case of error.
-func (l *forkListener) Ping(node *enode.Node) error {
+func (l *forkingDV5Listener) Ping(node *enode.Node) error {
 	if l.netCfg.PastAlanFork() {
 		l.closePreForkListener()
 		return l.postForkListener.Ping(node)
@@ -81,7 +81,7 @@ func (l *forkListener) Ping(node *enode.Node) error {
 
 // Returns the LocalNode using the post-fork listener.
 // Both pre and post-fork listeners should have the same LocalNode.
-func (l *forkListener) LocalNode() *enode.LocalNode {
+func (l *forkingDV5Listener) LocalNode() *enode.LocalNode {
 	if l.netCfg.PastAlanFork() {
 		l.closePreForkListener()
 		return l.postForkListener.LocalNode()
@@ -90,13 +90,13 @@ func (l *forkListener) LocalNode() *enode.LocalNode {
 }
 
 // Closes both listeners
-func (l *forkListener) Close() {
+func (l *forkingDV5Listener) Close() {
 	l.closePreForkListener()
 	l.postForkListener.Close()
 }
 
 // closePreForkListener ensures preForkListener is closed once
-func (l *forkListener) closePreForkListener() {
+func (l *forkingDV5Listener) closePreForkListener() {
 	l.closeOnce.Do(func() {
 		l.preForkListener.Close()
 	})
@@ -126,7 +126,11 @@ func (i *preAndPostForkIterator) Close() {
 	defer i.mutex.Unlock()
 
 	i.preForkIterator.Close()
-	i.postForkIterator.Close()
+
+	// Only closes post-fork iterator if it didn't change to pre-fork yet
+	if !i.hasChangedToPreForkIterator {
+		i.postForkIterator.Close()
+	}
 }
 
 func (i *preAndPostForkIterator) Node() *enode.Node {
@@ -156,5 +160,9 @@ func (i *preAndPostForkIterator) Next() bool {
 	}
 
 	i.hasChangedToPreForkIterator = true
+
+	// Close post-fork iterator since it won't be used anymore
+	i.postForkIterator.Close()
+
 	return i.preForkIterator.Next()
 }
