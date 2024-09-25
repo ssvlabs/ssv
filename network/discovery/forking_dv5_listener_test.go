@@ -15,7 +15,7 @@ func TestForkListener_Create(t *testing.T) {
 
 	t.Run("Pre-Fork", func(t *testing.T) {
 		netCfg := PreForkNetworkConfig()
-		_ = newForkListener(preForkListener, postForkListener, netCfg)
+		_ = newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		assert.False(t, preForkListener.closed)
 		assert.False(t, postForkListener.closed)
@@ -23,7 +23,7 @@ func TestForkListener_Create(t *testing.T) {
 
 	t.Run("Post-Fork", func(t *testing.T) {
 		netCfg := PostForkNetworkConfig()
-		_ = newForkListener(preForkListener, postForkListener, netCfg)
+		_ = newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		assert.False(t, preForkListener.closed)
 		assert.False(t, postForkListener.closed)
@@ -40,7 +40,7 @@ func TestForkListener_Lookup(t *testing.T) {
 
 	t.Run("Pre-Fork", func(t *testing.T) {
 		netCfg := PreForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		nodes := forkListener.Lookup(enode.ID{})
 		assert.Len(t, nodes, 2)
@@ -51,7 +51,7 @@ func TestForkListener_Lookup(t *testing.T) {
 
 	t.Run("Post-Fork", func(t *testing.T) {
 		netCfg := PostForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		nodes := forkListener.Lookup(enode.ID{})
 		// only post-fork nodes
@@ -70,7 +70,7 @@ func TestForkListener_RandomNodes(t *testing.T) {
 
 	t.Run("Pre-Fork", func(t *testing.T) {
 		netCfg := PreForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		iter := forkListener.RandomNodes()
 		var nodes []*enode.Node
@@ -87,7 +87,7 @@ func TestForkListener_RandomNodes(t *testing.T) {
 
 	t.Run("Post-Fork", func(t *testing.T) {
 		netCfg := PostForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		iter := forkListener.RandomNodes()
 		var nodes []*enode.Node
@@ -112,7 +112,7 @@ func TestForkListener_AllNodes(t *testing.T) {
 
 	t.Run("Pre-Fork", func(t *testing.T) {
 		netCfg := PreForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		nodes := forkListener.AllNodes()
 		assert.Len(t, nodes, 2)
@@ -123,7 +123,7 @@ func TestForkListener_AllNodes(t *testing.T) {
 
 	t.Run("Post-Fork", func(t *testing.T) {
 		netCfg := PostForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		nodes := forkListener.AllNodes()
 		// only post-fork nodes
@@ -140,7 +140,7 @@ func TestForkListener_PingPreFork(t *testing.T) {
 	postForkListener := NewMockListener(localNode, []*enode.Node{})
 
 	netCfg := PreForkNetworkConfig()
-	forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+	forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 	t.Run("Post-Fork succeeds", func(t *testing.T) {
 		postForkListener.SetNodesForPingError([]*enode.Node{})
@@ -172,7 +172,7 @@ func TestForkListener_PingPostFork(t *testing.T) {
 	postForkListener := NewMockListener(localNode, []*enode.Node{})
 
 	netCfg := PostForkNetworkConfig()
-	forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+	forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 	t.Run("Post-Fork succeeds", func(t *testing.T) {
 		postForkListener.SetNodesForPingError([]*enode.Node{})
@@ -199,14 +199,14 @@ func TestForkListener_LocalNode(t *testing.T) {
 
 	t.Run("Pre-Fork", func(t *testing.T) {
 		netCfg := PreForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		assert.Equal(t, localNode, forkListener.LocalNode())
 	})
 
 	t.Run("Post-Fork", func(t *testing.T) {
 		netCfg := PostForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		assert.Equal(t, localNode, forkListener.LocalNode())
 	})
@@ -219,7 +219,7 @@ func TestForkListener_Close(t *testing.T) {
 		postForkListener := NewMockListener(&enode.LocalNode{}, []*enode.Node{})
 
 		netCfg := PreForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		// Call any method so that it will check whether to close the pre-fork listener
 		_ = forkListener.AllNodes()
@@ -239,7 +239,7 @@ func TestForkListener_Close(t *testing.T) {
 		postForkListener := NewMockListener(&enode.LocalNode{}, []*enode.Node{})
 
 		netCfg := PostForkNetworkConfig()
-		forkListener := newForkListener(preForkListener, postForkListener, netCfg)
+		forkListener := newForkingDV5Listener(preForkListener, postForkListener, netCfg)
 
 		// Call any method so that it will check whether to close the pre-fork listener
 		_ = forkListener.AllNodes()
