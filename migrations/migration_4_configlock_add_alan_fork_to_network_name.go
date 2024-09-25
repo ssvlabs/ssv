@@ -25,20 +25,17 @@ var migration_4_configlock_add_alan_fork_to_network_name = Migration{
 				return fmt.Errorf("failed to get config: %w", err)
 			}
 
-			// If config is not found, skip the migration
-			// It means the node is not initialized yet
-			if !found {
-				return nil
-			}
+			// If config is not found, it means the node is not initialized yet
+			if found {
+				networkConfig, err := networkconfig.GetNetworkConfigByName(config.NetworkName)
+				if err != nil {
+					return fmt.Errorf("failed to get network config by name: %w", err)
+				}
 
-			networkConfig, err := networkconfig.GetNetworkConfigByName(config.NetworkName)
-			if err != nil {
-				return fmt.Errorf("failed to get network config by name: %w", err)
-			}
-
-			config.NetworkName = networkConfig.AlanForkNetworkName()
-			if err := nodeStorage.SaveConfig(txn, config); err != nil {
-				return fmt.Errorf("failed to save config: %w", err)
+				config.NetworkName = networkConfig.AlanForkNetworkName()
+				if err := nodeStorage.SaveConfig(txn, config); err != nil {
+					return fmt.Errorf("failed to save config: %w", err)
+				}
 			}
 
 			return completed(txn)
