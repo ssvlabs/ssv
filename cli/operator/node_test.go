@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,8 +22,8 @@ func Test_verifyConfig(t *testing.T) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	testnetNetworkConfig := networkconfig.TestNetwork
-	testNetworkName := fmt.Sprintf("%s:%s", testnetNetworkConfig.Name, testnetNetworkConfig.AlanForkNetworkName())
+	testNetworkName := networkconfig.TestNetwork.AlanForkNetworkName()
+
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
 			NetworkName:      testNetworkName,
