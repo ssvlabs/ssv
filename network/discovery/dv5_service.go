@@ -184,7 +184,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 
 	// Filters
-	if dvs.limitNodeFilter(e.Node) {
+	if !dvs.limitNodeFilter(e.Node) {
 		metricRejectedNodes.Inc()
 		return errors.New("reached limit")
 	}
