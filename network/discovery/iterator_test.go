@@ -27,8 +27,11 @@ func TestPreAndPostForkIterator_Next(t *testing.T) {
 	assert.True(t, iterator.Next()) // Second postFork node
 	assert.Equal(t, node2, iterator.Node())
 
+	assert.False(t, postFork.closed) // postFork iterator must be still openened
+
 	// Then, switch to preFork
 	assert.True(t, iterator.Next()) // First preFork node
+	assert.True(t, postFork.closed) // postFork iterator must closed after transition to preFork
 	assert.Equal(t, node3, iterator.Node())
 
 	assert.True(t, iterator.Next()) // Second preFork node
@@ -49,8 +52,11 @@ func TestPreAndPostForkIterator_PostForkEmpty(t *testing.T) {
 
 	iterator := NewPreAndPostForkIterator(preFork, postFork)
 
+	assert.False(t, postFork.closed) // postFork iterator must start openened
+
 	// First check: preFork first node after switch
 	assert.True(t, iterator.Next())
+	assert.True(t, postFork.closed) // postFork iterator must closed after transition to preFork
 	assert.Equal(t, node2, iterator.Node())
 
 	// Second check: preFork second node
@@ -82,6 +88,8 @@ func TestPreAndPostForkIterator_PreForkEmpty(t *testing.T) {
 
 	// No more elements even after switch
 	assert.False(t, iterator.Next())
+
+	assert.True(t, postFork.closed) // postFork iterator must closed after transition to preFork
 }
 
 func TestPreAndPostForkIterator_Close(t *testing.T) {
@@ -90,6 +98,10 @@ func TestPreAndPostForkIterator_Close(t *testing.T) {
 	postFork := NewMockIterator(nil)
 
 	iterator := NewPreAndPostForkIterator(preFork, postFork)
+
+	// Check that both iterators are opened
+	assert.False(t, preFork.closed)
+	assert.False(t, postFork.closed)
 
 	// No elements
 	assert.False(t, iterator.Next())
