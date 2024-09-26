@@ -69,10 +69,6 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	descriptor.Role = decodedMessage.SSVMessage.GetID().GetRoleType()
 	descriptor.SSVMessageType = decodedMessage.SSVMessage.GetType()
 
-	if mv.logger.Level() == zap.DebugLevel {
-		mv.addDutyIDField(descriptor)
-	}
-
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
 		if m != nil {
@@ -84,6 +80,10 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 		if m != nil {
 			descriptor.Slot = m.Slot
 		}
+	}
+
+	if mv.logger.Level() == zap.DebugLevel {
+		mv.addDutyIDField(descriptor)
 	}
 
 	return descriptor
