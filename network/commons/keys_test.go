@@ -1,10 +1,10 @@
 package commons
 
 import (
-	"crypto/ecdsa"
 	"encoding/hex"
 	"testing"
 
+	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
 )
@@ -22,11 +22,12 @@ func TestECDSAPrivFromInterface(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ecdsaPrivKey)
 
-	require.IsType(t, &ecdsa.PrivateKey{}, ecdsaPrivKey)
-	require.NotNil(t, ecdsaPrivKey.D)
-	require.NotNil(t, ecdsaPrivKey.X)
-	require.NotNil(t, ecdsaPrivKey.Y)
-	require.NotNil(t, ecdsaPrivKey.Curve)
-
 	require.Equal(t, ecdsaPrivKey.D.String(), "6792055902439951130224479433662882604105028919500185693322687975860017874966")
+	require.Equal(t, ecdsaPrivKey.X.String(), "22653320514410971312249902166871933285664081749262857866749567141267477006697")
+	require.Equal(t, ecdsaPrivKey.Y.String(), "103853204202400939811590846319591563498962634102053730872842929232997685705657")
+	require.Equal(t, ecdsaPrivKey.Curve, gcrypto.S256())
+
+	require.Equal(t, ecdsaPrivKey.PublicKey.X.String(), "22653320514410971312249902166871933285664081749262857866749567141267477006697")
+	require.Equal(t, ecdsaPrivKey.PublicKey.Y.String(), "103853204202400939811590846319591563498962634102053730872842929232997685705657")
+	require.Equal(t, ecdsaPrivKey.PublicKey.Curve, gcrypto.S256())
 }
