@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -46,7 +47,14 @@ type Committee struct {
 
 	dutyGuard      *CommitteeDutyGuard
 	CreateRunnerFn CommitteeRunnerFunc
+
+	state int32
 }
+
+const (
+	running = iota
+	stopped
+)
 
 // NewCommittee creates a new cluster
 func NewCommittee(
@@ -87,6 +95,9 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	if share, exist := c.Shares[validatorIndex]; exist {
 		c.dutyGuard.StopValidator(share.ValidatorPubKey)
 		delete(c.Shares, validatorIndex)
+		if len(c.Shares) == 0 {
+			c.stop()
+		}
 	}
 }
 
@@ -292,8 +303,13 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	return nil
 }
 
-func (c *Committee) Stop() {
+func (c *Committee) Stopped() bool {
+	return atomic.LoadInt32(&c.state) == stopped
+}
+
+func (c *Committee) stop() {
 	c.cancel()
+	atomic.StoreInt32(&c.state, stopped)
 }
 
 func (c *Committee) Encode() ([]byte, error) {
