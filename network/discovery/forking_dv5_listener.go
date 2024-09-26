@@ -4,21 +4,25 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
 )
 
 // forkingDV5Listener wraps a pre-fork and a post-fork listener.
 // Before the fork, it performs operations on both services.
 // Aftet the fork, it performs operations only on the post-fork service.
 type forkingDV5Listener struct {
+	logger           *zap.Logger
 	preForkListener  listener
 	postForkListener listener
 	closeOnce        sync.Once
 	netCfg           networkconfig.NetworkConfig
 }
 
-func newForkingDV5Listener(preFork, postFork listener, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
+func newForkingDV5Listener(logger *zap.Logger, preFork, postFork listener, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
 	return &forkingDV5Listener{
+		logger:           logger,
 		preForkListener:  preFork,
 		postForkListener: postFork,
 		netCfg:           netConfig,
@@ -48,7 +52,13 @@ func (l *forkingDV5Listener) RandomNodes() enode.Iterator {
 
 	preForkIterator := l.preForkListener.RandomNodes()
 	postForkIterator := l.postForkListener.RandomNodes()
-	return NewPreAndPostForkIterator(preForkIterator, postForkIterator)
+	iterator, err := NewPreAndPostForkIterator(preForkIterator, postForkIterator, 5)
+	if err != nil {
+		// Default to post-fork iterator on error.
+		l.logger.Error("failed to create pre and post-fork iterator", zap.Error(err))
+		return postForkIterator
+	}
+	return iterator
 }
 
 // Before the fork, returns all nodes from the pre and post-fork listeners.
@@ -102,23 +112,31 @@ func (l *forkingDV5Listener) closePreForkListener() {
 	})
 }
 
-// preAndPostForkIterator is an Iterator wrapper for enode.Iterator
-// It gives preference to the postForkIterator, starting by it
-// After the postForkIterator ends, it starts using the preForkIterator
 type preAndPostForkIterator struct {
-	preForkIterator             enode.Iterator
-	postForkIterator            enode.Iterator
-	hasChangedToPreForkIterator bool
-	mutex                       sync.Mutex
+	preForkIterator  enode.Iterator
+	postForkIterator enode.Iterator
+	preForkFrequency int
+	node             *enode.Node
+	cursor           int
+	mutex            sync.Mutex
 }
 
-func NewPreAndPostForkIterator(preForkIterator enode.Iterator, postForkIterator enode.Iterator) enode.Iterator {
-	return &preAndPostForkIterator{
-		preForkIterator:             preForkIterator,
-		postForkIterator:            postForkIterator,
-		hasChangedToPreForkIterator: false,
-		mutex:                       sync.Mutex{},
+// NewPreAndPostForkIterator returns an iterator that yields from the given iterators
+// in a round-robin fashion, where in 1 of preForkFrequency times the preForkIterator is invoked.
+func NewPreAndPostForkIterator(
+	preForkIterator enode.Iterator,
+	postForkIterator enode.Iterator,
+	preForkFrequency int,
+) (enode.Iterator, error) {
+	if preForkFrequency < 1 {
+		return nil, errors.New("preForkFrequency must be at least 1")
 	}
+	return &preAndPostForkIterator{
+		preForkFrequency: preForkFrequency,
+		preForkIterator:  preForkIterator,
+		postForkIterator: postForkIterator,
+		mutex:            sync.Mutex{},
+	}, nil
 }
 
 func (i *preAndPostForkIterator) Close() {
@@ -126,43 +144,35 @@ func (i *preAndPostForkIterator) Close() {
 	defer i.mutex.Unlock()
 
 	i.preForkIterator.Close()
-
-	// Only closes post-fork iterator if it didn't change to pre-fork yet
-	if !i.hasChangedToPreForkIterator {
-		i.postForkIterator.Close()
-	}
+	i.postForkIterator.Close()
 }
 
 func (i *preAndPostForkIterator) Node() *enode.Node {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	if i.hasChangedToPreForkIterator {
-		return i.preForkIterator.Node()
-	}
-
-	return i.postForkIterator.Node()
+	return i.node
 }
 
-// Check if the postForkIterator has a next element.
-// Once postForkIterator ends, switches to checking the preForkIterator.
 func (i *preAndPostForkIterator) Next() bool {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	if i.hasChangedToPreForkIterator {
-		return i.preForkIterator.Next()
+	i.cursor++
+	if (i.cursor % i.preForkFrequency) == 0 {
+		return i.firstNode(i.preForkIterator, i.postForkIterator)
 	}
+	return i.firstNode(i.postForkIterator, i.preForkIterator)
+}
 
-	hasNext := i.postForkIterator.Next()
-	if hasNext {
-		return true
+// firstNode picks the node from the first iterator that returns true for Next.
+func (i *preAndPostForkIterator) firstNode(iterators ...enode.Iterator) bool {
+	i.node = nil
+	for _, iterator := range iterators {
+		if iterator.Next() {
+			i.node = iterator.Node()
+			return true
+		}
 	}
-
-	i.hasChangedToPreForkIterator = true
-
-	// Close post-fork iterator since it won't be used anymore
-	i.postForkIterator.Close()
-
-	return i.preForkIterator.Next()
+	return false
 }

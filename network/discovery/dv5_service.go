@@ -285,7 +285,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		fields.ProtocolID(protocolID),
 	)
 
-	dvs.dv5Listener = newForkingDV5Listener(dv5PreForkListener, dv5PostForkListener, dvs.networkConfig)
+	dvs.dv5Listener = newForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, dvs.networkConfig)
 	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil

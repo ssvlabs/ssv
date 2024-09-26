@@ -143,6 +143,14 @@ func NewTestingNode(t *testing.T) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, mockSubnets(1))
 }
 
+func NewTestingNodes(t *testing.T, count int) []*enode.Node {
+	nodes := make([]*enode.Node, count)
+	for i := 0; i < count; i++ {
+		nodes[i] = NewTestingNode(t)
+	}
+	return nodes
+}
+
 func NodeWithoutDomain(t *testing.T) *enode.Node {
 	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.NextDomainType(), true, mockSubnets(1))
 }
@@ -250,7 +258,7 @@ func (m *MockIterator) Next() bool {
 		return false
 	}
 	m.position++
-	return true
+	return m.nodes[m.position] != nil
 }
 
 func (m *MockIterator) Node() *enode.Node {
