@@ -97,7 +97,8 @@ func WithUnhandled(unhandled chan<- discover.ReadPacket) func(config *discover.C
 // DiscV5Cfg creates discv5 config from the options
 func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger, funcOpts ...func(config *discover.Config)) (*discover.Config, error) {
 	dv5Cfg := &discover.Config{
-		PrivateKey: opts.NetworkKey,
+		PrivateKey:   opts.NetworkKey,
+		V5ProtocolID: &DefaultSSVProtocolID,
 	}
 
 	for _, fn := range funcOpts {
