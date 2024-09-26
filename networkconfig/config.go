@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -19,6 +20,8 @@ var SupportedConfigs = map[string]NetworkConfig{
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
 }
+
+const alanForkName = "alan"
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
@@ -55,6 +58,10 @@ func (n NetworkConfig) String() string {
 	}
 
 	return string(b)
+}
+
+func (n NetworkConfig) AlanForkNetworkName() string {
+	return fmt.Sprintf("%s:%s", n.Name, alanForkName)
 }
 
 func (n NetworkConfig) PastAlanFork() bool {
