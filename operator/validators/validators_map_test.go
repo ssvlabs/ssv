@@ -14,28 +14,19 @@ import (
 	"go.uber.org/zap"
 )
 
-func counter() (func(*validator.Committee), *int) {
-	var calls int
-	return func(*validator.Committee) {
-		calls++
-	}, &calls
-}
-
 func TestUpdateCommitteeAtomic(t *testing.T) {
 	t.Run("does nothing if committee not found", func(t *testing.T) {
-		vm := validators.New(context.Background())
-		fn, c := counter()
 		var cmtID spectypes.CommitteeID
-		updated := vm.UpdateCommitteeAtomic(cmtID, fn)
-
+		vm := validators.New(context.Background())
+		updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
+			t.Fatal("should not be called")
+		})
 		assert.False(t, updated)
-		assert.Equal(t, 0, *c)
 	})
 
 	t.Run("removes committee if no shares left", func(t *testing.T) {
 		ctx := context.Background()
 		vm := validators.New(ctx)
-		fn, c := counter()
 		ctx, cancel := context.WithCancel(ctx)
 
 		cmt := validator.NewCommittee(
@@ -43,17 +34,21 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			cancel,
 			zap.NewNop(),
 			tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-			&new(specssv.Committee).CommitteeMember,
-			nil, nil) // empty shares map
+			&new(specssv.Committee).CommitteeMember, nil,
+			map[phase0.ValidatorIndex]*spectypes.Share{
+				0: new(spectypes.Share),
+			})
 
 		var cmtID spectypes.CommitteeID
 		vm.PutCommittee(cmtID, cmt)
 		assert.Equal(t, 1, vm.SizeCommittees())
 
-		updated := vm.UpdateCommitteeAtomic(cmtID, fn)
+		updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
+			c.RemoveShare(0)
+		})
 
 		assert.True(t, updated)
-		assert.Equal(t, 1, *c)
+		assert.True(t, cmt.Stopped())
 		assert.Equal(t, context.Canceled, ctx.Err())
 		assert.Equal(t, 0, vm.SizeCommittees())
 	})
@@ -61,7 +56,6 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 	t.Run("does not stop committee if it has shares left", func(t *testing.T) {
 		ctx := context.Background()
 		vm := validators.New(ctx)
-		fn, c := counter()
 		ctx, cancel := context.WithCancel(ctx)
 		t.Cleanup(cancel)
 
@@ -73,16 +67,19 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			&new(specssv.Committee).CommitteeMember, nil,
 			map[phase0.ValidatorIndex]*spectypes.Share{
 				0: new(spectypes.Share),
+				1: new(spectypes.Share),
 			},
 		)
 
 		var cmtID spectypes.CommitteeID
 		vm.PutCommittee(cmtID, cmt)
 
-		updated := vm.UpdateCommitteeAtomic(cmtID, fn)
+		updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
+			c.RemoveShare(0)
+		})
 
 		assert.True(t, updated)
-		assert.Equal(t, 1, *c)
+		assert.False(t, cmt.Stopped())
 		assert.Equal(t, 1, vm.SizeCommittees())
 		assert.NoError(t, ctx.Err())
 	})
