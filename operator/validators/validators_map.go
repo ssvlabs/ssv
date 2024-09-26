@@ -112,7 +112,7 @@ func (vm *ValidatorsMap) ForEachCommittee(iterator committeeIterator) bool {
 	defer vm.mlock.RUnlock()
 
 	for _, val := range vm.committees {
-		if !iterator(val) {
+		if !val.Stopped() && !iterator(val) {
 			return false
 		}
 	}
@@ -126,6 +126,9 @@ func (vm *ValidatorsMap) GetAllCommittees() []*validator.Committee {
 
 	var committees []*validator.Committee
 	for _, val := range vm.committees {
+		if val.Stopped() {
+			continue
+		}
 		committees = append(committees, val)
 	}
 
@@ -138,6 +141,10 @@ func (vm *ValidatorsMap) GetCommittee(pubKey spectypes.CommitteeID) (*validator.
 	defer vm.mlock.RUnlock()
 
 	v, ok := vm.committees[pubKey]
+
+	if !ok || v.Stopped() {
+		return nil, false
+	}
 
 	return v, ok
 }
@@ -157,20 +164,32 @@ func (vm *ValidatorsMap) UpdateCommitteeAtomic(pubKey spectypes.CommitteeID, mut
 	defer vm.mlock.Unlock()
 
 	vc, found := vm.committees[pubKey]
-	if !found {
+	if !found || vc.Stopped() {
 		return false
 	}
 
 	mutate(vc)
 
-	// in case the mutation was a share removal and the share was
-	// the last one for this committee - delete and stop commitee
-	if len(vc.Shares) == 0 {
-		delete(vm.committees, pubKey)
-		vc.Stop()
+	// if committee was stopped, trigger cleanup
+	if vc.Stopped() {
+		vm.cleanup()
 	}
 
 	return true
+}
+
+// cleanup removes all stopped committees from the state
+// must be called under write lock
+func (vm *ValidatorsMap) cleanup() {
+	var stopped []spectypes.CommitteeID
+	for k, v := range vm.committees {
+		if v.Stopped() {
+			stopped = append(stopped, k)
+		}
+	}
+	for _, k := range stopped {
+		delete(vm.committees, k)
+	}
 }
 
 // SizeCommittees returns the number of committees in the map
