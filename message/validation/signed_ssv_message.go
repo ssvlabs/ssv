@@ -17,6 +17,7 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		e := ErrMalformedPubSubMessage
+		e.got = fmt.Sprintf("size %v", len(pMsg.GetData()))
 		e.innerErr = err
 
 		// Ignore genesis messages in the first slot of the fork epoch
