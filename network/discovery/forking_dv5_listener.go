@@ -188,6 +188,7 @@ func (i *annotatedIterator) Next() bool {
 	if !i.Iterator.Next() {
 		return false
 	}
+	zap.L().Debug("iterated node", zap.String("fork", i.fork), zap.Stringer("node", i.Node()))
 	metricIteratedNodes.WithLabelValues(i.fork).Inc()
 	return true
 }
