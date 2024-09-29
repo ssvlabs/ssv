@@ -299,7 +299,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
 func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
-	iterator := dvs.dv5Listener.RandomNodes()
+	iterator := dvs.dv5Listener.(*forkingDV5Listener).RandomNodes()
 	for _, f := range filters {
 		iterator = enode.Filter(iterator, f)
 	}

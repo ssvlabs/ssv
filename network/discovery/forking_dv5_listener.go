@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
@@ -59,6 +60,20 @@ func (l *forkingDV5Listener) RandomNodes() enode.Iterator {
 		return postForkIterator
 	}
 	return iterator
+}
+
+func (l *forkingDV5Listener) RandomNodesFairMix() enode.Iterator {
+	if l.netCfg.PastAlanFork() {
+		l.closePreForkListener()
+		return l.postForkListener.RandomNodes()
+	}
+
+	preForkIterator := l.preForkListener.RandomNodes()
+	postForkIterator := l.postForkListener.RandomNodes()
+	fairMix := enode.NewFairMix(time.Second * 5)
+	fairMix.AddSource(preForkIterator)
+	fairMix.AddSource(postForkIterator)
+	return fairMix
 }
 
 // Before the fork, returns all nodes from the pre and post-fork listeners.
