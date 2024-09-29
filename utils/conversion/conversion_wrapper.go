@@ -19,7 +19,7 @@ func LenUint64[T any](slice []T) uint64 {
 	return uint64(len(slice))
 }
 
-func TimeDurationFromUint64(t uint64) time.Duration {
+func DurationFromUint64(t uint64) time.Duration {
 	return time.Duration(t) // #nosec G115
 }
 
@@ -40,8 +40,8 @@ func CutoffRoundUint64() uint64 {
 	return uint64(specqbft.CutoffRound) // #nosec G115
 }
 
-// SafeTimeDurationToUint64 returns error if duration is negative and converts time.Duration to uint64 safe otherwise
-func SafeTimeDurationToUint64(t time.Duration) (uint64, error) {
+// DurationToUint64 returns error if duration is negative and converts time.Duration to uint64 safe otherwise
+func DurationToUint64(t time.Duration) (uint64, error) {
 	if t < 0 {
 		return 0, ErrNegativeTime
 	}

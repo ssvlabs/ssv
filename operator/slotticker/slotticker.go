@@ -80,7 +80,7 @@ func (s *slotTicker) Next() <-chan time.Time {
 		nextSlot = s.slot + 1
 		s.logger.Debug("double tick", zap.Uint64("slot", uint64(s.slot)))
 	}
-	nextSlotStartTime := s.genesisTime.Add(conversion.TimeDurationFromUint64(uint64(nextSlot)) * s.slotDuration)
+	nextSlotStartTime := s.genesisTime.Add(conversion.DurationFromUint64(uint64(nextSlot)) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
 	s.slot = nextSlot
 	return s.timer.C()
