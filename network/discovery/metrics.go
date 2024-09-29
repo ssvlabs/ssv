@@ -43,7 +43,7 @@ func init() {
 	if err := prometheus.Register(metricPublishEnrPongs); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricMixedFoundNodes); err != nil {
+	if err := prometheus.Register(metricIteratedNodes); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }

@@ -188,6 +188,6 @@ func (i *annotatedIterator) Next() bool {
 	if !i.Iterator.Next() {
 		return false
 	}
-	metricMixedFoundNodes.WithLabelValues(i.fork).Inc()
+	metricIteratedNodes.WithLabelValues(i.fork).Inc()
 	return true
 }
