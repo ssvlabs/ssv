@@ -29,14 +29,19 @@ type OperatorData struct {
 // GetOperatorData is a function that returns the operator data
 type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
-// Operators is the interface for managing operators data
-type Operators interface {
+// OperatorsReader is an interface for reading operators data
+type OperatorsReader interface {
 	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*OperatorData, bool, error)
 	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*OperatorData, bool, error)
 	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
+}
+
+// Operators is an interface for reading/writing operators data
+type Operators interface {
+	OperatorsReader
 	SaveOperatorData(rw basedb.ReadWriter, operatorData *OperatorData) (bool, error)
 	DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error
-	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 	DropOperators() error
 }
