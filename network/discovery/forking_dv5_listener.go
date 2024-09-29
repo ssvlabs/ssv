@@ -186,9 +186,11 @@ type annotatedIterator struct {
 
 func (i *annotatedIterator) Next() bool {
 	if !i.Iterator.Next() {
+		zap.L().Debug("iterated node", zap.String("fork", i.fork), zap.Stringer("node", i.Node()), zap.Bool("hasNext", i.Iterator.Next()))
 		return false
 	}
-	zap.L().Debug("iterated node", zap.String("fork", i.fork), zap.Stringer("node", i.Node()))
+	// TODO: remove log
+	zap.L().Debug("iterated node", zap.String("fork", i.fork), zap.Stringer("node", i.Node()), zap.Bool("hasNext", i.Iterator.Next()))
 	metricIteratedNodes.WithLabelValues(i.fork).Inc()
 	return true
 }
