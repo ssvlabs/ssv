@@ -282,7 +282,6 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		zap.Int("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
 		fields.Domain(discOpts.NetworkConfig.DomainType()),
-		fields.ProtocolID(protocolID),
 	)
 
 	dvs.dv5Listener = newForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, dvs.networkConfig)
