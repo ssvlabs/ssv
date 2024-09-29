@@ -113,8 +113,8 @@ func (l *forkingDV5Listener) closePreForkListener() {
 }
 
 type preAndPostForkIterator struct {
-	preForkIterator  enode.Iterator
-	postForkIterator enode.Iterator
+	preForkIterator  annotatedIterator
+	postForkIterator annotatedIterator
 	preForkFrequency int
 	node             *enode.Node
 	cursor           int
@@ -133,9 +133,10 @@ func NewPreAndPostForkIterator(
 	}
 	return &preAndPostForkIterator{
 		preForkFrequency: preForkFrequency,
-		preForkIterator:  preForkIterator,
-		postForkIterator: postForkIterator,
-		mutex:            sync.Mutex{},
+
+		// Annotate iterators for metric collection.
+		preForkIterator:  annotatedIterator{preForkIterator, "pre"},
+		postForkIterator: annotatedIterator{postForkIterator, "post"},
 	}, nil
 }
 
@@ -166,7 +167,7 @@ func (i *preAndPostForkIterator) Next() bool {
 }
 
 // firstNode picks the node from the first iterator that returns true for Next.
-func (i *preAndPostForkIterator) firstNode(iterators ...enode.Iterator) bool {
+func (i *preAndPostForkIterator) firstNode(iterators ...annotatedIterator) (ok bool) {
 	i.node = nil
 	for _, iterator := range iterators {
 		if iterator.Next() {
@@ -175,4 +176,18 @@ func (i *preAndPostForkIterator) firstNode(iterators ...enode.Iterator) bool {
 		}
 	}
 	return false
+}
+
+// annotatedIterator wraps an enode.Iterator with metrics collection.
+type annotatedIterator struct {
+	enode.Iterator
+	fork string
+}
+
+func (i *annotatedIterator) Next() bool {
+	if !i.Iterator.Next() {
+		return false
+	}
+	metricMixedFoundNodes.WithLabelValues(i.fork).Inc()
+	return true
 }
