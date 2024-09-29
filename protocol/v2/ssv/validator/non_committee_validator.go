@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 type CommitteeObserver struct {
@@ -55,7 +55,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		Domain:      opts.NetworkConfig.DomainType(),
 		Storage:     opts.Storage.Get(identifier.GetRoleType()),
 		Network:     opts.Network,
-		CutOffRound: specqbft.Round(conversion.CutoffRoundUint64()),
+		CutOffRound: roundtimer.CutOffRound,
 	}
 
 	// TODO: does the specific operator matters?

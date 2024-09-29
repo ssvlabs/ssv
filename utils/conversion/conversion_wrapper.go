@@ -2,24 +2,24 @@ package conversion
 
 import (
 	"fmt"
+	"math"
 	"time"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
 )
 
 var (
-	ErrNegativeTime = fmt.Errorf("time can't be negative")
+	ErrNegativeTime        = fmt.Errorf("time can't be negative")
+	ErrMaxDurationOverflow = fmt.Errorf("duration can't exceed max int64")
 )
 
-// LenUint64 - Returns the length of the slice as uint64, due length can't be negative
-func LenUint64[T any](slice []T) uint64 {
-	return uint64(len(slice))
-}
-
+// DurationFromUint64 converts uint64 to time.Duration
 func DurationFromUint64(t uint64) time.Duration {
+	if t > math.MaxInt64 {
+		return time.Duration(math.MaxInt64) // todo: error handling refactor
+	}
 	return time.Duration(t) // #nosec G115
 }
 
@@ -33,11 +33,6 @@ func BeaconRoleToRunnerRole(beaconRole spectypes.BeaconRole) spectypes.RunnerRol
 
 func RunnerRoleToBeaconRole(role spectypes.RunnerRole) spectypes.BeaconRole {
 	return spectypes.BeaconRole(role) // #nosec G115
-}
-
-// TODO fix the type in spec and remove this func
-func CutoffRoundUint64() uint64 {
-	return uint64(specqbft.CutoffRound) // #nosec G115
 }
 
 // DurationToUint64 returns error if duration is negative and converts time.Duration to uint64 safe otherwise

@@ -16,7 +16,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 const (
@@ -93,7 +92,7 @@ func (s *SSVShare) HasQuorum(cnt uint64) bool {
 }
 
 func (s *SSVShare) Quorum() uint64 {
-	q, _ := ComputeQuorumAndPartialQuorum(conversion.LenUint64(s.Committee))
+	q, _ := ComputeQuorumAndPartialQuorum(uint64(len((s.Committee))))
 	return q
 }
 

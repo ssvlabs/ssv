@@ -22,8 +22,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
-	"github.com/ssvlabs/ssv/utils/conversion"
-
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -1003,7 +1001,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		}
 	}
 
-	f := ssvtypes.ComputeF(conversion.LenUint64(share.Committee))
+	f := ssvtypes.ComputeF(uint64(len(share.Committee)))
 
 	operatorPEM, err := base64.StdEncoding.DecodeString(string(c.operatorDataStore.GetOperatorData().PublicKey))
 	if err != nil {
@@ -1244,7 +1242,7 @@ func SetupCommitteeRunners(
 			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: specqbft.Round(conversion.CutoffRoundUint64()),
+			CutOffRound: roundtimer.CutOffRound,
 		}
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.AlanDomainType, options.Operator.CommitteeID[:], role)
@@ -1307,7 +1305,7 @@ func SetupRunners(
 			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: specqbft.Round(conversion.CutoffRoundUint64()),
+			CutOffRound: roundtimer.CutOffRound,
 		}
 		config.ValueCheckF = valueCheckF
 

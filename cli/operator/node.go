@@ -437,6 +437,7 @@ func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, netwo
 			logger.Fatal(err.Error())
 		}
 	} else {
+
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
 			err = fmt.Errorf("failed to store config: %w", err)
 			logger.Fatal(err.Error())

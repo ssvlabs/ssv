@@ -23,6 +23,8 @@ const (
 	SlowTimeout           = 2 * time.Minute
 )
 
+var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
+
 // Timer is an interface for a round timer, calling the UponRoundTimeout when times out
 type Timer interface {
 	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
@@ -51,7 +53,7 @@ type RoundTimer struct {
 	// result holds the result of the timer
 	done OnRoundTimeoutF
 	// round is the current round of the timer
-	round int64
+	round uint64
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
@@ -149,12 +151,12 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 
 // Round returns a round.
 func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadInt64(&t.round)) // #nosec G115
+	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
 }
 
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreInt64(&t.round, int64(round)) // #nosec G115
+	atomic.StoreUint64(&t.round, uint64(round))
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer

@@ -82,7 +82,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	committee []spectypes.OperatorID,
 ) error {
 	signers := signedSSVMessage.OperatorIDs
-	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(conversion.LenUint64(committee))
+	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	msgType := consensusMessage.MsgType
 
 	if len(signers) > 1 {

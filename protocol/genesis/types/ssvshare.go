@@ -16,7 +16,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 const (
@@ -51,7 +50,7 @@ func (s *SSVShare) Decode(data []byte) error {
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode SSVShare: %w", err)
 	}
-	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(conversion.LenUint64(s.Committee))
+	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
 	return nil
 }
 

@@ -5,11 +5,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	typesv2 "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 func ConvertToGenesisShare(share *spectypes.Share, operator *spectypes.CommitteeMember) *genesisspectypes.Share {
-	q, pc := ComputeQuorumAndPartialQuorum(conversion.LenUint64(share.Committee))
+	q, pc := ComputeQuorumAndPartialQuorum(uint64(len((share.Committee))))
 
 	key := make([]byte, len(share.ValidatorPubKey))
 	copy(key, share.ValidatorPubKey[:])
