@@ -124,8 +124,10 @@ type annotatedIterator struct {
 
 func (i *annotatedIterator) Next() bool {
 	if !i.Iterator.Next() {
+		zap.L().Debug("iterated node: false", zap.String("fork", i.fork))
 		return false
 	}
+	zap.L().Debug("iterated node: true", zap.String("fork", i.fork), zap.String("node", i.Iterator.Node().String()))
 	metricIteratedNodes.WithLabelValues(i.fork).Inc()
 	return true
 }

@@ -219,8 +219,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 
 	// Get the protocol ID, or set to default if not provided
 	protocolID := dvs.networkConfig.DiscoveryProtocolID
-	emptyDiscoveryProtocolID := (networkconfig.NetworkConfig{}).DiscoveryProtocolID
-	if protocolID == emptyDiscoveryProtocolID {
+	emptyProtocolID := [6]byte{}
+	if protocolID == emptyProtocolID {
 		protocolID = DefaultSSVProtocolID
 	}
 
