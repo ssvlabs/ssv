@@ -9,7 +9,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/exporter/convert"
 )
 
 type Hex []byte
@@ -75,11 +75,10 @@ func (us *Uint64Slice) Bind(value string) error {
 	return nil
 }
 
-type Role spectypes.BeaconRole
+type Role spectypes.RunnerRole
 
 func (r *Role) Bind(value string) error {
-	// todo: check if need genesis?
-	role, err := message.BeaconRoleFromString(value)
+	role, err := convert.RunnerRoleFromString(value)
 	if err != nil {
 		return err
 	}
@@ -88,7 +87,7 @@ func (r *Role) Bind(value string) error {
 }
 
 func (r Role) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + spectypes.BeaconRole(r).String() + `"`), nil
+	return []byte(`"` + spectypes.RunnerRole(r).String() + `"`), nil
 }
 
 func (r *Role) UnmarshalJSON(data []byte) error {

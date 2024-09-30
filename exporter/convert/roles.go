@@ -1,5 +1,7 @@
 package convert
 
+import "fmt"
+
 type RunnerRole int32
 
 const (
@@ -57,5 +59,28 @@ func (r RunnerRole) ToBeaconRole() string {
 		return "VOLUNTARY_EXIT"
 	default:
 		return "UNDEFINED"
+	}
+}
+
+func RunnerRoleFromString(value string) (RunnerRole, error) {
+	switch value {
+	case "ATTESTER":
+		return RoleAttester, nil
+	case "AGGREGATOR":
+		return RoleAggregator, nil
+	case "PROPOSER":
+		return RoleProposer, nil
+	case "SYNC_COMMITTEE":
+		return RoleSyncCommittee, nil
+	case "SYNC_COMMITTEE_CONTRIBUTION":
+		return RoleSyncCommitteeContribution, nil
+	case "VALIDATOR_REGISTRATION":
+		return RoleValidatorRegistration, nil
+	case "VOLUNTARY_EXIT":
+		return RoleVoluntaryExit, nil
+	case "COMMITTEE":
+		return RoleCommittee, nil
+	default:
+		return RoleCommittee, fmt.Errorf("invalid runner role: %s", value)
 	}
 }
