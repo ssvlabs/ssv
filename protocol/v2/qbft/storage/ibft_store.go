@@ -33,8 +33,8 @@ type ParticipantsRangeEntry struct {
 	Identifier convert.MessageID
 }
 
-// InstanceStore manages instance data.
-type InstanceStore interface {
+// QBFTStore is the store used by QBFT components
+type QBFTStore interface {
 	// GetHighestInstance returns the highest instance for the given identifier.
 	GetHighestInstance(identifier []byte) (*StoredInstance, error) // test only but some skipped
 
@@ -49,9 +49,4 @@ type InstanceStore interface {
 
 	// GetParticipants returns participants in quorum for the given slot.
 	GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
-}
-
-// QBFTStore is the store used by QBFT components
-type QBFTStore interface {
-	InstanceStore
 }
