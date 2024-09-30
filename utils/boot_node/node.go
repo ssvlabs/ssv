@@ -170,13 +170,13 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, p
 
 	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
 		PrivateKey: privateKey,
-		Unhandled:  unhandled,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	postForkListener, err := discover.ListenV5(conn, localNode, discover.Config{
 		PrivateKey:   privateKey,
+		Unhandled:    unhandled,
 		V5ProtocolID: &n.network.DiscoveryProtocolID,
 	})
 	if err != nil {
