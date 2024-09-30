@@ -23,7 +23,8 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMes
 	}
 
 	// try to find instance
-	inst := c.InstanceForHeight(logger, msg.QBFTMessage.Height)
+	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
+
 	prevDecided := inst != nil && inst.State.Decided
 	isFutureDecided := msg.QBFTMessage.Height > c.Height
 
