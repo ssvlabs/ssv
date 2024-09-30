@@ -1354,7 +1354,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				sinceSlotStart := time.Duration(0)
 				for {
 					currentRound, err := validator.currentEstimatedRound(sinceSlotStart)
-					if currentRound == round || err != nil {
+					require.NoError(t, err)
+					if currentRound == round {
 						break
 					}
 					sinceSlotStart += roundtimer.QuickTimeout

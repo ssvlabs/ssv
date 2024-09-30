@@ -378,22 +378,18 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]uint64, 0)
-		subnet := uint64(0)
-		for _, active := range updatedSubnets {
+		for subnet, active := range updatedSubnets {
 			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				addedSubnets = append(addedSubnets, subnet)
+				addedSubnets = append(addedSubnets, uint64(subnet))
 			}
-			subnet++
 		}
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]uint64, 0)
-		subnet = uint64(0)
-		for _, active := range registeredSubnets {
+		for subnet, active := range registeredSubnets {
 			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
-				removedSubnets = append(removedSubnets, subnet)
+				removedSubnets = append(removedSubnets, uint64(subnet))
 			}
-			subnet++
 		}
 
 		registeredSubnets = updatedSubnets
