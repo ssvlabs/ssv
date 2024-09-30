@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -15,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -136,6 +138,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		pubsub.WithMaxMessageSize(validation.MaxEncodedMsgSize),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
