@@ -134,14 +134,6 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 }
 
 func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, privateKey *ecdsa.PrivateKey) discovery.Listener {
-	preForkCfg := discover.Config{
-		PrivateKey: privateKey,
-	}
-	postForkCfg := discover.Config{
-		PrivateKey:   privateKey,
-		V5ProtocolID: &n.network.DiscoveryProtocolID,
-	}
-
 	// Create the UDP listener and the LocalNode record.
 	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
@@ -167,7 +159,7 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, p
 	if err != nil {
 		log.Fatal(err)
 	}
-	localNode, err := n.createLocalNode(logger, preForkCfg.PrivateKey, ip, port)
+	localNode, err := n.createLocalNode(logger, privateKey, ip, port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -176,11 +168,17 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, p
 	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
 	sharedConn := &discovery.SharedUDPConn{UDPConn: conn, Unhandled: unhandled}
 
-	preForkListener, err := discover.ListenV5(sharedConn, localNode, preForkCfg)
+	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
+		PrivateKey: privateKey,
+		Unhandled:  unhandled,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	postForkListener, err := discover.ListenV5(conn, localNode, postForkCfg)
+	postForkListener, err := discover.ListenV5(conn, localNode, discover.Config{
+		PrivateKey:   privateKey,
+		V5ProtocolID: &n.network.DiscoveryProtocolID,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
