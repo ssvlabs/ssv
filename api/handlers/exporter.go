@@ -18,6 +18,15 @@ type Exporter struct {
 	QBFTStores *ibftstorage.QBFTStores
 }
 
+type ParticipantResponse struct {
+	Role      string `json:"role"`
+	Slot      uint64 `json:"slot"`
+	PublicKey string `json:"public_key"`
+	Message   struct {
+		Signers []uint64 `json:"Signers"`
+	} `json:"message"`
+}
+
 func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
 		From    int           `json:"from"`
@@ -26,7 +35,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		PubKeys api.HexSlice  `json:"pubkeys"`
 	}
 	var response struct {
-		Data []*exporterapi.ParticipantsAPI `json:"data"`
+		Data []*ParticipantResponse `json:"data"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -46,7 +55,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
-	response.Data = []*exporterapi.ParticipantsAPI{}
+	response.Data = []*ParticipantResponse{}
 	for _, role := range request.Roles {
 		roleStorage := e.QBFTStores.Get(convert.RunnerRole(role))
 		if roleStorage == nil {
@@ -72,9 +81,22 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 				return fmt.Errorf("invalid type for participants API data")
 			}
 
-			response.Data = append(response.Data, apiData...)
+			for _, apiMsg := range apiData {
+				response.Data = append(response.Data, transformToParticipantResponse(apiMsg))
+			}
 		}
 	}
 
 	return api.Render(w, r, response)
+}
+
+func transformToParticipantResponse(apiMsg *exporterapi.ParticipantsAPI) *ParticipantResponse {
+	response := &ParticipantResponse{
+		Role:      apiMsg.Role,
+		Slot:      uint64(apiMsg.Slot),
+		PublicKey: apiMsg.ValidatorPK,
+	}
+	response.Message.Signers = apiMsg.Signers
+
+	return response
 }
