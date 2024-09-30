@@ -122,7 +122,6 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		// save participants
 		for _, d := range decided250Seq {
-			require.NoError(t, ibftStorage.Get(role).SaveInstance(d))
 			_, err := ibftStorage.Get(role).UpdateParticipants(
 				convert.MessageID(d.DecidedMessage.SSVMessage.MsgID),
 				phase0.Slot(d.State.Height),
