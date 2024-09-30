@@ -30,9 +30,7 @@ func (h *Hex) Bind(value string) error {
 	if value == "" {
 		return nil
 	}
-	if strings.HasPrefix(value, "0x") {
-		value = value[2:] // remove "0x" prefix
-	}
+	value = strings.TrimPrefix(value, "0x")
 	b, err := hex.DecodeString(value)
 	if err != nil {
 		return err
