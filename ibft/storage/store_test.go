@@ -58,7 +58,6 @@ func TestCleanInstances(t *testing.T) {
 	// add different msgID
 	differMsgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("differ_pk"), spectypes.RoleCommittee)
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
-	require.NoError(t, storage.SaveHighestAndHistoricalInstance(generateInstance(differMsgID, specqbft.Height(1))))
 
 	for i := 0; i < msgsCount; i++ {
 		res, err := storage.GetInstance(msgID[:], specqbft.Height(i))
