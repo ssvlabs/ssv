@@ -72,9 +72,6 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 
 	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
-	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
-		opts.Logger.Debug("❗ failed to load highest instance", zap.Error(err))
-	}
 
 	return &CommitteeObserver{
 		qbftController:         ctrl,
