@@ -60,20 +60,24 @@ func TestCleanInstances(t *testing.T) {
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
 	require.NoError(t, storage.SaveHighestAndHistoricalInstance(generateInstance(differMsgID, specqbft.Height(1))))
 
-	res, err := storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
-	require.NoError(t, err)
-	require.Equal(t, msgsCount, len(res))
+	for i := 0; i < msgsCount; i++ {
+		res, err := storage.GetInstance(msgID[:], specqbft.Height(i))
+		require.NoError(t, err)
+		require.NotNil(t, res)
+	}
 
 	// remove all instances
 	require.NoError(t, storage.CleanAllInstances(logger, msgID[:]))
-	res, err = storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
-	require.NoError(t, err)
-	require.Equal(t, 0, len(res))
+	for i := 0; i < msgsCount; i++ {
+		res, err := storage.GetInstance(msgID[:], specqbft.Height(i))
+		require.NoError(t, err)
+		require.Nil(t, res)
+	}
 
 	// check other msgID
-	res, err = storage.GetInstancesInRange(differMsgID[:], 0, specqbft.Height(msgsCount))
+	res, err := storage.GetInstance(differMsgID[:], 1)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.NotNil(t, 1, res)
 }
 
 func TestSaveAndFetchState(t *testing.T) {
@@ -102,11 +106,8 @@ func TestSaveAndFetchState(t *testing.T) {
 
 	require.NoError(t, storage.SaveInstance(instance))
 
-	savedInstances, err := storage.GetInstancesInRange(identifier[:], 1, 1)
+	savedInstance, err := storage.GetInstance(identifier[:], 1)
 	require.NoError(t, err)
-	require.NotNil(t, savedInstances)
-	require.Len(t, savedInstances, 1)
-	savedInstance := savedInstances[0]
 
 	require.Equal(t, specqbft.Height(1), savedInstance.State.Height)
 	require.Equal(t, specqbft.Round(1), savedInstance.State.Round)
