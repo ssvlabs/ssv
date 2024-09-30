@@ -489,7 +489,6 @@ func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *comm
 
 		return ncv.OnProposalMsg(msg)
 	} else if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		c.logger.Debug("handleNonCommitteeMessages: processing partial signature message", zap.String("msg_id", msg.GetID().String()))
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return err
