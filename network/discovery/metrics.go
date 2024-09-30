@@ -25,7 +25,7 @@ var (
 	})
 	metricIteratedNodes = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:discovery:iterated_nodes",
-		Help: "Counts the number of times a node was iterated using the mixed iterator (preAndPostForkIterator)",
+		Help: "Counts the number of times a node was iterated using the mixed iterator",
 	}, []string{"fork"})
 )
 
