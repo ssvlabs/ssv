@@ -53,11 +53,7 @@ type bootNode struct {
 }
 
 // New is the constructor of ssvNode
-func New(opts Options) (Node, error) {
-	networkConfig, err := networkconfig.GetNetworkConfigByName(opts.Network)
-	if err != nil {
-		return nil, err
-	}
+func New(networkConfig networkconfig.NetworkConfig, opts Options) (Node, error) {
 	return &bootNode{
 		privateKey:  opts.PrivateKey,
 		discv5port:  opts.UDPPort,
@@ -113,7 +109,11 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	}
 	listener := n.createListener(logger, ipAddr, n.discv5port, cfg)
 	node := listener.Self()
-	logger.Info("Running", zap.String("node", node.String()))
+	logger.Info("Running",
+		zap.String("node", node.String()),
+		zap.String("network", n.network.Name),
+		fields.ProtocolID(n.network.DiscoveryProtocolID),
+	)
 
 	handler := &handler{
 		listener: listener,
