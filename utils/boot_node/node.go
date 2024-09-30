@@ -168,16 +168,17 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, p
 	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
 	sharedConn := &discovery.SharedUDPConn{UDPConn: conn, Unhandled: unhandled}
 
-	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
-		PrivateKey: privateKey,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
 	postForkListener, err := discover.ListenV5(conn, localNode, discover.Config{
 		PrivateKey:   privateKey,
 		Unhandled:    unhandled,
 		V5ProtocolID: &n.network.DiscoveryProtocolID,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
+		PrivateKey: privateKey,
 	})
 	if err != nil {
 		log.Fatal(err)
