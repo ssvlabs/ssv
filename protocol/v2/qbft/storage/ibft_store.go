@@ -36,10 +36,7 @@ type ParticipantsRangeEntry struct {
 // InstanceStore manages instance data.
 type InstanceStore interface {
 	// GetHighestInstance returns the highest instance for the given identifier.
-	GetHighestInstance(identifier []byte) (*StoredInstance, error)
-
-	// GetInstancesInRange returns historical instances in the given range.
-	GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*StoredInstance, error)
+	GetHighestInstance(identifier []byte) (*StoredInstance, error) // test only but some skipped
 
 	// SaveInstance updates/inserts the given instance to it's identifier's history.
 	SaveInstance(instance *StoredInstance) error
