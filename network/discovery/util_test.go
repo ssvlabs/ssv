@@ -29,7 +29,7 @@ import (
 var (
 	testLogger    = zap.NewNop()
 	testCtx       = context.Background()
-	testNetConfig = networkconfig.Holesky
+	testNetConfig = networkconfig.TestNetwork
 
 	testIP      = "127.0.0.1"
 	testBindIP  = "127.0.0.1"

@@ -5,9 +5,12 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"go.uber.org/zap"
+)
+
+const (
+	defaultIteratorTimeout = 5 * time.Second
 )
 
 // forkingDV5Listener wraps a pre-fork and a post-fork listener.
@@ -17,15 +20,20 @@ type forkingDV5Listener struct {
 	logger           *zap.Logger
 	preForkListener  listener
 	postForkListener listener
+	iteratorTimeout  time.Duration
 	closeOnce        sync.Once
 	netCfg           networkconfig.NetworkConfig
 }
 
-func newForkingDV5Listener(logger *zap.Logger, preFork, postFork listener, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
+func newForkingDV5Listener(logger *zap.Logger, preFork, postFork listener, iteratorTimeout time.Duration, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
+	if iteratorTimeout == 0 {
+		iteratorTimeout = defaultIteratorTimeout
+	}
 	return &forkingDV5Listener{
 		logger:           logger,
 		preForkListener:  preFork,
 		postForkListener: postFork,
+		iteratorTimeout:  iteratorTimeout,
 		netCfg:           netConfig,
 	}
 }
@@ -51,28 +59,9 @@ func (l *forkingDV5Listener) RandomNodes() enode.Iterator {
 		return l.postForkListener.RandomNodes()
 	}
 
-	preForkIterator := l.preForkListener.RandomNodes()
-	postForkIterator := l.postForkListener.RandomNodes()
-	iterator, err := NewPreAndPostForkIterator(preForkIterator, postForkIterator, 5)
-	if err != nil {
-		// Default to post-fork iterator on error.
-		l.logger.Error("failed to create pre and post-fork iterator", zap.Error(err))
-		return postForkIterator
-	}
-	return iterator
-}
-
-func (l *forkingDV5Listener) RandomNodesFairMix() enode.Iterator {
-	if l.netCfg.PastAlanFork() {
-		l.closePreForkListener()
-		return l.postForkListener.RandomNodes()
-	}
-
-	preForkIterator := l.preForkListener.RandomNodes()
-	postForkIterator := l.postForkListener.RandomNodes()
-	fairMix := enode.NewFairMix(time.Second * 5)
-	fairMix.AddSource(&annotatedIterator{preForkIterator, "pre"})
-	fairMix.AddSource(&annotatedIterator{postForkIterator, "post"})
+	fairMix := enode.NewFairMix(l.iteratorTimeout)
+	fairMix.AddSource(&annotatedIterator{l.preForkListener.RandomNodes(), "pre"})
+	fairMix.AddSource(&annotatedIterator{l.postForkListener.RandomNodes(), "post"})
 	return fairMix
 }
 
@@ -125,72 +114,6 @@ func (l *forkingDV5Listener) closePreForkListener() {
 	l.closeOnce.Do(func() {
 		l.preForkListener.Close()
 	})
-}
-
-type preAndPostForkIterator struct {
-	preForkIterator  annotatedIterator
-	postForkIterator annotatedIterator
-	preForkFrequency int
-	node             *enode.Node
-	cursor           int
-	mutex            sync.Mutex
-}
-
-// NewPreAndPostForkIterator returns an iterator that yields from the given iterators
-// in a round-robin fashion, where in 1 of preForkFrequency times the preForkIterator is invoked.
-func NewPreAndPostForkIterator(
-	preForkIterator enode.Iterator,
-	postForkIterator enode.Iterator,
-	preForkFrequency int,
-) (enode.Iterator, error) {
-	if preForkFrequency < 1 {
-		return nil, errors.New("preForkFrequency must be at least 1")
-	}
-	return &preAndPostForkIterator{
-		preForkFrequency: preForkFrequency,
-
-		// Annotate iterators for metric collection.
-		preForkIterator:  annotatedIterator{preForkIterator, "pre"},
-		postForkIterator: annotatedIterator{postForkIterator, "post"},
-	}, nil
-}
-
-func (i *preAndPostForkIterator) Close() {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-
-	i.preForkIterator.Close()
-	i.postForkIterator.Close()
-}
-
-func (i *preAndPostForkIterator) Node() *enode.Node {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-
-	return i.node
-}
-
-func (i *preAndPostForkIterator) Next() bool {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-
-	i.cursor++
-	if (i.cursor % i.preForkFrequency) == 0 {
-		return i.firstNode(i.preForkIterator, i.postForkIterator)
-	}
-	return i.firstNode(i.postForkIterator, i.preForkIterator)
-}
-
-// firstNode picks the node from the first iterator that returns true for Next.
-func (i *preAndPostForkIterator) firstNode(iterators ...annotatedIterator) (ok bool) {
-	i.node = nil
-	for _, iterator := range iterators {
-		if iterator.Next() {
-			i.node = iterator.Node()
-			return true
-		}
-	}
-	return false
 }
 
 // annotatedIterator wraps an enode.Iterator with metrics collection.

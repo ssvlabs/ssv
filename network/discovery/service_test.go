@@ -237,6 +237,11 @@ func TestDiscV5Service_Node(t *testing.T) {
 func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs := testingDiscovery(t)
 
+	defer func() {
+		err := dvs.conn.Close()
+		require.NoError(t, err)
+	}()
+
 	// Valid peer
 	err := dvs.checkPeer(testLogger, ToPeerEvent(NewTestingNode(t)))
 	require.NoError(t, err)
@@ -259,7 +264,7 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 
 	// Mismatching domains
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
-	require.ErrorContains(t, err, "mismatched domain type: neither 00000000 nor 00000000 match 00000502")
+	require.ErrorContains(t, err, "mismatched domain type: neither 00000000 nor 00000000 match 00000302")
 
 	// No subnets
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithoutSubnets(t)))
@@ -280,10 +285,6 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	subnets[10] = 1
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
-
-	// Close
-	err = dvs.conn.Close()
-	require.NoError(t, err)
 }
 
 func TestDiscV5ServiceListenerType(t *testing.T) {

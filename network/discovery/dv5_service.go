@@ -284,7 +284,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		fields.Domain(discOpts.NetworkConfig.DomainType()),
 	)
 
-	dvs.dv5Listener = newForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, dvs.networkConfig)
+	dvs.dv5Listener = newForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
 	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil
@@ -298,7 +298,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
 func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
-	iterator := dvs.dv5Listener.(*forkingDV5Listener).RandomNodesFairMix()
+	iterator := dvs.dv5Listener.RandomNodes()
 	for _, f := range filters {
 		iterator = enode.Filter(iterator, f)
 	}

@@ -1,96 +1,74 @@
 package discovery
 
 import (
-	"slices"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestPreAndPostForkIterator_Next(t *testing.T) {
+func TestFairMixIterator_Next(t *testing.T) {
 	// Mock iterators
 	preforkNodes := NewTestingNodes(t, 2)
 	postForkNodes := NewTestingNodes(t, 2)
-	preFork := NewMockIterator(preforkNodes)
-	postFork := NewMockIterator(postForkNodes)
 
-	iterator, err := NewPreAndPostForkIterator(preFork, postFork, 5)
-	assert.NoError(t, err)
+	iterator := enode.NewFairMix(5 * time.Millisecond)
+	defer iterator.Close()
+	iterator.AddSource(NewMockIterator(preforkNodes))
+	iterator.AddSource(NewMockIterator(postForkNodes))
 
-	for _, node := range postForkNodes {
-		assert.True(t, iterator.Next())
-		assert.Equal(t, node, iterator.Node())
+	expectedNodes := append(preforkNodes, postForkNodes...)
+	actualNodes := make([]*enode.Node, 0, len(expectedNodes))
+	for i := 0; i < 4; i++ {
+		require.True(t, iterator.Next())
+		actualNodes = append(actualNodes, iterator.Node())
 	}
-
-	for _, node := range preforkNodes {
-		assert.True(t, iterator.Next())
-		assert.Equal(t, node, iterator.Node())
-	}
+	require.ElementsMatch(t, expectedNodes, actualNodes)
 
 	// No more elements
-	assert.False(t, iterator.Next())
+	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
 }
 
-func TestPreAndPostForkIterator_Next_RoundRobin(t *testing.T) {
-	const preforkFrequency = 5
-
-	// Mock iterators
-	preforkNodes := NewTestingNodes(t, 20)
-	postForkNodes := NewTestingNodes(t, 80)
-	preFork := NewMockIterator(preforkNodes)
-	postFork := NewMockIterator(postForkNodes)
-
-	iterator, err := NewPreAndPostForkIterator(preFork, postFork, preforkFrequency)
-	assert.NoError(t, err)
-
-	i, j := 0, 0
-	for cursor := 1; cursor <= 100; cursor++ {
-		var expectedNode *enode.Node
-		if cursor%preforkFrequency == 0 {
-			expectedNode = preforkNodes[j]
-			j++
-		} else {
-			expectedNode = postForkNodes[i]
-			i++
-		}
-		assert.True(t, iterator.Next())
-		if !assert.ObjectsAreEqual(expectedNode, iterator.Node()) {
-			gotPrefork := !slices.Contains(preforkNodes, iterator.Node())
-			t.Fatalf("Unexpected node at iteration %d. Expected %v, got %v (got pre-fork: %t)", cursor, expectedNode, iterator.Node(), gotPrefork)
-		}
-	}
-
-	// No more elements
-	assert.False(t, iterator.Next())
-}
-
-func TestPreAndPostForkIterator_Next_False(t *testing.T) {
+func TestFairMixIterator_Next_False(t *testing.T) {
 	// Mock iterators
 	// Nil means return false on Next()
 	preforkNodes := []*enode.Node{NewTestingNode(t), nil, NewTestingNode(t)}
-	postForkNodes := []*enode.Node{nil, NewTestingNode(t), NewTestingNode(t)}
+	postForkNodes := []*enode.Node{NewTestingNode(t), NewTestingNode(t), nil}
 	preFork := NewMockIterator(preforkNodes)
 	postFork := NewMockIterator(postForkNodes)
 
-	iterator, err := NewPreAndPostForkIterator(preFork, postFork, 2)
-	assert.NoError(t, err)
+	iterator := enode.NewFairMix(5 * time.Millisecond)
+	defer iterator.Close()
+	iterator.AddSource(preFork)
+	iterator.AddSource(postFork)
 
-	expectNextFrom := func(node *enode.Node) {
-		assert.True(t, iterator.Next())
-		assert.Equal(t, node, iterator.Node())
+	var expectedNodes []*enode.Node
+	for _, node := range preforkNodes {
+		if node == nil {
+			break
+		}
+		expectedNodes = append(expectedNodes, node)
+	}
+	for _, node := range postForkNodes {
+		if node == nil {
+			break
+		}
+		expectedNodes = append(expectedNodes, node)
 	}
 
-	expectNextFrom(preforkNodes[0])  // Round is post, but nil so fallback to pre
-	expectNextFrom(postForkNodes[1]) // Round is pre, but nil so fallback to post
-	expectNextFrom(postForkNodes[2]) // Round is post
-	expectNextFrom(preforkNodes[2])  // Round is pre
+	var actualNodes []*enode.Node
+	for i := 0; i < len(expectedNodes); i++ {
+		requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+		actualNodes = append(actualNodes, iterator.Node())
+	}
+	require.ElementsMatch(t, expectedNodes, actualNodes)
 
 	// No more elements
-	assert.False(t, iterator.Next())
+	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
 }
 
-func TestPreAndPostForkIterator_PostForkEmpty(t *testing.T) {
+func TestFairMixIterator_PostForkEmpty(t *testing.T) {
 	// Mock nodes
 	node1 := NewTestingNode(t)
 	node2 := NewTestingNode(t)
@@ -99,24 +77,26 @@ func TestPreAndPostForkIterator_PostForkEmpty(t *testing.T) {
 	preFork := NewMockIterator([]*enode.Node{node2, node1}) // preFork has 2 nodes
 	postFork := NewMockIterator([]*enode.Node{})            // postFork has no node
 
-	iterator, err := NewPreAndPostForkIterator(preFork, postFork, 5)
-	assert.NoError(t, err)
+	iterator := enode.NewFairMix(5 * time.Millisecond)
+	defer iterator.Close()
+	iterator.AddSource(preFork)
+	iterator.AddSource(postFork)
 
-	assert.False(t, postFork.closed) // postFork iterator must start openened
+	require.False(t, postFork.closed) // postFork iterator must start openened
 
 	// First check: preFork first node after switch
-	assert.True(t, iterator.Next())
-	assert.Equal(t, node2, iterator.Node())
+	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	require.Equal(t, node2, iterator.Node())
 
 	// Second check: preFork second node
-	assert.True(t, iterator.Next())
-	assert.Equal(t, node1, iterator.Node())
+	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	require.Equal(t, node1, iterator.Node())
 
 	// No more elements
-	assert.False(t, iterator.Next())
+	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
 }
 
-func TestPreAndPostForkIterator_PreForkEmpty(t *testing.T) {
+func TestFairMixIterator_PreForkEmpty(t *testing.T) {
 	// Mock nodes
 	node1 := NewTestingNode(t)
 	node2 := NewTestingNode(t)
@@ -125,39 +105,19 @@ func TestPreAndPostForkIterator_PreForkEmpty(t *testing.T) {
 	preFork := NewMockIterator([]*enode.Node{})              // preFork has no node
 	postFork := NewMockIterator([]*enode.Node{node1, node2}) // postFork has 2 nodes
 
-	iterator, err := NewPreAndPostForkIterator(preFork, postFork, 5)
-	assert.NoError(t, err)
+	iterator := enode.NewFairMix(5 * time.Millisecond)
+	defer iterator.Close()
+	iterator.AddSource(preFork)
+	iterator.AddSource(postFork)
 
 	// First check: postFork first node
-	assert.True(t, iterator.Next())
-	assert.Equal(t, node1, iterator.Node())
+	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	require.Equal(t, node1, iterator.Node())
 
 	// Second check: postFork second node
-	assert.True(t, iterator.Next())
-	assert.Equal(t, node2, iterator.Node())
+	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	require.Equal(t, node2, iterator.Node())
 
 	// No more elements even after switch
-	assert.False(t, iterator.Next())
-}
-
-func TestPreAndPostForkIterator_Close(t *testing.T) {
-	// Mock iterators
-	preFork := NewMockIterator(nil)
-	postFork := NewMockIterator(nil)
-
-	iterator, err := NewPreAndPostForkIterator(preFork, postFork, 5)
-	assert.NoError(t, err)
-
-	// Check that both iterators are opened
-	assert.False(t, preFork.closed)
-	assert.False(t, postFork.closed)
-
-	// No elements
-	assert.False(t, iterator.Next())
-
-	iterator.Close()
-
-	// Check that both iterators are closed
-	assert.True(t, preFork.closed)
-	assert.True(t, postFork.closed)
+	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
 }
