@@ -54,18 +54,17 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
-
+func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) (*instance.Instance, error) {
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return errors.Wrap(err, "value invalid")
+		return nil, errors.Wrap(err, "value invalid")
 	}
 
 	if height < c.Height {
-		return errors.New("attempting to start an instance with a past height")
+		return nil, errors.New("attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return errors.New("instance already running")
+		return nil, errors.New("instance already running")
 	}
 
 	c.Height = height
@@ -73,7 +72,8 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height
 	newInstance := c.addAndStoreNewInstance()
 	newInstance.Start(logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
-	return nil
+
+	return newInstance, nil
 }
 
 func (c *Controller) forceStopAllInstanceExceptCurrent() {
@@ -122,7 +122,7 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.Sig
 }
 
 func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
-	inst := c.InstanceForHeight(logger, msg.QBFTMessage.Height)
+	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
 	}
@@ -160,37 +160,6 @@ func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	}
 
 	return nil
-}
-
-func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Height) *instance.Instance {
-	// Search in memory.
-	if inst := c.StoredInstances.FindInstance(height); inst != nil {
-		return inst
-	}
-
-	// Search in storage, if full node.
-	if !c.fullNode {
-		return nil
-	}
-
-	/*
-		storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
-		if err != nil {
-			logger.Debug("❗ could not load instance from storage",
-				fields.Height(height),
-				zap.Uint64("ctrl_height", uint64(c.Height)),
-				zap.Error(err))
-			return nil
-		}
-		if storedInst == nil {
-			return nil
-		}
-		inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier, storedInst.State.Height, c.OperatorSigner)
-		inst.State = storedInst.State
-		return inst
-	*/
-
-	return nil // TODO:1720 find solution for this method
 }
 
 // GetIdentifier returns QBFT Identifier, used to identify messages
