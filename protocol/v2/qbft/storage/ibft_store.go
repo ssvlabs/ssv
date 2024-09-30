@@ -41,9 +41,6 @@ type InstanceStore interface {
 	// SaveInstance updates/inserts the given instance to it's identifier's history.
 	SaveInstance(instance *StoredInstance) error
 
-	// SaveHighestAndHistoricalInstance saves the given instance as both the highest and historical.
-	SaveHighestAndHistoricalInstance(instance *StoredInstance) error
-
 	// GetInstance returns an historical instance for the given identifier and height.
 	GetInstance(identifier []byte, height specqbft.Height) (*StoredInstance, error)
 
