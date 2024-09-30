@@ -355,21 +355,24 @@ func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) (genesiss
 }
 
 func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (genesisspecqbft.Round, error) {
-	delta, err := casts.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
+	// Quick rounds (<= QuickTimeoutThreshold)
+	quickRounds, err := casts.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
 	if err != nil {
 		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
 	}
-	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(delta); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) {
+	currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(quickRounds)
+	if currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) {
 		return currentQuickRound, nil
 	}
 
+	// Slow rounds (> QuickTimeoutThreshold)
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
-	delta, err = casts.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
+	slowRounds, err := casts.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
 	if err != nil {
 		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
 	}
-	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(delta)
-	return estimatedRound, nil
+	currentSlowRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(slowRounds)
+	return currentSlowRound, nil
 }
 
 func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole) (time.Duration, error) {
