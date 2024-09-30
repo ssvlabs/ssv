@@ -11,7 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/utils/conversion"
+	"github.com/ssvlabs/ssv/utils/casts"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -163,7 +163,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if err := qbftMsg.Validate(); err != nil {
 			return errors.Wrap(err, "invalid qbft Message")
 		}
-		logger = v.loggerForDuty(logger, conversion.RunnerRoleToBeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height))
+		logger = v.loggerForDuty(logger, casts.RunnerRoleToBeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height))
 		logger = logger.With(fields.Height(qbftMsg.Height))
 		return dutyRunner.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
@@ -173,7 +173,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		logger = v.loggerForDuty(logger, conversion.RunnerRoleToBeaconRole(messageID.GetRoleType()), signedMsg.Slot)
+		logger = v.loggerForDuty(logger, casts.RunnerRoleToBeaconRole(messageID.GetRoleType()), signedMsg.Slot)
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")
@@ -196,7 +196,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole, slot phase0.Slot) *zap.Logger {
 	logger = logger.With(fields.Slot(slot))
-	if dutyID, ok := v.dutyIDs.Get(conversion.BeaconRoleToRunnerRole(role)); ok {
+	if dutyID, ok := v.dutyIDs.Get(casts.BeaconRoleToRunnerRole(role)); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}
 	return logger

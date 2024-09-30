@@ -4,9 +4,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv/utils/casts"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/utils/conversion"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
@@ -80,7 +79,7 @@ func (s *slotTicker) Next() <-chan time.Time {
 		nextSlot = s.slot + 1
 		s.logger.Debug("double tick", zap.Uint64("slot", uint64(s.slot)))
 	}
-	nextSlotStartTime := s.genesisTime.Add(conversion.DurationFromUint64(uint64(nextSlot)) * s.slotDuration)
+	nextSlotStartTime := s.genesisTime.Add(casts.DurationFromUint64(uint64(nextSlot)) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
 	s.slot = nextSlot
 	return s.timer.C()

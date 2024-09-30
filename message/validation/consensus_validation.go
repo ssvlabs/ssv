@@ -18,7 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/conversion"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -378,7 +378,7 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 }
 
 func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (specqbft.Round, error) {
-	delta, err := conversion.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
+	delta, err := casts.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
 	if err != nil {
 		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
 	}
@@ -387,7 +387,7 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	delta, err = conversion.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
+	delta, err = casts.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
 	if err != nil {
 		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
 	}
