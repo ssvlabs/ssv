@@ -75,6 +75,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 				Identifier: msg.Identifier[:],
 				Round:      specqbft.FirstRound,
 			},
+			// TODO: consider to remove it
 			FullData: &spectypes.ValidatorConsensusData{Duty: spectypes.ValidatorDuty{Slot: msg.Slot}},
 		}
 
