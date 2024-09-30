@@ -300,15 +300,13 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot,
 		return errors.Wrap(err, "input data invalid")
 	}
 
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
+	newInstance, err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
 		specqbft.Height(slot),
 		byts,
-	); err != nil {
+	)
+
+	if err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
-	}
-	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, runner.GetBaseRunner().QBFTController.Height)
-	if newInstance == nil {
-		return errors.New("could not find newly created QBFT instance")
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
