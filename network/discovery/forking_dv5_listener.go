@@ -18,14 +18,14 @@ const (
 // Aftet the fork, it performs operations only on the post-fork service.
 type forkingDV5Listener struct {
 	logger           *zap.Logger
-	preForkListener  listener
-	postForkListener listener
+	preForkListener  Listener
+	postForkListener Listener
 	iteratorTimeout  time.Duration
 	closeOnce        sync.Once
 	netCfg           networkconfig.NetworkConfig
 }
 
-func newForkingDV5Listener(logger *zap.Logger, preFork, postFork listener, iteratorTimeout time.Duration, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
+func NewForkingDV5Listener(logger *zap.Logger, preFork, postFork Listener, iteratorTimeout time.Duration, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
 	if iteratorTimeout == 0 {
 		iteratorTimeout = defaultIteratorTimeout
 	}

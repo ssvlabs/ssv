@@ -8,17 +8,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// sharedUDPConn implements a shared connection. Write sends messages to the underlying connection while read returns
+// SharedUDPConn implements a shared connection. Write sends messages to the underlying connection while read returns
 // messages that were found unprocessable and sent to the unhandled channel by the primary listener.
 // It's copied from https://github.com/ethereum/go-ethereum/blob/v1.14.8/p2p/server.go#L435
-type sharedUDPConn struct {
+type SharedUDPConn struct {
 	*net.UDPConn
-	unhandled chan discover.ReadPacket
+	Unhandled chan discover.ReadPacket
 }
 
 // ReadFromUDPAddrPort implements discover.UDPConn
-func (s *sharedUDPConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPort, err error) {
-	packet, ok := <-s.unhandled
+func (s *SharedUDPConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPort, err error) {
+	packet, ok := <-s.Unhandled
 	if !ok {
 		return 0, netip.AddrPort{}, errors.New("connection was closed")
 	}
@@ -31,6 +31,6 @@ func (s *sharedUDPConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPor
 }
 
 // Close implements discover.UDPConn
-func (s *sharedUDPConn) Close() error {
+func (s *SharedUDPConn) Close() error {
 	return nil
 }

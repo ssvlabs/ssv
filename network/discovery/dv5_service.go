@@ -35,7 +35,7 @@ type NodeProvider interface {
 // NodeFilter can be used for nodes filtering during discovery
 type NodeFilter func(*enode.Node) bool
 
-type listener interface {
+type Listener interface {
 	Lookup(enode.ID) []*enode.Node
 	RandomNodes() enode.Iterator
 	AllNodes() []*enode.Node
@@ -52,14 +52,14 @@ type DiscV5Service struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	dv5Listener listener
+	dv5Listener Listener
 	bootnodes   []*enode.Node
 
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
 	conn       *net.UDPConn
-	sharedConn *sharedUDPConn
+	sharedConn *SharedUDPConn
 
 	networkConfig networkconfig.NetworkConfig
 	subnets       []byte
@@ -97,7 +97,7 @@ func (dvs *DiscV5Service) Close() error {
 		}
 	}
 	if dvs.sharedConn != nil {
-		close(dvs.sharedConn.unhandled)
+		close(dvs.sharedConn.Unhandled)
 	}
 	if dvs.dv5Listener != nil {
 		dvs.dv5Listener.Close()
@@ -245,7 +245,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 
 	// New discovery, with ProtocolID restriction, to be kept post-fork
 	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &sharedUDPConn{udpConn, unhandled}
+	sharedConn := &SharedUDPConn{udpConn, unhandled}
 	dvs.sharedConn = sharedConn
 
 	dv5PostForkCfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
@@ -284,7 +284,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		fields.Domain(discOpts.NetworkConfig.DomainType()),
 	)
 
-	dvs.dv5Listener = newForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
+	dvs.dv5Listener = NewForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
 	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil
