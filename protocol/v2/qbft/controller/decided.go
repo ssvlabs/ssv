@@ -26,7 +26,6 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMes
 	inst := c.InstanceForHeight(logger, msg.QBFTMessage.Height)
 	prevDecided := inst != nil && inst.State.Decided
 	isFutureDecided := msg.QBFTMessage.Height > c.Height
-	save := true
 
 	if inst == nil {
 		i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, msg.QBFTMessage.Height, c.OperatorSigner)
@@ -52,25 +51,6 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMes
 			err := inst.State.CommitContainer.AddMsg(msg)
 			if err != nil {
 				return nil, err
-			}
-		} else {
-			save = false
-		}
-	}
-
-	if save {
-		// Retrieve instance from StoredInstances (in case it was created above)
-		// and save it together with the decided message.
-		if inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height); inst != nil {
-			logger := logger.With(
-				zap.Uint64("msg_height", uint64(msg.QBFTMessage.Height)),
-				zap.Uint64("ctrl_height", uint64(c.Height)),
-				zap.Any("signers", msg.SignedMessage.OperatorIDs),
-			)
-			if err := c.SaveInstance(inst, msg.SignedMessage); err != nil {
-				logger.Debug("❗failed to save instance", zap.Error(err))
-			} else {
-				logger.Debug("💾 saved instance upon decided", zap.Error(err))
 			}
 		}
 	}

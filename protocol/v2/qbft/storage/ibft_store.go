@@ -2,6 +2,7 @@ package qbftstorage
 
 import (
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
@@ -42,9 +43,6 @@ type InstanceStore interface {
 
 	// SaveInstance updates/inserts the given instance to it's identifier's history.
 	SaveInstance(instance *StoredInstance) error
-
-	// SaveHighestInstance saves the given instance as the highest of it's identifier.
-	SaveHighestInstance(instance *StoredInstance) error
 
 	// SaveHighestAndHistoricalInstance saves the given instance as both the highest and historical.
 	SaveHighestAndHistoricalInstance(instance *StoredInstance) error

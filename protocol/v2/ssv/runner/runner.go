@@ -196,24 +196,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		return false, nil, err
 	}
 
-	decDecided, err := specqbft.DecodeMessage(decidedMsg.SSVMessage.Data)
-	if err != nil {
-		return false, nil, err
-	}
-
-	if inst := b.QBFTController.StoredInstances.FindInstance(decDecided.Height); inst != nil {
-		logger := logger.With(
-			zap.Uint64("msg_height", uint64(decDecided.Height)),
-			zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
-			zap.Any("signers", msg.OperatorIDs),
-		)
-		if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-			logger.Debug("❗ failed to save instance", zap.Error(err))
-		} else {
-			logger.Debug("💾 saved instance")
-		}
-	}
-
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
 	}
