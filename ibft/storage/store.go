@@ -3,16 +3,15 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -66,76 +65,6 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 		return nil, errors.Wrap(err, "could not decode instance")
 	}
 	return ret, nil
-}
-
-func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
-	return i.saveInstance(instance, true, false)
-}
-
-func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
-	return i.saveInstance(instance, false, true)
-}
-
-func (i *ibftStorage) SaveHighestAndHistoricalInstance(instance *qbftstorage.StoredInstance) error {
-	return i.saveInstance(instance, true, true)
-}
-
-func (i *ibftStorage) saveInstance(inst *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
-	inst.State = instance.CompactCopy(inst.State, inst.DecidedMessage)
-
-	value, err := inst.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode instance")
-	}
-
-	if asHighest {
-		err = i.save(value, highestInstanceKey, inst.State.ID)
-		if err != nil {
-			return errors.Wrap(err, "could not save highest instance")
-		}
-	}
-
-	if toHistory {
-		err = i.save(value, instanceKey, inst.State.ID, uInt64ToByteSlice(uint64(inst.State.Height)))
-		if err != nil {
-			return errors.Wrap(err, "could not save historical instance")
-		}
-	}
-
-	return nil
-}
-
-// GetInstance returns historical StoredInstance for the given identifier and height.
-func (i *ibftStorage) GetInstance(identifier []byte, height specqbft.Height) (*qbftstorage.StoredInstance, error) {
-	val, found, err := i.get(instanceKey, identifier[:], uInt64ToByteSlice(uint64(height)))
-	if !found {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	ret := &qbftstorage.StoredInstance{}
-	if err := ret.Decode(val); err != nil {
-		return nil, errors.Wrap(err, "could not decode instance")
-	}
-	return ret, nil
-}
-
-// GetInstancesInRange returns historical StoredInstance's in the given range.
-func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*qbftstorage.StoredInstance, error) {
-	instances := make([]*qbftstorage.StoredInstance, 0)
-
-	for seq := from; seq <= to; seq++ {
-		instance, err := i.GetInstance(identifier, seq)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get instance")
-		}
-		if instance != nil {
-			instances = append(instances, instance)
-		}
-	}
-
-	return instances, nil
 }
 
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.

@@ -38,12 +38,6 @@ type InstanceStore interface {
 	// GetHighestInstance returns the highest instance for the given identifier.
 	GetHighestInstance(identifier []byte) (*StoredInstance, error) // test only but some skipped
 
-	// SaveInstance updates/inserts the given instance to it's identifier's history.
-	SaveInstance(instance *StoredInstance) error
-
-	// GetInstance returns an historical instance for the given identifier and height.
-	GetInstance(identifier []byte, height specqbft.Height) (*StoredInstance, error)
-
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(logger *zap.Logger, msgID []byte) error
 

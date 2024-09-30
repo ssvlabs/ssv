@@ -102,7 +102,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 }
 
 // SetHighestDecidedSlot set highestDecidedSlot for base runner
-func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
+func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) { // TODO:1720 in the light of not saving highest instance
 	b.highestDecidedSlot = slot
 }
 
