@@ -1,20 +1,5 @@
 package convert
 
-import "fmt"
-
-// Define constants for the role string values
-const (
-	AttesterString                  = "ATTESTER"
-	AggregatorString                = "AGGREGATOR"
-	ProposerString                  = "PROPOSER"
-	SyncCommitteeString             = "SYNC_COMMITTEE"
-	SyncCommitteeContributionString = "SYNC_COMMITTEE_CONTRIBUTION"
-	ValidatorRegistrationString     = "VALIDATOR_REGISTRATION"
-	VoluntaryExitString             = "VOLUNTARY_EXIT"
-	CommitteeString                 = "COMMITTEE"
-	UndefinedString                 = "UNDEFINED"
-)
-
 type RunnerRole int32
 
 const (
@@ -23,7 +8,6 @@ const (
 	RoleProposer
 	RoleSyncCommitteeContribution
 	RoleSyncCommittee
-
 	RoleValidatorRegistration
 	RoleVoluntaryExit
 	RoleCommittee
@@ -33,23 +17,23 @@ const (
 func (r RunnerRole) String() string {
 	switch r {
 	case RoleAttester:
-		return AttesterString
+		return "ATTESTER"
 	case RoleAggregator:
-		return AggregatorString
+		return "AGGREGATOR"
 	case RoleProposer:
-		return ProposerString
+		return "PROPOSER"
 	case RoleSyncCommittee:
-		return SyncCommitteeString
+		return "SYNC_COMMITTEE"
 	case RoleSyncCommitteeContribution:
-		return SyncCommitteeContributionString
+		return "SYNC_COMMITTEE_CONTRIBUTION"
 	case RoleValidatorRegistration:
-		return ValidatorRegistrationString
+		return "VALIDATOR_REGISTRATION"
 	case RoleVoluntaryExit:
-		return VoluntaryExitString
+		return "VOLUNTARY_EXIT"
 	case RoleCommittee:
-		return CommitteeString
+		return "COMMITTEE"
 	default:
-		return UndefinedString
+		return "UNDEFINED"
 	}
 }
 
@@ -57,44 +41,20 @@ func (r RunnerRole) String() string {
 func (r RunnerRole) ToBeaconRole() string {
 	switch r {
 	case RoleAttester:
-		return AttesterString
+		return "ATTESTER"
 	case RoleAggregator:
-		return AggregatorString
+		return "AGGREGATOR"
 	case RoleProposer:
-		return ProposerString
+		return "PROPOSER"
 	case RoleSyncCommittee:
-		return SyncCommitteeString
+		return "SYNC_COMMITTEE"
 	case RoleSyncCommitteeContribution:
-		return SyncCommitteeContributionString
+		return "SYNC_COMMITTEE_CONTRIBUTION"
 	case RoleValidatorRegistration:
-		return ValidatorRegistrationString
+		return "VALIDATOR_REGISTRATION"
 	case RoleVoluntaryExit:
-		return VoluntaryExitString
+		return "VOLUNTARY_EXIT"
 	default:
-		return UndefinedString
-	}
-}
-
-// RunnerRoleFromString converts a string to a RunnerRole
-func RunnerRoleFromString(value string) (RunnerRole, error) {
-	switch value {
-	case AttesterString:
-		return RoleAttester, nil
-	case AggregatorString:
-		return RoleAggregator, nil
-	case ProposerString:
-		return RoleProposer, nil
-	case SyncCommitteeString:
-		return RoleSyncCommittee, nil
-	case SyncCommitteeContributionString:
-		return RoleSyncCommitteeContribution, nil
-	case ValidatorRegistrationString:
-		return RoleValidatorRegistration, nil
-	case VoluntaryExitString:
-		return RoleVoluntaryExit, nil
-	case CommitteeString:
-		return RoleCommittee, nil
-	default:
-		return RoleCommittee, fmt.Errorf("invalid runner role: %s", value)
+		return "UNDEFINED"
 	}
 }
