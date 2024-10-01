@@ -380,7 +380,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		addedSubnets := make([]uint64, 0)
 		for subnet, active := range updatedSubnets {
 			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				addedSubnets = append(addedSubnets, uint64(subnet))
+				addedSubnets = append(addedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
 
@@ -388,7 +388,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		removedSubnets := make([]uint64, 0)
 		for subnet, active := range registeredSubnets {
 			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
-				removedSubnets = append(removedSubnets, uint64(subnet))
+				removedSubnets = append(removedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
 
