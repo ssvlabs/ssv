@@ -48,13 +48,8 @@ type Committee struct {
 	dutyGuard      *CommitteeDutyGuard
 	CreateRunnerFn CommitteeRunnerFunc
 
-	state int32
+	stopped atomic.Bool
 }
-
-const (
-	running = iota
-	stopped
-)
 
 // NewCommittee creates a new cluster
 func NewCommittee(
@@ -304,12 +299,12 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 }
 
 func (c *Committee) Stopped() bool {
-	return atomic.LoadInt32(&c.state) == stopped
+	return c.stopped.Load()
 }
 
 func (c *Committee) stop() {
 	c.cancel()
-	atomic.StoreInt32(&c.state, stopped)
+	c.stopped.Store(true)
 }
 
 func (c *Committee) Encode() ([]byte, error) {
