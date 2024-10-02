@@ -1392,7 +1392,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				topicID := commons.CommitteeTopicID(committeeID)[0]
 
 				sinceSlotStart := time.Duration(0)
-				for validator.currentEstimatedRound(sinceSlotStart) != round {
+				for {
+					currentRound, err := validator.currentEstimatedRound(sinceSlotStart)
+					require.NoError(t, err)
+					if currentRound == round {
+						break
+					}
 					sinceSlotStart += roundtimer.QuickTimeout
 				}
 

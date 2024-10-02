@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -81,7 +82,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	committee []spectypes.OperatorID,
 ) error {
 	signers := signedSSVMessage.OperatorIDs
-	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	msgType := consensusMessage.MsgType
 
 	if len(signers) > 1 {
@@ -376,14 +377,22 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
-		return currentQuickRound
+func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (specqbft.Round, error) {
+	delta, err := casts.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	if currentQuickRound := specqbft.FirstRound + specqbft.Round(delta); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+		return currentQuickRound, nil
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
-	return estimatedRound
+	delta, err = casts.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(delta)
+	return estimatedRound, nil
 }
 
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
@@ -407,7 +416,11 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	estimatedRound := specqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
+		currentEstimatedRound, err := mv.currentEstimatedRound(sinceSlotStart)
+		if err != nil {
+			return err
+		}
+		estimatedRound = currentEstimatedRound
 	}
 
 	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
@@ -427,12 +440,12 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 }
 
 func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) types.OperatorID {
-	firstRoundIndex := 0
+	firstRoundIndex := uint64(0)
 	if height != specqbft.FirstHeight {
-		firstRoundIndex += int(height) % len(committee)
+		firstRoundIndex += uint64(height) % uint64(len(committee))
 	}
 
-	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(committee)
+	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
 	return committee[index]
 }
 

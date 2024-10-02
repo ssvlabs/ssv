@@ -5,9 +5,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/stretchr/testify/require"
 )
 
 func createTestingValidators(n int) []*types.SSVShare {
@@ -22,10 +23,10 @@ func createTestingValidators(n int) []*types.SSVShare {
 	return ret
 }
 
-func createTestingSingleCommittees(n int) []*storage.Committee {
+func createTestingSingleCommittees(n uint64) []*storage.Committee {
 	ret := make([]*storage.Committee, 0)
-	for i := 0; i <= n; i++ {
-		opRef := uint64(i*4 + 1)
+	for i := uint64(0); i <= n; i++ {
+		opRef := i*4 + 1
 		ret = append(ret, &storage.Committee{
 			Operators:  []uint64{opRef, opRef + 1, opRef + 2, opRef + 3},
 			Validators: createTestingValidators(1),

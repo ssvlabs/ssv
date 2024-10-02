@@ -77,7 +77,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	n.fixedSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
-	for subnet := 0; subnet < commons.Subnets(); subnet++ {
+	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
 			return err
@@ -100,7 +100,8 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
 	randomSubnets = randomSubnets[:numSubnets]
 	for _, subnet := range randomSubnets {
-		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
+		// #nosec G115
+		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(uint64(subnet))) // Perm slice is [0, n)
 		if err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
@@ -172,14 +173,14 @@ func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
 	return nil
 }
 
-func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint) error {
+func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint64) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if subnet >= uint(commons.Subnets()) {
+	if subnet >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(int(subnet)), false); err != nil {
+	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(subnet), false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
 	}
 	return nil

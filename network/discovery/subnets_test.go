@@ -10,7 +10,7 @@ func TestNsToSubnet(t *testing.T) {
 	tests := []struct {
 		name        string
 		ns          string
-		expected    int
+		expected    uint64
 		expectedErr string
 		isSubnet    bool
 	}{
