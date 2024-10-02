@@ -70,10 +70,10 @@ func TestForkListener_RandomNodes(t *testing.T) {
 	nodeFromPostForkListener := NewTestingNode(t) // post-fork node
 	localNode := NewLocalNode(t)
 
-	preForkListener := NewMockListener(localNode, []*enode.Node{nodeFromPreForkListener})
-	postForkListener := NewMockListener(localNode, []*enode.Node{nodeFromPostForkListener})
-
 	t.Run("Pre-Fork", func(t *testing.T) {
+		preForkListener := NewMockListener(localNode, []*enode.Node{nodeFromPreForkListener})
+		postForkListener := NewMockListener(localNode, []*enode.Node{nodeFromPostForkListener})
+
 		netCfg := PreForkNetworkConfig()
 		forkListener := NewForkingDV5Listener(zap.NewNop(), preForkListener, postForkListener, iteratorTimeout, netCfg)
 
@@ -96,6 +96,9 @@ func TestForkListener_RandomNodes(t *testing.T) {
 	})
 
 	t.Run("Post-Fork", func(t *testing.T) {
+		preForkListener := NewMockListener(localNode, []*enode.Node{nodeFromPreForkListener})
+		postForkListener := NewMockListener(localNode, []*enode.Node{nodeFromPostForkListener})
+
 		netCfg := PostForkNetworkConfig()
 		forkListener := NewForkingDV5Listener(zap.NewNop(), preForkListener, postForkListener, iteratorTimeout, netCfg)
 

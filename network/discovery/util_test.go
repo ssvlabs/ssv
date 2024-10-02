@@ -244,6 +244,7 @@ type MockIterator struct {
 	nodes    []*enode.Node
 	position int
 	closed   bool
+	mtx      sync.Mutex
 }
 
 func NewMockIterator(nodes []*enode.Node) *MockIterator {
@@ -254,6 +255,8 @@ func NewMockIterator(nodes []*enode.Node) *MockIterator {
 }
 
 func (m *MockIterator) Next() bool {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 	if m.closed || m.position >= len(m.nodes)-1 {
 		return false
 	}
@@ -262,6 +265,8 @@ func (m *MockIterator) Next() bool {
 }
 
 func (m *MockIterator) Node() *enode.Node {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 	if m.closed || m.position == -1 || m.position >= len(m.nodes) {
 		return nil
 	}
@@ -269,6 +274,8 @@ func (m *MockIterator) Node() *enode.Node {
 }
 
 func (m *MockIterator) Close() {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 	m.closed = true
 }
 
