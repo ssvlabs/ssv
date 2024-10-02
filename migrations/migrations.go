@@ -25,6 +25,7 @@ var (
 		migration_1_example,
 		migration_2_encrypt_shares,
 		migration_3_drop_registry_data,
+		migration_4_configlock_add_alan_fork_to_network_name,
 	}
 )
 

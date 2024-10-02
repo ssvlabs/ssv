@@ -74,10 +74,31 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	var lastErr error
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner))
+		guard := validator.NewCommitteeDutyGuard()
+		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
 
 		if test.DontStartDuty {
-			c.Runners[test.Duty.DutySlot()] = test.Runner.(*runner.CommitteeRunner)
+			r := test.Runner.(*runner.CommitteeRunner)
+			r.DutyGuard = guard
+			c.Runners[test.Duty.DutySlot()] = r
+
+			// Inform the duty guard of the running duty, if any, so that it won't reject it.
+			if r.BaseRunner.State != nil && r.BaseRunner.State.StartingDuty != nil {
+				duty, ok := r.BaseRunner.State.StartingDuty.(*spectypes.CommitteeDuty)
+				if !ok {
+					panic("starting duty not found")
+				}
+				for _, validatorDuty := range duty.ValidatorDuties {
+					err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+					if err != nil {
+						panic(err)
+					}
+					err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
 		} else {
 			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
@@ -227,6 +248,7 @@ var baseCommitteeWithRunnerSample = func(
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
+	committeeDutyGuard runner.CommitteeDutyGuard,
 ) *validator.Committee {
 
 	var keySetSample *spectestingutils.TestKeySet
@@ -240,7 +262,7 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error) {
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		r, err := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -256,6 +278,7 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetSigner(),
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
+			committeeDutyGuard,
 		)
 		return r.(*runner.CommitteeRunner), err
 	}

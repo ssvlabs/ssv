@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"errors"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -79,7 +80,7 @@ func (c *Committee) ConsumeQueue(
 	logger *zap.Logger,
 	slot phase0.Slot,
 	handler MessageHandler,
-	runner *runner.CommitteeRunner,
+	rnr *runner.CommitteeRunner,
 ) error {
 	state := *q.queueState
 
@@ -89,8 +90,8 @@ func (c *Committee) ConsumeQueue(
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		var runningInstance *instance.Instance
-		if runner.HasRunningDuty() {
-			runningInstance = runner.GetBaseRunner().State.RunningInstance
+		if rnr.HasRunningDuty() {
+			runningInstance = rnr.GetBaseRunner().State.RunningInstance
 			if runningInstance != nil {
 				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
@@ -143,6 +144,10 @@ func (c *Committee) ConsumeQueue(
 			c.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
+			if errors.Is(err, runner.ErrNoValidDuties) {
+				// Stop the queue consumer if the runner no longer has any valid duties.
+				break
+			}
 		}
 	}
 

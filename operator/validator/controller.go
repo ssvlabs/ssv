@@ -925,7 +925,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 			genesisOpts := c.genesisValidatorOptions
 			genesisOpts.SSVShare = genesisssvtypes.ConvertToGenesisSSVShare(share, operator)
-			genesisOpts.DutyRunners = SetupGenesisRunners(genesisValidatorCtx, c.logger, opts)
+			genesisOpts.DutyRunners = SetupGenesisRunners(genesisValidatorCtx, c.logger, opts, genesisOpts)
 
 			genesisValidator = genesisvalidator.NewValidator(genesisValidatorCtx, validatorCancel, genesisOpts)
 		}
@@ -1250,7 +1250,7 @@ func SetupCommitteeRunners(
 		return qbftCtrl
 	}
 
-	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error) {
+	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
@@ -1263,6 +1263,7 @@ func SetupCommitteeRunners(
 			options.Signer,
 			options.OperatorSigner,
 			valCheck,
+			dutyGuard,
 		)
 		if err != nil {
 			return nil, err
@@ -1356,7 +1357,7 @@ func SetupRunners(
 	return runners, nil
 }
 
-func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options validator.Options) genesisrunner.DutyRunners {
+func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options validator.Options, genesisOptions genesisvalidator.Options) genesisrunner.DutyRunners {
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return genesisrunner.DutyRunners{} // TODO need to find better way to fix it
@@ -1372,7 +1373,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		genesisspectypes.BNRoleVoluntaryExit,
 	}
 
-	share := genesisssvtypes.ConvertToGenesisShare(&options.SSVShare.Share, options.Operator)
+	share := &genesisOptions.SSVShare.Share
 
 	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *genesisqbftcontroller.Controller {
 		config := &genesisqbft.Config{

@@ -27,7 +27,7 @@ var (
 	runnerExpirySlots = phase0.Slot(34)
 )
 
-type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK) (*runner.CommitteeRunner, error)
+type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error)
 
 type Committee struct {
 	logger *zap.Logger
@@ -44,8 +44,8 @@ type Committee struct {
 
 	CommitteeMember *spectypes.CommitteeMember
 
-	CreateRunnerFn          CommitteeRunnerFunc
-	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
+	dutyGuard      *CommitteeDutyGuard
+	CreateRunnerFn CommitteeRunnerFunc
 }
 
 // NewCommittee creates a new cluster
@@ -62,16 +62,16 @@ func NewCommittee(
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
 	}
 	return &Committee{
-		logger:                  logger,
-		BeaconNetwork:           beaconNetwork,
-		ctx:                     ctx,
-		cancel:                  cancel,
-		Queues:                  make(map[phase0.Slot]queueContainer),
-		Runners:                 make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:                  shares,
-		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
-		CommitteeMember:         committeeMember,
-		CreateRunnerFn:          createRunnerFn,
+		logger:          logger,
+		BeaconNetwork:   beaconNetwork,
+		ctx:             ctx,
+		cancel:          cancel,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:          shares,
+		CommitteeMember: committeeMember,
+		CreateRunnerFn:  createRunnerFn,
+		dutyGuard:       NewCommitteeDutyGuard(),
 	}
 }
 
@@ -85,7 +85,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	if share, exist := c.Shares[validatorIndex]; exist {
-		c.stopValidator(c.logger, share.ValidatorPubKey)
+		c.dutyGuard.StopValidator(share.ValidatorPubKey)
 		delete(c.Shares, validatorIndex)
 	}
 }
@@ -156,7 +156,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 	duty = filteredDuty
 
-	runner, err := c.CreateRunnerFn(duty.Slot, shares, attesters)
+	runner, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
 		return errors.Wrap(err, "could not create CommitteeRunner")
 	}
@@ -184,23 +184,11 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	return runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
-}
-
-func (c *Committee) stopValidator(logger *zap.Logger, validator spectypes.ValidatorPK) {
-	for slot, runner := range c.Runners {
-		opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-		epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
-		committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
-
-		logger.Debug("trying to stop duty for validator",
-			fields.DutyID(committeeDutyID),
-			fields.Slot(slot), fields.Validator(validator[:]),
-		)
-		// TODO: after StopDuty is implemented, if it's not a super fast operation,
-		// then we maybe shouldn't do it under a lock.
-		runner.StopDuty(validator)
+	err = runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
+	if err != nil {
+		return errors.Wrap(err, "runner failed to start duty")
 	}
+	return nil
 }
 
 func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {

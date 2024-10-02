@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -131,6 +132,7 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 			valCheck,
+			validator.NewCommitteeDutyGuard(),
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -202,6 +204,7 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 			valCheck,
+			validator.NewCommitteeDutyGuard(),
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
@@ -379,6 +382,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			km,
 			opSigner,
 			valCheck,
+			validator.NewCommitteeDutyGuard(),
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -450,6 +454,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			km,
 			opSigner,
 			valCheck,
+			validator.NewCommitteeDutyGuard(),
 		)
 		if r != nil {
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
