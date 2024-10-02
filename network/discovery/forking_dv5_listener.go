@@ -60,8 +60,8 @@ func (l *forkingDV5Listener) RandomNodes() enode.Iterator {
 	}
 
 	fairMix := enode.NewFairMix(l.iteratorTimeout)
-	fairMix.AddSource(&annotatedIterator{l.preForkListener.RandomNodes(), "pre"})
 	fairMix.AddSource(&annotatedIterator{l.postForkListener.RandomNodes(), "post"})
+	fairMix.AddSource(&annotatedIterator{l.preForkListener.RandomNodes(), "pre"})
 	return fairMix
 }
 
