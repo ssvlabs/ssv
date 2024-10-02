@@ -20,11 +20,10 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
 )
-
-var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // Options contains options to create the node
 type Options struct {
@@ -54,11 +53,7 @@ type bootNode struct {
 }
 
 // New is the constructor of ssvNode
-func New(opts Options) (Node, error) {
-	networkConfig, err := networkconfig.GetNetworkConfigByName(opts.Network)
-	if err != nil {
-		return nil, err
-	}
+func New(networkConfig networkconfig.NetworkConfig, opts Options) (Node, error) {
 	return &bootNode{
 		privateKey:  opts.PrivateKey,
 		discv5port:  opts.UDPPort,
@@ -71,7 +66,7 @@ func New(opts Options) (Node, error) {
 }
 
 type handler struct {
-	listener *discover.UDPv5
+	listener discovery.Listener
 }
 
 func (h *handler) httpHandler(logger *zap.Logger) func(w http.ResponseWriter, _ *http.Request) {
@@ -102,19 +97,19 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	if err != nil {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
-	cfg := discover.Config{
-		PrivateKey:   privKey,
-		V5ProtocolID: &SSVProtocolID,
-	}
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"
 	log.Print("TEST Ip addr----", ipAddr)
 	if err != nil {
 		logger.Fatal("Failed to get ExternalIP", zap.Error(err))
 	}
-	listener := n.createListener(logger, ipAddr, n.discv5port, cfg)
-	node := listener.Self()
-	logger.Info("Running", zap.String("node", node.String()))
+	listener := n.createListener(logger, ipAddr, n.discv5port, privKey)
+	node := listener.LocalNode().Node()
+	logger.Info("Running",
+		zap.String("node", node.String()),
+		zap.String("network", n.network.Name),
+		fields.ProtocolID(n.network.DiscoveryProtocolID),
+	)
 
 	handler := &handler{
 		listener: listener,
@@ -138,7 +133,8 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	return nil
 }
 
-func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port uint16, cfg discover.Config) *discover.UDPv5 {
+func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port uint16, privateKey *ecdsa.PrivateKey) discovery.Listener {
+	// Create the UDP listener and the LocalNode record.
 	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
 		logger.Fatal("IPV4 address not provided", fields.Address(ipAddr))
@@ -163,16 +159,31 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port uint16
 	if err != nil {
 		log.Fatal(err)
 	}
-	localNode, err := n.createLocalNode(logger, cfg.PrivateKey, ip, port)
+	localNode, err := n.createLocalNode(logger, privateKey, ip, port)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	network, err := discover.ListenV5(conn, localNode, cfg)
+	// Allocate a fake connection to forward postFork packets to the preFork listener.
+	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
+	sharedConn := &discovery.SharedUDPConn{UDPConn: conn, Unhandled: unhandled}
+
+	postForkListener, err := discover.ListenV5(conn, localNode, discover.Config{
+		PrivateKey:   privateKey,
+		Unhandled:    unhandled,
+		V5ProtocolID: &n.network.DiscoveryProtocolID,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	return network
+
+	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
+		PrivateKey: privateKey,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return discovery.NewForkingDV5Listener(logger, preForkListener, postForkListener, 5*time.Second, n.network)
 }
 
 func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {

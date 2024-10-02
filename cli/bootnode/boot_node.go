@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/commons"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -55,7 +56,11 @@ var StartBootNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		bootNode, err := bootnode.New(cfg.Options)
+		networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.Options.Network)
+		if err != nil {
+			logger.Fatal("failed to get network config", zap.Error(err))
+		}
+		bootNode, err := bootnode.New(networkConfig, cfg.Options)
 		if err != nil {
 			logger.Fatal("failed to set up boot node", zap.Error(err))
 		}
