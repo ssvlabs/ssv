@@ -36,8 +36,8 @@ type OperatorState struct {
 	state           []*SignerState // the slice index is slot % storedSlotCount
 	maxSlot         phase0.Slot
 	maxEpoch        phase0.Epoch
-	lastEpochDuties int
-	prevEpochDuties int
+	lastEpochDuties uint64
+	prevEpochDuties uint64
 }
 
 func newOperatorState(size phase0.Slot) *OperatorState {
@@ -82,7 +82,7 @@ func (os *OperatorState) MaxSlot() phase0.Slot {
 	return os.maxSlot
 }
 
-func (os *OperatorState) DutyCount(epoch phase0.Epoch) int {
+func (os *OperatorState) DutyCount(epoch phase0.Epoch) uint64 {
 	os.mu.RLock()
 	defer os.mu.RUnlock()
 

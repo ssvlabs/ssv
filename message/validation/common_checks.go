@@ -77,7 +77,7 @@ func (mv *messageValidator) validateDutyCount(
 	return nil
 }
 
-func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slot, validatorIndices []phase0.ValidatorIndex) (int, bool) {
+func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slot, validatorIndices []phase0.ValidatorIndex) (uint64, bool) {
 	switch msgID.GetRoleType() {
 	case spectypes.RoleVoluntaryExit:
 		pk := phase0.BLSPubKey{}
@@ -89,8 +89,8 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 		return 2, true
 
 	case spectypes.RoleCommittee:
-		validatorIndexCount := len(validatorIndices)
-		slotsPerEpoch := int(mv.netCfg.Beacon.SlotsPerEpoch())
+		validatorIndexCount := uint64(len(validatorIndices))
+		slotsPerEpoch := mv.netCfg.Beacon.SlotsPerEpoch()
 
 		// Skip duty search if validators * 2 exceeds slots per epoch,
 		// as the maximum duties per epoch is capped at the number of slots.
