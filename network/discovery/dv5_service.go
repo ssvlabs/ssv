@@ -239,7 +239,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 
 		logger.Debug("started discv5 listener (UDP)",
 			fields.BindIP(bindIP),
-			zap.Int("UdpPort", opts.Port),
+			zap.Uint16("UdpPort", opts.Port),
 			fields.ENRLocalNode(localNode),
 			fields.Domain(discOpts.NetworkConfig.DomainType()),
 			fields.ProtocolID(discOpts.NetworkConfig.DiscoveryProtocolID),
@@ -265,7 +265,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 
 	logger.Debug("started discv5 post-fork listener (UDP)",
 		fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port),
+		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
 		fields.Domain(discOpts.NetworkConfig.NextDomainType()),
 		fields.ProtocolID(protocolID),
@@ -284,7 +284,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 
 	logger.Debug("started discv5 pre-fork listener (UDP)",
 		fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port),
+		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
 		fields.Domain(discOpts.NetworkConfig.DomainType()),
 	)
@@ -341,7 +341,7 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	if len(subnets) == 0 {
 		return false, nil
 	}
@@ -358,7 +358,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) (u
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	logger = logger.Named(logging.NameDiscoveryService)
 
 	if len(subnets) == 0 {
@@ -465,10 +465,10 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 }
 
 // newUDPListener creates a udp server
-func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, error) {
+func newUDPListener(bindIP net.IP, port uint16, network string) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
-		Port: port,
+		Port: int(port),
 	}
 	conn, err := net.ListenUDP(network, udpAddr)
 	if err != nil {

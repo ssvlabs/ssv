@@ -34,12 +34,12 @@ func GenerateBLSKeys(oids ...genesisspectypes.OperatorID) (map[genesisspectypes.
 	nodes := make([]*genesisspectypes.Operator, 0)
 	sks := make(map[genesisspectypes.OperatorID]*bls.SecretKey)
 
-	for i, oid := range oids {
+	for _, oid := range oids {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
 		nodes = append(nodes, &genesisspectypes.Operator{
-			OperatorID: genesisspectypes.OperatorID(i),
+			OperatorID: oid,
 			PubKey:     sk.GetPublicKey().Serialize(),
 		})
 		sks[oid] = sk

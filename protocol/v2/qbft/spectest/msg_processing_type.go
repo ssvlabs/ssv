@@ -34,7 +34,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, ks, convert.RunnerRole(msgId.GetRoleType())),
+		qbfttesting.TestingConfig(logger, ks, convert.RunnerRole(msgId.GetRoleType())), // #nosec G104
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,

@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,7 +55,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		Domain:      opts.NetworkConfig.DomainType(),
 		Storage:     opts.Storage.Get(identifier.GetRoleType()),
 		Network:     opts.Network,
-		CutOffRound: specqbft.Round(specqbft.CutoffRound),
+		CutOffRound: roundtimer.CutOffRound,
 	}
 
 	// TODO: does the specific operator matters?

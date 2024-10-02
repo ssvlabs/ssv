@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 const (
@@ -72,7 +73,7 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		nm.Msg = res
 		return
 	}
-	runnerRole := convert.RunnerRole(beaconRole)
+	runnerRole := casts.BeaconRoleToConvertRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
 		logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))

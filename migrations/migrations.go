@@ -13,7 +13,6 @@ import (
 	"github.com/ssvlabs/ssv/ekm"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -57,15 +56,6 @@ type Options struct {
 	NodeStorage operatorstorage.Storage
 	DbPath      string
 	Network     beacon.Network
-}
-
-// nolint
-func (o Options) getRegistryStores(logger *zap.Logger) ([]eth1.RegistryStore, error) {
-	nodeStorage, err := o.nodeStorage(logger)
-	if err != nil {
-		return nil, err
-	}
-	return []eth1.RegistryStore{nodeStorage, o.signerStorage(logger)}, nil
 }
 
 // nolint

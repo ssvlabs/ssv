@@ -16,7 +16,7 @@ import (
 )
 
 // createLocalNode create a new enode.LocalNode instance
-func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.IP, udpPort, tcpPort int) (*enode.LocalNode, error) {
+func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.IP, udpPort, tcpPort uint16) (*enode.LocalNode, error) {
 	db, err := enode.OpenDB(storagePath)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open node's peer database")
@@ -27,7 +27,7 @@ func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.I
 	localNode.Set(enr.UDP(udpPort))
 	localNode.Set(enr.TCP(tcpPort))
 	localNode.SetFallbackIP(ipAddr)
-	localNode.SetFallbackUDP(udpPort)
+	localNode.SetFallbackUDP(int(udpPort))
 	localNode.Set(enr.WithEntry("ssv", true))
 
 	return localNode, nil
@@ -92,7 +92,7 @@ func ToMultiAddr(node *enode.Node) (ma.Multiaddr, error) {
 	if ip.To4() == nil && ip.To16() == nil {
 		return nil, errors.Errorf("invalid ip address: %s", ipAddr)
 	}
-	port := uint(node.TCP())
+	port := node.TCP()
 	var s string
 	if ip.To4() != nil {
 		s = fmt.Sprintf("/ip4/%s/%s/%d/p2p/%s", ipAddr, "tcp", port, id.String())

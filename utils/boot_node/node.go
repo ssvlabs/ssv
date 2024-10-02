@@ -29,8 +29,8 @@ import (
 type Options struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's external IP"`
-	TCPPort    int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
-	UDPPort    int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
+	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
+	UDPPort    uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
 	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
 	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
 }
@@ -44,10 +44,10 @@ type Node interface {
 // bootNode implements Node interface
 type bootNode struct {
 	privateKey  string
-	discv5port  int
+	discv5port  uint16
 	forkVersion []byte
 	externalIP  string
-	tcpPort     int
+	tcpPort     uint16
 	dbPath      string
 	network     networkconfig.NetworkConfig
 }
@@ -133,7 +133,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	return nil
 }
 
-func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, privateKey *ecdsa.PrivateKey) discovery.Listener {
+func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port uint16, privateKey *ecdsa.PrivateKey) discovery.Listener {
 	// Create the UDP listener and the LocalNode record.
 	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
@@ -153,7 +153,7 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, p
 	}
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
-		Port: port,
+		Port: int(port),
 	}
 	conn, err := net.ListenUDP(networkVersion, udpAddr)
 	if err != nil {
@@ -186,7 +186,7 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, p
 	return discovery.NewForkingDV5Listener(logger, preForkListener, postForkListener, 5*time.Second, n.network)
 }
 
-func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port int) (*enode.LocalNode, error) {
+func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
 	db, err := enode.OpenDB(filepath.Join(n.dbPath, "enode"))
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not open node's peer database")
@@ -222,7 +222,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	localNode := enode.NewLocalNode(db, privKey)
 	localNode.Set(enr.WithEntry("ssv", true))
 	localNode.SetFallbackIP(external)
-	localNode.SetFallbackUDP(port)
+	localNode.SetFallbackUDP(int(port))
 
 	ipEntry := enr.IP(external)
 	udpEntry := enr.UDP(port)

@@ -8,16 +8,16 @@ import (
 
 type VoluntaryExitDuties struct {
 	mu sync.RWMutex
-	m  map[phase0.Slot]map[phase0.BLSPubKey]int
+	m  map[phase0.Slot]map[phase0.BLSPubKey]uint64
 }
 
 func NewVoluntaryExit() *VoluntaryExitDuties {
 	return &VoluntaryExitDuties{
-		m: make(map[phase0.Slot]map[phase0.BLSPubKey]int),
+		m: make(map[phase0.Slot]map[phase0.BLSPubKey]uint64),
 	}
 }
 
-func (d *VoluntaryExitDuties) GetDutyCount(slot phase0.Slot, pk phase0.BLSPubKey) int {
+func (d *VoluntaryExitDuties) GetDutyCount(slot phase0.Slot, pk phase0.BLSPubKey) uint64 {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -35,7 +35,7 @@ func (d *VoluntaryExitDuties) AddDuty(slot phase0.Slot, pk phase0.BLSPubKey) {
 
 	v, ok := d.m[slot]
 	if !ok {
-		d.m[slot] = map[phase0.BLSPubKey]int{
+		d.m[slot] = map[phase0.BLSPubKey]uint64{
 			pk: 1,
 		}
 	} else {

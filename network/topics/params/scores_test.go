@@ -7,8 +7,9 @@ import (
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestTopicScoreParams(t *testing.T) {
@@ -20,7 +21,7 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 0 validators",
 			func() *Options {
-				validators := 0
+				validators := uint64(0)
 				opts := NewSubnetTopicOpts(validators, 128, []*storage.Committee{})
 				return opts
 			},
@@ -29,7 +30,7 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 1k validators",
 			func() *Options {
-				validators := 1000
+				validators := uint64(1000)
 				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
@@ -38,7 +39,7 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 10k validators",
 			func() *Options {
-				validators := 10_000
+				validators := uint64(10_000)
 				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
@@ -47,7 +48,7 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 51k validators",
 			func() *Options {
-				validators := 51_000
+				validators := uint64(51_000)
 				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},

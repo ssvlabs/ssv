@@ -8,6 +8,8 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
+var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
+
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
 	GetShareSigner() spectypes.BeaconSigner
