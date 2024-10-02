@@ -88,8 +88,8 @@ func TestForkListener_RandomNodes(t *testing.T) {
 
 		assert.Len(t, nodes, 2)
 		// post-fork nodes are set first
-		assert.Equal(t, nodes[0], nodeFromPostForkListener)
-		assert.Equal(t, nodes[1], nodeFromPreForkListener)
+		assert.Equal(t, nodes[0], nodeFromPreForkListener)
+		assert.Equal(t, nodes[1], nodeFromPostForkListener)
 
 		// No more next
 		requireNextTimeout(t, false, iter, 10*time.Millisecond)
