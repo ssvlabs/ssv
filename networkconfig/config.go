@@ -89,7 +89,7 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
-	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+	return time.Unix(n.Beacon.MinGenesisTime(), 0)
 }
 
 // DomainType returns current domain type based on the current fork.

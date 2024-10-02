@@ -57,8 +57,6 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 		return errors.New("could not setup network: in ready state")
 	}
 
-	// set a seed for rand values
-	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
 	logger.Info("configuring")
 
 	if err := n.initCfg(); err != nil {

@@ -18,12 +18,18 @@ type HandlerFunc func(http.ResponseWriter, *http.Request) error
 func Handler(h HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := h(w, r); err != nil {
-			//nolint:all
+			//nolint:errorlint
+			// errors.As would be incorrect here since a renderer.Renderer
+			// wrapped inside another error should error, not render.
 			switch e := err.(type) {
 			case render.Renderer:
-				render.Render(w, r, e)
+				if err := render.Render(w, r, e); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
 			default:
-				render.Render(w, r, Error(err))
+				if err := render.Render(w, r, Error(err)); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
 			}
 		}
 	}

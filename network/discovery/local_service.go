@@ -94,13 +94,13 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	// TODO
 	return false, nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	// TODO
 	return false, nil
 }

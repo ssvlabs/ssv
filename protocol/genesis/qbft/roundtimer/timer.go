@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
@@ -120,10 +121,10 @@ func (t *RoundTimer) RoundTimeout(height genesisspecqbft.Height, round genesissp
 	// Calculate additional timeout based on round
 	var additionalTimeout time.Duration
 	if round <= t.timeoutOptions.quickThreshold {
-		additionalTimeout = time.Duration(int(round)) * t.timeoutOptions.quick
+		additionalTimeout = casts.DurationFromUint64(uint64(round)) * t.timeoutOptions.quick
 	} else {
-		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick
-		slowPortion := time.Duration(int(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
+		quickPortion := casts.DurationFromUint64(uint64(t.timeoutOptions.quickThreshold)) * t.timeoutOptions.quick
+		slowPortion := casts.DurationFromUint64(uint64(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
 		additionalTimeout = quickPortion + slowPortion
 	}
 
@@ -147,12 +148,12 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 
 // Round returns a round.
 func (t *RoundTimer) Round() genesisspecqbft.Round {
-	return genesisspecqbft.Round(atomic.LoadInt64(&t.round))
+	return genesisspecqbft.Round(atomic.LoadInt64(&t.round)) // #nosec G115
 }
 
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height genesisspecqbft.Height, round genesisspecqbft.Round) {
-	atomic.StoreInt64(&t.round, int64(round))
+	atomic.StoreInt64(&t.round, int64(round)) // #nosec G115
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer

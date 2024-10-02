@@ -105,7 +105,7 @@ func (s *storageShare) Decode(data []byte) error {
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode storageShare: %w", err)
 	}
-	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(len(s.Committee))
+	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
 	return nil
 }
 
@@ -262,7 +262,7 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 			PubKey:     c.SharePubKey,
 		}
 	}
-	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(committee))
+	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	stShare := &storageShare{
 		Share: Share{
 			ValidatorPubKey:     share.ValidatorPubKey[:],

@@ -168,15 +168,15 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 		qbftMsg := msg.Body.(*specqbft.Message)
 
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(qbftMsg.Height)),
-			zap.Int64("msg_round", int64(qbftMsg.Round)),
-			zap.Int64("consensus_msg_type", int64(qbftMsg.MsgType)),
+			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
+			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
+			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Messages[0].Signer)), // TODO: only one signer?
+			zap.Uint64("signer", psm.Messages[0].Signer), // TODO: only one signer?
 			fields.Slot(psm.Slot),
 		}
 	}

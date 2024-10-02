@@ -49,8 +49,8 @@ type Options struct {
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error)
-	DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error)
+	RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
+	DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
 	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
 	PublishENR(logger *zap.Logger)
 }

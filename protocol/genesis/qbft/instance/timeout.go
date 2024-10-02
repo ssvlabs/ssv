@@ -5,10 +5,11 @@ import (
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
-var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
+var CutoffRound = uint64(15) // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
 
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	if !i.CanProcessMessages() {
