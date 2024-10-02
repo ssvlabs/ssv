@@ -31,10 +31,10 @@ var (
 	testCtx       = context.Background()
 	testNetConfig = networkconfig.TestNetwork
 
-	testIP      = "127.0.0.1"
-	testBindIP  = "127.0.0.1"
-	testPort    = 12001
-	testTCPPort = 13001
+	testIP             = "127.0.0.1"
+	testBindIP         = "127.0.0.1"
+	testPort    uint16 = 12001
+	testTCPPort uint16 = 13001
 )
 
 // Options for the discovery service
