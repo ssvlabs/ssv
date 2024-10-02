@@ -71,6 +71,10 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 				return fmt.Errorf("error getting participants: %w", err)
 			}
 
+			if len(participantsList) == 0 {
+				continue
+			}
+
 			data, err := exporterapi.ParticipantsAPIData(participantsList...)
 			if err != nil {
 				return fmt.Errorf("error getting participants API data: %w", err)
