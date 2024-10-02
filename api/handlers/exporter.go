@@ -39,7 +39,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := api.Bind(r, &request); err != nil {
-		return err
+		return api.BadRequestError(err)
 	}
 
 	if request.From > request.To {
