@@ -237,8 +237,13 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		dvs.dv5Listener = dv5Listener
 		dvs.bootnodes = dv5Cfg.Bootnodes
 
-		logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-			zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.NetworkConfig.DomainType()))
+		logger.Debug("started discv5 listener (UDP)",
+			fields.BindIP(bindIP),
+			zap.Int("UdpPort", opts.Port),
+			fields.ENRLocalNode(localNode),
+			fields.Domain(discOpts.NetworkConfig.DomainType()),
+			fields.ProtocolID(discOpts.NetworkConfig.DiscoveryProtocolID),
+		)
 
 		return nil
 	}
