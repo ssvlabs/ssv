@@ -43,10 +43,10 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if request.From > request.To {
-		return api.BadRequestError(fmt.Errorf("from must be less than to"))
+		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 	if request.From < 0 || request.To < 0 {
-		return api.BadRequestError(fmt.Errorf("from and to must be greater than 0"))
+		return api.BadRequestError(fmt.Errorf("'from' and 'to' must be greater than or equal to 0"))
 	}
 	if len(request.PubKeys) == 0 {
 		return api.BadRequestError(fmt.Errorf("at least one public key is required"))
