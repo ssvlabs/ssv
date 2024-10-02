@@ -110,26 +110,36 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		if !exists {
 			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
 		}
-		MsgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
-		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, slot, quorum); err != nil {
-			return fmt.Errorf("could not save participants %w", err)
-		} else {
-			var operatorIDs []string
-			for _, share := range quorum {
-				operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
-			}
-			logger.Info("✅ saved participants",
-				zap.String("converted_role", role.ToBeaconRole()),
-				zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
-				zap.String("signers", strings.Join(operatorIDs, ", ")),
-			)
+		msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
+
+		existingQuorum, err := ncv.Storage.Get(msgID.GetRoleType()).GetParticipants(msgID, slot)
+		if err != nil {
+			return fmt.Errorf("could not get participants %w", err)
 		}
+
+		if len(quorum) <= len(existingQuorum) {
+			continue
+		}
+
+		if err := ncv.Storage.Get(msgID.GetRoleType()).SaveParticipants(msgID, slot, quorum); err != nil {
+			return fmt.Errorf("could not save participants %w", err)
+		}
+
+		var operatorIDs []string
+		for _, share := range quorum {
+			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
+		}
+		logger.Info("✅ saved participants",
+			zap.String("converted_role", role.ToBeaconRole()),
+			zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
+			zap.String("signers", strings.Join(operatorIDs, ", ")),
+		)
 
 		if ncv.newDecidedHandler != nil {
 			ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
 				Slot:       slot,
 				Signers:    quorum,
-				Identifier: MsgID,
+				Identifier: msgID,
 			})
 		}
 	}
