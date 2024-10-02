@@ -29,8 +29,8 @@ type ParticipantResponse struct {
 
 func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From    int           `json:"from"`
-		To      int           `json:"to"`
+		From    uint64        `json:"from"`
+		To      uint64        `json:"to"`
 		Roles   api.RoleSlice `json:"roles"`
 		PubKeys api.HexSlice  `json:"pubkeys"`
 	}
