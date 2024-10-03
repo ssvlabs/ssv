@@ -37,9 +37,11 @@ func scoreInspector(logger *zap.Logger,
 	inspections := 0
 
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
-
-		// Updates the GossipScoreIndex in every iteration
-		updateGossipScoreIndex(gossipScoreIndex, scores)
+		peerScores := make(map[peer.ID]float64)
+		for pid, ps := range scores {
+			peerScores[pid] = ps.Score
+		}
+		gossipScoreIndex.SetScores(peerScores)
 
 		// Reset metrics before updating them.
 		metrics.ResetPeerScores()
@@ -104,19 +106,6 @@ func scoreInspector(logger *zap.Logger,
 
 		inspections++
 	}
-}
-
-// Updates the GossipScoreIndex with the peers' scores
-func updateGossipScoreIndex(gossipScoreIndex peers.GossipScoreIndex, scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
-	// Reset the index
-	peerScores := make(map[peer.ID]float64)
-
-	// Add the score for each peer
-	for pid, ps := range scores {
-		peerScores[pid] = ps.Score
-	}
-
-	gossipScoreIndex.SetScores(peerScores)
 }
 
 // topicScoreParams factory for creating scoring params for topics
