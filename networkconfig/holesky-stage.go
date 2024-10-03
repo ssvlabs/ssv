@@ -16,7 +16,7 @@ var HoleskyStage = NetworkConfig{
 	GenesisEpoch:         1,
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
 	RegistryContractAddr: "0x0d33801785340072C452b994496B19f196b7eE15",
-	AlanForkEpoch:        999999999,
+	AlanForkEpoch:        83532,
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	Bootnodes: []string{
 		// Public bootnode:
