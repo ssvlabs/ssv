@@ -4,7 +4,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -14,6 +13,8 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 const (
@@ -57,6 +58,10 @@ func (n *connGater) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
+	if n.isBadPeer(n.logger, id) {
+		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 
