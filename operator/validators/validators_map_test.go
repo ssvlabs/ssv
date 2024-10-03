@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
-	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/integration/qbft/tests"
+	"github.com/ssvlabs/ssv/operator/validators"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
 func TestUpdateCommitteeAtomic(t *testing.T) {
@@ -33,7 +34,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			ctx,
 			cancel,
 			zap.NewNop(),
-			tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+			tests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 			&new(specssv.Committee).CommitteeMember, nil,
 			map[phase0.ValidatorIndex]*spectypes.Share{
 				0: new(spectypes.Share),
@@ -63,7 +64,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			ctx,
 			cancel,
 			zap.NewNop(),
-			tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+			tests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 			&new(specssv.Committee).CommitteeMember, nil,
 			map[phase0.ValidatorIndex]*spectypes.Share{
 				0: new(spectypes.Share),
