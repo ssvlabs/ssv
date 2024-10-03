@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 )
 
 func TestUpdateCommitteeAtomic(t *testing.T) {
