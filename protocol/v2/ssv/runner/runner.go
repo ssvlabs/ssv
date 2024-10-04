@@ -102,7 +102,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 }
 
 // SetHighestDecidedSlot set highestDecidedSlot for base runner
-func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) { // TODO:1720 in the light of not saving highest instance
+func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
 	b.highestDecidedSlot = slot
 }
 
@@ -304,7 +304,6 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot,
 		specqbft.Height(slot),
 		byts,
 	)
-
 	if err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
