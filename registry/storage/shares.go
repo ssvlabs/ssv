@@ -140,7 +140,7 @@ func (s *sharesStorage) load() error {
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
-		val.DomainType = spectypes.DomainType(genesistypes.GetDefaultDomain())
+		val.DomainType = spectypes.DomainType(genesistypes.GetDefaultDomain()) // TODO: (Alan) can we get rid of this yet?
 		share, err := s.storageShareToSpecShare(val)
 		if err != nil {
 			return fmt.Errorf("failed to convert storage share to spec share: %w", err)
