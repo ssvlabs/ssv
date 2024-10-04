@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
@@ -47,6 +48,8 @@ type Shares interface {
 	// Drop deletes all shares.
 	Drop() error
 
+	Stop()
+
 	// UpdateValidatorsMetadata updates the metadata of the given validators
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
@@ -58,6 +61,11 @@ type sharesStorage struct {
 	shares         map[string]*types.SSVShare
 	validatorStore *validatorStore
 	mu             sync.RWMutex
+
+	pendingShares []basedb.Obj
+	cond          *sync.Cond
+	stop          func()
+	stopWg        sync.WaitGroup
 }
 
 type storageOperator struct {
@@ -115,6 +123,7 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 		shares: make(map[string]*types.SSVShare),
 		db:     db,
 		prefix: prefix,
+		cond:   sync.NewCond(&sync.Mutex{}),
 	}
 
 	if err := storage.load(); err != nil {
@@ -127,7 +136,52 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 	if err := storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...); err != nil {
 		return nil, nil, err
 	}
+
+	storage.stopWg.Add(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	go storage.persistPendingShares(ctx)
+
+	storage.stop = cancel
+
 	return storage, storage.validatorStore, nil
+}
+
+func (s *sharesStorage) Stop() {
+	s.stop()
+	s.cond.L.Lock()
+	s.cond.Signal()
+	s.cond.L.Unlock()
+	s.stopWg.Wait()
+}
+
+func (s *sharesStorage) persistPendingShares(ctx context.Context) {
+	defer s.stopWg.Done()
+	for {
+		if ctx.Err() != nil {
+			break
+		}
+
+		s.cond.L.Lock()
+
+		for len(s.pendingShares) == 0 {
+			if ctx.Err() != nil {
+				break
+			}
+			s.cond.Wait()
+		}
+
+		s.logger.Debug("persisting pending shares", zap.Int("count", len(s.pendingShares)))
+
+		err := s.db.SetMany(s.prefix, len(s.pendingShares), func(i int) (basedb.Obj, error) {
+			return s.pendingShares[i], nil
+		})
+		if err != nil {
+			s.logger.Error("persist share db objects", zap.Error(err))
+		}
+
+		s.pendingShares = nil
+		s.cond.L.Unlock()
+	}
 }
 
 // load reads all shares from db.
@@ -210,23 +264,19 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		}
 	}
 
-	var dbShares []basedb.Obj
-	for _, share := range shares {
-		share := specShareToStorageShare(share)
-		value, err := share.Encode()
+	s.cond.L.Lock()
+	for _, shr := range shares {
+		ss := specShareToStorageShare(shr)
+		value, err := ss.Encode()
 		if err != nil {
-			return fmt.Errorf("failed to serialize share: %w", err)
+			s.logger.Error("encode share", zap.Error(err))
+			continue
 		}
-		dbShares = append(dbShares, basedb.Obj{Key: s.storageKey(share.ValidatorPubKey[:]), Value: value})
+		obj := basedb.Obj{Key: s.storageKey(shr.ValidatorPubKey[:]), Value: value}
+		s.pendingShares = append(s.pendingShares, obj)
 	}
-
-	err := s.db.Using(rw).SetMany(s.prefix, len(dbShares), func(i int) (basedb.Obj, error) {
-		return dbShares[i], nil
-	})
-	if err != nil {
-		s.logger.Error("persist share db objects", zap.Error(err))
-		return fmt.Errorf("persist share db objects: %w", err)
-	}
+	s.cond.Signal()
+	s.cond.L.Unlock()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

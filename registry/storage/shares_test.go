@@ -12,10 +12,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -73,7 +73,10 @@ func TestSharesStorage(t *testing.T) {
 	logger := logging.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
-	defer storage.Close()
+	t.Cleanup(func() {
+		storage.waitDone()
+		storage.Close()
+	})
 
 	threshold.Init()
 	const keysCount = 4
@@ -312,8 +315,15 @@ func newTestStorage(logger *zap.Logger) (*testStorage, error) {
 	return s, nil
 }
 
+func (t *testStorage) waitDone() {
+	if t.Shares != nil {
+		t.Shares.Stop()
+	}
+}
+
 func (t *testStorage) open(logger *zap.Logger) error {
 	var err error
+	t.waitDone()
 	t.Shares, t.ValidatorStore, err = NewSharesStorage(logger, t.db, []byte("test"))
 	if err != nil {
 		return err
@@ -334,7 +344,10 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 	logger := logging.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
-	defer storage.Close()
+	t.Cleanup(func() {
+		storage.waitDone()
+		storage.Close()
+	})
 
 	// Initialize threshold and generate keys for test setup
 	threshold.Init()
@@ -414,8 +427,11 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 	logger := logging.TestLogger(t)
 	storage, err := newTestStorage(logger)
+	t.Cleanup(func() {
+		storage.waitDone()
+		storage.Close()
+	})
 	require.NoError(t, err)
-	defer storage.Close()
 
 	// Initialize threshold and generate keys for test setup
 	threshold.Init()
