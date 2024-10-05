@@ -2,17 +2,17 @@ package bootnode
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/utils/commons"
 	"log"
-
-	"github.com/bloxapp/ssv/logging"
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	global_config "github.com/bloxapp/ssv/cli/config"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"
+	"github.com/bloxapp/ssv/utils/commons"
 )
 
 type config struct {
@@ -54,7 +54,11 @@ var StartBootNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		bootNode, err := bootnode.New(cfg.Options)
+		networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.Options.Network)
+		if err != nil {
+			logger.Fatal("failed to get network config", zap.Error(err))
+		}
+		bootNode, err := bootnode.New(networkConfig, cfg.Options)
 		if err != nil {
 			logger.Fatal("failed to set up boot node", zap.Error(err))
 		}
