@@ -86,6 +86,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
 	if n.isBadPeer(n.logger, id) {
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
+		return false
 	}
 	return true
 }
