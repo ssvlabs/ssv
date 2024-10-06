@@ -1,4 +1,5 @@
-// go:build linux
+//go:build linux
+
 package keys
 
 import (
@@ -6,10 +7,9 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"testing"
 )
 
 func Test_VerifyRegularSigWithOpenSSL(t *testing.T) {
