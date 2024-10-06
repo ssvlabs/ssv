@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
@@ -39,14 +40,15 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	}
 
 	var lastErr error
-	for i, runData := range test.RunInstanceData {
-		height := specqbft.Height(i)
+	height := specqbft.Height(0)
+	for _, runData := range test.RunInstanceData {
 		if runData.Height != nil {
 			height = *runData.Height
 		}
 		if err := runInstanceWithData(t, logger, height, contr, runData); err != nil {
 			lastErr = err
 		}
+		height++
 	}
 
 	if len(test.ExpectedError) != 0 {

@@ -25,7 +25,7 @@ func (eh *EventHandler) validateOperators(txn basedb.Txn, operators []uint64) er
 		return fmt.Errorf("no operators")
 	}
 
-	if !ssvtypes.ValidCommitteeSize(len(operators)) {
+	if !ssvtypes.ValidCommitteeSize(uint64(len(operators))) {
 		return fmt.Errorf("given operator count (%d) cannot build a 3f+1 quorum", operatorCount)
 	}
 

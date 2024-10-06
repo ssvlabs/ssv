@@ -28,6 +28,7 @@ func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spe
 	var beaconRole spectypes.BeaconRole
 	switch role {
 	case spectypes.RoleCommittee:
+		// #nosec G115
 		return spectestingutils.TestingCommitteeAttesterDuty(slot, []int{int(idx)})
 	case spectypes.RoleAggregator:
 		testingDuty = spectestingutils.TestingAggregatorDuty

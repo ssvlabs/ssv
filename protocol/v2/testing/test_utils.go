@@ -48,7 +48,7 @@ func GenerateOperatorSigner(oids ...spectypes.OperatorID) ([]*rsa.PrivateKey, []
 		}
 
 		nodes = append(nodes, &spectypes.Operator{
-			OperatorID:        spectypes.OperatorID(i),
+			OperatorID:        oids[i],
 			SSVOperatorPubKey: pubKey,
 		})
 

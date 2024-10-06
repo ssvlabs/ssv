@@ -56,7 +56,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -131,7 +131,7 @@ func (mockSignatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
 	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
@@ -190,7 +190,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return uint64(options.TotalValidators), uint64(options.ActiveValidators), uint64(options.MyValidators), nil
+			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
 		}
 	}
 
@@ -222,7 +222,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: spectypes.OperatorID(nodeIndex + 1)})
+	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
 
 	mr := metricsreporter.New()
 	p, err := New(logger, cfg, mr)
@@ -237,11 +237,11 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 }
 
 type LocalNetOptions struct {
-	MessageValidatorProvider                        func(int) validation.MessageValidator
+	MessageValidatorProvider                        func(uint64) validation.MessageValidator
 	Nodes                                           int
 	MinConnected                                    int
 	UseDiscv5                                       bool
-	TotalValidators, ActiveValidators, MyValidators int
+	TotalValidators, ActiveValidators, MyValidators uint64
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
 	Shares                                          []*ssvtypes.SSVShare
@@ -256,7 +256,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 			return nil, err
 		}
 	}
-	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex int, keys testing.NodeKeys) network.P2PNetwork {
+	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
 		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
 		if err != nil {
@@ -274,7 +274,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {

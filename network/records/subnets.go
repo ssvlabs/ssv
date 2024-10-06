@@ -21,7 +21,7 @@ const (
 
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
-func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) ([]byte, error) {
+func UpdateSubnets(node *enode.LocalNode, count int, added []uint64, removed []uint64) ([]byte, error) {
 	subnets, err := GetSubnetsEntry(node.Node().Record())
 	if err != nil && !errors.Is(err, ErrEntryNotFound) {
 		return nil, errors.Wrap(err, "could not read subnets entry")
@@ -59,8 +59,10 @@ func (s Subnets) Clone() Subnets {
 
 func (s Subnets) String() string {
 	subnetsVec := bitfield.NewBitvector128()
-	for subnet, val := range s {
-		subnetsVec.SetBitAt(uint64(subnet), val > uint8(0))
+	subnet := uint64(0)
+	for _, val := range s {
+		subnetsVec.SetBitAt(subnet, val > uint8(0))
+		subnet++
 	}
 	return hex.EncodeToString(subnetsVec.Bytes())
 }
@@ -144,7 +146,7 @@ func getCharMask(str string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		maskData = append(maskData, uint8(val))
+		maskData = append(maskData, uint8(val)) // nolint:gosec
 	}
 	return maskData, nil
 }

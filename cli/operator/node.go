@@ -442,6 +442,7 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
+
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
 			return fmt.Errorf("failed to store config: %w", err)
 		}
