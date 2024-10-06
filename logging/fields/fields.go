@@ -38,7 +38,6 @@ const (
 	FieldBlockHash           = "block_hash"
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
-	FieldBuilderProposals    = "builder_proposals"
 	FieldClusterIndex        = "cluster_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
@@ -71,6 +70,7 @@ const (
 	FieldPeerID              = "peer_id"
 	FieldPeerScore           = "peer_score"
 	FieldPrivKey             = "privkey"
+	FieldProtocolID          = "protocol_id"
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
@@ -293,6 +293,10 @@ func Domain(val spectypes.DomainType) zap.Field {
 	return zap.Stringer(FieldDomain, format.DomainType(val))
 }
 
+func ProtocolID(val [6]byte) zap.Field {
+	return zap.String(FieldProtocolID, hex.EncodeToString(val[:]))
+}
+
 func Network(val string) zap.Field {
 	return zap.String(FieldNetwork, val)
 }
@@ -315,10 +319,6 @@ func ToBlock(val uint64) zap.Field {
 
 func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
-}
-
-func BuilderProposals(v bool) zap.Field {
-	return zap.Bool(FieldBuilderProposals, v)
 }
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
