@@ -303,10 +303,15 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	// selfID is used to exclude current node
 	selfID := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	t := time.NewTimer(interval)
+	defer t.Stop()
+	wait := func() {
+		t.Reset(interval)
+		<-t.C
+	}
 
 	for ctx.Err() == nil {
+		wait()
 		exists := iterator.Next()
 		if !exists {
 			continue
@@ -324,11 +329,6 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 				AddrInfo: *ai,
 				Node:     n,
 			})
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return
-			}
 		}
 	}
 }
