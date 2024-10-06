@@ -11,6 +11,7 @@ import (
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type Exporter struct {
@@ -56,12 +57,13 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 
 	response.Data = []*ParticipantResponse{}
 	for _, role := range request.Roles {
-		roleStorage := e.QBFTStores.Get(convert.RunnerRole(role))
+		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
+		roleStorage := e.QBFTStores.Get(runnerRole)
 		if roleStorage == nil {
 			return fmt.Errorf("role storage doesn't exist: %v", role)
 		}
 		for _, pubKey := range request.PubKeys {
-			msgID := convert.NewMsgID(e.DomainType, pubKey, convert.RunnerRole(role))
+			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
 			from := phase0.Slot(request.From)
 			to := phase0.Slot(request.To)
 
