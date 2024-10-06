@@ -23,7 +23,7 @@ type ParticipantResponse struct {
 	Slot      uint64 `json:"slot"`
 	PublicKey string `json:"public_key"`
 	Message   struct {
-		Signers []uint64 `json:"signers"`
+		Signers []uint64 `json:"Signers"`
 	} `json:"message"`
 }
 
