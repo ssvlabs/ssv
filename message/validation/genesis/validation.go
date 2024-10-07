@@ -255,7 +255,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 			if valErr.Reject() {
 				if !valErr.Silent() {
 					f = append(f, zap.Error(err))
-					mv.logger.Debug("rejecting invalid message", f...)
+					mv.logger.Debug("rejecting invalid message (genesis)", f...)
 				}
 
 				mv.metrics.GenesisMessageRejected(valErr.Text(), descriptor.Role, round)
@@ -264,7 +264,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 
 			if !valErr.Silent() {
 				f = append(f, zap.Error(err))
-				mv.logger.Debug("ignoring invalid message", f...)
+				mv.logger.Debug("ignoring invalid message (genesis)", f...)
 			}
 			mv.metrics.GenesisMessageIgnored(valErr.Text(), descriptor.Role, round)
 			return pubsub.ValidationIgnore
@@ -335,6 +335,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	msg, err := genesisqueue.DecodeGenesisSignedSSVMessage(signedSSVMsg)
 	if err != nil {
 		if errors.Is(err, genesisqueue.ErrDecodeNetworkMsg) {
+			alanSignedSSVMsg := &alanspectypes.SignedSSVMessage{}
+			if err := alanSignedSSVMsg.Decode(pMsg.GetData()); err == nil {
+				e := ErrAlanMessage
+				return nil, Descriptor{}, e
+			}
+
 			e := ErrMalformedPubSubMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
