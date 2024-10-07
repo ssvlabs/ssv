@@ -55,5 +55,5 @@ func (s *SharedUDPConn) LocalAddr() net.Addr {
 
 // Close implements discover.UDPConn
 func (s *SharedUDPConn) Close() error {
-	return s.UDPConn.Close()
+	return nil
 }
