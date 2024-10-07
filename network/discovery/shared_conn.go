@@ -16,7 +16,23 @@ type SharedUDPConn struct {
 }
 
 // ReadFromUDPAddrPort implements discover.UDPConn
+// It's being called in go-ethereum@1.14.8
 func (s *SharedUDPConn) ReadFromUDPAddrPort(b []byte) (n int, addr *net.UDPAddr, err error) {
+	packet, ok := <-s.Unhandled
+	if !ok {
+		return 0, nil, errors.New("connection was closed")
+	}
+	l := len(packet.Data)
+	if l > len(b) {
+		l = len(b)
+	}
+	copy(b[:l], packet.Data[:l])
+	return l, packet.Addr, nil
+}
+
+// ReadFromUDP implements discover.UDPConn
+// It's being called in go-ethereum@1.13.14
+func (s *SharedUDPConn) ReadFromUDP(b []byte) (n int, addr *net.UDPAddr, err error) {
 	packet, ok := <-s.Unhandled
 	if !ok {
 		return 0, nil, errors.New("connection was closed")
