@@ -16,7 +16,7 @@ var TestNetwork = NetworkConfig{
 	RegistrySyncOffset:   new(big.Int).SetInt64(9015219),
 	RegistryContractAddr: "0x4B133c68A084B8A88f72eDCd7944B69c8D545f03",
 	Bootnodes: []string{
-		"enr:-Li4QPnPGESWx2wnu3s2qeu6keFbkaV2M0ZiGHgxxGI9ThP4XSgSaFzl6zYsF1zAdni3Mh04iA6BEZqoC6LZ52UFnwKGAYxEgLqeh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDQiKqmJc2VjcDI1NmsxoQP2e508AoA0B-KH-IaAd3nVCfI9q16lNztV-oTpcH72tIN0Y3CCE4mDdWRwgg-h",
+		"enr:-Li4QFIQzamdvTxGJhvcXG_DFmCeyggSffDnllY5DiU47pd_K_1MRnSaJimWtfKJ-MD46jUX9TwgW5Jqe0t4pH41RYWGAYuFnlyth2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQN4v-N9zFYwEqzGPBBX37q24QPFvAVUtokIo1fblIsmTIN0Y3CCE4uDdWRwgg-j",
 	},
 	PermissionlessActivationEpoch: 123456789,
 }
