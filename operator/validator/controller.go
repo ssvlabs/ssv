@@ -14,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -57,8 +59,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils/casts"
-	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -1271,7 +1271,6 @@ func SetupCommitteeRunners(
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Storage:     options.Storage.Get(casts.RunnerRoleToConvertRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
@@ -1335,7 +1334,6 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:     options.Storage.Get(casts.RunnerRoleToConvertRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,

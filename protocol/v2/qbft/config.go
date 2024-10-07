@@ -3,9 +3,7 @@ package qbft
 import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
@@ -36,7 +34,6 @@ type Config struct {
 	Domain       spectypes.DomainType
 	ValueCheckF  specqbft.ProposedValueCheckF
 	ProposerF    specqbft.ProposerF
-	Storage      qbftstorage.QBFTStore
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
 	CutOffRound  specqbft.Round
