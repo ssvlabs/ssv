@@ -14,7 +14,7 @@ var Holesky = NetworkConfig{
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, 0x5, 0x1},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, 0x5, 0x2},
 	GenesisEpoch:         1,
-	AlanForkEpoch:        84600, // Oct-08-2024 12:00:00 PM UTC
+	AlanForkEpoch:        84426,
 	RegistrySyncOffset:   new(big.Int).SetInt64(181612),
 	RegistryContractAddr: "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA",
 	Bootnodes: []string{
