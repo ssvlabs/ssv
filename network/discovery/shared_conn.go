@@ -8,6 +8,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// UDPConn is a network connection on which discovery can operate.
+type UDPConn interface {
+	ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPort, err error)
+	WriteToUDPAddrPort(b []byte, addr netip.AddrPort) (n int, err error)
+	Close() error
+	LocalAddr() net.Addr
+}
+
 // SharedUDPConn implements a shared connection. Write sends messages to the underlying connection while read returns
 // messages that were found unprocessable and sent to the unhandled channel by the primary listener.
 // It's copied from https://github.com/ethereum/go-ethereum/blob/v1.14.8/p2p/server.go#L435
@@ -30,8 +38,8 @@ func (s *SharedUDPConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPor
 	return l, packet.Addr, nil
 }
 
-func (s *SharedUDPConn) WriteToUDP(b []byte, addr *net.UDPAddr) (n int, err error) {
-	return s.UDPConn.WriteToUDP(b, addr)
+func (s *SharedUDPConn) WriteToUDPAddrPort(b []byte, addr netip.AddrPort) (n int, err error) {
+	return s.UDPConn.WriteToUDPAddrPort(b, addr)
 }
 
 func (s *SharedUDPConn) LocalAddr() net.Addr {
