@@ -120,7 +120,7 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - unstable
+    - deploy/holesky-bootnode
 
 Deploy nodes to prod:
   stage: deploy
@@ -144,13 +144,13 @@ Deploy nodes to prod:
     # +-------------------------------+
     # |  🟠 Deploy SSV Holesky nodes  |
     # +-------------------------------+
-    - .k8/production/holesky/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    # - .k8/production/holesky/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
     #
     # +-------------------------------+
     # │  🟠 Deploy Holesky Bootnode   |
     # +-------------------------------+
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
-    #- .k8/production/holesky/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    - .k8/production/holesky/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
     #
     # +----------------------------+
     # |  🔴 Deploy SSV Mainnet nodes  |
@@ -164,7 +164,7 @@ Deploy nodes to prod:
     # - .k8/production/mainnet/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
 
   only:
-    - unstable
+    - deploy/holesky-bootnode
 
 Deploy exporter to prod:
   stage: deploy
