@@ -3,16 +3,15 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -243,6 +242,9 @@ func uInt64ToByteSlice(n uint64) []byte {
 }
 
 func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+	if len(operators) != 4 && len(operators) != 7 && len(operators) != 13 {
+		return nil, fmt.Errorf("invalid operators list size: %d", len(operators))
+	}
 	encoded := make([]byte, len(operators)*8)
 	for i, v := range operators {
 		binary.BigEndian.PutUint64(encoded[i*8:], v)
