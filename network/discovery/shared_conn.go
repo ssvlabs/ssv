@@ -12,7 +12,7 @@ import (
 // messages that were found unprocessable and sent to the unhandled channel by the primary listener.
 // It's copied from https://github.com/ethereum/go-ethereum/blob/v1.14.8/p2p/server.go#L435
 type SharedUDPConn struct {
-	*net.UDPConn
+	UDPConn   *net.UDPConn // not using embedding to make sure go-ethereum doesn't use unwrapped net.UDPConn's methods
 	Unhandled chan discover.ReadPacket
 }
 
@@ -28,6 +28,14 @@ func (s *SharedUDPConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPor
 	}
 	copy(b[:l], packet.Data[:l])
 	return l, packet.Addr, nil
+}
+
+func (s *SharedUDPConn) WriteToUDP(b []byte, addr *net.UDPAddr) (n int, err error) {
+	return s.UDPConn.WriteToUDP(b, addr)
+}
+
+func (s *SharedUDPConn) LocalAddr() net.Addr {
+	return s.UDPConn.LocalAddr()
 }
 
 // Close implements discover.UDPConn
