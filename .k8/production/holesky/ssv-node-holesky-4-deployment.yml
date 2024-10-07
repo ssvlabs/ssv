@@ -46,6 +46,7 @@ spec:
     metadata:
       labels:
         app: ssv-node-holesky-4
+        app.kubernetes.io/name: ssv-node
     spec:
       affinity:
         nodeAffinity:
