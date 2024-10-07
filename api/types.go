@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"log"
 	"strconv"
 	"strings"
 
@@ -81,7 +80,6 @@ func (r *Role) Bind(value string) error {
 		return err
 	}
 	*r = Role(role)
-	log.Printf("Binding role: %s to %v", value, role)
 	return nil
 }
 

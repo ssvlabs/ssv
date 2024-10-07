@@ -3,7 +3,6 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -192,8 +191,6 @@ func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from,
 }
 
 func (i *ibftStorage) GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	log.Printf("Fetching participants for identifier: %x at slot: %d", identifier, slot)
-
 	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err

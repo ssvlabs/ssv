@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -65,8 +64,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		}
 		for _, pubKey := range request.PubKeys {
 			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
-			log.Printf("Generated MsgID: %x for role: %v, pubKey: %s", msgID, role, pubKey)
-
 			from := phase0.Slot(request.From)
 			to := phase0.Slot(request.To)
 
