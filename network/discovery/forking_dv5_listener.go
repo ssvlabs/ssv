@@ -113,6 +113,7 @@ func (l *forkingDV5Listener) Close() {
 // closePreForkListener ensures preForkListener is closed once
 func (l *forkingDV5Listener) closePreForkListener() {
 	l.closeOnce.Do(func() {
+		zap.L().Debug("closing pre fork listener")
 		l.preForkListener.Close()
 	})
 }
@@ -125,8 +126,14 @@ type annotatedIterator struct {
 
 func (i *annotatedIterator) Next() bool {
 	if !i.Iterator.Next() {
+		zap.L().Debug("iterator next returned false", zap.String("fork", i.fork))
 		return false
 	}
 	metricIterations.WithLabelValues(i.fork).Inc()
 	return true
+}
+
+func (i *annotatedIterator) Close() {
+	zap.L().Debug("closing iterator", zap.String("fork", i.fork))
+	i.Iterator.Close()
 }
