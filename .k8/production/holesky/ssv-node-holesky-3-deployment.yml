@@ -12,19 +12,19 @@ spec:
     - port: 12024
       protocol: UDP
       targetPort: 12024
-      name: port-12024
+      name: p2p-udp
     - port: 13024
       protocol: TCP
       targetPort: 13024
-      name: port-13024
+      name: p2p-tcp
     - port: 15024
       protocol: TCP
       targetPort: 15024
-      name: port-15024
+      name: metrics
     - port: 16024
       protocol: TCP
       targetPort: 16024
-      name: port-16024
+      name: api
   selector:
     app: ssv-node-holesky-3
 ---
@@ -71,17 +71,17 @@ spec:
         command: ["make", "start-node"]
         ports:
         - containerPort: 12024
-          name: port-12024
+          name: p2p-udp
           hostPort: 12024
           protocol: UDP
         - containerPort: 13024
-          name: port-13024
+          name: p2p-tcp
           hostPort: 13024
         - containerPort: 15024
-          name: port-15024
+          name: metrics
           hostPort: 15024
         - containerPort: 16024
-          name: port-16024
+          name: api
           hostPort: 16024
         env:
           - name: SHARE_CONFIG
