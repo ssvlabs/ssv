@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
@@ -22,8 +21,6 @@ var SupportedConfigs = map[string]NetworkConfig{
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
 }
-
-const alanForkName = "alan"
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
@@ -43,9 +40,6 @@ type NetworkConfig struct {
 	Bootnodes                     []string
 	WhitelistedOperatorKeys       []string
 	PermissionlessActivationEpoch spec.Epoch
-	DiscoveryProtocolID           [6]byte
-
-	AlanForkEpoch phase0.Epoch
 }
 
 func (n NetworkConfig) String() string {
@@ -55,18 +49,6 @@ func (n NetworkConfig) String() string {
 	}
 
 	return string(b)
-}
-
-func (n NetworkConfig) AlanForkNetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, alanForkName)
-}
-
-func (n NetworkConfig) PastAlanFork() bool {
-	return n.Beacon.EstimatedCurrentEpoch() >= n.AlanForkEpoch
-}
-
-func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
-	return epoch >= n.AlanForkEpoch
 }
 
 // ForkVersion returns the fork version of the network.
@@ -87,9 +69,4 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
-}
-
-// DomainType returns current domain type based on the current fork.
-func (n NetworkConfig) DomainType() spectypes.DomainType {
-	return n.Domain
 }

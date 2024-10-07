@@ -20,5 +20,4 @@ var HoleskyStage = NetworkConfig{
 	},
 	WhitelistedOperatorKeys:       []string{},
 	PermissionlessActivationEpoch: 10560,
-	AlanForkEpoch:                 9999999999,
 }
