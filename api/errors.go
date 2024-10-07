@@ -23,7 +23,7 @@ func (e *ErrorResponse) Error() string {
 	return e.Err.Error()
 }
 
-func InvalidRequestError(err error) *ErrorResponse {
+func BadRequestError(err error) *ErrorResponse {
 	return &ErrorResponse{
 		Err:     err,
 		Code:    400,
