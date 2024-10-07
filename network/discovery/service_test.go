@@ -198,16 +198,12 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	require.ErrorContains(t, err, "could not read domain type: not found")
 
 	// Matching main domain
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType(), spectypes.DomainType{})))
-	require.NoError(t, err)
-
-	// Matching next domain
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType())))
+	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomain(t, testNetConfig.DomainType())))
 	require.NoError(t, err)
 
 	// Mismatching domains
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
-	require.ErrorContains(t, err, "mismatched domain type: neither 00000000 nor 00000000 match 00000302")
+	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomain(t, spectypes.DomainType{})))
+	require.ErrorContains(t, err, "mismatched domain type: 00000000")
 
 	// No subnets
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithoutSubnets(t)))

@@ -157,7 +157,7 @@ func NodeWithoutSubnets(t *testing.T) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType(), false, nil)
 }
 
-func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
+func NodeWithCustomDomain(t *testing.T, domainType spectypes.DomainType) *enode.Node {
 	return CustomNode(t, true, domainType, true, mockSubnets(1))
 }
 
