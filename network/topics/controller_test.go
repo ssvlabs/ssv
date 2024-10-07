@@ -371,7 +371,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		// TODO: add mock for peers.ScoreIndex
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop())
+	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), nil)
 	require.NoError(t, err)
 
 	p = &P{

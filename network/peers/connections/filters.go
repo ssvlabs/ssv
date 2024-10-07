@@ -6,7 +6,9 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/storage"
@@ -20,6 +22,16 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 		nid := ani.GetNodeInfo().NetworkID
 		if networkID != nid {
 			return errors.Errorf("networkID '%s' instead of '%s'", nid, networkID)
+		}
+		return nil
+	}
+}
+
+// BadPeerFilter avoids connecting to a bad peer
+func BadPeerFilter(logger *zap.Logger, n peers.Index) HandshakeFilter {
+	return func(senderID peer.ID, ani records.AnyNodeInfo) error {
+		if n.IsBad(logger, senderID) {
+			return errors.New("bad peer")
 		}
 		return nil
 	}

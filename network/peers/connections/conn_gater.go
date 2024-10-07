@@ -13,6 +13,8 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 const (
@@ -24,20 +26,24 @@ const (
 	//
 )
 
+type BadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
 	logger    *zap.Logger // struct logger to implement connmgr.ConnectionGater
 	atLimit   func() bool
 	ipLimiter *leakybucket.Collector
+	isBadPeer BadPeerF
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, atLimit func() bool) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, atLimit func() bool, isBadPeerF BadPeerF) connmgr.ConnectionGater {
 	return &connGater{
 		logger:    logger,
 		atLimit:   atLimit,
 		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
+		isBadPeer: isBadPeerF,
 	}
 }
 
@@ -52,6 +58,10 @@ func (n *connGater) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
+	if n.isBadPeer(n.logger, id) {
+		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 
@@ -74,6 +84,10 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+	if n.isBadPeer(n.logger, id) {
+		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 
