@@ -128,7 +128,7 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open wallet")
 	}
-	if obj.Value == nil || len(obj.Value) == 0 {
+	if len(obj.Value) == 0 {
 		return nil, errors.New("failed to open wallet")
 	}
 	// decode
@@ -280,7 +280,7 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.Attestation
 	if !found {
 		return nil, false, nil
 	}
-	if obj.Value == nil || len(obj.Value) == 0 {
+	if len(obj.Value) == 0 {
 		return nil, found, errors.Wrap(err, "highest attestation value is empty")
 	}
 
@@ -333,7 +333,7 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 	if !found {
 		return 0, found, nil
 	}
-	if obj.Value == nil || len(obj.Value) == 0 {
+	if len(obj.Value) == 0 {
 		return 0, found, errors.Wrap(err, "highest proposal value is empty")
 	}
 
@@ -350,7 +350,7 @@ func (s *storage) RemoveHighestProposal(pubKey []byte) error {
 }
 
 func (s *storage) decryptData(objectValue []byte) ([]byte, error) {
-	if s.encryptionKey == nil || len(s.encryptionKey) == 0 {
+	if len(s.encryptionKey) == 0 {
 		return objectValue, nil
 	}
 
@@ -363,7 +363,7 @@ func (s *storage) decryptData(objectValue []byte) ([]byte, error) {
 }
 
 func (s *storage) encryptData(objectValue []byte) ([]byte, error) {
-	if s.encryptionKey == nil || len(s.encryptionKey) == 0 {
+	if len(s.encryptionKey) == 0 {
 		return objectValue, nil
 	}
 
