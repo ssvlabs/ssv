@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -61,10 +62,13 @@ func TestMain(m *testing.M) {
 		Nodes: nodes,
 	}
 
-	m.Run()
+	// exitCode required here only for linter
+	exitCode := m.Run()
 
 	//teardown
 	for i := 0; i < len(ln.Nodes); i++ {
 		_ = ln.Nodes[i].Close()
 	}
+
+	os.Exit(exitCode)
 }
