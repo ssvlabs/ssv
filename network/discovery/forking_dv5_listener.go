@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -21,7 +20,6 @@ type forkingDV5Listener struct {
 	preForkListener  Listener
 	postForkListener Listener
 	iteratorTimeout  time.Duration
-	closeOnce        sync.Once
 	netCfg           networkconfig.NetworkConfig
 }
 
@@ -87,9 +85,7 @@ func (l *forkingDV5Listener) Close() {
 
 // closePreForkListener ensures preForkListener is closed once
 func (l *forkingDV5Listener) closePreForkListener() {
-	l.closeOnce.Do(func() {
-		l.preForkListener.Close()
-	})
+	l.preForkListener.Close()
 }
 
 // annotatedIterator wraps an enode.Iterator with metrics collection.
