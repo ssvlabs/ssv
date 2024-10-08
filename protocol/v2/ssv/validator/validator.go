@@ -13,7 +13,6 @@ import (
 
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -40,8 +39,7 @@ type Validator struct {
 	Signer         spectypes.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Storage *storage.QBFTStores
-	Queues  map[spectypes.RunnerRole]queueContainer
+	Queues map[spectypes.RunnerRole]queueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
@@ -66,7 +64,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		NetworkConfig:    options.NetworkConfig,
 		DutyRunners:      options.DutyRunners,
 		Network:          options.Network,
-		Storage:          options.Storage,
 		Operator:         options.Operator,
 		Share:            options.SSVShare,
 		Signer:           options.Signer,

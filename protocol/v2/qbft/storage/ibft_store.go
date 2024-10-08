@@ -34,9 +34,6 @@ type ParticipantsRangeEntry struct {
 
 // QBFTStore is the store used by QBFT components
 type QBFTStore interface {
-	// GetHighestInstance returns the highest instance for the given identifier.
-	GetHighestInstance(identifier []byte) (*StoredInstance, error) // test only but some skipped
-
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(msgID []byte) error
 

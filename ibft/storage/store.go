@@ -54,22 +54,6 @@ func New(db basedb.Database, prefix string) qbftstorage.QBFTStore {
 	}
 }
 
-// GetHighestInstance returns the StoredInstance for the highest instance.
-func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.StoredInstance, error) {
-	val, found, err := i.get(nil, highestInstanceKey, identifier[:])
-	if !found {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	ret := &qbftstorage.StoredInstance{}
-	if err := ret.Decode(val); err != nil {
-		return nil, errors.Wrap(err, "could not decode instance")
-	}
-	return ret, nil
-}
-
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
 func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	prefix := i.prefix

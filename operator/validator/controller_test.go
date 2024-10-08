@@ -354,7 +354,6 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 	firstValidator, err := validators.NewValidatorContainer(
 		&validator.Validator{
 			DutyRunners: runner.ValidatorDutyRunners{},
-			Storage:     ibftstorage.NewStores(),
 			Share: &types.SSVShare{
 				Share: spectypes.Share{
 					ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
@@ -1115,7 +1114,6 @@ func setupTestValidator(t *testing.T, ownerAddressBytes, feeRecipientBytes []byt
 	v, err := validators.NewValidatorContainer(
 		&validator.Validator{
 			DutyRunners: runner.ValidatorDutyRunners{},
-			Storage:     ibftstorage.NewStores(),
 			Share: &types.SSVShare{
 				Share: spectypes.Share{
 					FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),

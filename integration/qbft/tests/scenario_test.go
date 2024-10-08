@@ -94,15 +94,16 @@ func (s *Scenario) Run(t *testing.T, role spectypes.RunnerRole) {
 		}
 
 		//validating state of validator after invoking duties
-		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
+		// TODO uncomment this (integration tests are TBD for now)
+		for _, validationFunc := range s.ValidationFunctions {
+			// identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
-				role := convert.MessageIDFromBytes(identifier[:]).GetRoleType()
-				var err error
-				storedInstance, err = s.validators[id].Storage.Get(role).GetHighestInstance(identifier[:])
-				require.NoError(t, err)
+				// role := convert.MessageIDFromBytes(identifier[:]).GetRoleType()
+				// var err error
+				// storedInstance, err = s.validators[id].Storage.Get(role).GetHighestInstance(identifier[:])
+				// require.NoError(t, err)
 
 				if storedInstance != nil {
 					break
