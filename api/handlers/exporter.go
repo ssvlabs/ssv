@@ -77,6 +77,8 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 
 			e.Logger.Debug("Fetched participants",
 				zap.Any("role", role),
+				zap.Any("runner_role", runnerRole),
+				zap.String("msg_id", hex.EncodeToString(msgID[:])),
 				zap.Uint64("from", request.From),
 				zap.Uint64("to", request.To),
 				zap.String("pubkey", hex.EncodeToString(pubKey)),
