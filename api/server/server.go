@@ -21,6 +21,7 @@ type Server struct {
 	node       *handlers.Node
 	validators *handlers.Validators
 	exporter   *handlers.Exporter
+	operators  *handlers.Operators
 }
 
 func New(
@@ -29,6 +30,7 @@ func New(
 	node *handlers.Node,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
+	operators *handlers.Operators,
 ) *Server {
 	return &Server{
 		logger:     logger,
@@ -36,6 +38,7 @@ func New(
 		node:       node,
 		validators: validators,
 		exporter:   exporter,
+		operators:  operators,
 	}
 }
 
@@ -52,6 +55,7 @@ func (s *Server) Run() error {
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
+	router.Get("/v1/operators", api.Handler(s.operators.List))
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
 	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))

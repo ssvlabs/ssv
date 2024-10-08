@@ -30,6 +30,9 @@ type MessageValidator interface {
 	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
+var PeerIDtoSignerMtx sync.Mutex
+var PeerIDtoSigner map[peer.ID]spectypes.OperatorID = make(map[peer.ID]spectypes.OperatorID)
+
 type messageValidator struct {
 	logger                *zap.Logger
 	netCfg                networkconfig.NetworkConfig
@@ -112,6 +115,13 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	if err != nil {
 		return nil, err
 	}
+
+	pid := pMsg.GetFrom()
+	operator := signedSSVMessage.OperatorIDs[0]
+
+	PeerIDtoSignerMtx.Lock()
+	PeerIDtoSigner[pid] = operator
+	PeerIDtoSignerMtx.Unlock()
 
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
