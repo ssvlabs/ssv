@@ -33,7 +33,7 @@ type MessageValidator interface {
 }
 
 var PeerIDtoSignerMtx sync.Mutex
-var PeerIDtoSigner map[peer.ID]spectypes.OperatorID
+var PeerIDtoSigner map[peer.ID]spectypes.OperatorID = make(map[peer.ID]spectypes.OperatorID)
 
 type messageValidator struct {
 	logger                *zap.Logger
