@@ -113,6 +113,8 @@ spec:
             value: "true"
           - name: SUBNETS
             value: "0xffffffffffffffffffffffffffffffff"
+          - name: P2P_MAX_PEERS
+            value: "300"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-holesky-4
