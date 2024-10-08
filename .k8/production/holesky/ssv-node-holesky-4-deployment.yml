@@ -111,6 +111,8 @@ spec:
             value: "16025"
           - name: ENABLE_PROFILE
             value: "true"
+          - name: SUBNETS
+            value: "0xffffffffffffffffffffffffffffffff"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-holesky-4
