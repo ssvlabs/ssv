@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"encoding/hex"
 	"fmt"
 	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
@@ -19,7 +17,6 @@ import (
 type Exporter struct {
 	DomainType spectypes.DomainType
 	QBFTStores *ibftstorage.QBFTStores
-	Logger     *zap.Logger
 }
 
 type ParticipantResponse struct {
@@ -74,17 +71,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return fmt.Errorf("error getting participants: %w", err)
 			}
-
-			e.Logger.Debug("Fetched participants",
-				zap.Any("role", role),
-				zap.Any("runner_role", runnerRole),
-				zap.String("msg_id", hex.EncodeToString(msgID[:])),
-				zap.Uint64("from", request.From),
-				zap.Uint64("to", request.To),
-				zap.String("pubkey", hex.EncodeToString(pubKey)),
-				zap.Int("count", len(participantsList)),
-				zap.Any("participants", participantsList),
-			)
 
 			if len(participantsList) == 0 {
 				continue

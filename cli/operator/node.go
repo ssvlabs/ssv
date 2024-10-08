@@ -411,7 +411,6 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Exporter{
 					DomainType: networkConfig.AlanDomainType,
 					QBFTStores: storageMap,
-					Logger:     logger,
 				},
 			)
 			go func() {
