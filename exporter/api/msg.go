@@ -63,11 +63,15 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 
 	apiMsgs := make([]*ParticipantsAPI, 0)
 	for _, msg := range msgs {
+		dutyExecutorID := msg.Identifier.GetDutyExecutorID()
+		blsPubKey := phase0.BLSPubKey{}
+		copy(blsPubKey[:], dutyExecutorID)
+
 		apiMsg := &ParticipantsAPI{
 			Signers:     msg.Signers,
 			Slot:        msg.Slot,
 			Identifier:  msg.Identifier[:],
-			ValidatorPK: hex.EncodeToString(msg.Identifier.GetDutyExecutorID()),
+			ValidatorPK: hex.EncodeToString(dutyExecutorID),
 			Role:        msg.Identifier.GetRoleType().String(),
 			Message: specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
@@ -75,7 +79,12 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 				Identifier: msg.Identifier[:],
 				Round:      specqbft.FirstRound,
 			},
-			FullData: &spectypes.ValidatorConsensusData{Duty: spectypes.ValidatorDuty{Slot: msg.Slot}},
+			FullData: &spectypes.ValidatorConsensusData{
+				Duty: spectypes.ValidatorDuty{
+					PubKey: blsPubKey,
+					Slot:   msg.Slot,
+				},
+			},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)
