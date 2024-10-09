@@ -31,6 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -95,6 +96,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	ValidatorStore             registrystorage.ValidatorStore
+	DutyStore                  *dutystore.Store
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
@@ -196,6 +198,7 @@ type controller struct {
 	validatorOptions        validator.Options
 	genesisValidatorOptions genesisvalidator.Options
 	validatorStore          registrystorage.ValidatorStore
+	dutyStore               *dutystore.Store
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
@@ -298,6 +301,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		recipientsStorage: options.RegistryStorage,
 		ibftStorageMap:    options.StorageMap,
 		validatorStore:    options.ValidatorStore,
+		dutyStore:         options.DutyStore,
 		ctx:               options.Context,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
@@ -446,6 +450,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			Logger:            c.logger,
 			NetworkConfig:     c.networkConfig,
 			ValidatorStore:    c.validatorStore,
+			DutyStore:         c.dutyStore,
 			Network:           c.validatorOptions.Network,
 			Storage:           c.validatorOptions.Storage,
 			FullNode:          c.validatorOptions.FullNode,

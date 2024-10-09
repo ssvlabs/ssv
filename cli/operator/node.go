@@ -330,6 +330,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
+		cfg.SSVOptions.ValidatorOptions.DutyStore = dutyStore
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
