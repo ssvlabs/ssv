@@ -283,6 +283,11 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	defer ticker.Stop()
 
 	for ctx.Err() == nil {
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return
+		}
 		exists := iterator.Next()
 		if !exists {
 			continue
@@ -300,11 +305,6 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 				AddrInfo: *ai,
 				Node:     n,
 			})
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return
-			}
 		}
 	}
 }
