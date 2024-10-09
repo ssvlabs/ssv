@@ -61,7 +61,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -230,7 +230,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {

@@ -23,6 +23,10 @@ var (
 		Name: "ssv:network:discovery:enr_pong",
 		Help: "Counts the number of pong responses we got as part of ENR publishing",
 	})
+	metricIterations = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:discovery:iterations",
+		Help: "Counts the number of times a node was iterated using the mixed iterator",
+	}, []string{"fork"})
 )
 
 func init() {
@@ -37,6 +41,9 @@ func init() {
 		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPublishEnrPongs); err != nil {
+		logger.Debug("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricIterations); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }

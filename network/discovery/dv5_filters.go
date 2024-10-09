@@ -1,13 +1,14 @@
 package discovery
 
 import (
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/records"
 )
 
-// limitNodeFilter checks if limit exceeded
+// limitNodeFilter returns true if the limit is exceeded
 func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 	return !dvs.conns.AtLimit(libp2pnetwork.DirOutbound)
 }
@@ -50,7 +51,8 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 	}
 }
 
-// subnetFilter checks if the node has an interest in the given subnet
+// sharedSubnetsFilter returns a function that
+// returns true if the peer has at least [n] subnets in common
 func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		if n == 0 {

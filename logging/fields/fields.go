@@ -70,6 +70,7 @@ const (
 	FieldPeerID              = "peer_id"
 	FieldPeerScore           = "peer_score"
 	FieldPrivKey             = "privkey"
+	FieldProtocolID          = "protocol_id"
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
@@ -290,6 +291,10 @@ func Slot(val phase0.Slot) zap.Field {
 
 func Domain(val spectypes.DomainType) zap.Field {
 	return zap.Stringer(FieldDomain, format.DomainType(val))
+}
+
+func ProtocolID(val [6]byte) zap.Field {
+	return zap.String(FieldProtocolID, hex.EncodeToString(val[:]))
 }
 
 func Network(val string) zap.Field {

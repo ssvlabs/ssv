@@ -10,8 +10,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 const (
@@ -34,15 +34,13 @@ type HandleNewPeer func(e PeerEvent)
 
 // Options represents the options passed to create a service
 type Options struct {
-	Host        host.Host
-	DiscV5Opts  *DiscV5Options
-	ConnIndex   peers.ConnectionIndex
-	SubnetsIdx  peers.SubnetsIndex
-	HostAddress string
-	HostDNS     string
-
-	// DomainType is the SSV network domain of the node
-	DomainType spectypes.DomainType
+	Host          host.Host
+	DiscV5Opts    *DiscV5Options
+	ConnIndex     peers.ConnectionIndex
+	SubnetsIdx    peers.SubnetsIndex
+	HostAddress   string
+	HostDNS       string
+	NetworkConfig networkconfig.NetworkConfig
 }
 
 // Service is the interface for discovery

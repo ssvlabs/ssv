@@ -40,6 +40,7 @@ type NetworkConfig struct {
 	Bootnodes                     []string
 	WhitelistedOperatorKeys       []string
 	PermissionlessActivationEpoch spec.Epoch
+	DiscoveryProtocolID           [6]byte
 }
 
 func (n NetworkConfig) String() string {
@@ -69,4 +70,9 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+}
+
+// DomainType returns current domain type based on the current fork.
+func (n NetworkConfig) DomainType() spectypes.DomainType {
+	return n.Domain
 }
