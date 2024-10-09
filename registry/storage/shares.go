@@ -61,7 +61,6 @@ type sharesStorage struct {
 	shares         map[string]*types.SSVShare
 	validatorStore *validatorStore
 	mu             sync.RWMutex
-	dbmu           sync.Mutex
 
 	pendingShares []basedb.Obj
 	cond          *sync.Cond
@@ -172,9 +171,6 @@ func (s *sharesStorage) persistPendingShares(ctx context.Context) {
 		}
 
 		s.logger.Debug("persisting pending shares", zap.Int("count", len(s.pendingShares)))
-
-		s.dbmu.Lock()
-		defer s.dbmu.Unlock()
 
 		err := s.db.SetMany(s.prefix, len(s.pendingShares), func(i int) (basedb.Obj, error) {
 			return s.pendingShares[i], nil
@@ -372,8 +368,8 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.dbmu.Lock()
-	defer s.dbmu.Unlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
 
 	// Delete the share from the database
 	if err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey)); err != nil {
@@ -428,8 +424,8 @@ func (s *sharesStorage) Drop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.dbmu.Lock()
-	defer s.dbmu.Unlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
 
 	err := s.db.DropPrefix(bytes.Join(
 		[][]byte{s.prefix, sharesPrefix, []byte("/")},
