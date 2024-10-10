@@ -88,6 +88,7 @@ func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.SSVMessage) {
 		case <-ctx.Done():
 			return
 		case msg := <-ch:
+			zap.L().Info("worker processing ssv message")
 			w.process(logger, msg)
 		}
 	}
