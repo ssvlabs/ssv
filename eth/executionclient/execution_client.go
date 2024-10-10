@@ -33,8 +33,10 @@ type ExecutionClient struct {
 	contractAddress ethcommon.Address
 
 	// optional
-	logger                      *zap.Logger
-	metrics                     metrics
+	logger  *zap.Logger
+	metrics metrics
+	// followDistance defines an offset into the past from the head block such that the block
+	// at this offset will be considered as very likely finalized.
 	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
