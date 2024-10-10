@@ -117,18 +117,7 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		fields.Owner(od.OwnerAddress),
 	)
 
-	// TODO: In original handler we didn't delete operator data, so this behavior was preserved. However we likely need to.
-	// TODO: Delete operator from all the shares.
-	//	var shares []Share
-	//	for _, s := range nodeStorage.Shares().List() {
-	//		// if operator in committee, delete him from it:
-	//		//     shares = append(shares, s)
-	//	}
-	//	nodeStorage.Shares().Save(shares)
-	// err = eh.nodeStorage.DeleteOperatorData(txn, od.ID)
-	// if err != nil {
-	// 	return err
-	// }
+	// This function is currently no-op and it will do nothing. Operator removed event is not used in the current implementation.
 
 	logger.Debug("processed event")
 	return nil
