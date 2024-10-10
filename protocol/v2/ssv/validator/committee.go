@@ -6,20 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 var (
@@ -34,10 +32,11 @@ type Committee struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mtx           sync.RWMutex
 	BeaconNetwork spectypes.BeaconNetwork
 	Storage       *storage.QBFTStores
 
+	// mtx syncs access to Queues, Runners, Shares.
+	mtx     sync.RWMutex
 	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
 	Shares  map[phase0.ValidatorIndex]*spectypes.Share
@@ -90,118 +89,87 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	}
 }
 
-func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	// Setting the cancel function separately due the queue could be created in HandleMessage
-	q, found := c.Queues[duty.Slot]
-	if !found {
-		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
-	}
-
-	r := c.Runners[duty.Slot]
-	if r == nil {
-		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
-	}
-
-	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
-
-	go func() {
-		defer cancelF()
-		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
-			logger.Error("❗failed consuming committee queue", zap.Error(err))
-		}
-	}()
-	return nil
-}
-
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
+	prepareRunner := func() (runner.Runner, error) {
+		c.mtx.Lock()
+		defer c.mtx.Unlock()
 
-	if len(duty.ValidatorDuties) == 0 {
-		return errors.New("no beacon duties")
-	}
-	if _, exists := c.Runners[duty.Slot]; exists {
-		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
-	}
-
-	// Filter out Beacon duties for which we don't have a share.
-	filteredDuty := &spectypes.CommitteeDuty{
-		Slot:            duty.Slot,
-		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
-	}
-	shares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-	attesters := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
-	for _, beaconDuty := range duty.ValidatorDuties {
-		share, exists := c.Shares[beaconDuty.ValidatorIndex]
-		if !exists {
-			logger.Debug("no share for validator duty",
-				fields.BeaconRole(beaconDuty.Type),
-				zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
-			continue
+		if len(duty.ValidatorDuties) == 0 {
+			return nil, errors.New("no beacon duties")
 		}
-		shares[beaconDuty.ValidatorIndex] = share
-		filteredDuty.ValidatorDuties = append(filteredDuty.ValidatorDuties, beaconDuty)
-
-		if beaconDuty.Type == spectypes.BNRoleAttester {
-			attesters = append(attesters, share.SharePubKey)
+		if _, exists := c.Runners[duty.Slot]; exists {
+			return nil, errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 		}
-	}
-	if len(shares) == 0 {
-		return errors.New("no shares for duty's validators")
-	}
-	duty = filteredDuty
 
-	runner, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
+		// Filter out Beacon duties for which we don't have a share.
+		filteredDuty := &spectypes.CommitteeDuty{
+			Slot:            duty.Slot,
+			ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
+		}
+		shares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
+		attesters := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
+		for _, beaconDuty := range duty.ValidatorDuties {
+			share, exists := c.Shares[beaconDuty.ValidatorIndex]
+			if !exists {
+				logger.Debug("no share for validator duty",
+					fields.BeaconRole(beaconDuty.Type),
+					zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+				continue
+			}
+			shares[beaconDuty.ValidatorIndex] = share
+			filteredDuty.ValidatorDuties = append(filteredDuty.ValidatorDuties, beaconDuty)
+
+			if beaconDuty.Type == spectypes.BNRoleAttester {
+				attesters = append(attesters, share.SharePubKey)
+			}
+		}
+		if len(shares) == 0 {
+			return nil, errors.New("no shares for duty's validators")
+		}
+		duty = filteredDuty
+
+		r, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not create CommitteeRunner")
+		}
+
+		// Set timeout function.
+		r.GetBaseRunner().TimeoutF = c.onTimeout
+		c.Runners[duty.Slot] = r
+		_, queueExists := c.Queues[duty.Slot]
+		if !queueExists {
+			c.Queues[duty.Slot] = queueContainer{
+				Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+				queueState: &queue.State{
+					HasRunningInstance: false,
+					Height:             qbft.Height(duty.Slot),
+					Slot:               duty.Slot,
+					Quorum:             c.CommitteeMember.GetQuorum(),
+				},
+			}
+		}
+
+		// Prunes all expired committee runners, when new runner is created
+		pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
+		if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+			pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
+		}
+
+		return r, nil
+	}
+
+	r, err := prepareRunner()
 	if err != nil {
-		return errors.Wrap(err, "could not create CommitteeRunner")
-	}
-
-	// Set timeout function.
-	runner.GetBaseRunner().TimeoutF = c.onTimeout
-	c.Runners[duty.Slot] = runner
-	_, queueExists := c.Queues[duty.Slot]
-	if !queueExists {
-		c.Queues[duty.Slot] = queueContainer{
-			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             qbft.Height(duty.Slot),
-				Slot:               duty.Slot,
-				Quorum:             c.CommitteeMember.GetQuorum(),
-			},
-		}
-	}
-
-	// Prunes all expired committee runners, when new runner is created
-	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
-	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
-		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
+		return err
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	err = runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
+	err = r.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
 	if err != nil {
 		return errors.Wrap(err, "runner failed to start duty")
 	}
 	return nil
-}
-
-func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
-	c.mtx.RLock()
-	queue, exists := c.Queues[slot]
-	c.mtx.RUnlock()
-	if !exists {
-		c.logger.Warn("cannot push to non-existing queue", zap.Uint64("slot", uint64(slot)))
-		return
-	}
-	if pushed := queue.Q.TryPush(dec); !pushed {
-		c.logger.Warn("dropping ExecuteDuty message because the queue is full")
-	}
 }
 
 // ProcessMessage processes Network Message of all types
@@ -268,8 +236,8 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		return errors.New("unknown msg")
 	}
 	return nil
-
 }
+
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
 	if runnerExpirySlots > currentSlot {
 		return nil
