@@ -472,6 +472,8 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 }
 
 func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *committeeObserver) error {
+	c.logger.Info("controller processing non-committee message - 1")
+
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
