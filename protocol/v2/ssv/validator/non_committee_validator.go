@@ -2,17 +2,16 @@ package validator
 
 import (
 	"fmt"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -20,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -53,7 +53,6 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:      opts.NetworkConfig.DomainType(),
-		Storage:     opts.Storage.Get(identifier.GetRoleType()),
 		Network:     opts.Network,
 		CutOffRound: roundtimer.CutOffRound,
 	}
@@ -62,9 +61,6 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 
 	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
-	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
-		opts.Logger.Debug("❗ failed to load highest instance", zap.Error(err))
-	}
 
 	return &CommitteeObserver{
 		qbftController:         ctrl,
