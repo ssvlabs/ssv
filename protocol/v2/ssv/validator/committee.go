@@ -199,13 +199,13 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if err := qbftMsg.Validate(); err != nil {
 			return errors.Wrap(err, "invalid qbft Message")
 		}
-		c.mtx.Lock()
-		runner, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
-		c.mtx.Unlock()
+		c.mtx.RLock()
+		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
+		c.mtx.RUnlock()
 		if !exists {
-			return errors.New("no runner found for message's slot")
+			return errors.New(fmt.Sprintf("no runner found for consensus message's slot(qbtf height): %d", qbftMsg.Height))
 		}
-		return runner.ProcessConsensus(logger, msg.SignedSSVMessage)
+		return r.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -222,13 +222,13 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			c.mtx.Lock()
-			runner, exists := c.Runners[pSigMessages.Slot]
-			c.mtx.Unlock()
+			c.mtx.RLock()
+			r, exists := c.Runners[pSigMessages.Slot]
+			c.mtx.RUnlock()
 			if !exists {
-				return errors.New("no runner found for message's slot")
+				return errors.New(fmt.Sprintf("no runner found for post consensus sig message's slot: %d", pSigMessages.Slot))
 			}
-			return runner.ProcessPostConsensus(logger, pSigMessages)
+			return r.ProcessPostConsensus(logger, pSigMessages)
 		}
 	case message.SSVEventMsgType:
 		return c.handleEventMessage(logger, msg)
