@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
@@ -112,7 +111,7 @@ func (vm *ValidatorsMap) ForEachCommittee(iterator committeeIterator) bool {
 	defer vm.mlock.RUnlock()
 
 	for _, val := range vm.committees {
-		if !iterator(val) {
+		if !val.Stopped() && !iterator(val) {
 			return false
 		}
 	}
@@ -126,6 +125,9 @@ func (vm *ValidatorsMap) GetAllCommittees() []*validator.Committee {
 
 	var committees []*validator.Committee
 	for _, val := range vm.committees {
+		if val.Stopped() {
+			continue
+		}
 		committees = append(committees, val)
 	}
 
@@ -139,6 +141,10 @@ func (vm *ValidatorsMap) GetCommittee(pubKey spectypes.CommitteeID) (*validator.
 
 	v, ok := vm.committees[pubKey]
 
+	if !ok || v.Stopped() {
+		return nil, false
+	}
+
 	return v, ok
 }
 
@@ -150,16 +156,39 @@ func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.CommitteeID, v *validator
 	vm.committees[pubKey] = v
 }
 
-// Remove removes a committee instance from the map
-func (vm *ValidatorsMap) RemoveCommittee(pubKey spectypes.CommitteeID) *validator.Committee {
-	if v, found := vm.GetCommittee(pubKey); found {
-		vm.mlock.Lock()
-		defer vm.mlock.Unlock()
+// UpdateCommitteeAtomic allows to perform a mutation on a given committee in an atomic manner
+// returns true if the given committee was found
+func (vm *ValidatorsMap) UpdateCommitteeAtomic(pubKey spectypes.CommitteeID, mutate func(*validator.Committee)) bool {
+	vm.mlock.Lock()
+	defer vm.mlock.Unlock()
 
-		delete(vm.committees, pubKey)
-		return v
+	vc, found := vm.committees[pubKey]
+	if !found || vc.Stopped() {
+		return false
 	}
-	return nil
+
+	mutate(vc)
+
+	// if committee was stopped, trigger cleanup
+	if vc.Stopped() {
+		vm.cleanup()
+	}
+
+	return true
+}
+
+// cleanup removes all stopped committees from the state
+// must be called under write lock
+func (vm *ValidatorsMap) cleanup() {
+	var stopped []spectypes.CommitteeID
+	for k, v := range vm.committees {
+		if v.Stopped() {
+			stopped = append(stopped, k)
+		}
+	}
+	for _, k := range stopped {
+		delete(vm.committees, k)
+	}
 }
 
 // SizeCommittees returns the number of committees in the map
