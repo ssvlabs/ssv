@@ -632,6 +632,7 @@ func (c *controller) StartNetworkHandlers() {
 	for i := 0; i < networkRouterConcurrency; i++ {
 		go c.handleRouterMessages()
 	}
+	c.logger.Info("network handler started")
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
