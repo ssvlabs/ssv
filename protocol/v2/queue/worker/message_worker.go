@@ -110,6 +110,7 @@ func (w *Worker) UseErrorHandler(errHandler ErrorHandler) {
 func (w *Worker) TryEnqueue(msg *queue.SSVMessage) bool {
 	select {
 	case w.queue <- msg:
+		zap.L().Info("enqueue ssv message", zap.String("prefix", w.metricsPrefix))
 		return true
 	default:
 		return false

@@ -412,6 +412,8 @@ func (c *controller) handleRouterMessages() {
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(c.logger, m)
 				} else if c.validatorOptions.Exporter {
+					zap.L().Info("exporter handling router message - zap.L()")
+					c.logger.Info("exporter handling router message - logger")
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
