@@ -108,64 +108,73 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	for key, quorum := range quorums {
-		role := ncv.getRole(msg, key.Root)
+		roles := ncv.getRoles(msg, key.Root)
 
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
-		if !exists {
-			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
-		}
+		for _, role := range roles {
+			validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+			if !exists {
+				return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
+			}
 
-		msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
-		roleStorage := ncv.Storage.Get(msgID.GetRoleType())
-		if roleStorage == nil {
-			return fmt.Errorf("role storage doesn't exist: %v", role)
-		}
+			msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
+			roleStorage := ncv.Storage.Get(msgID.GetRoleType())
+			if roleStorage == nil {
+				return fmt.Errorf("role storage doesn't exist: %v", role)
+			}
 
-		existingQuorum, err := roleStorage.GetParticipants(msgID, slot)
-		if err != nil {
-			return fmt.Errorf("could not get participants %w", err)
-		}
+			existingQuorum, err := roleStorage.GetParticipants(msgID, slot)
+			if err != nil {
+				return fmt.Errorf("could not get participants %w", err)
+			}
 
-		if len(existingQuorum) > len(quorum) {
-			continue
-		}
+			if len(existingQuorum) > len(quorum) {
+				continue
+			}
 
-		if err := roleStorage.SaveParticipants(msgID, slot, quorum); err != nil {
-			return fmt.Errorf("could not save participants %w", err)
-		}
+			if err := roleStorage.SaveParticipants(msgID, slot, quorum); err != nil {
+				return fmt.Errorf("could not save participants %w", err)
+			}
 
-		var operatorIDs []string
-		for _, share := range quorum {
-			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
-		}
-		logger.Info("✅ saved participants",
-			zap.String("converted_role", role.ToBeaconRole()),
-			zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
-			zap.String("signers", strings.Join(operatorIDs, ", ")),
-		)
+			var operatorIDs []string
+			for _, share := range quorum {
+				operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
+			}
+			logger.Info("✅ saved participants",
+				zap.String("converted_role", role.ToBeaconRole()),
+				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
+				zap.String("signers", strings.Join(operatorIDs, ", ")),
+			)
 
-		if ncv.newDecidedHandler != nil {
-			ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
-				Slot:       slot,
-				Signers:    quorum,
-				Identifier: msgID,
-			})
+			if ncv.newDecidedHandler != nil {
+				ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
+					Slot:       slot,
+					Signers:    quorum,
+					Identifier: msgID,
+				})
+			}
 		}
 	}
 
 	return nil
 }
 
-func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) convert.RunnerRole {
+func (ncv *CommitteeObserver) getRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		if _, found := ncv.attesterRoots[root]; found {
-			return convert.RoleAttester
-		}
-		if _, found := ncv.syncCommitteeRoots[root]; found {
-			return convert.RoleSyncCommittee
+		_, foundAttester := ncv.attesterRoots[root]
+		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
+
+		switch {
+		case foundAttester && foundSyncCommittee:
+			return []convert.RunnerRole{convert.RoleAttester, convert.RoleSyncCommittee}
+		case foundAttester:
+			return []convert.RunnerRole{convert.RoleAttester}
+		case foundSyncCommittee:
+			return []convert.RunnerRole{convert.RoleSyncCommittee}
+		default:
+			return nil
 		}
 	}
-	return convert.RunnerRole(msg.MsgID.GetRoleType())
+	return []convert.RunnerRole{convert.RunnerRole(msg.MsgID.GetRoleType())}
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
