@@ -517,12 +517,12 @@ func (c *controller) StartValidators() {
 	}
 
 	var ownShares []*ssvtypes.SSVShare
-	var allPubKeys = make([][]byte, 0, len(shares))
+	var ownPubKeys = make([][]byte, 0, len(shares))
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
+			ownPubKeys = append(ownPubKeys, share.ValidatorPubKey[:])
 		}
-		allPubKeys = append(allPubKeys, share.ValidatorPubKey[:])
 	}
 
 	if c.validatorOptions.Exporter {
@@ -554,15 +554,15 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
-		err := c.fetchAndUpdateValidatorsMetadata(c.logger, allPubKeys, c.beacon)
+		err := c.fetchAndUpdateValidatorsMetadata(c.logger, ownPubKeys, c.beacon)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
+				zap.Int("shares", len(ownPubKeys)),
 				fields.Took(time.Since(start)),
 				zap.Error(err))
 		} else {
 			c.logger.Debug("updated validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
+				zap.Int("shares", len(ownPubKeys)),
 				fields.Took(time.Since(start)))
 		}
 	}
@@ -1137,6 +1137,10 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		var existingShares, newShares []*ssvtypes.SSVShare
 		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 			if share.Liquidated {
+				return true
+			}
+			if share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
+				// skip non-committee validators
 				return true
 			}
 			if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
