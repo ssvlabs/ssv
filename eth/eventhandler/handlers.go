@@ -95,6 +95,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	return nil
 }
 
+// This function is currently no-op and it will do nothing. Operator removed event is not used in the current implementation.
 func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
 	logger := eh.logger.With(
 		fields.EventName(OperatorRemoved),
