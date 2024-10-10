@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/types"
@@ -164,7 +165,7 @@ func openDB(logger *zap.Logger, dbPath string) (*kv.BadgerDB, error) {
 func readOperatorPrivateKeyFromFile(filePath string) (string, error) {
 	var config ShareUpdateCmd
 
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filepath.Clean(filePath))
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %s, error: %w", filePath, err)
 	}

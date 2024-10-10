@@ -157,7 +157,7 @@ func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID 
 	// Convert to bytes
 	bytes := make([]byte, len(committee)*4)
 	for i, v := range committee {
-		binary.LittleEndian.PutUint32(bytes[i*4:], uint32(v)) // nolint:gosec
+		binary.LittleEndian.PutUint32(bytes[i*4:], uint32(v)) // #nosec G115
 	}
 	// Hash
 	return sha256.Sum256(bytes)
