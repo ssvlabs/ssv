@@ -4,7 +4,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
@@ -35,15 +34,14 @@ type IConfig interface {
 }
 
 type Config struct {
-	BeaconSigner  spectypes.BeaconSigner
-	Domain        spectypes.DomainType
-	NetworkConfig networkconfig.NetworkConfig
-	ValueCheckF   specqbft.ProposedValueCheckF
-	ProposerF     specqbft.ProposerF
-	Storage       qbftstorage.QBFTStore
-	Network       specqbft.Network
-	Timer         roundtimer.Timer
-	CutOffRound   specqbft.Round
+	BeaconSigner spectypes.BeaconSigner
+	Domain       spectypes.DomainType
+	ValueCheckF  specqbft.ProposedValueCheckF
+	ProposerF    specqbft.ProposerF
+	Storage      qbftstorage.QBFTStore
+	Network      specqbft.Network
+	Timer        roundtimer.Timer
+	CutOffRound  specqbft.Round
 }
 
 // GetShareSigner returns a BeaconSigner instance

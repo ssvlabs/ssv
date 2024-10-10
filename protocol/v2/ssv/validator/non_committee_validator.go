@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -31,12 +30,11 @@ import (
 
 type CommitteeObserver struct {
 	logger                 *zap.Logger
-	networkConfig          networkconfig.NetworkConfig
 	Storage                *storage.QBFTStores
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
-	dutyStore              *dutystore.Store
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
+	Roots                  map[[32]byte]spectypes.BeaconRole
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -50,17 +48,15 @@ type CommitteeObserverOptions struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
-	DutyStore         *dutystore.Store
 }
 
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:        opts.NetworkConfig.DomainType(),
-		NetworkConfig: opts.NetworkConfig,
-		Storage:       opts.Storage.Get(identifier.GetRoleType()),
-		Network:       opts.Network,
-		CutOffRound:   roundtimer.CutOffRound,
+		Domain:      opts.NetworkConfig.DomainType(),
+		Storage:     opts.Storage.Get(identifier.GetRoleType()),
+		Network:     opts.Network,
+		CutOffRound: roundtimer.CutOffRound,
 	}
 
 	// TODO: does the specific operator matters?
@@ -74,11 +70,10 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 	return &CommitteeObserver{
 		qbftController:         ctrl,
 		logger:                 opts.Logger,
-		networkConfig:          opts.NetworkConfig,
 		Storage:                opts.Storage,
 		ValidatorStore:         opts.ValidatorStore,
-		dutyStore:              opts.DutyStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
+		Roots:                  make(map[[32]byte]spectypes.BeaconRole),
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
@@ -112,7 +107,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	for key, quorum := range quorums {
-		role := ncv.getRole(msg, slot, key.ValidatorIndex)
+		role := ncv.getRole(msg, key.Root)
 
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
 		if !exists {
@@ -160,12 +155,10 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) convert.RunnerRole {
+func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		beacon := ncv.networkConfig.Beacon
-		period := beacon.EstimatedSyncCommitteePeriodAtEpoch(beacon.EstimatedEpochAtSlot(slot))
-		d := ncv.dutyStore.SyncCommittee.Duty(period, validatorIndex)
-		if d == nil {
+		_, found := ncv.Roots[root]
+		if !found {
 			return convert.RoleAttester
 		}
 		return convert.RoleSyncCommittee
@@ -289,5 +282,6 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 
 	ncv.logger.Info("✅ Got proposal message", fields.CommitteeID(cid))
+	ncv.Roots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
 	return nil
 }
