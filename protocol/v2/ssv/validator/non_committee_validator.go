@@ -81,6 +81,8 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 }
 
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
+	ncv.logger.Info("CommitteeObserver processing message - 1")
+
 	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 	logger := ncv.logger.With(fields.CommitteeID(cid), fields.Role(msg.MsgID.GetRoleType()))
 
@@ -88,9 +90,12 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
+	ncv.logger.Info("CommitteeObserver processing message - 2")
+
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
 		return fmt.Errorf("not processing message type %d", partialSigMessages.Type)
 	}
+	ncv.logger.Info("CommitteeObserver processing message - 3")
 
 	slot := partialSigMessages.Slot
 	logger = logger.With(fields.Slot(slot))
@@ -99,10 +104,14 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		return fmt.Errorf("got invalid message %w", err)
 	}
 
+	ncv.logger.Info("CommitteeObserver processing message - 4")
+
 	quorums, err := ncv.processMessage(partialSigMessages)
 	if err != nil {
 		return fmt.Errorf("could not process SignedPartialSignatureMessage %w", err)
 	}
+
+	ncv.logger.Info("CommitteeObserver processing message - 5")
 
 	if len(quorums) == 0 {
 		ncv.logger.Warn("no quorums")
