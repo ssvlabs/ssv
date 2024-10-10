@@ -16,6 +16,7 @@
       - [Generating an Operator Key](#generating-an-operator-key)
     - [Config Files](#config-files)
       - [Node Config](#node-config)
+  - [Operator Private Key](#operator-private-key)
   - [Running a Local Network of Operators](#running-a-local-network-of-operators)
     - [Install](#install)
       - [Prerequisites](#prerequisites)
@@ -86,7 +87,13 @@ $ ./bin/ssvnode generate-operator-keys
 ```
 This will generate an operator key in raw format.
 
-**Option 2: Encrypted Operator Key Generation as keystore.json:**
+**Option 2: Encrypted Operator Key Generation as `keystore.json`:**
+
+You will need to create a file (named `password` in this example) containing the password you chose for your Secret Key:
+
+```bash
+echo "<MY_OPERATOR_PASSWORD>" >> password
+```
 
 To generate an operator key in encrypted format, use the `--password-file` option followed by your password file.
 
@@ -98,15 +105,19 @@ Please replace `path/to/your/file` with your password file. This will generate a
 
 **Option 3: Convert an Existing Key to keystore.json:**
 
-To convert an existing key to keystore.json format, use both the `--password-file` and `--operator-key-file` options.
+You will need to create a file (named `password` in this example) containing the password you chose for your Secret Key:
+
+```bash
+echo "<MY_OPERATOR_PASSWORD>" >> password
+```
+
+To convert an existing key to `keystore.json` format, use both the `--password-file` and `--operator-key-file` options.
 
 ```bash
 $ ./bin/ssvnode generate-operator-keys --password-file=path/to/your/password/file --operator-key-file=path/to/your/existing/key/file
 ```
 
-Please replace `path/to/your/password/file` with your password file and `path/to/your/existing/key/file` with your existing key file. This will convert the existing key to a keystore.json file as an encrypted private key.
-
-
+Please replace `path/to/your/password/file` with your password file and `path/to/your/existing/key/file` with your existing key file. This will convert the existing key to a `keystore.json` file as an encrypted private key.
 
 Keep your password safe as it will be required to decrypt the operator key for use.
 
@@ -283,8 +294,7 @@ In order to spin up local prometheus and grafana use:
 $ make docker-monitor
 ```
 
-For a grafana dashboard, use the [SSV Operator dashboard](../monitoring/grafana/dashboard_ssv_operator.json) as
-explained in [monitoring/README.md#grafana](../monitoring/README.md#grafana)
+For a grafana dashboard, use the [SSV Operator dashboard](../monitoring/grafana/dashboard_ssv_operator_performance.json) as explained in [monitoring/README.md#grafana](../monitoring/README.md#grafana)
 
 ## Coding Standards
 
