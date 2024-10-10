@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"strconv"
@@ -143,6 +144,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				zap.String("converted_role", role.ToBeaconRole()),
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
+				zap.String("msg_id", hex.EncodeToString(msgID[:])),
 			)
 
 			if ncv.newDecidedHandler != nil {
