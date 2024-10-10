@@ -376,6 +376,8 @@ func (c *controller) handleRouterMessages() {
 			return
 
 		case msg := <-ch:
+			zap.L().Info("new router message - zap.L()")
+			c.logger.Info("new router message - logger")
 			switch m := msg.(type) {
 			case *genesisqueue.GenesisSSVMessage:
 				if m.MsgType == genesismessage.SSVEventMsgType {
