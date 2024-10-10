@@ -129,6 +129,9 @@ func (w *Worker) Size() int {
 
 // process the msg's from queue
 func (w *Worker) process(logger *zap.Logger, msg *queue.SSVMessage) {
+	zap.L().Info("worker processing ssv message - zap.L()")
+	logger.Info("worker processing ssv message - logger")
+
 	if w.handler == nil {
 		logger.Warn("❗ no handler for worker")
 		return
