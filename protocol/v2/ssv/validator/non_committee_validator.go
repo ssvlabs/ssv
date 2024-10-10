@@ -105,11 +105,16 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	if len(quorums) == 0 {
+		ncv.logger.Warn("no quorums")
 		return nil
 	}
 
 	for key, quorum := range quorums {
 		roles := ncv.getRoles(msg, key.Root)
+
+		if len(roles) == 0 {
+			ncv.logger.Warn("no roles")
+		}
 
 		for _, role := range roles {
 			validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
