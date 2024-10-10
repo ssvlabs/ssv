@@ -34,7 +34,8 @@ type CommitteeObserver struct {
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	Roots                  map[[32]byte]spectypes.BeaconRole
+	attesterRoots          map[[32]byte]spectypes.BeaconRole
+	syncCommitteeRoots     map[[32]byte]spectypes.BeaconRole
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -73,7 +74,8 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		Storage:                opts.Storage,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
-		Roots:                  make(map[[32]byte]spectypes.BeaconRole),
+		attesterRoots:          make(map[[32]byte]spectypes.BeaconRole),
+		syncCommitteeRoots:     make(map[[32]byte]spectypes.BeaconRole),
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
@@ -157,11 +159,12 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		_, found := ncv.Roots[root]
-		if !found {
+		if _, found := ncv.attesterRoots[root]; found {
 			return convert.RoleAttester
 		}
-		return convert.RoleSyncCommittee
+		if _, found := ncv.syncCommitteeRoots[root]; found {
+			return convert.RoleSyncCommittee
+		}
 	}
 	return convert.RunnerRole(msg.MsgID.GetRoleType())
 }
@@ -282,6 +285,27 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 
 	ncv.logger.Info("✅ Got proposal message", fields.CommitteeID(cid))
-	ncv.Roots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
+
+	qbftMsg, ok := msg.Body.(*specqbft.Message)
+	if !ok {
+		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
+	}
+
+	committeeIndex := phase0.CommitteeIndex(0) //TODO committeeIndex is 0, is this correct? this is copied from ssv/runner/committee.go
+	attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
+
+	ncv.attesterRoots[attestationData.BeaconBlockRoot] = spectypes.BNRoleAttester
+	ncv.attesterRoots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
+
 	return nil
+}
+
+func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
+	return &phase0.AttestationData{
+		Slot:            slot,
+		Index:           committeeIndex,
+		BeaconBlockRoot: vote.BlockRoot,
+		Source:          vote.Source,
+		Target:          vote.Target,
+	}
 }
