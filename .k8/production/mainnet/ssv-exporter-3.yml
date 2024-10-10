@@ -1,0 +1,211 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ssv-full-node-mainnet-3-api
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ssv-full-node-mainnet-3.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - ssv-full-node-mainnet-3-api
+  http:
+  - route:
+    - destination:
+        host: ssv-full-node-mainnet-3
+        port:
+          number: 16017
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-full-node-mainnet-3-api
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ssv-full-node-mainnet-3.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ssv-full-node-mainnet-3
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ws-ssv-full-node-mainnet-3.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - ssv-full-node-mainnet-3
+  http:
+  - route:
+    - destination:
+        host: ssv-full-node-mainnet-3
+        port:
+          number: 14017
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-full-node-mainnet-3
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ws-ssv-full-node-mainnet-3.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-full-node-mainnet-3
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-full-node-mainnet-3
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12017
+      protocol: UDP
+      targetPort: 12017
+      name: port-12017
+    - port: 13017
+      protocol: TCP
+      targetPort: 13017
+      name: port-13017
+    - port: 14017
+      protocol: TCP
+      targetPort: 14017
+      name: port-14017
+    - port: 15017
+      protocol: TCP
+      targetPort: 15017
+      name: port-15017
+    - port: 16017
+      protocol: TCP
+      targetPort: 16017
+      name: port-16017
+  selector:
+    app: ssv-full-node-mainnet-3
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-full-node-mainnet-3
+  name: ssv-full-node-mainnet-3
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-full-node-mainnet-3
+  template:
+    metadata:
+      labels:
+        app: ssv-full-node-mainnet-3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-exporter
+      containers:
+      - name: ssv-full-node-mainnet-3
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: 4
+            memory: 8Gi
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12017
+          name: port-12017
+          hostPort: 12017
+          protocol: UDP
+        - containerPort: 13017
+          name: port-13017
+          hostPort: 13017
+        - containerPort: 14017
+          name: port-14017
+          hostPort: 14017
+        - containerPort: 15017
+          name: port-15017
+          hostPort: 15017
+        - containerPort: 16017
+          name: port-16017
+          hostPort: 16017
+        env:
+          - name: SHARE_CONFIG
+            value: "./data/share.yaml"
+          - name: LOG_LEVEL
+            value: "debug"
+          - name: DB_REPORTING
+            value: "false"
+          - name: PUBSUB_TRACE
+            value: "false"
+          - name: DISCOVERY_TYPE_KEY
+            value: "discv5"
+          - name: NETWORK
+            value: "mainnet"
+          - name: DB_PATH
+            value: "./data/db-mainnet"
+          - name: METRICS_API_PORT
+            value: "15017"
+          - name: SSV_API_PORT
+            value: "16017"
+          - name: ENABLE_PROFILE
+            value: "true"
+          - name: UDP_PORT
+            value: "12017"
+          - name: TCP_PORT
+            value: "13017"
+          - name: WS_API_PORT
+            value: "14017"
+          - name: FULLNODE
+            value: "true"
+          - name: EXPORTER
+            value: "true"
+          - name: MSG_WORKERS_COUNT
+            value: "1024"
+          - name: MSG_WORKER_BUFFER_SIZE
+            value: "2048"
+          - name: SUBNETS
+            value: "0xffffffffffffffffffffffffffffffff"
+          - name: P2P_MAX_PEERS
+            value: "300"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-full-node-mainnet-3
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-full-node-mainnet-3-cm
+      volumes:
+      - name: ssv-full-node-mainnet-3
+        persistentVolumeClaim:
+          claimName: ssv-full-node-mainnet-3
+      - name: ssv-full-node-mainnet-3-cm
+        configMap:
+          name: ssv-full-node-mainnet-3-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
+      hostNetwork: true

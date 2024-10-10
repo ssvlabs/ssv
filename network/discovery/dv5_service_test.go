@@ -2,21 +2,31 @@ package discovery
 
 import (
 	"context"
+	"math"
 	"net"
 	"os"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/utils"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/peers/connections/mock"
+	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/utils"
 )
+
+var TestNetwork = networkconfig.NetworkConfig{
+	Beacon:        beacon.NewNetwork(spectypes.BeaconTestNetwork),
+	Domain:        spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+	AlanForkEpoch: math.MaxUint64,
+}
 
 func TestCheckPeer(t *testing.T) {
 	var (
@@ -104,11 +114,11 @@ func TestCheckPeer(t *testing.T) {
 	// Run the tests.
 	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
 	dvs := &DiscV5Service{
-		ctx:        ctx,
-		conns:      &mock.MockConnectionIndex{LimitValue: true},
-		subnetsIdx: subnetIndex,
-		domainType: myDomainType,
-		subnets:    mySubnets,
+		ctx:           ctx,
+		conns:         &mock.MockConnectionIndex{LimitValue: false},
+		subnetsIdx:    subnetIndex,
+		networkConfig: TestNetwork,
+		subnets:       mySubnets,
 	}
 
 	for _, test := range tests {
