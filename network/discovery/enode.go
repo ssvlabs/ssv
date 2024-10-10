@@ -28,6 +28,7 @@ func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.I
 	localNode.Set(enr.TCP(tcpPort))
 	localNode.SetFallbackIP(ipAddr)
 	localNode.SetFallbackUDP(int(udpPort))
+	localNode.Set(enr.WithEntry("ssv", true))
 
 	return localNode, nil
 }

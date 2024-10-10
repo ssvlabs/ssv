@@ -100,20 +100,12 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 		RegistrySyncOffset:   n.RegistrySyncOffset,
 		RegistryContractAddr: n.RegistryContractAddr,
 		Bootnodes:            n.Bootnodes,
-		// Fork epoch
-		AlanForkEpoch: forkEpoch,
 	}
 }
 
 // NetworkConfig for staying in pre-fork
 func PreForkNetworkConfig() networkconfig.NetworkConfig {
 	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
-}
-
-// NetworkConfig for staying in post-fork
-func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 

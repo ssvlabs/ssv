@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"context"
-	"math"
 	"net"
 	"os"
 	"testing"
@@ -23,9 +22,8 @@ import (
 )
 
 var TestNetwork = networkconfig.NetworkConfig{
-	Beacon:        beacon.NewNetwork(spectypes.BeaconTestNetwork),
-	Domain:        spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-	AlanForkEpoch: math.MaxUint64,
+	Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
+	Domain: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 }
 
 func TestCheckPeer(t *testing.T) {
