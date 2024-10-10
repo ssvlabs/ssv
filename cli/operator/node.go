@@ -408,6 +408,11 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
+				&handlers.Exporter{
+					DomainType: networkConfig.AlanDomainType,
+					QBFTStores: storageMap,
+					Logger:     logger,
+				},
 			)
 			go func() {
 				err := apiServer.Run()

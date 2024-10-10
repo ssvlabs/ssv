@@ -1,8 +1,8 @@
 package validator
 
 import (
+	"encoding/hex"
 	"fmt"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -33,7 +34,8 @@ type CommitteeObserver struct {
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	Roots                  map[[32]byte]spectypes.BeaconRole
+	attesterRoots          map[[32]byte]spectypes.BeaconRole
+	syncCommitteeRoots     map[[32]byte]spectypes.BeaconRole
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -72,12 +74,15 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		Storage:                opts.Storage,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
-		Roots:                  make(map[[32]byte]spectypes.BeaconRole),
+		attesterRoots:          make(map[[32]byte]spectypes.BeaconRole),
+		syncCommitteeRoots:     make(map[[32]byte]spectypes.BeaconRole),
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
 
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
+	ncv.logger.Info("CommitteeObserver processing message - 1")
+
 	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 	logger := ncv.logger.With(fields.CommitteeID(cid), fields.Role(msg.MsgID.GetRoleType()))
 
@@ -85,9 +90,12 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
+	ncv.logger.Info("CommitteeObserver processing message - 2")
+
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
 		return fmt.Errorf("not processing message type %d", partialSigMessages.Type)
 	}
+	ncv.logger.Info("CommitteeObserver processing message - 3")
 
 	slot := partialSigMessages.Slot
 	logger = logger.With(fields.Slot(slot))
@@ -96,57 +104,93 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		return fmt.Errorf("got invalid message %w", err)
 	}
 
+	ncv.logger.Info("CommitteeObserver processing message - 4")
+
 	quorums, err := ncv.processMessage(partialSigMessages)
 	if err != nil {
 		return fmt.Errorf("could not process SignedPartialSignatureMessage %w", err)
 	}
 
+	ncv.logger.Info("CommitteeObserver processing message - 5")
+
 	if len(quorums) == 0 {
+		ncv.logger.Warn("no quorums")
 		return nil
 	}
 
 	for key, quorum := range quorums {
-		role := ncv.getRole(msg, key.Root)
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
-		if !exists {
-			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
+		roles := ncv.getRoles(msg, key.Root)
+
+		if len(roles) == 0 {
+			ncv.logger.Warn("no roles")
 		}
-		MsgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
-		if err := ncv.Storage.Get(MsgID.GetRoleType()).SaveParticipants(MsgID, slot, quorum); err != nil {
-			return fmt.Errorf("could not save participants %w", err)
-		} else {
+
+		for _, role := range roles {
+			validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+			if !exists {
+				return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
+			}
+
+			msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
+			roleStorage := ncv.Storage.Get(msgID.GetRoleType())
+			if roleStorage == nil {
+				return fmt.Errorf("role storage doesn't exist: %v", role)
+			}
+
+			existingQuorum, err := roleStorage.GetParticipants(msgID, slot)
+			if err != nil {
+				return fmt.Errorf("could not get participants %w", err)
+			}
+
+			if len(existingQuorum) > len(quorum) {
+				continue
+			}
+
+			if err := roleStorage.SaveParticipants(msgID, slot, quorum); err != nil {
+				return fmt.Errorf("could not save participants %w", err)
+			}
+
 			var operatorIDs []string
 			for _, share := range quorum {
 				operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
 			}
 			logger.Info("✅ saved participants",
 				zap.String("converted_role", role.ToBeaconRole()),
-				zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
+				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
+				zap.String("msg_id", hex.EncodeToString(msgID[:])),
 			)
-		}
 
-		if ncv.newDecidedHandler != nil {
-			ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
-				Slot:       slot,
-				Signers:    quorum,
-				Identifier: MsgID,
-			})
+			if ncv.newDecidedHandler != nil {
+				ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
+					Slot:       slot,
+					Signers:    quorum,
+					Identifier: msgID,
+				})
+			}
 		}
 	}
 
 	return nil
 }
 
-func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) convert.RunnerRole {
+func (ncv *CommitteeObserver) getRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		_, found := ncv.Roots[root]
-		if !found {
-			return convert.RoleAttester
+		_, foundAttester := ncv.attesterRoots[root]
+		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
+
+		switch {
+		case foundAttester && foundSyncCommittee:
+			return []convert.RunnerRole{convert.RoleAttester, convert.RoleSyncCommittee}
+		case foundAttester:
+			return []convert.RunnerRole{convert.RoleAttester}
+		case foundSyncCommittee:
+			return []convert.RunnerRole{convert.RoleSyncCommittee}
+		default:
+			return nil
 		}
-		return convert.RoleSyncCommittee
 	}
-	return convert.RunnerRole(msg.MsgID.GetRoleType())
+	return []convert.RunnerRole{convert.RunnerRole(msg.MsgID.GetRoleType())}
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
@@ -265,6 +309,27 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 
 	ncv.logger.Info("✅ Got proposal message", fields.CommitteeID(cid))
-	ncv.Roots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
+
+	qbftMsg, ok := msg.Body.(*specqbft.Message)
+	if !ok {
+		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
+	}
+
+	committeeIndex := phase0.CommitteeIndex(0) //TODO committeeIndex is 0, is this correct? this is copied from ssv/runner/committee.go
+	attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
+
+	ncv.attesterRoots[attestationData.BeaconBlockRoot] = spectypes.BNRoleAttester
+	ncv.attesterRoots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
+
 	return nil
+}
+
+func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
+	return &phase0.AttestationData{
+		Slot:            slot,
+		Index:           committeeIndex,
+		BeaconBlockRoot: vote.BlockRoot,
+		Source:          vote.Source,
+		Target:          vote.Target,
+	}
 }

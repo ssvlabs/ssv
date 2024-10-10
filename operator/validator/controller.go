@@ -376,6 +376,8 @@ func (c *controller) handleRouterMessages() {
 			return
 
 		case msg := <-ch:
+			zap.L().Info("new router message - zap.L()")
+			c.logger.Info("new router message - logger")
 			switch m := msg.(type) {
 			case *genesisqueue.GenesisSSVMessage:
 				if m.MsgType == genesismessage.SSVEventMsgType {
@@ -412,6 +414,8 @@ func (c *controller) handleRouterMessages() {
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(c.logger, m)
 				} else if c.validatorOptions.Exporter {
+					zap.L().Info("exporter handling router message - zap.L()")
+					c.logger.Info("exporter handling router message - logger")
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -472,6 +476,8 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 }
 
 func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *committeeObserver) error {
+	c.logger.Info("controller processing non-committee message - 1")
+
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
@@ -630,6 +636,7 @@ func (c *controller) StartNetworkHandlers() {
 	for i := 0; i < networkRouterConcurrency; i++ {
 		go c.handleRouterMessages()
 	}
+	c.logger.Info("network handler started")
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 

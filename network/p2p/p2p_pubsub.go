@@ -219,6 +219,8 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 // handlePubsubMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.Context, topic string, msg *pubsub.Message) error {
 	return func(ctx context.Context, topic string, msg *pubsub.Message) error {
+		logger.Info("new pubsub message")
+
 		if n.msgRouter == nil {
 			logger.Debug("msg router is not configured")
 			return nil

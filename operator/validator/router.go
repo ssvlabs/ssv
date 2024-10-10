@@ -27,6 +27,7 @@ func (r *messageRouter) Route(ctx context.Context, message network.DecodedSSVMes
 	case <-ctx.Done():
 		r.logger.Warn("context canceled, dropping message")
 	case r.ch <- message:
+		r.logger.Info("message routed")
 	default:
 		r.logger.Warn("message router buffer is full, dropping message")
 	}
