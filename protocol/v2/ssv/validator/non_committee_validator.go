@@ -128,24 +128,22 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	for key, quorum := range quorums {
-		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
+		var operatorIDs []string
+		for _, share := range quorum {
+			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
+		}
 
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
 		if !exists {
 			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
 		}
 
-		var operatorIDs []string
-		for _, share := range quorum {
-			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
-		}
-
+		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
 		if len(beaconRoles) == 0 {
 			logger.Warn("NOT saved participants, roles not found",
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
-				zap.String("msg_id", hex.EncodeToString(msg.MsgID[:])),
 				fields.BlockRoot(key.Root),
 			)
 		}
@@ -167,7 +165,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			}
 
 			if err := roleStorage.SaveParticipants(msgID, slot, quorum); err != nil {
-				return fmt.Errorf("could not save participants %w", err)
+				return fmt.Errorf("could not save participants: %w", err)
 			}
 
 			logger.Info("✅ saved participants",
