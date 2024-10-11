@@ -120,6 +120,13 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	for key, quorum := range quorums {
 		roles := ncv.getRoles(msg, key.Root)
 
+		if len(roles) == 0 {
+			logger.Warn("NOT saved participants, roles not found",
+				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
+				zap.String("msg_id", hex.EncodeToString(msg.MsgID[:])),
+			)
+		}
+
 		for _, role := range roles {
 			validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
 			if !exists {
