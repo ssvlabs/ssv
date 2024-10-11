@@ -336,7 +336,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	}
 
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
-	for committeeIndex := phase0.CommitteeIndex(0); committeeIndex <= 64; committeeIndex++ {
+	for committeeIndex := phase0.CommitteeIndex(0); committeeIndex <= 128; committeeIndex++ {
 		attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
 
 		attesterDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainAttester)
