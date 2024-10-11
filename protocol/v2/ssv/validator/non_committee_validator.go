@@ -39,7 +39,7 @@ type CommitteeObserver struct {
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	attesterRoots          map[[32]byte]struct{}
+	attesterRoots          map[[32]byte]phase0.CommitteeIndex
 	syncCommitteeRoots     map[[32]byte]struct{}
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
@@ -85,7 +85,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		signer:                 opts.Signer,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
-		attesterRoots:          make(map[[32]byte]struct{}),
+		attesterRoots:          make(map[[32]byte]phase0.CommitteeIndex),
 		syncCommitteeRoots:     make(map[[32]byte]struct{}),
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
@@ -174,6 +174,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				zap.String("msg_id", hex.EncodeToString(msgID[:])),
+				fields.BlockRoot(key.Root),
 			)
 
 			if ncv.newDecidedHandler != nil {
@@ -191,7 +192,9 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		_, foundAttester := ncv.attesterRoots[root]
+		committeeIndex, foundAttester := ncv.attesterRoots[root]
+		ncv.logger.Info("found attester root", zap.Uint64("committee_index", uint64(committeeIndex)))
+
 		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
 
 		switch {
@@ -344,7 +347,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 			return err
 		}
 
-		ncv.attesterRoots[attesterRoot] = struct{}{}
+		ncv.attesterRoots[attesterRoot] = committeeIndex
 		ncv.logger.Info("saved attester block root",
 			fields.BlockRoot(attesterRoot),
 			zap.Uint64("committee_index", uint64(committeeIndex)),
