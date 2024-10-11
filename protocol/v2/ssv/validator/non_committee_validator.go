@@ -128,26 +128,33 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	for key, quorum := range quorums {
-		roles := ncv.getRoles(msg, key.Root)
+		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
 
-		if len(roles) == 0 {
+		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+		if !exists {
+			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
+		}
+
+		var operatorIDs []string
+		for _, share := range quorum {
+			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
+		}
+
+		if len(beaconRoles) == 0 {
 			logger.Warn("NOT saved participants, roles not found",
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
+				fields.Validator(validator.ValidatorPubKey[:]),
+				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				zap.String("msg_id", hex.EncodeToString(msg.MsgID[:])),
 				fields.BlockRoot(key.Root),
 			)
 		}
 
-		for _, role := range roles {
-			validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
-			if !exists {
-				return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
-			}
-
-			msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], role)
+		for _, beaconRole := range beaconRoles {
+			msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], beaconRole)
 			roleStorage := ncv.Storage.Get(msgID.GetRoleType())
 			if roleStorage == nil {
-				return fmt.Errorf("role storage doesn't exist: %v", role)
+				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
 			}
 
 			existingQuorum, err := roleStorage.GetParticipants(msgID, slot)
@@ -163,12 +170,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				return fmt.Errorf("could not save participants %w", err)
 			}
 
-			var operatorIDs []string
-			for _, share := range quorum {
-				operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
-			}
 			logger.Info("✅ saved participants",
-				zap.String("converted_role", role.ToBeaconRole()),
+				zap.String("converted_role", beaconRole.ToBeaconRole()),
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
@@ -188,7 +191,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (ncv *CommitteeObserver) getRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
+func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		_, foundAttester := ncv.attesterRoots[root]
 		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
