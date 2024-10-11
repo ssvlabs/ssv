@@ -331,20 +331,24 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	}
 
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
-	committeeIndex := phase0.CommitteeIndex(0) //TODO committeeIndex is 0, is this correct? this is copied from ssv/runner/committee.go
-	attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
+	for committeeIndex := phase0.CommitteeIndex(0); committeeIndex <= 64; committeeIndex++ {
+		attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
 
-	attesterDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainAttester)
-	if err != nil {
-		return err
+		attesterDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainAttester)
+		if err != nil {
+			return err
+		}
+
+		attesterRoot, err := spectypes.ComputeETHSigningRoot(attestationData, attesterDomain)
+		if err != nil {
+			return err
+		}
+
+		ncv.attesterRoots[attesterRoot] = struct{}{}
+		ncv.logger.Info("saved attester block root", fields.BlockRoot(attesterRoot)) // TODO: remove or make debug
 	}
 
 	syncCommitteeDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainSyncCommittee)
-	if err != nil {
-		return err
-	}
-
-	attesterRoot, err := spectypes.ComputeETHSigningRoot(attestationData, attesterDomain)
 	if err != nil {
 		return err
 	}
@@ -354,9 +358,6 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	if err != nil {
 		return err
 	}
-
-	ncv.attesterRoots[attesterRoot] = struct{}{}
-	ncv.logger.Info("saved attester block root", fields.BlockRoot(attesterRoot)) // TODO: remove or make debug
 
 	ncv.syncCommitteeRoots[syncCommitteeRoot] = struct{}{}
 	ncv.logger.Info("saved sync committee block root", fields.BlockRoot(syncCommitteeRoot)) // TODO: remove or make debug
