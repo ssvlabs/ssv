@@ -345,7 +345,10 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		}
 
 		ncv.attesterRoots[attesterRoot] = struct{}{}
-		ncv.logger.Info("saved attester block root", fields.BlockRoot(attesterRoot)) // TODO: remove or make debug
+		ncv.logger.Info("saved attester block root",
+			fields.BlockRoot(attesterRoot),
+			zap.Uint64("committee_index", uint64(committeeIndex)),
+		) // TODO: remove or make debug
 	}
 
 	syncCommitteeDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainSyncCommittee)
