@@ -233,7 +233,7 @@ func (ncv *CommitteeObserver) processMessage(
 
 		rootSignatures := container.GetSignatures(msg.ValidatorIndex, msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= validator.Quorum() {
-			key := validatorIndexAndRoot{msg.ValidatorIndex, msg.SigningRoot}
+			key := validatorIndexAndRoot{ValidatorIndex: msg.ValidatorIndex, Root: msg.SigningRoot}
 			longestSigners := quorums[key]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
 				newSigners := make([]spectypes.OperatorID, 0, newLength)
@@ -320,8 +320,12 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 
 	committeeIndex := phase0.CommitteeIndex(0) //TODO committeeIndex is 0, is this correct? this is copied from ssv/runner/committee.go
 	attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
+	attestationDataHash, err := attestationData.HashTreeRoot()
+	if err != nil {
+		return err
+	}
 
-	ncv.attesterRoots[attestationData.BeaconBlockRoot] = spectypes.BNRoleAttester
+	ncv.attesterRoots[attestationDataHash] = spectypes.BNRoleAttester
 	ncv.logger.Info("saved attester block root", fields.BlockRoot(attestationData.BeaconBlockRoot)) // TODO: remove or make debug
 	ncv.syncCommitteeRoots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
 	ncv.logger.Info("saved sync committee block root", fields.BlockRoot(beaconVote.BlockRoot)) // TODO: remove or make debug
