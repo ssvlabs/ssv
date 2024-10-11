@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -32,11 +33,14 @@ import (
 type CommitteeObserver struct {
 	logger                 *zap.Logger
 	Storage                *storage.QBFTStores
+	beaconNode             beacon.BeaconNode
+	beaconNetwork          beacon.BeaconNetwork
+	signer                 spectypes.BeaconSigner
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	attesterRoots          map[[32]byte]spectypes.BeaconRole
-	syncCommitteeRoots     map[[32]byte]spectypes.BeaconRole
+	attesterRoots          map[[32]byte]struct{}
+	syncCommitteeRoots     map[[32]byte]struct{}
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -44,6 +48,9 @@ type CommitteeObserverOptions struct {
 	FullNode          bool
 	Logger            *zap.Logger
 	Network           specqbft.Network
+	BeaconNetwork     beacon.BeaconNetwork
+	BeaconNode        beacon.BeaconNode
+	Signer            spectypes.BeaconSigner
 	Storage           *storage.QBFTStores
 	Operator          *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner
@@ -73,10 +80,13 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		qbftController:         ctrl,
 		logger:                 opts.Logger,
 		Storage:                opts.Storage,
+		beaconNode:             opts.BeaconNode,
+		beaconNetwork:          opts.BeaconNetwork,
+		signer:                 opts.Signer,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
-		attesterRoots:          make(map[[32]byte]spectypes.BeaconRole),
-		syncCommitteeRoots:     make(map[[32]byte]spectypes.BeaconRole),
+		attesterRoots:          make(map[[32]byte]struct{}),
+		syncCommitteeRoots:     make(map[[32]byte]struct{}),
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
@@ -318,17 +328,33 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
+	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 	committeeIndex := phase0.CommitteeIndex(0) //TODO committeeIndex is 0, is this correct? this is copied from ssv/runner/committee.go
 	attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
-	attestationDataHash, err := attestationData.HashTreeRoot()
+
+	attesterDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
 	}
 
-	ncv.attesterRoots[attestationDataHash] = spectypes.BNRoleAttester
-	ncv.logger.Info("saved attester block root", fields.BlockRoot(attestationData.BeaconBlockRoot)) // TODO: remove or make debug
-	ncv.syncCommitteeRoots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
-	ncv.logger.Info("saved sync committee block root", fields.BlockRoot(beaconVote.BlockRoot)) // TODO: remove or make debug
+	syncCommitteeDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainSyncCommittee)
+	if err != nil {
+		return err
+	}
+
+	attesterRoot, err := spectypes.ComputeETHSigningRoot(attestationData, attesterDomain)
+	if err != nil {
+		return err
+	}
+
+	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
+	syncCommitteeRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, syncCommitteeDomain)
+
+	ncv.attesterRoots[attesterRoot] = struct{}{}
+	ncv.logger.Info("saved attester block root", fields.BlockRoot(attesterRoot)) // TODO: remove or make debug
+
+	ncv.syncCommitteeRoots[syncCommitteeRoot] = struct{}{}
+	ncv.logger.Info("saved sync committee block root", fields.BlockRoot(syncCommitteeRoot)) // TODO: remove or make debug
 
 	return nil
 }
