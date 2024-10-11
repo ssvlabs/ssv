@@ -198,7 +198,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	}{
 		{"no shares of non committee", nil, false, nil, nil},
 		{"set up non committee validators", sharesWithMetadata, false, nil, nil},
-		{"set up non committee validators without metadata", sharesWithoutMetadata, true, nil, nil},
+		{"set up non committee validators without metadata", sharesWithoutMetadata, false, nil, nil},
 		{"fail to sync highest decided", sharesWithMetadata, false, errors.New("failed to sync highest decided"), nil},
 		{"fail to update validators metadata", sharesWithMetadata, false, nil, errors.New("could not update all validators")},
 	}
@@ -231,8 +231,8 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				}).AnyTimes()
 				if tc.expectMetadataFetch {
 					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				}
+				bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
