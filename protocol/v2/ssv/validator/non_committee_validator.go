@@ -349,6 +349,9 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 
 	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
 	syncCommitteeRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, syncCommitteeDomain)
+	if err != nil {
+		return err
+	}
 
 	ncv.attesterRoots[attesterRoot] = struct{}{}
 	ncv.logger.Info("saved attester block root", fields.BlockRoot(attesterRoot)) // TODO: remove or make debug
