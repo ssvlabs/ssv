@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type CommitteeObserver struct {
@@ -181,7 +182,7 @@ func (ncv *CommitteeObserver) getRoles(msg *queue.SSVMessage, root [32]byte) []c
 			return nil
 		}
 	}
-	return []convert.RunnerRole{convert.RunnerRole(msg.MsgID.GetRoleType())}
+	return []convert.RunnerRole{casts.RunnerRoleToConvertRole(msg.MsgID.GetRoleType())}
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators

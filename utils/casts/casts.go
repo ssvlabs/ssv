@@ -44,6 +44,25 @@ func BeaconRoleToConvertRole(beaconRole spectypes.BeaconRole) convert.RunnerRole
 	}
 }
 
+func RunnerRoleToConvertRole(runnerRole spectypes.RunnerRole) convert.RunnerRole {
+	switch runnerRole {
+	case spectypes.RoleCommittee:
+		return convert.RoleCommittee
+	case spectypes.RoleAggregator:
+		return convert.RoleAggregator
+	case spectypes.RoleProposer:
+		return convert.RoleProposer
+	case spectypes.RoleSyncCommitteeContribution:
+		return convert.RoleSyncCommitteeContribution
+	case spectypes.RoleValidatorRegistration:
+		return convert.RoleValidatorRegistration
+	case spectypes.RoleVoluntaryExit:
+		return convert.RoleVoluntaryExit
+	default:
+		return -1
+	}
+}
+
 // DurationToUint64 returns error if duration is negative and converts time.Duration to uint64 safe otherwise
 func DurationToUint64(t time.Duration) (uint64, error) {
 	if t < 0 {
