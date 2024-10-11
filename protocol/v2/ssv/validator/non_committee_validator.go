@@ -97,6 +97,9 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
+	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
+		return fmt.Errorf("not processing message type %d", partialSigMessages.Type)
+	}
 
 	slot := partialSigMessages.Slot
 	logger = logger.With(fields.Slot(slot))
