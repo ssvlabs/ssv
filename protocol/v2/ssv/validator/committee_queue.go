@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -30,28 +31,7 @@ func (c *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 		return
 	}
 
-	prepareQueue := func() queueContainer {
-		c.mtx.Lock()
-		defer c.mtx.Unlock()
-
-		q, ok := c.Queues[slot]
-		if !ok {
-			q = queueContainer{
-				Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
-				queueState: &queue.State{
-					HasRunningInstance: false,
-					Height:             specqbft.Height(slot),
-					Slot:               slot,
-					//Quorum:             options.SSVShare.Share,// TODO
-				},
-			}
-			c.Queues[slot] = q
-			logger.Debug("missing queue for slot created", fields.Slot(slot))
-		}
-
-		return q
-	}
-	q := prepareQueue()
+	q := c.prepareQueue(logger, slot)
 
 	if pushed := q.Q.TryPush(msg); !pushed {
 		msgID := msg.MsgID.String()
@@ -61,6 +41,28 @@ func (c *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	} else {
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	}
+}
+
+func (c *Committee) prepareQueue(logger *zap.Logger, slot phase0.Slot) queueContainer {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	q, ok := c.Queues[slot]
+	if !ok {
+		q = queueContainer{
+			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			queueState: &queue.State{
+				HasRunningInstance: false,
+				Height:             specqbft.Height(slot),
+				Slot:               slot,
+				//Quorum:             options.SSVShare.Share,// TODO
+			},
+		}
+		c.Queues[slot] = q
+		logger.Debug("missing queue for slot created", fields.Slot(slot))
+	}
+
+	return q
 }
 
 func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
