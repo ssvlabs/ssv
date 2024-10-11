@@ -34,6 +34,7 @@ func (a *CommitteeDutyGuard) StartDuty(role spectypes.BeaconRole, validator spec
 		return fmt.Errorf("unsupported role %d", role)
 	}
 	runningSlot, exists := duties[validator]
+	// TODO: leave a clarifying comment for this condition
 	if exists && runningSlot >= slot {
 		return fmt.Errorf("duty already running at slot %d", runningSlot)
 	}
