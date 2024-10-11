@@ -321,7 +321,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
 
 	ncv.attesterRoots[attestationData.BeaconBlockRoot] = spectypes.BNRoleAttester
-	ncv.attesterRoots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
+	ncv.syncCommitteeRoots[beaconVote.BlockRoot] = spectypes.BNRoleSyncCommittee
 
 	return nil
 }
