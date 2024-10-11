@@ -91,77 +91,9 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	prepareRunner := func() (runner.Runner, error) {
-		c.mtx.Lock()
-		defer c.mtx.Unlock()
-
-		if len(duty.ValidatorDuties) == 0 {
-			return nil, errors.New("no beacon duties")
-		}
-		if _, exists := c.Runners[duty.Slot]; exists {
-			return nil, errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
-		}
-
-		// Filter out Beacon duties for which we don't have a share.
-		filteredDuty := &spectypes.CommitteeDuty{
-			Slot:            duty.Slot,
-			ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
-		}
-		shares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-		attesters := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
-		for _, beaconDuty := range duty.ValidatorDuties {
-			share, exists := c.Shares[beaconDuty.ValidatorIndex]
-			if !exists {
-				logger.Debug("no share for validator duty",
-					fields.BeaconRole(beaconDuty.Type),
-					zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
-				continue
-			}
-			shares[beaconDuty.ValidatorIndex] = share
-			filteredDuty.ValidatorDuties = append(filteredDuty.ValidatorDuties, beaconDuty)
-
-			if beaconDuty.Type == spectypes.BNRoleAttester {
-				attesters = append(attesters, share.SharePubKey)
-			}
-		}
-		if len(shares) == 0 {
-			return nil, errors.New("no shares for duty's validators")
-		}
-		duty = filteredDuty
-
-		r, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not create CommitteeRunner")
-		}
-
-		// Set timeout function.
-		r.GetBaseRunner().TimeoutF = c.onTimeout
-		c.Runners[duty.Slot] = r
-		_, queueExists := c.Queues[duty.Slot]
-		if !queueExists {
-			c.Queues[duty.Slot] = queueContainer{
-				Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
-				queueState: &queue.State{
-					HasRunningInstance: false,
-					Height:             qbft.Height(duty.Slot),
-					Slot:               duty.Slot,
-					Quorum:             c.CommitteeMember.GetQuorum(),
-				},
-			}
-		}
-
-		// Prunes all expired committee runners, when new runner is created
-		pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
-		if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
-			pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
-		}
-
-		return r, nil
-	}
-
-	r, err := prepareRunner()
+	r, err := c.prepareDutyRunner(logger, duty)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not prepare duty runner: %w", err)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
@@ -170,6 +102,91 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		return errors.Wrap(err, "runner failed to start duty")
 	}
 	return nil
+}
+
+func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.CommitteeDuty) (runner.Runner, error) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if _, exists := c.Runners[duty.Slot]; exists {
+		return nil, errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
+	}
+
+	shares, attesters, trimmedDuty, err := c.prepareDuty(logger, duty)
+	if err != nil {
+		return nil, fmt.Errorf("prepareDutyRunner: %w", err)
+	}
+	duty = trimmedDuty
+
+	r, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create CommitteeRunner")
+	}
+
+	// Set timeout function.
+	r.GetBaseRunner().TimeoutF = c.onTimeout
+	c.Runners[duty.Slot] = r
+	_, queueExists := c.Queues[duty.Slot]
+	if !queueExists {
+		c.Queues[duty.Slot] = queueContainer{
+			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			queueState: &queue.State{
+				HasRunningInstance: false,
+				Height:             qbft.Height(duty.Slot),
+				Slot:               duty.Slot,
+				Quorum:             c.CommitteeMember.GetQuorum(),
+			},
+		}
+	}
+
+	// Prunes all expired committee runners, when new runner is created
+	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
+	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
+	}
+
+	return r, nil
+}
+
+// prepareDuty will analyse duty and prepare the data we need to further process it.
+func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+	map[phase0.ValidatorIndex]*spectypes.Share,
+	[]spectypes.ShareValidatorPK,
+	*spectypes.CommitteeDuty,
+	error,
+) {
+	if len(duty.ValidatorDuties) == 0 {
+		return nil, nil, nil, errors.New("no beacon duties")
+	}
+
+	trimmedDuty := &spectypes.CommitteeDuty{
+		Slot:            duty.Slot,
+		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
+	}
+	shares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
+	attesters := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
+	for _, beaconDuty := range duty.ValidatorDuties {
+		share, exists := c.Shares[beaconDuty.ValidatorIndex]
+		if !exists {
+			// Filter out Beacon duties for which we don't have a share.
+			logger.Debug("committee has no share for validator duty",
+				fields.BeaconRole(beaconDuty.Type),
+				zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+			continue
+		}
+		shares[beaconDuty.ValidatorIndex] = share
+		trimmedDuty.ValidatorDuties = append(trimmedDuty.ValidatorDuties, beaconDuty)
+
+		if beaconDuty.Type == spectypes.BNRoleAttester {
+			attesters = append(attesters, share.SharePubKey)
+		}
+	}
+
+	if len(shares) == 0 {
+		return nil, nil, nil, errors.New("no shares for duty's validators")
+	}
+
+	return shares, attesters, trimmedDuty, nil
 }
 
 // ProcessMessage processes Network Message of all types
@@ -203,7 +220,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.RUnlock()
 		if !exists {
-			return errors.New(fmt.Sprintf("no runner found for consensus message's slot(qbtf height): %d", qbftMsg.Height))
+			return fmt.Errorf("no runner found for consensus message's slot %d", qbftMsg.Height)
 		}
 		return r.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
@@ -226,7 +243,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				return errors.New(fmt.Sprintf("no runner found for post consensus sig message's slot: %d", pSigMessages.Slot))
+				return fmt.Errorf("no runner found for post consensus sig message's slot %d", pSigMessages.Slot)
 			}
 			return r.ProcessPostConsensus(logger, pSigMessages)
 		}
