@@ -114,7 +114,7 @@ func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.Commit
 
 	shares, attesters, trimmedDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		return nil, fmt.Errorf("prepareDutyRunner: %w", err)
+		return nil, fmt.Errorf("prepare duty: %w", err)
 	}
 	duty = trimmedDuty
 
