@@ -147,6 +147,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				fields.BlockRoot(key.Root),
+				zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
 			)
 		}
 
@@ -370,6 +371,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Info("saved attester block root",
 			fields.BlockRoot(root),
 			zap.Uint64("committee_index", uint64(committeeIndices[i])),
+			zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
 		) // TODO: remove or make debug
 	}
 
