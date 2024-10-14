@@ -220,6 +220,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	//}
 
 	localNode := enode.NewLocalNode(db, privKey)
+	localNode.Set(enr.WithEntry("ssv", true))
 	localNode.SetFallbackIP(external)
 	localNode.SetFallbackUDP(int(port))
 
