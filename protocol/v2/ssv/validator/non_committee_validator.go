@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -39,6 +40,7 @@ type CommitteeObserver struct {
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
+	rootMu                 sync.RWMutex
 	attesterRoots          map[[32]byte]phase0.CommitteeIndex
 	syncCommitteeRoots     map[[32]byte]struct{}
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
@@ -192,12 +194,16 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		ncv.rootMu.RLock()
+
 		committeeIndex, foundAttester := ncv.attesterRoots[root]
 		if foundAttester {
 			ncv.logger.Info("found attester root", zap.Uint64("committee_index", uint64(committeeIndex)))
 		}
 
 		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
+
+		ncv.rootMu.Unlock()
 
 		switch {
 		case foundAttester && foundSyncCommittee:
@@ -336,6 +342,9 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	}
 
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+	var attesterRoots [][32]byte
+	var committeeIndices []phase0.CommitteeIndex
+
 	for committeeIndex := phase0.CommitteeIndex(0); committeeIndex <= 64; committeeIndex++ {
 		attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
 
@@ -349,10 +358,20 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 			return err
 		}
 
-		ncv.attesterRoots[attesterRoot] = committeeIndex
+		attesterRoots = append(attesterRoots, attesterRoot)
+		committeeIndices = append(committeeIndices, committeeIndex)
+	}
+
+	ncv.rootMu.Lock()
+	for i, root := range attesterRoots {
+		ncv.attesterRoots[root] = committeeIndices[i]
+	}
+	ncv.rootMu.Unlock()
+
+	for i, root := range attesterRoots {
 		ncv.logger.Info("saved attester block root",
-			fields.BlockRoot(attesterRoot),
-			zap.Uint64("committee_index", uint64(committeeIndex)),
+			fields.BlockRoot(root),
+			zap.Uint64("committee_index", uint64(committeeIndices[i])),
 		) // TODO: remove or make debug
 	}
 
@@ -367,7 +386,10 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		return err
 	}
 
+	ncv.rootMu.Lock()
 	ncv.syncCommitteeRoots[syncCommitteeRoot] = struct{}{}
+	ncv.rootMu.Unlock()
+
 	ncv.logger.Info("saved sync committee block root", fields.BlockRoot(syncCommitteeRoot)) // TODO: remove or make debug
 
 	return nil
