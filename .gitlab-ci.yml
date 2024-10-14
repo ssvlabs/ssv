@@ -18,7 +18,7 @@ variables:
   #PRODUCTION
   ACCOUNT_ID_INFRA_PROD: 764289642555
   AWS_REGION_INFRA_PROD: "us-west-2"
-  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
+  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_PROD.amazonaws.com/$IMAGE_NAME
   APP_REPLICAS_INFRA_PROD: "1"
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
   PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
@@ -136,6 +136,11 @@ Deploy nodes to prod:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
+    - mkdir ~/.kube/
+    - echo $PROD_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
     # +-------------------------------+
     # |  🟠 Deploy SSV Holesky nodes  |
     # +-------------------------------+
@@ -166,7 +171,7 @@ Deploy exporter to prod:
   tags:
     - blox-infra-prod
   script:
-    - apk add bash
+    - apk add bash curl
     - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
     - export SSV_EXPORTER_CPU_LIMIT=$PROD_SSV_EXPORTER_CPU_LIMIT
     - export SSV_EXPORTER_MEM_LIMIT=$PROD_SSV_EXPORTER_MEM_LIMIT
@@ -179,6 +184,11 @@ Deploy exporter to prod:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
+    - mkdir ~/.kube/
+    - echo $PROD_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
     #
     # +-------------------------------+
     # |  🟠 Deploy Holesky exporter   |
