@@ -195,15 +195,13 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		ncv.rootMu.RLock()
-
 		committeeIndex, foundAttester := ncv.attesterRoots[root]
+		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
+		ncv.rootMu.RUnlock()
+
 		if foundAttester {
 			ncv.logger.Info("found attester root", zap.Uint64("committee_index", uint64(committeeIndex)))
 		}
-
-		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
-
-		ncv.rootMu.Unlock()
 
 		switch {
 		case foundAttester && foundSyncCommittee:
