@@ -143,7 +143,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
 		if len(beaconRoles) == 0 {
-			logger.Warn("NOT saved participants, roles not found",
+			logger.Warn("no roles found for quorum root",
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
@@ -336,6 +336,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	}
 
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+
 	var attesterRoots [][32]byte
 	var committeeIndices []phase0.CommitteeIndex
 
@@ -361,11 +362,11 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	}
 
 	for i, root := range attesterRoots {
-		ncv.logger.Info("saved attester block root",
+		ncv.logger.Debug("saved attester block root",
 			fields.BlockRoot(root),
 			zap.Uint64("committee_index", uint64(committeeIndices[i])),
 			zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
-		) // TODO: remove or make debug
+		)
 	}
 
 	syncCommitteeDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainSyncCommittee)
@@ -381,7 +382,10 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 
 	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
 
-	ncv.logger.Info("saved sync committee block root", fields.BlockRoot(syncCommitteeRoot)) // TODO: remove or make debug
+	ncv.logger.Debug("saved sync committee block root",
+		fields.BlockRoot(syncCommitteeRoot),
+		zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
+	)
 
 	return nil
 }
