@@ -33,8 +33,12 @@ func (a *CommitteeDutyGuard) StartDuty(role spectypes.BeaconRole, validator spec
 	if !ok {
 		return fmt.Errorf("unsupported role %d", role)
 	}
+	// If an older committee duty is still running for this validator we won't be interested in it
+	// anymore now that we have a fresher duty started. The older duty might or might not finish
+	// successfully, either outcome is fine but since it's always better to execute the freshest
+	// committee duty CommitteeDutyGuard will invalidate the older duty.
+	// Note: this should happen very rarely, if ever, in practice.
 	runningSlot, exists := duties[validator]
-	// TODO: leave a clarifying comment for this condition
 	if exists && runningSlot >= slot {
 		return fmt.Errorf("duty already running at slot %d", runningSlot)
 	}
