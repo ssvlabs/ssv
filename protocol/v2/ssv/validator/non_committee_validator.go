@@ -6,10 +6,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -40,9 +40,8 @@ type CommitteeObserver struct {
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	rootMu                 sync.RWMutex
-	attesterRoots          map[[32]byte]phase0.CommitteeIndex
-	syncCommitteeRoots     map[[32]byte]struct{}
+	attesterRoots          *ttlcache.Cache[[32]byte, struct{}]
+	syncCommRoots          *ttlcache.Cache[[32]byte, struct{}]
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -59,6 +58,8 @@ type CommitteeObserverOptions struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
+	AttesterRoots     *ttlcache.Cache[[32]byte, struct{}]
+	SyncCommRoots     *ttlcache.Cache[[32]byte, struct{}]
 }
 
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
@@ -87,8 +88,8 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		signer:                 opts.Signer,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
-		attesterRoots:          make(map[[32]byte]phase0.CommitteeIndex),
-		syncCommitteeRoots:     make(map[[32]byte]struct{}),
+		attesterRoots:          opts.AttesterRoots,
+		syncCommRoots:          opts.SyncCommRoots,
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
@@ -195,21 +196,15 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		ncv.rootMu.RLock()
-		committeeIndex, foundAttester := ncv.attesterRoots[root]
-		_, foundSyncCommittee := ncv.syncCommitteeRoots[root]
-		ncv.rootMu.RUnlock()
-
-		if foundAttester {
-			ncv.logger.Info("found attester root", zap.Uint64("committee_index", uint64(committeeIndex)))
-		}
+		attester := ncv.attesterRoots.Get(root)
+		syncCommittee := ncv.syncCommRoots.Get(root)
 
 		switch {
-		case foundAttester && foundSyncCommittee:
+		case attester != nil && syncCommittee != nil:
 			return []convert.RunnerRole{convert.RoleAttester, convert.RoleSyncCommittee}
-		case foundAttester:
+		case attester != nil:
 			return []convert.RunnerRole{convert.RoleAttester}
-		case foundSyncCommittee:
+		case syncCommittee != nil:
 			return []convert.RunnerRole{convert.RoleSyncCommittee}
 		default:
 			return nil
@@ -361,11 +356,9 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		committeeIndices = append(committeeIndices, committeeIndex)
 	}
 
-	ncv.rootMu.Lock()
-	for i, root := range attesterRoots {
-		ncv.attesterRoots[root] = committeeIndices[i]
+	for _, root := range attesterRoots {
+		ncv.attesterRoots.Set(root, struct{}{}, ttlcache.DefaultTTL)
 	}
-	ncv.rootMu.Unlock()
 
 	for i, root := range attesterRoots {
 		ncv.logger.Info("saved attester block root",
@@ -386,9 +379,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		return err
 	}
 
-	ncv.rootMu.Lock()
-	ncv.syncCommitteeRoots[syncCommitteeRoot] = struct{}{}
-	ncv.rootMu.Unlock()
+	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
 
 	ncv.logger.Info("saved sync committee block root", fields.BlockRoot(syncCommitteeRoot)) // TODO: remove or make debug
 

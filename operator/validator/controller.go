@@ -213,6 +213,8 @@ type controller struct {
 	// nonCommittees is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
+	attesterRoots            *ttlcache.Cache[[32]byte, struct{}]
+	syncCommRoots            *ttlcache.Cache[[32]byte, struct{}]
 
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
@@ -321,6 +323,13 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		committeesObservers: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
 		),
+		attesterRoots: ttlcache.New(
+			ttlcache.WithTTL[[32]byte, struct{}](time.Minute * 13),
+		),
+		syncCommRoots: ttlcache.New(
+			ttlcache.WithTTL[[32]byte, struct{}](time.Minute * 13),
+		),
+
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -331,6 +340,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
+	// Delete old roots.
+	go ctrl.attesterRoots.Start()
+	go ctrl.syncCommRoots.Start()
 
 	return &ctrl
 }
@@ -456,6 +468,8 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			Operator:          c.validatorOptions.Operator,
 			OperatorSigner:    c.validatorOptions.OperatorSigner,
 			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+			AttesterRoots:     c.attesterRoots,
+			SyncCommRoots:     c.syncCommRoots,
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
