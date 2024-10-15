@@ -213,8 +213,9 @@ type controller struct {
 	// nonCommittees is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
-	attesterRoots            *ttlcache.Cache[[32]byte, struct{}]
-	syncCommRoots            *ttlcache.Cache[[32]byte, struct{}]
+	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache              *validator.DomainCache
 
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
@@ -259,10 +260,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		},
 	}
 
-	//TODO
+	beaconNetwork := options.NetworkConfig.Beacon
+
 	genesisValidatorOptions := genesisvalidator.Options{
 		Network:       options.GenesisControllerOptions.Network,
-		BeaconNetwork: options.NetworkConfig.Beacon,
+		BeaconNetwork: beaconNetwork,
 		Storage:       options.GenesisControllerOptions.StorageMap,
 		// SSVShare:   nil,  // set per validator
 		Signer:            options.GenesisControllerOptions.KeyManager,
@@ -291,6 +293,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	if options.Metrics != nil {
 		metrics = options.Metrics
 	}
+
+	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -321,14 +325,15 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
 		committeesObservers: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
+			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](cacheTTL),
 		),
 		attesterRoots: ttlcache.New(
-			ttlcache.WithTTL[[32]byte, struct{}](time.Minute * 13),
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
 		syncCommRoots: ttlcache.New(
-			ttlcache.WithTTL[[32]byte, struct{}](time.Minute * 13),
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
+		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
 
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
@@ -340,9 +345,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
-	// Delete old roots.
+	// Delete old root and domain entries.
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
+	go ctrl.domainCache.Start()
 
 	return &ctrl
 }
@@ -467,6 +473,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
 			AttesterRoots:     c.attesterRoots,
 			SyncCommRoots:     c.syncCommRoots,
+			DomainCache:       c.domainCache,
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
