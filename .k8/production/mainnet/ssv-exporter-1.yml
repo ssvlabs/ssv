@@ -166,7 +166,7 @@ spec:
           - name: NETWORK
             value: "mainnet"
           - name: DB_PATH
-            value: "./data/db-mainnet"
+            value: "./data/db-mainnet--2024-10-13"
           - name: METRICS_API_PORT
             value: "15015"
           - name: SSV_API_PORT
