@@ -206,6 +206,8 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		}
 	}
 
+	s.logger.Debug("save validators to shares storage", zap.Int("count", len(shares)))
+
 	s.dbmu.Lock()
 	defer s.dbmu.Unlock()
 
@@ -243,10 +245,10 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		return err
 	}
 
-	return s.unsafeSave(rw, shares...)
+	return s.saveToDB(rw, shares...)
 }
 
-func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
+func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	return s.db.Using(rw).SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		share := specShareToStorageShare(shares[i])
 		value, err := share.Encode()
@@ -357,9 +359,9 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 	s.dbmu.Lock()
 	defer s.dbmu.Unlock()
 
-	func() {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
+	err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
 		for pk, metadata := range data {
 			if metadata == nil {
@@ -373,30 +375,19 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			share.Share.ValidatorIndex = metadata.Index
 			shares = append(shares, share)
 		}
-	}()
 
-	saveShares := func(sshares []*types.SSVShare) error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if err := s.unsafeSave(nil, sshares...); err != nil {
-			return err
+		for _, share := range shares {
+			key := hex.EncodeToString(share.ValidatorPubKey[:])
+			s.shares[key] = share
 		}
+
 		return s.validatorStore.handleSharesUpdated(shares...)
+	}()
+	if err != nil {
+		return err
 	}
 
-	// split into chunks to avoid holding the lock for too long
-	chunkSize := 1000
-	for i := 0; i < len(shares); i += chunkSize {
-		end := i + chunkSize
-		if end > len(shares) {
-			end = len(shares)
-		}
-		if err := saveShares(shares[i:end]); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return s.saveToDB(nil, shares...)
 }
 
 // Drop deletes all shares.
