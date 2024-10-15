@@ -27,6 +27,7 @@ type ParticipantResponse struct {
 	Slot      uint64 `json:"slot"`
 	PublicKey string `json:"public_key"`
 	Message   struct {
+		// We're keeping "Signers" capitalized to avoid breaking existing clients that rely on the current structure
 		Signers []uint64 `json:"Signers"`
 	} `json:"message"`
 }
