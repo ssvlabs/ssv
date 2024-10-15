@@ -9,7 +9,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -18,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -33,15 +33,15 @@ import (
 
 type CommitteeObserver struct {
 	logger                 *zap.Logger
+	netCfg                 networkconfig.NetworkConfig
 	Storage                *storage.QBFTStores
 	beaconNode             beacon.BeaconNode
 	beaconNetwork          beacon.BeaconNetwork
 	signer                 spectypes.BeaconSigner
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
+	dutyStore              *dutystore.Store
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	attesterRoots          *ttlcache.Cache[[32]byte, struct{}]
-	syncCommRoots          *ttlcache.Cache[[32]byte, struct{}]
 	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -58,8 +58,7 @@ type CommitteeObserverOptions struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
-	AttesterRoots     *ttlcache.Cache[[32]byte, struct{}]
-	SyncCommRoots     *ttlcache.Cache[[32]byte, struct{}]
+	DutyStore         *dutystore.Store
 }
 
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
@@ -82,14 +81,14 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 	return &CommitteeObserver{
 		qbftController:         ctrl,
 		logger:                 opts.Logger,
+		netCfg:                 opts.NetworkConfig,
 		Storage:                opts.Storage,
 		beaconNode:             opts.BeaconNode,
 		beaconNetwork:          opts.BeaconNetwork,
 		signer:                 opts.Signer,
 		ValidatorStore:         opts.ValidatorStore,
+		dutyStore:              opts.DutyStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
-		attesterRoots:          opts.AttesterRoots,
-		syncCommRoots:          opts.SyncCommRoots,
 		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
@@ -141,7 +140,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
 		}
 
-		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
+		beaconRoles := ncv.getBeaconRoles(msg, slot, validator.ValidatorIndex)
 		if len(beaconRoles) == 0 {
 			logger.Warn("no roles found for quorum root",
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
@@ -194,23 +193,25 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root [32]byte) []convert.RunnerRole {
-	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		attester := ncv.attesterRoots.Get(root)
-		syncCommittee := ncv.syncCommRoots.Get(root)
+func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, slot phase0.Slot, valIdx phase0.ValidatorIndex) []convert.RunnerRole {
+	var roles []convert.RunnerRole
 
-		switch {
-		case attester != nil && syncCommittee != nil:
-			return []convert.RunnerRole{convert.RoleAttester, convert.RoleSyncCommittee}
-		case attester != nil:
-			return []convert.RunnerRole{convert.RoleAttester}
-		case syncCommittee != nil:
-			return []convert.RunnerRole{convert.RoleSyncCommittee}
-		default:
-			return nil
+	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		epoch := ncv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		period := ncv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+
+		if d := ncv.dutyStore.Attester.ValidatorDuty(epoch, slot, valIdx); d != nil {
+			roles = append(roles, convert.RoleAttester)
 		}
+
+		if d := ncv.dutyStore.SyncCommittee.Duty(period, valIdx); d != nil {
+			roles = append(roles, convert.RoleSyncCommittee)
+		}
+	} else {
+		roles = append(roles, casts.RunnerRoleToConvertRole(msg.MsgID.GetRoleType()))
 	}
-	return []convert.RunnerRole{casts.RunnerRoleToConvertRole(msg.MsgID.GetRoleType())}
+
+	return roles
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
@@ -311,91 +312,4 @@ func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signat
 		}
 	}
 	return fmt.Errorf("unknown signer")
-}
-
-func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
-	mssg := &specqbft.Message{}
-	if err := mssg.Decode(msg.SSVMessage.GetData()); err != nil {
-		ncv.logger.Debug("❗ failed to get decode ssv message", zap.Error(err))
-		return err
-	}
-
-	// decode consensus data
-	beaconVote := &spectypes.BeaconVote{}
-	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
-		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
-		return err
-	}
-	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
-
-	ncv.logger.Info("✅ Got proposal message", fields.CommitteeID(cid))
-
-	qbftMsg, ok := msg.Body.(*specqbft.Message)
-	if !ok {
-		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
-	}
-
-	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
-
-	var attesterRoots [][32]byte
-	var committeeIndices []phase0.CommitteeIndex
-
-	for committeeIndex := phase0.CommitteeIndex(0); committeeIndex <= 64; committeeIndex++ {
-		attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
-
-		attesterDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainAttester)
-		if err != nil {
-			return err
-		}
-
-		attesterRoot, err := spectypes.ComputeETHSigningRoot(attestationData, attesterDomain)
-		if err != nil {
-			return err
-		}
-
-		attesterRoots = append(attesterRoots, attesterRoot)
-		committeeIndices = append(committeeIndices, committeeIndex)
-	}
-
-	for _, root := range attesterRoots {
-		ncv.attesterRoots.Set(root, struct{}{}, ttlcache.DefaultTTL)
-	}
-
-	for i, root := range attesterRoots {
-		ncv.logger.Debug("saved attester block root",
-			fields.BlockRoot(root),
-			zap.Uint64("committee_index", uint64(committeeIndices[i])),
-			zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
-		)
-	}
-
-	syncCommitteeDomain, err := ncv.beaconNode.DomainData(epoch, spectypes.DomainSyncCommittee)
-	if err != nil {
-		return err
-	}
-
-	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
-	syncCommitteeRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, syncCommitteeDomain)
-	if err != nil {
-		return err
-	}
-
-	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
-
-	ncv.logger.Debug("saved sync committee block root",
-		fields.BlockRoot(syncCommitteeRoot),
-		zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
-	)
-
-	return nil
-}
-
-func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
-	return &phase0.AttestationData{
-		Slot:            slot,
-		Index:           committeeIndex,
-		BeaconBlockRoot: vote.BlockRoot,
-		Source:          vote.Source,
-		Target:          vote.Target,
-	}
 }
