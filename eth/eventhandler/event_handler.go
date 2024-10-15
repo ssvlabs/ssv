@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/ssvlabs/ssv/ekm"
@@ -57,14 +58,16 @@ type taskExecutor interface {
 }
 
 type EventHandler struct {
-	nodeStorage       nodestorage.Storage
-	taskExecutor      taskExecutor
-	eventParser       eventparser.Parser
-	networkConfig     networkconfig.NetworkConfig
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorDecrypter keys.OperatorDecrypter
-	keyManager        ekm.KeyManager
-	beacon            beaconprotocol.BeaconNode
+	nodeStorage        nodestorage.Storage
+	taskExecutor       taskExecutor
+	eventParser        eventparser.Parser
+	networkConfig      networkconfig.NetworkConfig
+	operatorDataStore  operatordatastore.OperatorDataStore
+	operatorDecrypter  keys.OperatorDecrypter
+	keyManager         ekm.KeyManager
+	beacon             beaconprotocol.BeaconNode
+	removedOperators   map[string]struct{}
+	removedOperatorsMu sync.Mutex
 
 	fullNode bool
 	logger   *zap.Logger
@@ -91,6 +94,7 @@ func New(
 		operatorDecrypter: operatorDecrypter,
 		keyManager:        keyManager,
 		beacon:            beacon,
+		removedOperators:  make(map[string]struct{}),
 		logger:            zap.NewNop(),
 		metrics:           nopMetrics{},
 	}

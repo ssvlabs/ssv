@@ -69,7 +69,12 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	if err != nil {
 		return fmt.Errorf("could not get operator data by public key: %w", err)
 	}
-	if pubkeyExists {
+
+	eh.removedOperatorsMu.Lock()
+	_, removed := eh.removedOperators[string(od.PublicKey)]
+	eh.removedOperatorsMu.Unlock()
+
+	if pubkeyExists && !removed {
 		logger.Warn("malformed event: operator public key already exists",
 			fields.OperatorPubKey(operatorData.PublicKey))
 		return &MalformedEventError{Err: ErrOperatorPubkeyAlreadyExists}
@@ -79,7 +84,8 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	if err != nil {
 		return fmt.Errorf("save operator data: %w", err)
 	}
-	if exists {
+
+	if exists && !removed {
 		logger.Debug("operator data already exists")
 		return nil
 	}
@@ -88,6 +94,10 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		eh.operatorDataStore.SetOperatorData(od)
 		logger = logger.With(zap.Bool("own_operator", true))
 	}
+
+	eh.removedOperatorsMu.Lock()
+	delete(eh.removedOperators, string(od.PublicKey))
+	eh.removedOperatorsMu.Unlock()
 
 	eh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
 	logger.Debug("processed event")
@@ -117,7 +127,12 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		fields.Owner(od.OwnerAddress),
 	)
 
-	// This function is currently no-op and it will do nothing. Operator removed event is not used in the current implementation.
+	// This function is currently just maintaining the set of removed validators, and it will do nothing beyond that.
+	// The set of removed validators allows registering a validator with a pubkey that was once removed.
+	// Operator removed event is not used for anything else in the current implementation.
+	eh.removedOperatorsMu.Lock()
+	eh.removedOperators[string(od.PublicKey)] = struct{}{}
+	eh.removedOperatorsMu.Unlock()
 
 	logger.Debug("processed event")
 	return nil
