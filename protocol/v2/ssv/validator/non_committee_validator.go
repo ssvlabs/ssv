@@ -119,21 +119,21 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		return nil
 	}
 
-	for key, quorum := range quorums {
+	for valIdx, quorum := range quorums {
 		var operatorIDs []string
 		for _, share := range quorum {
 			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
 		}
 
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+		validator, exists := ncv.ValidatorStore.ValidatorByIndex(valIdx)
 		if !exists {
-			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
+			return fmt.Errorf("could not find share for validator with index %d", valIdx)
 		}
 
 		beaconRoles := ncv.getBeaconRoles(msg, slot, validator.ValidatorIndex)
 		if len(beaconRoles) == 0 {
 			logger.Warn("no roles found for validator",
-				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
+				zap.Uint64("validator_index", uint64(valIdx)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
@@ -162,7 +162,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 			logger.Info("✅ saved participants",
 				zap.String("converted_role", beaconRole.ToBeaconRole()),
-				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
+				zap.Uint64("validator_index", uint64(valIdx)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				zap.String("msg_id", hex.EncodeToString(msgID[:])),
@@ -211,15 +211,10 @@ func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 	return 1
 }
 
-type validatorIndexAndRoot struct {
-	ValidatorIndex phase0.ValidatorIndex
-	Root           [32]byte
-}
-
 func (ncv *CommitteeObserver) processMessage(
 	signedMsg *spectypes.PartialSignatureMessages,
-) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
-	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
+) (map[phase0.ValidatorIndex][]spectypes.OperatorID, error) {
+	quorums := make(map[phase0.ValidatorIndex][]spectypes.OperatorID)
 
 	for _, msg := range signedMsg.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
@@ -239,15 +234,14 @@ func (ncv *CommitteeObserver) processMessage(
 
 		rootSignatures := container.GetSignatures(msg.ValidatorIndex, msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= validator.Quorum() {
-			key := validatorIndexAndRoot{ValidatorIndex: msg.ValidatorIndex, Root: msg.SigningRoot}
-			longestSigners := quorums[key]
+			longestSigners := quorums[msg.ValidatorIndex]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
 				newSigners := make([]spectypes.OperatorID, 0, newLength)
 				for signer := range rootSignatures {
 					newSigners = append(newSigners, signer)
 				}
 				slices.Sort(newSigners)
-				quorums[key] = newSigners
+				quorums[msg.ValidatorIndex] = newSigners
 			}
 		}
 	}
