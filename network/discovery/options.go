@@ -7,16 +7,15 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/commons"
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-var SSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
+var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
 
 // DiscV5Options for creating a new discv5 listener
 type DiscV5Options struct {
@@ -28,9 +27,9 @@ type DiscV5Options struct {
 	// BindIP is the IP to bind to the UDP listener
 	BindIP string
 	// Port is the UDP port used by discv5
-	Port int
+	Port uint16
 	// TCPPort is the TCP port exposed in the ENR
-	TCPPort int
+	TCPPort uint16
 	// NetworkKey is the private key used to create the peer.ID if the node
 	NetworkKey *ecdsa.PrivateKey
 	// Bootnodes is a list of bootstrapper nodes
@@ -85,12 +84,28 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 	return ipAddr, bindIP, n
 }
 
-// DiscV5Cfg creates discv5 config from the options
-func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, error) {
-	dv5Cfg := discover.Config{
-		PrivateKey:   opts.NetworkKey,
-		V5ProtocolID: &SSVProtocolID,
+func WithProtocolID(protocolID [6]byte) func(config *discover.Config) {
+	return func(config *discover.Config) {
+		config.V5ProtocolID = &protocolID
 	}
+}
+
+func WithUnhandled(unhandled chan<- discover.ReadPacket) func(config *discover.Config) {
+	return func(config *discover.Config) {
+		config.Unhandled = unhandled
+	}
+}
+
+// DiscV5Cfg creates discv5 config from the options
+func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger, funcOpts ...func(config *discover.Config)) (*discover.Config, error) {
+	dv5Cfg := &discover.Config{
+		PrivateKey: opts.NetworkKey,
+	}
+
+	for _, fn := range funcOpts {
+		fn(dv5Cfg)
+	}
+
 	if len(opts.Bootnodes) > 0 {
 		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)
 		if err != nil {
@@ -107,5 +122,5 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 		dv5Cfg.Log = newLogger
 	}
 
-	return &dv5Cfg, nil
+	return dv5Cfg, nil
 }

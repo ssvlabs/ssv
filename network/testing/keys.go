@@ -7,6 +7,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -83,7 +84,8 @@ func NewLocalTestnetFromKeySet(ctx context.Context, factory NetworkFactory, ks *
 		return nil, nil, err
 	}
 
-	for i, k := range keys {
+	i := uint64(0)
+	for _, k := range keys {
 		nodes[i] = factory(ctx, i, k)
 	}
 

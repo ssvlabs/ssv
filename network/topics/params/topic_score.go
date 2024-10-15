@@ -6,6 +6,7 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
+
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -46,7 +47,7 @@ var (
 // NetworkOpts is the config struct for network configurations
 type NetworkOpts struct {
 	// ActiveValidators is the amount of validators in the network
-	ActiveValidators int
+	ActiveValidators uint64
 	// Subnets is the number of subnets in the network
 	Subnets int
 	// OneEpochDuration is used as a time-frame length to control scoring in a dynamic way
@@ -149,7 +150,7 @@ func (o *Options) maxScore() float64 {
 }
 
 // NewOpts creates new TopicOpts instance
-func NewOpts(activeValidators, subnets int) *Options {
+func NewOpts(activeValidators uint64, subnets int) *Options {
 	return &Options{
 		Network: NetworkOpts{
 			ActiveValidators: activeValidators,
@@ -160,7 +161,7 @@ func NewOpts(activeValidators, subnets int) *Options {
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators, subnets int, committees []*storage.Committee) *Options {
+func NewSubnetTopicOpts(activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()
@@ -175,7 +176,7 @@ func NewSubnetTopicOpts(activeValidators, subnets int, committees []*storage.Com
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOptsValidators(activeValidators, subnets int) *Options {
+func NewSubnetTopicOptsValidators(activeValidators uint64, subnets int) *Options {
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()

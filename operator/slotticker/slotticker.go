@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv/utils/casts"
 	"go.uber.org/zap"
 )
 
@@ -72,13 +73,13 @@ func (s *slotTicker) Next() <-chan time.Time {
 		default:
 		}
 	}
-	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1
+	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1 // #nosec G115
 	if nextSlot <= s.slot {
 		// We've already ticked for this slot, so we need to wait for the next one.
 		nextSlot = s.slot + 1
 		s.logger.Debug("double tick", zap.Uint64("slot", uint64(s.slot)))
 	}
-	nextSlotStartTime := s.genesisTime.Add(time.Duration(nextSlot) * s.slotDuration)
+	nextSlotStartTime := s.genesisTime.Add(casts.DurationFromUint64(uint64(nextSlot)) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
 	s.slot = nextSlot
 	return s.timer.C()

@@ -237,7 +237,7 @@ func isDecidedMessage(s *State, m *SSVMessage) bool {
 		return false
 	}
 	return consensusMessage.MsgType == specqbft.CommitMsgType &&
-		len(m.SignedSSVMessage.OperatorIDs) > int(s.Quorum)
+		uint64(len(m.SignedSSVMessage.OperatorIDs)) > s.Quorum
 }
 
 // scoreCommitteeMessageSubtype returns an integer score for the message's type.

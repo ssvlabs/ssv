@@ -22,7 +22,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -84,6 +83,7 @@ type ControllerOptions struct {
 	BeaconNetwork              beaconprotocol.Network
 	Network                    P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
+	GenesisBeacon              genesisbeaconprotocol.BeaconNode
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BeaconSigner               spectypes.BeaconSigner
@@ -423,7 +423,7 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
-var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]phase0.Slot{
+var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 	spectypes.RoleCommittee:  64,
 	spectypes.RoleProposer:   4,
 	spectypes.RoleAggregator: 4,
@@ -996,7 +996,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		}
 	}
 
-	f := ssvtypes.ComputeF(len(share.Committee))
+	f := ssvtypes.ComputeF(uint64(len(share.Committee)))
 
 	operatorPEM, err := base64.StdEncoding.DecodeString(string(c.operatorDataStore.GetOperatorData().PublicKey))
 	if err != nil {
@@ -1237,7 +1237,7 @@ func SetupCommitteeRunners(
 			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: specqbft.Round(specqbft.CutoffRound),
+			CutOffRound: roundtimer.CutOffRound,
 		}
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.AlanDomainType, options.Operator.CommitteeID[:], role)
@@ -1301,7 +1301,7 @@ func SetupRunners(
 			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: specqbft.Round(specqbft.CutoffRound),
+			CutOffRound: roundtimer.CutOffRound,
 		}
 		config.ValueCheckF = valueCheckF
 
