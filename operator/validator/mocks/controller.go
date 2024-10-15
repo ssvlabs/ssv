@@ -9,7 +9,6 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	common "github.com/ethereum/go-ethereum/common"
-	gomock "github.com/golang/mock/gomock"
 	types "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
@@ -20,6 +19,7 @@ import (
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
+	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 )
 
