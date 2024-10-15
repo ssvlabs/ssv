@@ -81,7 +81,7 @@ $ ./install.sh
 The following command will generate your operator's public and private keys (appear as "pk" and "sk" in the output).
 
 ```
-$ docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode generate-operator-keys
+$ docker run --rm -it 'ssvlabs/ssv-node:latest' /go/bin/ssvnode generate-operator-keys
 ```
 
 ### 5. Create a Configuration File
@@ -153,7 +153,7 @@ Before start, make sure the clock is synced with NTP servers.
 Then, run the docker image in the same folder you created the `config.yaml`:
 
 ```shell
-$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13001:13001 -p 12001:12001/udp -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data --log-opt max-size=500m --log-opt max-file=10 -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \
+$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13001:13001 -p 12001:12001/udp -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data --log-opt max-size=500m --log-opt max-file=10 -it 'ssvlabs/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \
   && docker logs ssv_node --follow
 ```
 
@@ -162,13 +162,13 @@ $ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config
 The current version is available through logs or a cmd:
 
 ```shell
-$ docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode version
+$ docker run --rm -it 'ssvlabs/ssv-node:latest' /go/bin/ssvnode version
 ```
 
-In order to update, kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
+In order to update, kill running container and pull the latest image or a specific version (`ssvlabs/ssv-node:<version>`)
 
 ```shell
-$ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
+$ docker rm -f ssv_node && docker pull ssvlabs/ssv-node:latest
 ```
 
 Now run the container again as specified above in step 6.
