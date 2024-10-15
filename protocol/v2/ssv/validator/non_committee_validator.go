@@ -84,16 +84,8 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 }
 
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
-	role := msg.MsgID.GetRoleType()
-
-	logger := ncv.logger.With(fields.Role(role))
-	if role == spectypes.RoleCommittee {
-		cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
-		logger = logger.With(fields.CommitteeID(cid))
-	} else {
-		validatorPK := msg.GetID().GetDutyExecutorID()
-		logger = logger.With(fields.Validator(validatorPK))
-	}
+	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
+	logger := ncv.logger.With(fields.CommitteeID(cid), fields.Role(msg.MsgID.GetRoleType()))
 
 	partialSigMessages := &spectypes.PartialSignatureMessages{}
 	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
