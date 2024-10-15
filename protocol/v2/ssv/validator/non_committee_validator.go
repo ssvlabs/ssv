@@ -132,11 +132,11 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 		beaconRoles := ncv.getBeaconRoles(msg, slot, validator.ValidatorIndex)
 		if len(beaconRoles) == 0 {
-			logger.Warn("no roles found for quorum root",
+			logger.Warn("no roles found for validator",
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
-				zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
+				zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
 			)
 		}
 
