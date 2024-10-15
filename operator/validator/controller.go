@@ -31,7 +31,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -97,7 +96,6 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	ValidatorStore             registrystorage.ValidatorStore
-	DutyStore                  *dutystore.Store
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
@@ -199,7 +197,6 @@ type controller struct {
 	validatorOptions        validator.Options
 	genesisValidatorOptions genesisvalidator.Options
 	validatorStore          registrystorage.ValidatorStore
-	dutyStore               *dutystore.Store
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
@@ -216,6 +213,8 @@ type controller struct {
 	// nonCommittees is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
+	attesterRoots            *ttlcache.Cache[[32]byte, struct{}]
+	syncCommRoots            *ttlcache.Cache[[32]byte, struct{}]
 
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
@@ -302,7 +301,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		recipientsStorage: options.RegistryStorage,
 		ibftStorageMap:    options.StorageMap,
 		validatorStore:    options.ValidatorStore,
-		dutyStore:         options.DutyStore,
 		ctx:               options.Context,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
@@ -325,6 +323,12 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		committeesObservers: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
 		),
+		attesterRoots: ttlcache.New(
+			ttlcache.WithTTL[[32]byte, struct{}](time.Minute * 13),
+		),
+		syncCommRoots: ttlcache.New(
+			ttlcache.WithTTL[[32]byte, struct{}](time.Minute * 13),
+		),
 
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
@@ -336,6 +340,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
+	// Delete old roots.
+	go ctrl.attesterRoots.Start()
+	go ctrl.syncCommRoots.Start()
 
 	return &ctrl
 }
@@ -452,13 +459,14 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			Logger:            c.logger,
 			NetworkConfig:     c.networkConfig,
 			ValidatorStore:    c.validatorStore,
-			DutyStore:         c.dutyStore,
 			Network:           c.validatorOptions.Network,
 			Storage:           c.validatorOptions.Storage,
 			FullNode:          c.validatorOptions.FullNode,
 			Operator:          c.validatorOptions.Operator,
 			OperatorSigner:    c.validatorOptions.OperatorSigner,
 			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+			AttesterRoots:     c.attesterRoots,
+			SyncCommRoots:     c.syncCommRoots,
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
@@ -482,7 +490,19 @@ func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *comm
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
-	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
+		// Process proposal messages for committee consensus only to get the roots
+		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+			return nil
+		}
+
+		subMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+			return nil
+		}
+
+		return ncv.OnProposalMsg(msg)
+	} else if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return err
