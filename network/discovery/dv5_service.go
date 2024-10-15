@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	defaultDiscoveryInterval = time.Millisecond * 100
+	defaultDiscoveryInterval = time.Millisecond * 1
 	publishENRTimeout        = time.Minute
 )
 
@@ -222,30 +222,6 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	emptyProtocolID := [6]byte{}
 	if protocolID == emptyProtocolID {
 		protocolID = DefaultSSVProtocolID
-	}
-
-	// After the Alan fork, on a restart, we only use the discovery with the ProtocolID restriction
-	if dvs.networkConfig.PastAlanFork() {
-		dv5Cfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID))
-		if err != nil {
-			return err
-		}
-		dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
-		if err != nil {
-			return errors.Wrap(err, "could not create discV5 listener")
-		}
-		dvs.dv5Listener = dv5Listener
-		dvs.bootnodes = dv5Cfg.Bootnodes
-
-		logger.Debug("started discv5 listener (UDP)",
-			fields.BindIP(bindIP),
-			zap.Uint16("UdpPort", opts.Port),
-			fields.ENRLocalNode(localNode),
-			fields.Domain(discOpts.NetworkConfig.DomainType()),
-			fields.ProtocolID(discOpts.NetworkConfig.DiscoveryProtocolID),
-		)
-
-		return nil
 	}
 
 	// New discovery, with ProtocolID restriction, to be kept post-fork
