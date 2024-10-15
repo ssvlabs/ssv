@@ -222,10 +222,15 @@ func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 	return 1
 }
 
+type validatorIndexAndRoot struct {
+	ValidatorIndex phase0.ValidatorIndex
+	Root           [32]byte
+}
+
 func (ncv *CommitteeObserver) processMessage(
 	signedMsg *spectypes.PartialSignatureMessages,
-) (map[phase0.ValidatorIndex][]spectypes.OperatorID, error) {
-	quorums := make(map[phase0.ValidatorIndex][]spectypes.OperatorID)
+) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
+	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
 
 	for _, msg := range signedMsg.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
@@ -245,14 +250,15 @@ func (ncv *CommitteeObserver) processMessage(
 
 		rootSignatures := container.GetSignatures(msg.ValidatorIndex, msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= validator.Quorum() {
-			longestSigners := quorums[msg.ValidatorIndex]
+			key := validatorIndexAndRoot{ValidatorIndex: msg.ValidatorIndex, Root: msg.SigningRoot}
+			longestSigners := quorums[key]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
 				newSigners := make([]spectypes.OperatorID, 0, newLength)
 				for signer := range rootSignatures {
 					newSigners = append(newSigners, signer)
 				}
 				slices.Sort(newSigners)
-				quorums[msg.ValidatorIndex] = newSigners
+				quorums[key] = newSigners
 			}
 		}
 	}
