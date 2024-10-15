@@ -106,9 +106,9 @@ fi
 DIR=".k8/production/mainnet"
 DEPLOY_FILES=(
   "ssv-node-mainnet-1-deployment.yml"
-  "ssv-node-mainnet-2-deployment.yml"
-  "ssv-node-mainnet-3-deployment.yml"
-  "ssv-node-mainnet-4-deployment.yml"
+#  "ssv-node-mainnet-2-deployment.yml"
+#  "ssv-node-mainnet-3-deployment.yml"
+#  "ssv-node-mainnet-4-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then
