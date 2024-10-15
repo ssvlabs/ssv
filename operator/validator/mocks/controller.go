@@ -5,22 +5,23 @@
 package mocks
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	common "github.com/ethereum/go-ethereum/common"
-	types "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
-	network "github.com/ssvlabs/ssv/network"
-	records "github.com/ssvlabs/ssv/network/records"
-	duties "github.com/ssvlabs/ssv/operator/duties"
-	validators "github.com/ssvlabs/ssv/operator/validators"
-	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/operator/duties"
+	"github.com/ssvlabs/ssv/operator/validators"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
-	storage "github.com/ssvlabs/ssv/registry/storage"
-	basedb "github.com/ssvlabs/ssv/storage/basedb"
-	gomock "go.uber.org/mock/gomock"
-	zap "go.uber.org/zap"
+	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // MockController is a mock of Controller interface.
