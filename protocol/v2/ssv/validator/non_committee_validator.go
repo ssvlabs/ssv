@@ -18,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -35,9 +34,6 @@ type CommitteeObserver struct {
 	logger                 *zap.Logger
 	netCfg                 networkconfig.NetworkConfig
 	Storage                *storage.QBFTStores
-	beaconNode             beacon.BeaconNode
-	beaconNetwork          beacon.BeaconNetwork
-	signer                 spectypes.BeaconSigner
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	dutyStore              *dutystore.Store
@@ -49,9 +45,6 @@ type CommitteeObserverOptions struct {
 	FullNode          bool
 	Logger            *zap.Logger
 	Network           specqbft.Network
-	BeaconNetwork     beacon.BeaconNetwork
-	BeaconNode        beacon.BeaconNode
-	Signer            spectypes.BeaconSigner
 	Storage           *storage.QBFTStores
 	Operator          *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner
@@ -83,9 +76,6 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		logger:                 opts.Logger,
 		netCfg:                 opts.NetworkConfig,
 		Storage:                opts.Storage,
-		beaconNode:             opts.BeaconNode,
-		beaconNetwork:          opts.BeaconNetwork,
-		signer:                 opts.Signer,
 		ValidatorStore:         opts.ValidatorStore,
 		dutyStore:              opts.DutyStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
@@ -146,7 +136,6 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
-				fields.BlockRoot(key.Root),
 				zap.String("ncv_indentifier", hex.EncodeToString(ncv.qbftController.Identifier)),
 			)
 		}
@@ -177,7 +166,6 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				zap.String("msg_id", hex.EncodeToString(msgID[:])),
-				fields.BlockRoot(key.Root),
 			)
 
 			if ncv.newDecidedHandler != nil {
