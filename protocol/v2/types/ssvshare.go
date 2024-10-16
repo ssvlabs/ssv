@@ -92,7 +92,7 @@ func (s *SSVShare) HasQuorum(cnt uint64) bool {
 }
 
 func (s *SSVShare) Quorum() uint64 {
-	q, _ := ComputeQuorumAndPartialQuorum(uint64(len((s.Committee))))
+	q, _ := ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
 	return q
 }
 

@@ -521,14 +521,21 @@ func (c *controller) StartValidators() {
 	}
 
 	var ownShares []*ssvtypes.SSVShare
-	var activeSubnetsPubKeys = make([][]byte, 0, len(shares))
+	var pubKeysToFetch [][]byte
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		shareSubnet := byte(commons.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey[:])))
-		if bytes.Contains(c.network.ActiveSubnets(), []byte{shareSubnet}) {
-			activeSubnetsPubKeys = append(activeSubnetsPubKeys, share.ValidatorPubKey[:])
+		committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
+		if bytes.Contains(c.network.ActiveSubnets(), []byte{committeeSubnet}) {
+			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
+		}
+
+		if !c.networkConfig.PastAlanFork() {
+			validatorSubnet := byte(commons.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey[:])))
+			if bytes.Contains(c.network.ActiveSubnets(), []byte{validatorSubnet}) {
+				pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
+			}
 		}
 	}
 
@@ -561,15 +568,15 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
-		err := c.fetchAndUpdateValidatorsMetadata(c.logger, activeSubnetsPubKeys, c.beacon)
+		err := c.fetchAndUpdateValidatorsMetadata(c.logger, pubKeysToFetch, c.beacon)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
-				zap.Int("shares", len(activeSubnetsPubKeys)),
+				zap.Int("shares", len(pubKeysToFetch)),
 				fields.Took(time.Since(start)),
 				zap.Error(err))
 		} else {
 			c.logger.Debug("updated validators metadata after setup",
-				zap.Int("shares", len(activeSubnetsPubKeys)),
+				zap.Int("shares", len(pubKeysToFetch)),
 				fields.Took(time.Since(start)))
 		}
 	}
@@ -1147,8 +1154,21 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 				return true
 			}
 
-			shareSubnet := byte(commons.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey[:])))
-			if !bytes.Contains(c.network.ActiveSubnets(), []byte{shareSubnet}) {
+			belongsToOwnSubnet := false
+
+			committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
+			if bytes.Contains(c.network.ActiveSubnets(), []byte{committeeSubnet}) {
+				belongsToOwnSubnet = true
+			}
+
+			if !c.networkConfig.PastAlanFork() {
+				validatorSubnet := byte(commons.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey[:])))
+				if bytes.Contains(c.network.ActiveSubnets(), []byte{validatorSubnet}) {
+					belongsToOwnSubnet = true
+				}
+			}
+
+			if !belongsToOwnSubnet {
 				// skip validators out of own subnets
 				return true
 			}
