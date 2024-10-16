@@ -530,13 +530,6 @@ func (c *controller) StartValidators() {
 		if bytes.Contains(c.network.ActiveSubnets(), []byte{committeeSubnet}) {
 			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
 		}
-
-		if !c.networkConfig.PastAlanFork() {
-			validatorSubnet := byte(commons.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey[:])))
-			if bytes.Contains(c.network.ActiveSubnets(), []byte{validatorSubnet}) {
-				pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
-			}
-		}
 	}
 
 	if c.validatorOptions.Exporter {
@@ -1154,22 +1147,8 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 				return true
 			}
 
-			belongsToOwnSubnet := false
-
 			committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
-			if bytes.Contains(c.network.ActiveSubnets(), []byte{committeeSubnet}) {
-				belongsToOwnSubnet = true
-			}
-
-			if !c.networkConfig.PastAlanFork() {
-				validatorSubnet := byte(commons.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey[:])))
-				if bytes.Contains(c.network.ActiveSubnets(), []byte{validatorSubnet}) {
-					belongsToOwnSubnet = true
-				}
-			}
-
-			if !belongsToOwnSubnet {
-				// skip validators out of own subnets
+			if !bytes.Contains(c.network.ActiveSubnets(), []byte{committeeSubnet}) {
 				return true
 			}
 
