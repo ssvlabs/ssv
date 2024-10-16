@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -17,13 +18,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
+	"github.com/ssvlabs/ssv/utils/hashmap"
+	"go.uber.org/zap"
 )
 
 const (
@@ -141,19 +142,40 @@ var _ NodeClientProvider = (*GoClient)(nil)
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log                  *zap.Logger
-	ctx                  context.Context
-	network              beaconprotocol.Network
-	client               Client
-	nodeVersion          string
-	nodeClient           NodeClient
-	gasLimit             uint64
-	operatorDataStore    operatordatastore.OperatorDataStore
+	log         *zap.Logger
+	ctx         context.Context
+	network     beaconprotocol.Network
+	client      Client
+	nodeVersion string
+	nodeClient  NodeClient
+	gasLimit    uint64
+
+	operatorDataStore operatordatastore.OperatorDataStore
+
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
-	commonTimeout        time.Duration
-	longTimeout          time.Duration
+
+	// attestationReqMuPool helps us prevent the sending of multiple attestation data requests
+	// for the same slot number (to avoid doing unnecessary work).
+	// It's a pool of mutexes (not a single mutex) to allow for some parallelism when requests
+	// targeting different slots are made.
+	attestationReqMuPool [32]sync.Mutex
+	// attestationDataCache stores attestation data from Beacon node for a bunch of recently made
+	// requests (by slot number). It allows for requesting attestation data once per slot from
+	// Beacon node as well as always having/observing the same consistent data in any given slot
+	// (eg, Beacon node might return different merkle root for the same slot for different requests,
+	// and this can lead to undesirable effects for GoClient users).
+	// attestationDataCache is used concurrently, hence thread-safe map.
+	// Note, we cache attestation data by slot (and not slot+committee_index) because it's the same
+	// data across all 64 Ethereum committees assigned for each slot.
+	attestationDataCache *hashmap.Map[phase0.Slot, *phase0.AttestationData]
+	// recentAttestationSlot keeps track of recent (not necessarily the latest) slot attestation
+	// data was requested for.
+	recentAttestationSlot atomic.Uint64
+
+	commonTimeout time.Duration
+	longTimeout   time.Duration
 }
 
 // New init new client and go-client instance
@@ -187,15 +209,17 @@ func New(
 	}
 
 	client := &GoClient{
-		log:               logger,
-		ctx:               opt.Context,
-		network:           opt.Network,
-		client:            httpClient.(*eth2clienthttp.Service),
-		gasLimit:          opt.GasLimit,
-		operatorDataStore: operatorDataStore,
-		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		commonTimeout:     commonTimeout,
-		longTimeout:       longTimeout,
+		log:                   logger,
+		ctx:                   opt.Context,
+		network:               opt.Network,
+		client:                httpClient.(*eth2clienthttp.Service),
+		gasLimit:              opt.GasLimit,
+		operatorDataStore:     operatorDataStore,
+		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		attestationDataCache:  hashmap.New[phase0.Slot, *phase0.AttestationData](),
+		recentAttestationSlot: atomic.Uint64{}, // 0 is appropriate starting value
+		commonTimeout:         commonTimeout,
+		longTimeout:           longTimeout,
 	}
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
@@ -216,6 +240,7 @@ func New(
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)
+	go client.pruneStaleAttestationDataRunner()
 
 	return client, nil
 }
