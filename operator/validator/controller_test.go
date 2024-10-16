@@ -213,7 +213,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 
 			var subnets []byte
 			for _, share := range sharesWithMetadata {
-				subnets = append(subnets, byte(commons.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey[:]))))
+				subnets = append(subnets, byte(commons.CommitteeSubnet(share.CommitteeID())))
 			}
 			slices.Sort(subnets)
 
