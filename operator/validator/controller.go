@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
@@ -28,6 +29,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
@@ -167,6 +170,7 @@ type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	ActiveSubnets() records.Subnets
 }
 
 // controller implements Controller
@@ -517,12 +521,16 @@ func (c *controller) StartValidators() {
 	}
 
 	var ownShares []*ssvtypes.SSVShare
-	var allPubKeys = make([][]byte, 0, len(shares))
+	var pubKeysToFetch [][]byte
+	activeSubnets := c.network.ActiveSubnets()
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		allPubKeys = append(allPubKeys, share.ValidatorPubKey[:])
+		committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
+		if bytes.Contains(activeSubnets, []byte{committeeSubnet}) {
+			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
+		}
 	}
 
 	if c.validatorOptions.Exporter {
@@ -554,15 +562,15 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
-		err := c.fetchAndUpdateValidatorsMetadata(c.logger, allPubKeys, c.beacon)
+		err := c.fetchAndUpdateValidatorsMetadata(c.logger, pubKeysToFetch, c.beacon)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
+				zap.Int("shares", len(pubKeysToFetch)),
 				fields.Took(time.Since(start)),
 				zap.Error(err))
 		} else {
 			c.logger.Debug("updated validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
+				zap.Int("shares", len(pubKeysToFetch)),
 				fields.Took(time.Since(start)))
 		}
 	}
@@ -1131,6 +1139,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	const batchSize = 512
 	var sleep = 2 * time.Second
 
+	activeSubnets := c.network.ActiveSubnets()
 	for {
 		// Get the shares to fetch metadata for.
 		start := time.Now()
@@ -1139,6 +1148,12 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			if share.Liquidated {
 				return true
 			}
+
+			committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
+			if !bytes.Contains(activeSubnets, []byte{committeeSubnet}) {
+				return true
+			}
+
 			if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
 				newShares = append(newShares, share)
 			} else if time.Since(share.MetadataLastUpdated()) > c.metadataUpdateInterval {
