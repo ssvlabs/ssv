@@ -153,8 +153,7 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		fields.Owner(od.OwnerAddress),
 	)
 
-	err = eh.nodeStorage.DeleteOperatorData(txn, od.ID)
-	if err != nil {
+	if err := eh.nodeStorage.DeleteOperatorData(txn, od.ID); err != nil {
 		return fmt.Errorf("delete operator data: %w", err)
 	}
 
