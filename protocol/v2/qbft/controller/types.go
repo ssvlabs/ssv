@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
