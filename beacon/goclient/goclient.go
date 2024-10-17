@@ -14,6 +14,7 @@ import (
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
@@ -23,7 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
-	"github.com/ssvlabs/ssv/utils/hashmap"
 	"go.uber.org/zap"
 )
 
@@ -169,7 +169,7 @@ type GoClient struct {
 	// attestationDataCache is used concurrently, hence thread-safe map.
 	// Note, we cache attestation data by slot (and not slot+committee_index) because it's the same
 	// data across all 64 Ethereum committees assigned for each slot.
-	attestationDataCache *hashmap.Map[phase0.Slot, *phase0.AttestationData]
+	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
 	// recentAttestationSlot keeps track of recent (not necessarily the latest) slot attestation
 	// data was requested for.
 	recentAttestationSlot atomic.Uint64
@@ -208,16 +208,20 @@ func New(
 		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 
+	epochDuration := time.Duration(opt.Network.SlotsPerEpoch()) * opt.Network.SlotDurationSec()
+
 	client := &GoClient{
-		log:                   logger,
-		ctx:                   opt.Context,
-		network:               opt.Network,
-		client:                httpClient.(*eth2clienthttp.Service),
-		gasLimit:              opt.GasLimit,
-		operatorDataStore:     operatorDataStore,
-		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		attestationReqMuPool:  make([]sync.Mutex, opt.Network.SlotsPerEpoch()),
-		attestationDataCache:  hashmap.New[phase0.Slot, *phase0.AttestationData](),
+		log:                  logger,
+		ctx:                  opt.Context,
+		network:              opt.Network,
+		client:               httpClient.(*eth2clienthttp.Service),
+		gasLimit:             opt.GasLimit,
+		operatorDataStore:    operatorDataStore,
+		registrationCache:    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		attestationReqMuPool: make([]sync.Mutex, opt.Network.SlotsPerEpoch()),
+		attestationDataCache: ttlcache.New(
+			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * epochDuration),
+		),
 		recentAttestationSlot: atomic.Uint64{}, // 0 is appropriate starting value
 		commonTimeout:         commonTimeout,
 		longTimeout:           longTimeout,
@@ -241,7 +245,6 @@ func New(
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)
-	go client.pruneStaleAttestationDataRunner()
 
 	return client, nil
 }
