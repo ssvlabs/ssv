@@ -240,6 +240,8 @@ func New(
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)
+	// Start automatic expired item deletion for attestationDataCache.
+	go client.attestationDataCache.Start()
 
 	return client, nil
 }
