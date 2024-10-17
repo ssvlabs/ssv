@@ -8,17 +8,15 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"go.uber.org/zap"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -117,6 +115,7 @@ var ConstructBaseRunner = func(
 
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[share.ValidatorIndex] = share
+	dutyGuard := validator.NewCommitteeDutyGuard()
 
 	var r runner.Runner
 	var err error
@@ -132,7 +131,7 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -204,7 +203,7 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
@@ -300,6 +299,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	var contr *controller.Controller
 
 	km := spectestingutils.NewTestingKeyManager()
+	dutyGuard := validator.NewCommitteeDutyGuard()
 
 	if len(shareMap) > 0 {
 		var keySetInstance *spectestingutils.TestKeySet
@@ -382,7 +382,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -454,7 +454,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 		if r != nil {
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
