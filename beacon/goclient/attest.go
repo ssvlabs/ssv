@@ -34,43 +34,20 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 // Note, result returned is meant to be read-only, it's not safe to modify it (because it will be
 // accessed by multiple concurrent readers).
 func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (
-	result *phase0.AttestationData,
-	version spec.DataVersion,
-	err error,
+	*phase0.AttestationData,
+	spec.DataVersion,
+	error,
 ) {
-	// Final processing for result returned.
-	defer func() {
-		if err != nil {
-			// Nothing to process, just propagate error.
-			return
-		}
-
-		// Assign committeeIndex passed to GetAttestationData call, the rest of attestation data stays
-		// unchanged.
-		// Note, we cannot return result object directly here modifying its Index value because it
-		// would be unsynchronised concurrent write (since it's cached for other concurrent readers
-		// to access). Hence, we return shallow copy here. We don't need to return deep copy because
-		// the callers of GetAttestationData will only use this data to read it (they won't update it).
-		result = &phase0.AttestationData{
-			Slot:            result.Slot,
-			Index:           committeeIndex,
-			BeaconBlockRoot: result.BeaconBlockRoot,
-			Source:          result.Source,
-			Target:          result.Target,
-		}
-	}()
-
 	// Check cache.
 	cachedResult, ok := gc.attestationDataCache.Get(slot)
 	if ok {
-		return cachedResult, spec.DataVersionPhase0, nil
+		return withCommitteeIndex(cachedResult, committeeIndex), spec.DataVersionPhase0, nil
 	}
 
 	// Have to make beacon node request and cache the result.
-	attDataReqStart := time.Now()
-	result, err = func() (*phase0.AttestationData, error) {
+	result, err := func() (*phase0.AttestationData, error) {
 		// Requests with the same slot number must lock on the same mutex.
-		reqMu := &gc.attestationReqMuPool[int64(slot)%int64(len(gc.attestationReqMuPool))]
+		reqMu := &gc.attestationReqMuPool[uint64(slot)%uint64(len(gc.attestationReqMuPool))]
 		reqMu.Lock()
 		defer reqMu.Unlock()
 
@@ -81,9 +58,11 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			return cachedResult, nil
 		}
 
+		attDataReqStart := time.Now()
 		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
 		})
+		metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get attestation data: %w", err)
 		}
@@ -96,12 +75,26 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 
 		return resp.Data, nil
 	}()
-	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
 	if err != nil {
 		return nil, DataVersionNil, err
 	}
 
-	return result, spec.DataVersionPhase0, nil
+	return withCommitteeIndex(result, committeeIndex), spec.DataVersionPhase0, nil
+}
+
+// withCommitteeIndex creates a shallow copy of data setting committeeIndex to the provided one, the
+// rest of attestation data stays unchanged.
+// Note, we don't want to modify the provided data object here because it might be accessed
+// concurrently, hence, we return shallow copy. We don't need to return deep copy because
+// we expect it to be used for read operations only.
+func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
+	return &phase0.AttestationData{
+		Slot:            data.Slot,
+		Index:           committeeIndex,
+		BeaconBlockRoot: data.BeaconBlockRoot,
+		Source:          data.Source,
+		Target:          data.Target,
+	}
 }
 
 // pruneStaleAttestationDataRunner will periodically prune attestationDataCache to keep it from growing
@@ -109,7 +102,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 func (gc *GoClient) pruneStaleAttestationDataRunner() {
 	pruneStaleAttestationData := func() {
 		// slotRetainCnt defines how many recent slots we want to preserve in attestation data cache.
-		slotRetainCnt := 5 * gc.network.SlotsPerEpoch()
+		slotRetainCnt := 2 * gc.network.SlotsPerEpoch()
 		gc.attestationDataCache.Range(func(slot phase0.Slot, data *phase0.AttestationData) bool {
 			if uint64(slot) < (gc.recentAttestationSlot.Load() - slotRetainCnt) {
 				gc.attestationDataCache.Delete(slot)
@@ -118,7 +111,8 @@ func (gc *GoClient) pruneStaleAttestationDataRunner() {
 		})
 	}
 
-	ticker := time.NewTicker(10 * time.Minute)
+	epochDuration := time.Duration(gc.network.SlotsPerEpoch()) * gc.network.SlotDurationSec()
+	ticker := time.NewTicker(2 * epochDuration)
 	for {
 		select {
 		case <-gc.ctx.Done():
