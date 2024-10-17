@@ -92,7 +92,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		convert.RoleCommittee,
 		convert.RoleProposer,
 		convert.RoleAggregator,
-		convert.RoleSyncCommitteeContribution,
+		convert.RoleSyncCommittee,
 		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)

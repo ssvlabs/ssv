@@ -42,7 +42,7 @@ func TestMessageValidator_maxRound(t *testing.T) {
 		},
 		{
 			name: "Unknown role",
-			role: spectypes.RunnerRole(999),
+			role: 999,
 			want: 0,
 			err:  fmt.Errorf("unknown role"),
 		},

@@ -3,6 +3,7 @@ package utils
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -57,6 +58,18 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
 			return phase0.Epoch(slot / 32)
+		},
+	).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().SlotDurationSec().DoAndReturn(
+		func() time.Duration {
+			return 12 * time.Second
+		},
+	).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().SlotsPerEpoch().DoAndReturn(
+		func() uint64 {
+			return 32
 		},
 	).AnyTimes()
 

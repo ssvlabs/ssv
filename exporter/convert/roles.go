@@ -8,7 +8,6 @@ const (
 	RoleProposer
 	RoleSyncCommitteeContribution
 	RoleSyncCommittee
-
 	RoleValidatorRegistration
 	RoleVoluntaryExit
 	RoleCommittee
