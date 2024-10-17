@@ -265,6 +265,7 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		// slotStartPos start at some non-0 slot (GetAttestationData requests will be made in the slot
 		// range [slotStartPos, slotStartPos + slotsTotalCnt).
 		const slotStartPos = 100000000
+
 		gotResults := hashmap.New[phase0.Slot, *phase0.AttestationData]()
 
 		p := pool.New()
@@ -295,7 +296,7 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		for i := 0; i < slotsTotalCnt; i++ {
 			slot := phase0.Slot(slotStartPos + i)
 			// There is about ~1 % chance a particular slot didn't receive any requests, just
-			// accounting for that here by setting reqCnt to 1 for in this case.
+			// accounting for that here by setting reqCnt to 1 in this case.
 			reqCnt, _ := serverGotRequests.GetOrSet(slot, 1)
 			require.Equal(t, 1, reqCnt)
 		}

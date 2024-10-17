@@ -72,7 +72,6 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		}
 
 		gc.attestationDataCache.Set(slot, resp.Data, ttlcache.DefaultTTL)
-		gc.recentAttestationSlot.Store(uint64(slot))
 
 		return resp.Data, nil
 	}()

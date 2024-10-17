@@ -6,7 +6,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -170,9 +169,6 @@ type GoClient struct {
 	// Note, we cache attestation data by slot (and not slot+committee_index) because it's the same
 	// data across all 64 Ethereum committees assigned for each slot.
 	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
-	// recentAttestationSlot keeps track of recent (not necessarily the latest) slot attestation
-	// data was requested for.
-	recentAttestationSlot atomic.Uint64
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
@@ -222,9 +218,8 @@ func New(
 		attestationDataCache: ttlcache.New(
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * epochDuration),
 		),
-		recentAttestationSlot: atomic.Uint64{}, // 0 is appropriate starting value
-		commonTimeout:         commonTimeout,
-		longTimeout:           longTimeout,
+		commonTimeout: commonTimeout,
+		longTimeout:   longTimeout,
 	}
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
