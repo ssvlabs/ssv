@@ -160,7 +160,7 @@ type GoClient struct {
 	// for the same slot number (to avoid doing unnecessary work).
 	// It's a pool of mutexes (not a single mutex) to allow for some parallelism when requests
 	// targeting different slots are made.
-	attestationReqMuPool [32]sync.Mutex
+	attestationReqMuPool []sync.Mutex
 	// attestationDataCache stores attestation data from Beacon node for a bunch of recently made
 	// requests (by slot number). It allows for requesting attestation data once per slot from
 	// Beacon node as well as always having/observing the same consistent data in any given slot
@@ -216,6 +216,7 @@ func New(
 		gasLimit:              opt.GasLimit,
 		operatorDataStore:     operatorDataStore,
 		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		attestationReqMuPool:  make([]sync.Mutex, opt.Network.SlotsPerEpoch()),
 		attestationDataCache:  hashmap.New[phase0.Slot, *phase0.AttestationData](),
 		recentAttestationSlot: atomic.Uint64{}, // 0 is appropriate starting value
 		commonTimeout:         commonTimeout,
