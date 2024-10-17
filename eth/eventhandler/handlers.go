@@ -156,7 +156,7 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 
 	err = eh.nodeStorage.DeleteOperatorData(txn, od.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete operator data: %w", err)
 	}
 
 	var modifiedShares []*ssvtypes.SSVShare
