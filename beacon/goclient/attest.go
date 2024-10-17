@@ -9,6 +9,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 )
 
 // AttesterDuties returns attester duties for a given epoch.
@@ -39,9 +40,9 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	error,
 ) {
 	// Check cache.
-	cachedResult, ok := gc.attestationDataCache.Get(slot)
-	if ok {
-		return withCommitteeIndex(cachedResult, committeeIndex), spec.DataVersionPhase0, nil
+	cachedResult := gc.attestationDataCache.Get(slot)
+	if cachedResult != nil {
+		return withCommitteeIndex(cachedResult.Value(), committeeIndex), spec.DataVersionPhase0, nil
 	}
 
 	// Have to make beacon node request and cache the result.
@@ -53,9 +54,9 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 
 		// Prevent making more than 1 beacon node requests in case somebody has already made this
 		// request concurrently and succeeded.
-		cachedResult, ok := gc.attestationDataCache.Get(slot)
-		if ok {
-			return cachedResult, nil
+		cachedResult := gc.attestationDataCache.Get(slot)
+		if cachedResult != nil {
+			return cachedResult.Value(), nil
 		}
 
 		attDataReqStart := time.Now()
@@ -70,7 +71,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			return nil, fmt.Errorf("attestation data response is nil")
 		}
 
-		gc.attestationDataCache.Set(slot, resp.Data)
+		gc.attestationDataCache.Set(slot, resp.Data, ttlcache.DefaultTTL)
 		gc.recentAttestationSlot.Store(uint64(slot))
 
 		return resp.Data, nil
@@ -94,32 +95,6 @@ func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.Comm
 		BeaconBlockRoot: data.BeaconBlockRoot,
 		Source:          data.Source,
 		Target:          data.Target,
-	}
-}
-
-// pruneStaleAttestationDataRunner will periodically prune attestationDataCache to keep it from growing
-// perpetually.
-func (gc *GoClient) pruneStaleAttestationDataRunner() {
-	pruneStaleAttestationData := func() {
-		// slotRetainCnt defines how many recent slots we want to preserve in attestation data cache.
-		slotRetainCnt := 2 * gc.network.SlotsPerEpoch()
-		gc.attestationDataCache.Range(func(slot phase0.Slot, data *phase0.AttestationData) bool {
-			if uint64(slot) < (gc.recentAttestationSlot.Load() - slotRetainCnt) {
-				gc.attestationDataCache.Delete(slot)
-			}
-			return true
-		})
-	}
-
-	epochDuration := time.Duration(gc.network.SlotsPerEpoch()) * gc.network.SlotDurationSec()
-	ticker := time.NewTicker(2 * epochDuration)
-	for {
-		select {
-		case <-gc.ctx.Done():
-			return
-		case <-ticker.C:
-			pruneStaleAttestationData()
-		}
 	}
 }
 

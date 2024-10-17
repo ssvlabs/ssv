@@ -3,6 +3,13 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/sourcegraph/conc/pool"
@@ -14,12 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"math/rand"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
-	"testing"
-	"time"
 )
 
 func TestGoClient_GetAttestationData(t *testing.T) {
