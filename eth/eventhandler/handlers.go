@@ -92,10 +92,10 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 			continue
 		}
 
-		var missingOtherOperators bool
+		var existingOperatorsCount int
 		for _, shareMember := range share.Committee {
 			if shareMember.Signer == event.OperatorId {
-				continue
+				existingOperatorsCount++
 			}
 
 			_, ok, err := eh.nodeStorage.GetOperatorData(txn, shareMember.Signer)
@@ -103,13 +103,12 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 				return fmt.Errorf("get operator data: %w", err)
 			}
 
-			if !ok {
-				missingOtherOperators = true
-				break
+			if ok {
+				existingOperatorsCount++
 			}
 		}
 
-		if !missingOtherOperators {
+		if existingOperatorsCount == len(share.Committee) {
 			share.Liquidated = false
 			modifiedShares = append(modifiedShares, share)
 		}
