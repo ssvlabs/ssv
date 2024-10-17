@@ -6,10 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
 	"time"
-
-	"github.com/ssvlabs/ssv/ekm"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -17,6 +14,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -58,16 +56,14 @@ type taskExecutor interface {
 }
 
 type EventHandler struct {
-	nodeStorage        nodestorage.Storage
-	taskExecutor       taskExecutor
-	eventParser        eventparser.Parser
-	networkConfig      networkconfig.NetworkConfig
-	operatorDataStore  operatordatastore.OperatorDataStore
-	operatorDecrypter  keys.OperatorDecrypter
-	keyManager         ekm.KeyManager
-	beacon             beaconprotocol.BeaconNode
-	removedOperators   map[string]struct{}
-	removedOperatorsMu sync.Mutex
+	nodeStorage       nodestorage.Storage
+	taskExecutor      taskExecutor
+	eventParser       eventparser.Parser
+	networkConfig     networkconfig.NetworkConfig
+	operatorDataStore operatordatastore.OperatorDataStore
+	operatorDecrypter keys.OperatorDecrypter
+	keyManager        ekm.KeyManager
+	beacon            beaconprotocol.BeaconNode
 
 	fullNode bool
 	logger   *zap.Logger
@@ -94,7 +90,6 @@ func New(
 		operatorDecrypter: operatorDecrypter,
 		keyManager:        keyManager,
 		beacon:            beacon,
-		removedOperators:  make(map[string]struct{}),
 		logger:            zap.NewNop(),
 		metrics:           nopMetrics{},
 	}

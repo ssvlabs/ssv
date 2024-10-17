@@ -70,11 +70,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return fmt.Errorf("could not get operator data by public key: %w", err)
 	}
 
-	eh.removedOperatorsMu.Lock()
-	_, removed := eh.removedOperators[string(od.PublicKey)]
-	eh.removedOperatorsMu.Unlock()
-
-	if pubkeyExists && !removed {
+	if pubkeyExists {
 		logger.Warn("malformed event: operator public key already exists",
 			fields.OperatorPubKey(operatorData.PublicKey))
 		return &MalformedEventError{Err: ErrOperatorPubkeyAlreadyExists}
@@ -85,19 +81,50 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return fmt.Errorf("save operator data: %w", err)
 	}
 
-	if exists && !removed {
+	if exists {
 		logger.Debug("operator data already exists")
 		return nil
+	}
+
+	var modifiedShares []*ssvtypes.SSVShare
+	for _, share := range eh.nodeStorage.Shares().List(txn, registrystorage.ByOperatorID(event.OperatorId)) {
+		if !share.Liquidated {
+			continue
+		}
+
+		var missingOtherOperators bool
+		for _, shareMember := range share.Committee {
+			if shareMember.Signer == event.OperatorId {
+				continue
+			}
+
+			_, ok, err := eh.nodeStorage.GetOperatorData(txn, shareMember.Signer)
+			if err != nil {
+				return fmt.Errorf("get operator data: %w", err)
+			}
+
+			if !ok {
+				missingOtherOperators = true
+				break
+			}
+		}
+
+		if !missingOtherOperators {
+			share.Liquidated = false
+			modifiedShares = append(modifiedShares, share)
+		}
+	}
+
+	if len(modifiedShares) > 0 {
+		if err := eh.nodeStorage.Shares().Save(txn, modifiedShares...); err != nil {
+			return fmt.Errorf("save shares: %w", err)
+		}
 	}
 
 	if bytes.Equal(event.PublicKey, eh.operatorDataStore.GetOperatorData().PublicKey) {
 		eh.operatorDataStore.SetOperatorData(od)
 		logger = logger.With(zap.Bool("own_operator", true))
 	}
-
-	eh.removedOperatorsMu.Lock()
-	delete(eh.removedOperators, string(od.PublicKey))
-	eh.removedOperatorsMu.Unlock()
 
 	eh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
 	logger.Debug("processed event")
@@ -127,12 +154,22 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		fields.Owner(od.OwnerAddress),
 	)
 
-	// This function is currently just maintaining the set of removed validators, and it will do nothing beyond that.
-	// The set of removed validators allows registering a validator with a pubkey that was once removed.
-	// Operator removed event is not used for anything else in the current implementation.
-	eh.removedOperatorsMu.Lock()
-	eh.removedOperators[string(od.PublicKey)] = struct{}{}
-	eh.removedOperatorsMu.Unlock()
+	err = eh.nodeStorage.DeleteOperatorData(txn, od.ID)
+	if err != nil {
+		return err
+	}
+
+	var modifiedShares []*ssvtypes.SSVShare
+	for _, share := range eh.nodeStorage.Shares().List(txn, registrystorage.ByOperatorID(event.OperatorId)) {
+		share.Liquidated = true
+		modifiedShares = append(modifiedShares, share)
+	}
+
+	if len(modifiedShares) > 0 {
+		if err := eh.nodeStorage.Shares().Save(txn, modifiedShares...); err != nil {
+			return fmt.Errorf("save shares: %w", err)
+		}
+	}
 
 	logger.Debug("processed event")
 	return nil
