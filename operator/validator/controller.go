@@ -522,12 +522,13 @@ func (c *controller) StartValidators() {
 
 	var ownShares []*ssvtypes.SSVShare
 	var pubKeysToFetch [][]byte
+	activeSubnets := c.network.ActiveSubnets()
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
 		committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
-		if bytes.Contains(c.network.ActiveSubnets(), []byte{committeeSubnet}) {
+		if bytes.Contains(activeSubnets, []byte{committeeSubnet}) {
 			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
 		}
 	}
@@ -1138,6 +1139,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	const batchSize = 512
 	var sleep = 2 * time.Second
 
+	activeSubnets := c.network.ActiveSubnets()
 	for {
 		// Get the shares to fetch metadata for.
 		start := time.Now()
@@ -1148,7 +1150,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			}
 
 			committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
-			if !bytes.Contains(c.network.ActiveSubnets(), []byte{committeeSubnet}) {
+			if !bytes.Contains(activeSubnets, []byte{committeeSubnet}) {
 				return true
 			}
 
