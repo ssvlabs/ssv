@@ -7,10 +7,12 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"math/big"
+	"os"
+	"runtime"
 	"sync"
 
-	"github.com/microsoft/go-crypto-openssl/openssl"
-	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
+	"github.com/golang-fips/openssl/v2"
+	"github.com/golang-fips/openssl/v2/bbig"
 )
 
 type privateKey struct {
@@ -26,30 +28,62 @@ type publicKey struct {
 }
 
 func init() {
-	// TODO: check multiple versions of openssl
 	// TODO: fallback to stdlib when openssl is not available
-	if err := openssl.Init(); err != nil {
+	version := getVersion()
+	if err := openssl.Init(version); err != nil {
 		panic(err)
 	}
 }
 
+// getVersion returns the highest available OpenSSL version.
+func getVersion() string {
+	v := os.Getenv("GO_OPENSSL_VERSION_OVERRIDE")
+	if v != "" {
+		if runtime.GOOS == "linux" {
+			return "libcrypto.so." + v
+		}
+		return v
+	}
+	versions := []string{"3", "1.1.1", "1.1", "11", "111", "1.0.2", "1.0.0", "10"}
+	if runtime.GOOS == "windows" {
+		if runtime.GOARCH == "amd64" {
+			versions = []string{"libcrypto-3-x64", "libcrypto-3", "libcrypto-1_1-x64", "libcrypto-1_1", "libeay64", "libeay32"}
+		} else {
+			versions = []string{"libcrypto-3", "libcrypto-1_1", "libeay32"}
+		}
+	}
+	for _, v = range versions {
+		if runtime.GOOS == "windows" {
+			v += ".dll"
+		} else if runtime.GOOS == "darwin" {
+			v = "libcrypto." + v + ".dylib"
+		} else {
+			v = "libcrypto.so." + v
+		}
+		if ok, _ := openssl.CheckVersion(v); ok {
+			return v
+		}
+	}
+	return "libcrypto.so"
+}
+
 func rsaPrivateKeyToOpenSSL(priv *rsa.PrivateKey) (*openssl.PrivateKeyRSA, error) {
-	return bridge.NewPrivateKeyRSA(
-		priv.N,
-		big.NewInt(int64(priv.E)),
-		priv.D,
-		priv.Primes[0],
-		priv.Primes[1],
-		priv.Precomputed.Dp,
-		priv.Precomputed.Dq,
-		priv.Precomputed.Qinv,
+	return openssl.NewPrivateKeyRSA(
+		bbig.Enc(priv.N),
+		bbig.Enc(big.NewInt(int64(priv.E))),
+		bbig.Enc(priv.D),
+		bbig.Enc(priv.Primes[0]),
+		bbig.Enc(priv.Primes[1]),
+		bbig.Enc(priv.Precomputed.Dp),
+		bbig.Enc(priv.Precomputed.Dq),
+		bbig.Enc(priv.Precomputed.Qinv),
 	)
 }
 
 func rsaPublicKeyToOpenSSL(pub *rsa.PublicKey) (*openssl.PublicKeyRSA, error) {
-	return bridge.NewPublicKeyRSA(
-		pub.N,
-		big.NewInt(int64(pub.E)),
+	return openssl.NewPublicKeyRSA(
+		bbig.Enc(pub.N),
+		bbig.Enc(big.NewInt(int64(pub.E))),
 	)
 }
 
