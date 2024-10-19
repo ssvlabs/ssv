@@ -367,7 +367,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metricsReporter.SSVNodeHealthy()
 
-		eventSyncer := setupEventHandling(
+		eventSyncer := syncContractEvents(
 			cmd.Context(),
 			logger,
 			executionClient,
@@ -664,7 +664,8 @@ func setupConsensusClient(
 	return cl
 }
 
-func setupEventHandling(
+// syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
+func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
