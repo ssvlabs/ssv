@@ -1195,11 +1195,11 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(pks []spectypes.ValidatorP
 
 	metadata, err := c.metadataFetcher.Fetch(pks)
 	if err != nil {
-		return fmt.Errorf("failed to fetch validators metadata: %w", err)
+		return fmt.Errorf("fetch validators metadata: %w", err)
 	}
 
 	if err := c.UpdateValidatorsMetadata(metadata); err != nil {
-		return fmt.Errorf("failed to update validators metadata: %w", err)
+		return fmt.Errorf("update validators metadata: %w", err)
 	}
 
 	// Refresh duties if there are any new active validators.
