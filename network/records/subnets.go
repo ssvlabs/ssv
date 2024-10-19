@@ -105,7 +105,14 @@ func SharedSubnets(a, b []byte, maxLen int) []int {
 	if len(a) == 0 || len(b) == 0 {
 		return shared
 	}
-	for subnet, aval := range a {
+
+	// Fix https://github.com/ssvlabs/ssv/issues/1802
+	limit := len(a)
+	if len(b) < limit {
+		limit = len(b)
+	}
+
+	for subnet, aval := range a[:limit] {
 		if aval == 0 {
 			continue
 		}
