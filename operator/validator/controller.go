@@ -200,6 +200,7 @@ type controller struct {
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
 
+	metadataFetcher        *beaconprotocol.MetadataFetcher
 	metadataUpdateInterval time.Duration
 
 	operatorsIDs         *sync.Map
@@ -309,6 +310,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		validatorOptions:        validatorOptions,
 		genesisValidatorOptions: genesisValidatorOptions,
 
+		metadataFetcher:        beaconprotocol.NewMetadataFetcher(logger, options.Beacon),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
 
 		operatorsIDs: operatorsIDs,
@@ -517,12 +519,12 @@ func (c *controller) StartValidators() {
 	}
 
 	var ownShares []*ssvtypes.SSVShare
-	var allPubKeys = make([][]byte, 0, len(shares))
+	var allPubKeys = make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		allPubKeys = append(allPubKeys, share.ValidatorPubKey[:])
+		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
 	}
 
 	if c.validatorOptions.Exporter {
@@ -554,7 +556,7 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
-		err := c.fetchAndUpdateValidatorsMetadata(c.logger, allPubKeys, c.beacon)
+		err := c.fetchAndUpdateValidatorsMetadata(allPubKeys)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
 				zap.Int("shares", len(allPubKeys)),
@@ -1162,11 +1164,11 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 		filteringTook := time.Since(start)
 		if len(shares) > 0 {
-			pubKeys := make([][]byte, len(shares))
+			pubKeys := make([]spectypes.ValidatorPK, len(shares))
 			for i, s := range shares {
-				pubKeys[i] = s.ValidatorPubKey[:]
+				pubKeys[i] = s.ValidatorPubKey
 			}
-			err := c.fetchAndUpdateValidatorsMetadata(c.logger, pubKeys, c.beacon)
+			err := c.fetchAndUpdateValidatorsMetadata(pubKeys)
 			if err != nil {
 				c.logger.Warn("failed to update validators metadata", zap.Error(err))
 				continue
@@ -1186,14 +1188,18 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
-func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks [][]byte, beacon beaconprotocol.BeaconNode) error {
+func (c *controller) fetchAndUpdateValidatorsMetadata(pks []spectypes.ValidatorPK) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
 	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
 
-	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, beacon, c.UpdateValidatorsMetadata)
+	metadata, err := c.metadataFetcher.Fetch(pks)
 	if err != nil {
-		return errors.Wrap(err, "failed to update validators metadata")
+		return fmt.Errorf("failed to fetch validators metadata: %w", err)
+	}
+
+	if err := c.UpdateValidatorsMetadata(metadata); err != nil {
+		return fmt.Errorf("failed to update validators metadata: %w", err)
 	}
 
 	// Refresh duties if there are any new active validators.
