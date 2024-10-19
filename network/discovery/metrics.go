@@ -27,10 +27,6 @@ var (
 		Name: "ssv:network:discovery:iterations",
 		Help: "Counts the number of times a node was iterated using the mixed iterator",
 	}, []string{"fork"})
-	metricSkippedPeers = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:discovery:skipped_peers",
-		Help: "Counts skipped peers",
-	}, []string{"enr", "peer_id", "err"})
 )
 
 func init() {
@@ -48,9 +44,6 @@ func init() {
 		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricIterations); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricSkippedPeers); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }

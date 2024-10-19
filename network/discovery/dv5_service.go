@@ -138,8 +138,13 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	logger = logger.Named(logging.NameDiscoveryService)
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		if err := dvs.checkPeer(logger, e); err != nil {
-			metricSkippedPeers.WithLabelValues(e.Node.String(), e.AddrInfo.ID.String(), err.Error()).Inc()
+		logger := logger.With(
+			fields.ENR(e.Node),
+			fields.PeerID(e.AddrInfo.ID),
+		)
+		err := dvs.checkPeer(logger, e)
+		if err != nil {
+			logger.Debug("skipped discovered peer", zap.Error(err))
 			return
 		}
 		handler(e)
