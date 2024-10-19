@@ -153,7 +153,7 @@ func (n *operatorNode) Start() error {
 	go n.net.UpdateScoreParams(n.logger)
 	n.validatorsCtrl.ForkListener(n.logger)
 	n.validatorsCtrl.StartValidators()
-	go n.reportOperators(n.logger)
+	go n.reportOperators()
 
 	go n.feeRecipientCtrl.Start(n.logger)
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
@@ -204,16 +204,16 @@ func (n *operatorNode) startWSServer(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *operatorNode) reportOperators(logger *zap.Logger) {
+func (n *operatorNode) reportOperators() {
 	operators, err := n.storage.ListOperators(nil, 0, 1000) // TODO more than 1000?
 	if err != nil {
-		logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		return
 	}
-	logger.Debug("reporting operators", zap.Int("count", len(operators)))
+	n.logger.Debug("reporting operators", zap.Int("count", len(operators)))
 	for i := range operators {
 		n.metrics.OperatorPublicKey(operators[i].ID, operators[i].PublicKey)
-		logger.Debug("report operator public key",
+		n.logger.Debug("report operator public key",
 			fields.OperatorID(operators[i].ID),
 			fields.PubKey(operators[i].PublicKey))
 	}
