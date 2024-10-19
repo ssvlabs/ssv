@@ -48,12 +48,12 @@ func (p *GenesisP2P) Broadcast(message *genesisspectypes.SSVMessage) error {
 	topics := commons.ValidatorTopicID(message.MsgID.GetPubKey())
 
 	for _, topic := range topics {
-		p.Network.interfaceLogger.Debug("broadcasting msg",
+		p.Network.logger.Debug("broadcasting msg",
 			fields.PubKey(message.MsgID.GetPubKey()),
 			zap.Uint64("msg_type", uint64(message.MsgType)),
 			fields.Topic(topic))
 		if err := p.Network.topicsCtrl.Broadcast(topic, encodedMsg, p.Network.cfg.RequestTimeout); err != nil {
-			p.Network.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(message.MsgID.GetPubKey()), zap.Error(err))
+			p.Network.logger.Debug("could not broadcast msg", fields.PubKey(message.MsgID.GetPubKey()), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
