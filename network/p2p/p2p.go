@@ -8,18 +8,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	ma "github.com/multiformats/go-multiaddr"
-
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
+	ma "github.com/multiformats/go-multiaddr"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -36,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/utils/async"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
@@ -72,8 +69,8 @@ type p2pNetwork struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	interfaceLogger *zap.Logger // struct logger to log in interface methods that do not accept a logger
-	cfg             *Config
+	logger *zap.Logger
+	cfg    *Config
 
 	host         host.Host
 	streamCtrl   streams.StreamController
@@ -110,13 +107,11 @@ type p2pNetwork struct {
 func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
-	logger = logger.Named(logging.NameP2PNetwork)
-
 	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		interfaceLogger:         logger,
+		logger:                  logger.Named(logging.NameP2PNetwork),
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
@@ -173,13 +168,13 @@ func (n *p2pNetwork) PeersByTopic() ([]peer.ID, map[string][]peer.ID) {
 	for _, tpc := range tpcs {
 		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
 		if err != nil {
-			n.interfaceLogger.Error("Cant get peers from topics")
+			n.logger.Error("Cant get peers from topics")
 			return nil, nil
 		}
 	}
 	allpeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
-		n.interfaceLogger.Error("Cant all peers")
+		n.logger.Error("Cant all peers")
 		return nil, nil
 	}
 	return allpeers, peerz
@@ -191,16 +186,16 @@ func (n *p2pNetwork) Close() error {
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.libConnManager.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.disc.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.idx.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close index", zap.Error(err))
+		n.logger.Warn("could not close index", zap.Error(err))
 	}
 	if err := n.topicsCtrl.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close topics controller", zap.Error(err))
+		n.logger.Warn("could not close topics controller", zap.Error(err))
 	}
 	return n.host.Close()
 }
@@ -227,8 +222,8 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start(logger *zap.Logger) error {
-	logger = logger.Named(logging.NameP2PNetwork)
+func (n *p2pNetwork) Start() error {
+	logger := n.logger.Named(logging.NameP2PNetwork)
 
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")

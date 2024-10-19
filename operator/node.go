@@ -73,7 +73,7 @@ type operatorNode struct {
 // New is the constructor of operatorNode
 func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
 	node := &operatorNode{
-		logger:           logger,
+		logger:           logger.Named(logging.NameOperator),
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
@@ -122,8 +122,6 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
-	n.logger.Named(logging.NameOperator)
-
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
