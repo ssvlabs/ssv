@@ -151,8 +151,6 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 }
 
 func (h *SyncCommitteeHandler) processIndicesChange(period uint64, slot phase0.Slot) {
-	// we should not reset sync committee duties here as it is necessary for message validation
-	// but this can lead to executing duties for deleted/liquidated validators
 	h.fetchCurrentPeriod = true
 
 	// reset next period duties if in appropriate slot range
