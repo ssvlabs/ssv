@@ -138,7 +138,6 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 }
 
 func (h *AttesterHandler) processIndicesChange(epoch phase0.Epoch, slot phase0.Slot) {
-	h.duties.Reset(epoch)
 	h.fetchCurrentEpoch = true
 
 	// reset next epoch duties if in appropriate slot range
