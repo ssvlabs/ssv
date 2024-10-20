@@ -4,17 +4,15 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
@@ -82,16 +80,12 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 	}, nil
 }
 
-func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
+func (c *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
-		v.mtx.RLock() // read-lock for v.Queues, v.state
-		defer v.mtx.RUnlock()
+		c.mtx.RLock() // read-lock for c.Queues, c.Runners
+		defer c.mtx.RUnlock()
 
-		// only run if the validator is started
-		//if v.state != uint32(Started) {
-		//	return
-		//}
-		dr := v.Runners[phase0.Slot(height)]
+		dr := c.Runners[phase0.Slot(height)]
 		if dr == nil {
 			logger.Warn("❗no committee runner found for slot", fields.Slot(phase0.Slot(height)))
 			return
@@ -101,7 +95,7 @@ func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 
-		msg, err := v.createTimerMessage(identifier, height, round)
+		msg, err := c.createTimerMessage(identifier, height, round)
 		if err != nil {
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
@@ -112,7 +106,7 @@ func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 
-		if pushed := v.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
+		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
 				fields.Role(identifier.GetRoleType()))
 		}
@@ -120,7 +114,7 @@ func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 	}
 }
 
-func (v *Committee) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
 		Height: height,
 		Round:  round,
