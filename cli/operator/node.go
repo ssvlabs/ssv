@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -609,8 +610,12 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
 		networkConfig.GenesisDomainType = spectypes.DomainType(byts)
+		alanDomainUint := binary.LittleEndian.Uint32(byts) + 1
+		alanbyts := make([]byte, 4)
+		binary.LittleEndian.PutUint32(alanbyts, alanDomainUint)
+		networkConfig.AlanDomainType = spectypes.DomainType(alanbyts)
 		if networkConfig.PastAlanFork() {
-			logger.Info("custom domain type is ineffective now after Alan fork", fields.Domain(networkConfig.GenesisDomainType))
+			logger.Info("running with custom domain type", fields.Domain(networkConfig.AlanDomainType))
 		} else {
 			logger.Info("running with custom domain type", fields.Domain(networkConfig.GenesisDomainType))
 		}
