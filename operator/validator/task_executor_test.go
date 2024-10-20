@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/validators"
+	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -130,9 +131,9 @@ func TestController_StopValidator(t *testing.T) {
 		sharesStorage:     sharesStorage,
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
-		validatorOptions: validator.Options{GenesisOptions: validator.GenesisOptions{
+		genesisValidatorOptions: genesisvalidator.Options{
 			Storage: genesisStorageMap,
-		}},
+		},
 		metrics: validator.NopMetrics{},
 		signer:  signer,
 	}
@@ -189,9 +190,9 @@ func TestController_ReactivateCluster(t *testing.T) {
 		validatorOptions: validator.Options{
 			Storage:       storageMap,
 			NetworkConfig: networkconfig.TestNetwork,
-			GenesisOptions: validator.GenesisOptions{
-				Storage: genesisStorageMap,
-			},
+		},
+		genesisValidatorOptions: genesisvalidator.Options{
+			Storage: genesisStorageMap,
 		},
 		metrics: validator.NopMetrics{},
 		signer:  signer,

@@ -35,6 +35,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
+	genesisvalidator "github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
@@ -56,18 +57,19 @@ const (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
-	metrics           validator.Metrics
-	beacon            beacon.BeaconNode
-	validatorOptions  validator.Options
-	signer            spectypes.BeaconSigner
-	StorageMap        *ibftstorage.QBFTStores
-	validatorsMap     *validators.ValidatorsMap
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorStorage   registrystorage.Operators
-	networkConfig     networkconfig.NetworkConfig
+	network                 P2PNetwork
+	recipientsStorage       Recipients
+	sharesStorage           SharesStorage
+	metrics                 validator.Metrics
+	beacon                  beacon.BeaconNode
+	validatorOptions        validator.Options
+	genesisValidatorOptions genesisvalidator.Options
+	signer                  spectypes.BeaconSigner
+	StorageMap              *ibftstorage.QBFTStores
+	validatorsMap           *validators.ValidatorsMap
+	operatorDataStore       operatordatastore.OperatorDataStore
+	operatorStorage         registrystorage.Operators
+	networkConfig           networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -697,12 +699,13 @@ func TestSetupValidators(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
+
 				validatorOptions: validator.Options{
 					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
-					GenesisOptions: validator.GenesisOptions{
-						Storage: genesisStorageMap,
-					},
+				},
+				genesisValidatorOptions: genesisvalidator.Options{
+					Storage: genesisStorageMap,
 				},
 				metrics: validator.NopMetrics{},
 			}
