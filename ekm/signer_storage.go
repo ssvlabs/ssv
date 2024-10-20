@@ -406,6 +406,7 @@ func (s *storage) decrypt(data []byte) ([]byte, error) {
 	}
 
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	// #nosec G407 false positive: https://github.com/securego/gosec/issues/1211
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }
 

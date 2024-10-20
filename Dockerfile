@@ -6,7 +6,7 @@ FROM golang:1.22 AS preparer
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
   curl=7.88.1-10+deb12u7 \
-  git=1:2.39.2-1.1 \
+  git=1:2.39.5-0+deb12u1 \
   zip=3.0-13 \
   unzip=6.0-28 \
   g++=4:12.2.0-3 \

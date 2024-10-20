@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
@@ -20,6 +21,8 @@ const (
 	QuickTimeout          = 2 * time.Second
 	SlowTimeout           = 2 * time.Minute
 )
+
+var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 
 // Timer is an interface for a round timer, calling the UponRoundTimeout when times out
 type Timer interface {
@@ -49,7 +52,7 @@ type RoundTimer struct {
 	// result holds the result of the timer
 	done OnRoundTimeoutF
 	// round is the current round of the timer
-	round int64
+	round uint64
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
@@ -120,10 +123,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	// Calculate additional timeout based on round
 	var additionalTimeout time.Duration
 	if round <= t.timeoutOptions.quickThreshold {
-		additionalTimeout = time.Duration(int(round)) * t.timeoutOptions.quick
+		additionalTimeout = casts.DurationFromUint64(uint64(round)) * t.timeoutOptions.quick
 	} else {
-		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick
-		slowPortion := time.Duration(int(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
+		quickPortion := casts.DurationFromUint64(uint64(t.timeoutOptions.quickThreshold)) * t.timeoutOptions.quick
+		slowPortion := casts.DurationFromUint64(uint64(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
 		additionalTimeout = quickPortion + slowPortion
 	}
 
@@ -147,12 +150,12 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 
 // Round returns a round.
 func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadInt64(&t.round))
+	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
 }
 
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreInt64(&t.round, int64(round))
+	atomic.StoreUint64(&t.round, uint64(round))
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer

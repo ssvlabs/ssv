@@ -34,23 +34,21 @@ type HandleNewPeer func(e PeerEvent)
 
 // Options represents the options passed to create a service
 type Options struct {
-	Host        host.Host
-	DiscV5Opts  *DiscV5Options
-	ConnIndex   peers.ConnectionIndex
-	SubnetsIdx  peers.SubnetsIndex
-	HostAddress string
-	HostDNS     string
-
-	// DomainType is the SSV network domain of the node
-	DomainType networkconfig.DomainTypeProvider
+	Host          host.Host
+	DiscV5Opts    *DiscV5Options
+	ConnIndex     peers.ConnectionIndex
+	SubnetsIdx    peers.SubnetsIndex
+	HostAddress   string
+	HostDNS       string
+	NetworkConfig networkconfig.NetworkConfig
 }
 
 // Service is the interface for discovery
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error)
-	DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error)
+	RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
+	DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
 	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
 	PublishENR(logger *zap.Logger)
 }

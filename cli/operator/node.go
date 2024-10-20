@@ -168,7 +168,9 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
+		if err := validateConfig(nodeStorage, networkConfig.AlanForkNetworkName(), usingLocalEvents); err != nil {
+			logger.Fatal("failed to validate config", zap.Error(err))
+		}
 
 		ekmHashedKey, err := operatorPrivKey.EKMHash()
 		if err != nil {
@@ -420,10 +422,10 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
-func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
+func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) error {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
-		logger.Fatal("could not check saved local events config", zap.Error(err))
+		return fmt.Errorf("failed to get stored config: %w", err)
 	}
 
 	currentConfig := &operatorstorage.ConfigLock{
@@ -432,16 +434,17 @@ func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, netwo
 	}
 
 	if foundConfig {
-		if err := storedConfig.EnsureSameWith(currentConfig); err != nil {
-			err = fmt.Errorf("incompatible config change: %w", err)
-			logger.Fatal(err.Error())
+		if err := storedConfig.ValidateCompatibility(currentConfig); err != nil {
+			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
+
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
-			err = fmt.Errorf("failed to store config: %w", err)
-			logger.Fatal(err.Error())
+			return fmt.Errorf("failed to store config: %w", err)
 		}
 	}
+
+	return nil
 }
 
 func init() {

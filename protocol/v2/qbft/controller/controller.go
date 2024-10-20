@@ -130,23 +130,18 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 
 	prevDecided, _ := inst.IsDecided()
 
+	// if previously decided, we don't process more messages
+	if prevDecided {
+		return nil, errors.New("not processing consensus message since instance is already decided")
+	}
+
 	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
 
-	if prevDecided {
-		return nil, err
-	}
-
 	// save the highest Decided
 	if !decided {
-		return nil, nil
-	}
-
-	// ProcessMsg returns a nil decidedMsg when given a non-commit message
-	// while the instance is decided. In this case, we have nothing new to broadcast.
-	if decidedMsg == nil {
 		return nil, nil
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
@@ -56,8 +57,6 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 		return errors.New("could not setup network: in ready state")
 	}
 
-	// set a seed for rand values
-	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
 	logger.Info("configuring")
 
 	if err := n.initCfg(); err != nil {
@@ -108,6 +107,14 @@ func (n *p2pNetwork) initCfg() error {
 	return nil
 }
 
+// Returns whetehr a peer is bad
+func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
+	if n.idx == nil {
+		return false
+	}
+	return n.idx.IsBad(logger, peerID)
+}
+
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	opts, err := n.cfg.Libp2pOptions(logger)
@@ -121,7 +128,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -180,7 +187,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute)
+	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute, peers.NewGossipScoreIndex())
 	logger.Debug("peers index is ready")
 
 	var ids identify.IDService
@@ -198,11 +205,13 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return n.activeSubnets
 	}
 
+	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
 		newDomain := n.cfg.Network.DomainType()
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
+			connections.BadPeerFilter(logger, n.idx),
 		}
 	}
 
@@ -255,13 +264,13 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
-		Host:        n.host,
-		DiscV5Opts:  discV5Opts,
-		ConnIndex:   n.idx,
-		SubnetsIdx:  n.idx,
-		HostAddress: n.cfg.HostAddress,
-		HostDNS:     n.cfg.HostDNS,
-		DomainType:  n.cfg.Network,
+		Host:          n.host,
+		DiscV5Opts:    discV5Opts,
+		ConnIndex:     n.idx,
+		SubnetsIdx:    n.idx,
+		HostAddress:   n.cfg.HostAddress,
+		HostDNS:       n.cfg.HostDNS,
+		NetworkConfig: n.cfg.Network,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
@@ -307,7 +316,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore())
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

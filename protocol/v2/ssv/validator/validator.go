@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/utils/casts"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -99,19 +100,21 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
+func (v *Validator) StartDuty(logger *zap.Logger, duty spectypes.Duty) error {
+	vDuty, ok := duty.(*spectypes.ValidatorDuty)
+	if !ok {
+		return fmt.Errorf("expected ValidatorDuty, got %T", duty)
+	}
 
-	duty := iduty.(*spectypes.ValidatorDuty) // TODO: err handling
-
-	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(duty.Type)]
+	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(vDuty.Type)]
 	if dutyRunner == nil {
-		return errors.Errorf("no runner for duty type %s", duty.Type.String())
+		return errors.Errorf("no runner for duty type %s", vDuty.Type.String())
 	}
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(duty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex))
-	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(duty.Type))
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
+	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -120,7 +123,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
 	logger.Info("ℹ️ starting duty processing")
 
-	return dutyRunner.StartNewDuty(logger, duty, v.Operator.GetQuorum())
+	return dutyRunner.StartNewDuty(logger, vDuty, v.Operator.GetQuorum())
 }
 
 // ProcessMessage processes Network Message of all types
@@ -157,15 +160,11 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
-		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height))
-
-		// Check signer consistency
-		if !msg.SignedSSVMessage.CommonSigners([]spectypes.OperatorID{msg.SignedSSVMessage.OperatorIDs[0]}) { // todo: array check
-			return errors.New("SignedSSVMessage's signer not consistent with SignedMessage's signers")
+		if err := qbftMsg.Validate(); err != nil {
+			return errors.Wrap(err, "invalid qbft Message")
 		}
-
+		logger = v.loggerForDuty(logger, casts.RunnerRoleToBeaconRole(messageID.GetRoleType()), phase0.Slot(qbftMsg.Height))
 		logger = logger.With(fields.Height(qbftMsg.Height))
-		// Process
 		return dutyRunner.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
@@ -174,7 +173,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		logger = v.loggerForDuty(logger, spectypes.BeaconRole(messageID.GetRoleType()), signedMsg.Slot)
+		logger = v.loggerForDuty(logger, casts.RunnerRoleToBeaconRole(messageID.GetRoleType()), signedMsg.Slot)
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")
@@ -182,10 +181,6 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
 			return errors.Wrap(err, "invalid PartialSignatureMessages")
-		}
-		// Check signer consistency
-		if signedMsg.Messages[0].Signer != msg.SignedSSVMessage.OperatorIDs[0] {
-			return errors.New("SignedSSVMessage's signer not consistent with SignedPartialSignatureMessage's signer")
 		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
@@ -201,7 +196,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 
 func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole, slot phase0.Slot) *zap.Logger {
 	logger = logger.With(fields.Slot(slot))
-	if dutyID, ok := v.dutyIDs.Get(spectypes.RunnerRole(role)); ok {
+	if dutyID, ok := v.dutyIDs.Get(casts.BeaconRoleToRunnerRole(role)); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}
 	return logger

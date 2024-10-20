@@ -138,7 +138,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	}
 
 	// Create a VirtualNet with 4 nodes.
-	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex int) validation.MessageValidator {
+	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex uint64) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
 
@@ -338,7 +338,7 @@ func CreateVirtualNet(
 	ctx context.Context,
 	nodes int,
 	shares []*ssvtypes.SSVShare,
-	messageValidatorProvider func(int) validation.MessageValidator,
+	messageValidatorProvider func(uint64) validation.MessageValidator,
 ) *VirtualNet {
 	var doneSetup atomic.Bool
 	vn := &VirtualNet{}

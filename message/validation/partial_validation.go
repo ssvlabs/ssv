@@ -55,7 +55,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, e
 	}
 
-	mv.updatePartialSignatureState(partialSignatureMessages, state, signer)
+	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer); err != nil {
+		return nil, err
+	}
 
 	return partialSignatureMessages, nil
 }
@@ -178,15 +180,15 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	clusterValidatorCount := len(committeeInfo.indices)
 	// Rule: valid number of duties per epoch:
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
-	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, clusterValidatorCount, signerStateBySlot); err != nil {
+	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.indices, signerStateBySlot); err != nil {
 		return err
 	}
 
+	clusterValidatorCount := len(committeeInfo.indices)
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
@@ -225,7 +227,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
 	state *consensusState,
 	signer spectypes.OperatorID,
-) {
+) error {
 	stateBySlot := state.GetOrCreate(signer)
 	messageSlot := partialSignatureMessages.Slot
 	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
@@ -236,7 +238,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 
-	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
+	return signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

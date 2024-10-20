@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -19,6 +19,8 @@ var SupportedConfigs = map[string]NetworkConfig{
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
 }
+
+const alanForkName = "alan"
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
@@ -44,6 +46,7 @@ type NetworkConfig struct {
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address
 	Bootnodes            []string
+	DiscoveryProtocolID  [6]byte
 
 	AlanForkEpoch phase0.Epoch
 }
@@ -55,6 +58,10 @@ func (n NetworkConfig) String() string {
 	}
 
 	return string(b)
+}
+
+func (n NetworkConfig) AlanForkNetworkName() string {
+	return fmt.Sprintf("%s:%s", n.Name, alanForkName)
 }
 
 func (n NetworkConfig) PastAlanFork() bool {
@@ -82,7 +89,7 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
-	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+	return time.Unix(n.Beacon.MinGenesisTime(), 0)
 }
 
 // DomainType returns current domain type based on the current fork.

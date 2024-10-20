@@ -62,8 +62,8 @@ func TestOperatorState(t *testing.T) {
 
 		os.Set(slot, epoch, signerState)
 
-		require.Equal(t, os.DutyCount(epoch), 1)
-		require.Equal(t, os.DutyCount(epoch-1), 0)
+		require.Equal(t, os.DutyCount(epoch), uint64(1))
+		require.Equal(t, os.DutyCount(epoch-1), uint64(0))
 
 		slot2 := phase0.Slot(6)
 		epoch2 := phase0.Epoch(2)
@@ -71,9 +71,9 @@ func TestOperatorState(t *testing.T) {
 
 		os.Set(slot2, epoch2, signerState2)
 
-		require.Equal(t, os.DutyCount(epoch2), 1)
-		require.Equal(t, os.DutyCount(epoch), 1)
-		require.Equal(t, os.DutyCount(epoch-1), 0)
+		require.Equal(t, os.DutyCount(epoch2), uint64(1))
+		require.Equal(t, os.DutyCount(epoch), uint64(1))
+		require.Equal(t, os.DutyCount(epoch-1), uint64(0))
 	})
 
 	t.Run("TestIncrementLastEpochDuties", func(t *testing.T) {
@@ -85,12 +85,12 @@ func TestOperatorState(t *testing.T) {
 		signerState := &SignerState{Slot: slot}
 
 		os.Set(slot, epoch, signerState)
-		require.Equal(t, os.DutyCount(epoch), 1)
+		require.Equal(t, os.DutyCount(epoch), uint64(1))
 
 		slot2 := phase0.Slot(6)
 		signerState2 := &SignerState{Slot: slot2}
 		os.Set(slot2, epoch, signerState2)
 
-		require.Equal(t, os.DutyCount(epoch), 2)
+		require.Equal(t, os.DutyCount(epoch), uint64(2))
 	})
 }

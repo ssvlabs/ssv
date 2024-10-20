@@ -18,6 +18,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -90,7 +91,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	sim := simTestBackend(testAddresses)
 
 	// Create JSON-RPC handler
-	rpcServer, _ := sim.Node.RPCHandler()
+	rpcServer, _ := sim.Node().RPCHandler()
 	// Expose handler on a test server with ws open
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
@@ -99,14 +100,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
 	if err != nil {
 		t.Errorf("deploying contract: %v", err)
 	}
 	sim.Commit()
 
 	// Check contract code at the simulated blockchain
-	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
+	contractCode, err := sim.Client().CodeAt(ctx, contractAddr, nil)
 	if err != nil {
 		t.Errorf("getting contract code: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	logs := client.StreamLogs(ctx, 0)
 
-	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
+	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
 	require.NoError(t, err)
 
 	// Generate a new validator
@@ -202,6 +203,59 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 	})
 
+	t.Run("test OperatorAdded event fails for malformed event data", func(t *testing.T) {
+		t.Run("test OperatorAdded event handle with the same pubkey, but with a different id", func(t *testing.T) {
+			op := &testOperator{}
+			op.privateKey = ops[2].privateKey
+			op.id = 8
+
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
+				OperatorId: op.id,
+				Owner:      testAddr,
+				PublicKey:  encodedPubKey,
+			})
+			require.ErrorContains(t, err, "operator public key already exists")
+
+			// check no operators were added
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+		})
+		t.Run("test OperatorAdded event handle with existing id and new pubkey", func(t *testing.T) {
+			privateKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			op := &testOperator{}
+			op.id = ops[2].id
+			op.privateKey = privateKey
+
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
+				OperatorId: op.id,
+				Owner:      testAddr,
+				PublicKey:  encodedPubKey,
+			})
+			require.ErrorContains(t, err, "operator ID already exists")
+
+			// check no operators were added
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+		})
+	})
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
 
 		// Should return MalformedEventError and no changes to the state
@@ -1439,15 +1493,15 @@ func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 	return vLogOperatorAdded
 }
 
-func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
+func simTestBackend(testAddresses []*ethcommon.Address) *simulator.Backend {
 	genesis := ethtypes.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
 		genesis[*testAddr] = ethtypes.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
-	return simulator.NewSimulatedBackend(
-		genesis, 50_000_000,
+	return simulator.NewBackend(
+		genesis, simulated.WithBlockGasLimit(50_000_000),
 	)
 }
 

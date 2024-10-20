@@ -9,8 +9,6 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // AttesterDuties returns attester duties for a given epoch.
@@ -49,32 +47,5 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error {
-
-	// TODO: better way to return error and not stop sending other attestations
-	for _, attestation := range attestations {
-		signingRoot, err := gc.getSigningRoot(attestation.Data)
-		if err != nil {
-			return errors.Wrap(err, "failed to get signing root")
-		}
-
-		if err := gc.slashableAttestationCheck(gc.ctx, signingRoot); err != nil {
-			return errors.Wrap(err, "failed attestation slashing protection check")
-		}
-	}
-
 	return gc.client.SubmitAttestations(gc.ctx, attestations)
-}
-
-// getSigningRoot returns signing root
-func (gc *GoClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, error) {
-	epoch := gc.network.EstimatedEpochAtSlot(data.Slot)
-	domain, err := gc.DomainData(epoch, spectypes.DomainAttester)
-	if err != nil {
-		return [32]byte{}, err
-	}
-	root, err := gc.ComputeSigningRoot(data, domain)
-	if err != nil {
-		return [32]byte{}, err
-	}
-	return root, nil
 }

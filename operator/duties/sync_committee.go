@@ -210,11 +210,16 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
-	h.duties.Reset(period)
+	storeDuties := make([]dutystore.StoreSyncCommitteeDuty, 0, len(duties))
 	for _, d := range duties {
 		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
-		h.duties.Add(period, d.ValidatorIndex, d, inCommitteeDuty)
+		storeDuties = append(storeDuties, dutystore.StoreSyncCommitteeDuty{
+			ValidatorIndex: d.ValidatorIndex,
+			Duty:           d,
+			InCommittee:    inCommitteeDuty,
+		})
 	}
+	h.duties.Set(period, storeDuties)
 
 	h.prepareDutiesResultLog(period, duties, start)
 

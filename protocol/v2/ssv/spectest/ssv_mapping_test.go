@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/committee"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/partialsigcontainer"
+	runnerconstruction "github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/construction"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
@@ -183,6 +184,19 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 			Name:  test.(map[string]interface{})["Name"].(string),
 			Tests: typedTests,
 		}
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
+			},
+		}
+
+	case reflect.TypeOf(&runnerconstruction.RunnerConstructionSpecTest{}).String():
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &RunnerConstructionSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -545,9 +559,11 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		logger,
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
-			return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
+		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
+			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
+			return r.(*runner.CommitteeRunner), nil
 		},
+		specCommittee.Share,
 	)
 	tmpSsvCommittee := &validator.Committee{}
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
@@ -565,7 +581,6 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), testingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
 	}
-	c.Shares = specCommittee.Share
 
 	return c
 }

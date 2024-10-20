@@ -562,23 +562,43 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		epoch := phase0.Epoch(1)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
-		dutyStore.Proposer.Add(epoch, slot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
-		dutyStore.Proposer.Add(epoch, slot+4, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
-		dutyStore.Proposer.Add(epoch, slot+8, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
+		dutyStore.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+			{Slot: slot + 4, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+			{Slot: slot + 8, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
 
 		role := spectypes.RoleAggregator
 		identifier := spectypes.NewMsgID(netCfg.DomainType(), ks.ValidatorPK.Serialize(), role)
 		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
 
+		// First duty.
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot))
 		require.NoError(t, err)
 
+		// Second duty.
 		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+4))
 		require.NoError(t, err)
 
+		// Second duty (another message).
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4, func(qbftMessage *specqbft.Message) {
+			qbftMessage.MsgType = specqbft.RoundChangeMsgType
+		})
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+4))
+		require.NoError(t, err)
+
+		// Third duty.
+		// TODO: this should fail, see https://github.com/ssvlabs/ssv/pull/1758
 		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+8))
+		require.NoError(t, err)
+
+		// Third duty (another message).
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8, func(qbftMessage *specqbft.Message) {
+			qbftMessage.MsgType = specqbft.RoundChangeMsgType
+		})
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+8))
 		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
 	})
@@ -589,7 +609,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 		ds := dutystore.New()
-		ds.Proposer.Add(epoch, slot, shares.active.ValidatorIndex+1, &eth2apiv1.ProposerDuty{}, true)
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex + 1, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
 		validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 
 		identifier := spectypes.NewMsgID(netCfg.DomainType(), ks.ValidatorPK.Serialize(), spectypes.RoleProposer)
@@ -600,7 +622,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
 		ds = dutystore.New()
-		ds.Proposer.Add(epoch, slot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
 		validator = New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot))
 		require.NoError(t, err)
@@ -728,8 +752,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
 					t.Run(subtestName, func(t *testing.T) {
 						ds := dutystore.New()
-						ds.Proposer.Add(spectestingutils.TestingDutyEpoch, spectestingutils.TestingDutySlot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
-						ds.SyncCommittee.Add(0, shares.active.ValidatorIndex, &eth2apiv1.SyncCommitteeDuty{}, true)
+						ds.Proposer.Set(spectestingutils.TestingDutyEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+							{Slot: spectestingutils.TestingDutySlot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+						})
+						ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+							{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+						})
 						ds.VoluntaryExit.AddDuty(spectestingutils.TestingDutySlot, phase0.BLSPubKey(shares.active.ValidatorPubKey))
 
 						validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
@@ -805,8 +833,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
 					t.Run(subtestName, func(t *testing.T) {
 						ds := dutystore.New()
-						ds.Proposer.Add(spectestingutils.TestingDutyEpoch, spectestingutils.TestingDutySlot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
-						ds.SyncCommittee.Add(0, shares.active.ValidatorIndex, &eth2apiv1.SyncCommitteeDuty{}, true)
+						ds.Proposer.Set(spectestingutils.TestingDutyEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+							{Slot: spectestingutils.TestingDutySlot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+						})
+						ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+							{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+						})
 
 						validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 
@@ -1001,8 +1033,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 		ds := dutystore.New()
-		ds.Proposer.Add(epoch, slot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
-		ds.SyncCommittee.Add(0, shares.active.ValidatorIndex, &eth2apiv1.SyncCommitteeDuty{}, true)
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+			{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+		})
 
 		validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 
@@ -1322,8 +1358,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 		ds := dutystore.New()
-		ds.Proposer.Add(epoch, slot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
-		ds.SyncCommittee.Add(0, shares.active.ValidatorIndex, &eth2apiv1.SyncCommitteeDuty{}, true)
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+			{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+		})
 
 		validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 
@@ -1352,7 +1392,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				topicID := commons.CommitteeTopicID(committeeID)[0]
 
 				sinceSlotStart := time.Duration(0)
-				for validator.currentEstimatedRound(sinceSlotStart) != round {
+				for {
+					currentRound, err := validator.currentEstimatedRound(sinceSlotStart)
+					require.NoError(t, err)
+					if currentRound == round {
+						break
+					}
 					sinceSlotStart += roundtimer.QuickTimeout
 				}
 
@@ -1383,20 +1428,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
 
-	// Receive a dkg message from an operator that is not myself should receive an error
-	t.Run("dkg message", func(t *testing.T) {
+	// Receive a unknown message type from an operator that is not myself should receive an error
+	t.Run("unknown type message", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.SSVMessage.MsgType = spectypes.DKGMsgType
+		unknownType := spectypes.MsgType(12345)
+		signedSSVMessage.SSVMessage.MsgType = unknownType
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		require.ErrorIs(t, err, ErrDKGMessage)
+		require.ErrorContains(t, err, fmt.Sprintf("%s, got %d", ErrUnknownSSVMessageType.Error(), unknownType))
 	})
 
 	// Receive a message with a wrong signature

@@ -44,7 +44,11 @@ func NewAggregatorRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-) Runner {
+) (Runner, error) {
+	if len(share) != 1 {
+		return nil, errors.New("must have one share")
+	}
+
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleAggregator,
@@ -62,7 +66,7 @@ func NewAggregatorRunner(
 		valCheck:       valCheck,
 
 		metrics: metrics.NewConsensusMetrics(spectypes.RoleAggregator),
-	}
+	}, nil
 }
 
 func (r *AggregatorRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {

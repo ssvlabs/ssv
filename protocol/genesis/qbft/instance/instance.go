@@ -255,5 +255,5 @@ func (i *Instance) bumpToRound(round genesisspecqbft.Round) {
 
 // CanProcessMessages will return true if instance can process messages
 func (i *Instance) CanProcessMessages() bool {
-	return !i.forceStop && int(i.State.Round) < CutoffRound
+	return !i.forceStop && uint64(i.State.Round) < CutoffRound
 }

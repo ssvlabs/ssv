@@ -48,11 +48,12 @@ const (
 )
 
 const (
-	connManagerGCInterval           = 3 * time.Minute
-	connManagerGCTimeout            = time.Minute
-	peersReportingInterval          = 60 * time.Second
-	peerIdentitiesReportingInterval = 5 * time.Minute
-	topicsReportingInterval         = 180 * time.Second
+	connManagerBalancingInterval       = 3 * time.Minute
+	connManagerBalancingTimeout        = time.Minute
+	peersReportingInterval             = 60 * time.Second
+	peerIdentitiesReportingInterval    = 5 * time.Minute
+	topicsReportingInterval            = 180 * time.Second
+	maximumIrrelevantPeersToDisconnect = 3
 )
 
 // PeersIndexProvider holds peers index instance
@@ -257,7 +258,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 	go n.startDiscovery(logger, connector)
 
-	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing(logger))
+	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
 	// don't report metrics in tests
 	if n.cfg.Metrics != nil {
 		async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
@@ -274,19 +275,38 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	return nil
 }
 
+// Returns a function that balances the peers.
+// Balancing is peformed by:
+// - Dropping peers with bad Gossip score.
+// - Dropping irrelevant peers that don't have any subnet in common.
+// - Tagging the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removing the worst peer.
 func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 	return func() {
 		allPeers := n.host.Network().Peers()
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
+
+		// Disconnect from bad peers
+		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
+
+		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
 		if currentCount < n.cfg.MaxPeers {
 			_ = n.idx.GetSubnetsStats() // trigger metrics update
 			return
 		}
-		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
+
+		ctx, cancel := context.WithTimeout(n.ctx, connManagerBalancingTimeout)
 		defer cancel()
 
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
+
+		// Disconnect from irrelevant peers
+		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
+		if disconnectedPeers > 0 {
+			return
+		}
+
+		// Trim peers according to subnet participation (considering the subnet size)
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
@@ -357,18 +377,18 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
-		addedSubnets := make([]int, 0)
+		addedSubnets := make([]uint64, 0)
 		for subnet, active := range updatedSubnets {
 			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				addedSubnets = append(addedSubnets, subnet)
+				addedSubnets = append(addedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
 
 		// Compute the not anymore registered subnets.
-		removedSubnets := make([]int, 0)
+		removedSubnets := make([]uint64, 0)
 		for subnet, active := range registeredSubnets {
 			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
-				removedSubnets = append(removedSubnets, subnet)
+				removedSubnets = append(removedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
 
@@ -403,12 +423,12 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 
 			// Unsubscribe from the removed subnets.
-			for _, subnet := range removedSubnets {
-				if err := n.unsubscribeSubnet(logger, uint(subnet)); err != nil {
-					logger.Debug("could not unsubscribe from subnet", zap.Int("subnet", subnet), zap.Error(err))
+			for _, removedSubnet := range removedSubnets {
+				if err := n.unsubscribeSubnet(logger, removedSubnet); err != nil {
+					logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
 					errs = errors.Join(errs, err)
 				} else {
-					logger.Debug("unsubscribed from subnet", zap.Int("subnet", subnet))
+					logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
 				}
 			}
 		}
