@@ -88,7 +88,9 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 				zap.Ints("shared", shared),
 				zap.String("own_subnets", records.Subnets(dvs.subnets).String()),
 				zap.String("node_subnets", records.Subnets(nodeSubnets).String()),
-				zap.String("node", node.String()))
+				zap.String("node", node.String()),
+				zap.String("peer_id", node.ID().String()),
+			)
 		}
 
 		return hasShared
