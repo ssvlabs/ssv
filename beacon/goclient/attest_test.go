@@ -230,6 +230,8 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		require.Equal(t, gotResult1c.Target.Epoch, gotResult1a.Target.Epoch)
 		require.Equal(t, gotResult1c.Target.Root, gotResult1a.Target.Root)
 
+		uniqueSlots := serverGotRequests.SlowLen()
+		require.Equal(t, 2, uniqueSlots)
 		reqCntSlot1, ok := serverGotRequests.Get(slot1)
 		require.True(t, ok)
 		require.Equal(t, 1, reqCntSlot1)
@@ -300,5 +302,7 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 			reqCnt, _ := serverGotRequests.GetOrSet(slot, 1)
 			require.Equal(t, 1, reqCnt)
 		}
+		uniqueSlots := serverGotRequests.SlowLen()
+		require.Equal(t, slotsTotalCnt, uniqueSlots)
 	})
 }
