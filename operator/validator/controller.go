@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
@@ -527,8 +526,7 @@ func (c *controller) StartValidators() {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
-		if bytes.Contains(activeSubnets, []byte{committeeSubnet}) {
+		if activeSubnets[commons.CommitteeSubnet(share.CommitteeID())] != 0 {
 			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
 		}
 	}
@@ -1149,8 +1147,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 				return true
 			}
 
-			committeeSubnet := byte(commons.CommitteeSubnet(share.CommitteeID()))
-			if !bytes.Contains(activeSubnets, []byte{committeeSubnet}) {
+			if activeSubnets[commons.CommitteeSubnet(share.CommitteeID())] == 0 {
 				return true
 			}
 
