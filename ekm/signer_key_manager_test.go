@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"encoding/hex"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -787,4 +789,128 @@ func TestEkmListAccounts(t *testing.T) {
 	accounts, err := km.(*ethKeyManagerSigner).ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(accounts))
+}
+
+func TestConcurrentSlashingProtectionAttData(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	km := testKeyManager(t, nil)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+	require.NoError(t, km.AddShare(sk1))
+
+	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
+	currentEpoch := km.(*ethKeyManagerSigner).storage.Network().EstimatedEpochAtSlot(currentSlot)
+
+	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
+	highestSource := highestTarget - 1
+
+	attestationData := &phase0.AttestationData{
+		Slot:            currentSlot,
+		Index:           1,
+		BeaconBlockRoot: [32]byte{1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2},
+		Source: &phase0.Checkpoint{
+			Epoch: highestSource,
+			Root:  [32]byte{},
+		},
+		Target: &phase0.Checkpoint{
+			Epoch: highestTarget,
+			Root:  [32]byte{},
+		},
+	}
+
+	// Define function to concurrently attempt signing.
+	signAttestation := func(wg *sync.WaitGroup, errChan chan error) {
+		defer wg.Done()
+		_, _, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+			attestationData,
+			phase0.Domain{},
+			sk1.GetPublicKey().Serialize(),
+			spectypes.DomainAttester,
+		)
+		errChan <- err
+	}
+
+	// Set up concurrency.
+	const goroutineCount = 100
+	var wg sync.WaitGroup
+	errChan := make(chan error, goroutineCount)
+
+	for i := 0; i < goroutineCount; i++ {
+		wg.Add(1)
+		go signAttestation(&wg, errChan)
+	}
+
+	// Wait for all goroutines to complete.
+	wg.Wait()
+	close(errChan)
+
+	// Count errors and successes.
+	var slashableErrors, successCount int
+	for err := range errChan {
+		if err != nil && err.Error() == "slashable attestation (HighestAttestationVote), not signing" {
+			slashableErrors++
+		} else if err == nil {
+			successCount++
+		}
+	}
+
+	require.Equal(t, 1, successCount, "expected exactly one successful signing")
+	require.Equal(t, goroutineCount-1, slashableErrors, "expected slashing errors for remaining goroutines")
+}
+
+func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	km := testKeyManager(t, nil)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+	require.NoError(t, km.AddShare(sk1))
+
+	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
+
+	blockContents := testingutils.TestingBlockContentsDeneb
+	blockContents.Block.Slot = highestProposal
+
+	// Define function to concurrently attempt signing.
+	signBeaconBlock := func(wg *sync.WaitGroup, errChan chan error) {
+		defer wg.Done()
+		_, _, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+			blockContents.Block,
+			phase0.Domain{},
+			sk1.GetPublicKey().Serialize(),
+			spectypes.DomainProposer,
+		)
+		errChan <- err
+	}
+
+	// Set up concurrency.
+	const goroutineCount = 100
+	var wg sync.WaitGroup
+	errChan := make(chan error, goroutineCount)
+
+	for i := 0; i < goroutineCount; i++ {
+		wg.Add(1)
+		go signBeaconBlock(&wg, errChan)
+	}
+
+	// Wait for all goroutines to complete.
+	wg.Wait()
+	close(errChan)
+
+	// Count errors and successes.
+	var slashableErrors, successCount int
+	for err := range errChan {
+		if err != nil && err.Error() == "slashable proposal (HighestProposalVote), not signing" {
+			slashableErrors++
+		} else if err == nil {
+			successCount++
+		}
+	}
+
+	require.Equal(t, 1, successCount, "expected exactly one successful signing")
+	require.Equal(t, goroutineCount-1, slashableErrors, "expected slashing errors for remaining goroutines")
 }
