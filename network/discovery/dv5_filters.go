@@ -80,16 +80,17 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 			return false
 		}
 
-		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		ownSubs := records.SharedSubnets(allSubs, dvs.subnets, 0)
-		nodeSubs := records.SharedSubnets(allSubs, nodeSubnets, 0)
 		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
-		zap.L().Debug("shared subnets",
-			zap.Ints("shared", shared),
-			zap.Ints("own_subnets", ownSubs),
-			zap.Ints("node_subnets", nodeSubs),
-			zap.String("node", node.String()))
 
-		return len(shared) >= n
+		hasShared := len(shared) >= n
+		if !hasShared {
+			zap.L().Debug("shared subnets",
+				zap.Ints("shared", shared),
+				zap.String("own_subnets", records.Subnets(dvs.subnets).String()),
+				zap.String("node_subnets", records.Subnets(nodeSubnets).String()),
+				zap.String("node", node.String()))
+		}
+
+		return hasShared
 	}
 }
