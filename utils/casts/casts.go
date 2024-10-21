@@ -21,10 +21,6 @@ func DurationFromUint64(t uint64) time.Duration {
 	return time.Duration(t) // #nosec G115
 }
 
-func BeaconRoleToConvertRole(beaconRole spectypes.BeaconRole) spectypes.RunnerRole {
-	return spectypes.RunnerRole(beaconRole) // #nosec G115
-}
-
 func BeaconRoleToRunnerRole(beaconRole spectypes.BeaconRole) spectypes.RunnerRole {
 	return spectypes.RunnerRole(beaconRole) // #nosec G115
 }
