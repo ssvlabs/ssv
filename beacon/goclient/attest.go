@@ -46,19 +46,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	}
 
 	// Have to make beacon node request and cache the result.
-	result, err := func() (*phase0.AttestationData, error) {
-		// Requests with the same slot number must lock on the same mutex.
-		reqMu := &gc.attestationReqMuPool[uint64(slot)%uint64(len(gc.attestationReqMuPool))]
-		reqMu.Lock()
-		defer reqMu.Unlock()
-
-		// Prevent making more than 1 beacon node requests in case somebody has already made this
-		// request concurrently and succeeded.
-		cachedResult := gc.attestationDataCache.Get(slot)
-		if cachedResult != nil {
-			return cachedResult.Value(), nil
-		}
-
+	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
 		attDataReqStart := time.Now()
 		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
@@ -71,10 +59,12 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			return nil, fmt.Errorf("attestation data response is nil")
 		}
 
+		// Caching resulting value here (as part of inflight request) guarantees only 1 request
+		// will ever be done for a given slot.
 		gc.attestationDataCache.Set(slot, resp.Data, ttlcache.DefaultTTL)
 
 		return resp.Data, nil
-	}()
+	})
 	if err != nil {
 		return nil, DataVersionNil, err
 	}
