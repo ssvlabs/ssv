@@ -24,6 +24,7 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
 	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
 )
 
 const (
@@ -155,11 +156,9 @@ type GoClient struct {
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 
-	// attestationReqMuPool helps us prevent the sending of multiple attestation data requests
+	// attestationReqInflight helps us prevent the sending of multiple attestation data requests
 	// for the same slot number (to avoid doing unnecessary work).
-	// It's a pool of mutexes (not a single mutex) to allow for some parallelism when requests
-	// targeting different slots are made.
-	attestationReqMuPool []sync.Mutex
+	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
 	// attestationDataCache stores attestation data from Beacon node for a bunch of recently made
 	// requests (by slot number). It allows for requesting attestation data once per slot from
 	// Beacon node as well as always having/observing the same consistent data in any given slot
@@ -207,14 +206,13 @@ func New(
 	epochDuration := time.Duration(opt.Network.SlotsPerEpoch()) * opt.Network.SlotDurationSec()
 
 	client := &GoClient{
-		log:                  logger,
-		ctx:                  opt.Context,
-		network:              opt.Network,
-		client:               httpClient.(*eth2clienthttp.Service),
-		gasLimit:             opt.GasLimit,
-		operatorDataStore:    operatorDataStore,
-		registrationCache:    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		attestationReqMuPool: make([]sync.Mutex, opt.Network.SlotsPerEpoch()),
+		log:               logger,
+		ctx:               opt.Context,
+		network:           opt.Network,
+		client:            httpClient.(*eth2clienthttp.Service),
+		gasLimit:          opt.GasLimit,
+		operatorDataStore: operatorDataStore,
+		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * epochDuration),
 		),
