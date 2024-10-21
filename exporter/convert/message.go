@@ -28,7 +28,7 @@ func (msg MessageID) GetDutyExecutorID() []byte {
 	return msg[dutyExecutorIDStartPos : dutyExecutorIDStartPos+dutyExecutorIDSize]
 }
 
-func (msg MessageID) GetRoleType() RunnerRole {
+func (msg MessageID) GetRoleType() spectypes.RunnerRole {
 	roleByts := msg[roleTypeStartPos : roleTypeStartPos+roleTypeSize]
 	roleValue := binary.LittleEndian.Uint32(roleByts)
 
@@ -37,10 +37,10 @@ func (msg MessageID) GetRoleType() RunnerRole {
 		return spectypes.RoleUnknown
 	}
 
-	return RunnerRole(roleValue)
+	return spectypes.RunnerRole(roleValue)
 }
 
-func NewMsgID(domain spectypes.DomainType, dutyExecutorID []byte, role RunnerRole) MessageID {
+func NewMsgID(domain spectypes.DomainType, dutyExecutorID []byte, role spectypes.RunnerRole) MessageID {
 	// Sanitize role. If bad role, return an empty MessageID
 	roleValue := int32(role)
 	if roleValue < 0 {

@@ -7,12 +7,12 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -174,15 +174,13 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 
 	storageMap := qbftstorage.NewStores()
 
-	roles := []convert.RunnerRole{
-		convert.RoleAttester,
-		convert.RoleAggregator,
-		convert.RoleProposer,
-		convert.RoleSyncCommitteeContribution,
-		convert.RoleSyncCommittee,
-		convert.RoleValidatorRegistration,
-		convert.RoleVoluntaryExit,
-		convert.RoleCommittee,
+	roles := []spectypes.RunnerRole{
+		spectypes.RoleAggregator,
+		spectypes.RoleProposer,
+		spectypes.RoleSyncCommitteeContribution,
+		spectypes.RoleValidatorRegistration,
+		spectypes.RoleVoluntaryExit,
+		spectypes.RoleCommittee,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(db, role.String()))

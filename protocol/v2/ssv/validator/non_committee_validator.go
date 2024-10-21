@@ -2,17 +2,16 @@ package validator
 
 import (
 	"fmt"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -20,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -120,7 +120,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
 			}
 			logger.Info("✅ saved participants",
-				zap.String("converted_role", role.ToBeaconRole()),
+				zap.String("converted_role", role.String()),
 				zap.String("validator_index", strconv.FormatUint(uint64(key.ValidatorIndex), 10)),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 			)
@@ -138,15 +138,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) convert.RunnerRole {
-	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		_, found := ncv.Roots[root]
-		if !found {
-			return convert.RoleAttester
-		}
-		return convert.RoleSyncCommittee
-	}
-	return convert.RunnerRole(msg.MsgID.GetRoleType())
+func (ncv *CommitteeObserver) getRole(msg *queue.SSVMessage, root [32]byte) spectypes.RunnerRole {
+	return msg.MsgID.GetRoleType()
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
