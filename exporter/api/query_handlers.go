@@ -73,7 +73,7 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		nm.Msg = res
 		return
 	}
-	runnerRole := casts.BeaconRoleToConvertRole(beaconRole)
+	runnerRole := casts.BeaconRoleToRunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
 		logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))
