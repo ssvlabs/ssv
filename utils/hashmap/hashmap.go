@@ -38,6 +38,9 @@ func (m *Map[Key, Value]) Set(key Key, value Value) {
 }
 
 // SlowLen returns the number of elements in the map by iterating over all items.
+// This method call doesn't block other operations (for example Set), hence the
+// resulting length value returned might or might not reflect the outcome of
+// concurrent operations happening with this Map.
 //
 // This implementation is quite expensive. If it becomes a bottleneck,
 // we should consider maintaining an internal atomic counter and
