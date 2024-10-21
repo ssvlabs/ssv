@@ -609,16 +609,16 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		if len(byts) != 4 {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
+		// Assign domain type as-is for Genesis.
 		networkConfig.GenesisDomainType = spectypes.DomainType(byts)
-		alanDomainUint := binary.LittleEndian.Uint32(byts) + 1
-		alanbyts := make([]byte, 4)
-		binary.LittleEndian.PutUint32(alanbyts, alanDomainUint)
-		networkConfig.AlanDomainType = spectypes.DomainType(alanbyts)
-		if networkConfig.PastAlanFork() {
-			logger.Info("running with custom domain type", fields.Domain(networkConfig.AlanDomainType))
-		} else {
-			logger.Info("running with custom domain type", fields.Domain(networkConfig.GenesisDomainType))
-		}
+		// Assign domain type incremented by 1 for Alan.
+		alanDomainType := binary.LittleEndian.Uint32(byts) + 1
+		binary.LittleEndian.PutUint32(networkConfig.AlanDomainType[:], alanDomainType)
+
+		logger.Info("running with custom domain type",
+			zap.Stringer("genesis", format.DomainType(networkConfig.GenesisDomainType)),
+			zap.Stringer("alan", format.DomainType(networkConfig.AlanDomainType)),
+		)
 	}
 
 	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
