@@ -141,7 +141,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		enr    string
 		peerID peer.ID
 	}
-	logInterval := 2 * time.Duration(dvs.networkConfig.SlotsPerEpoch()) * dvs.networkConfig.SlotDurationSec()
+	logInterval := 2 * time.Duration(dvs.networkConfig.SlotsPerEpoch()) * dvs.networkConfig.SlotDurationSec() // #nosec G115
 	logCache := ttlcache.New[logCacheKey, struct{}](
 		ttlcache.WithTTL[logCacheKey, struct{}](logInterval),
 	)
