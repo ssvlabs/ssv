@@ -6,8 +6,6 @@ import (
 	"time"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/exporter/convert"
 )
 
 var (
@@ -21,10 +19,6 @@ func DurationFromUint64(t uint64) time.Duration {
 		return time.Duration(math.MaxInt64) // todo: error handling refactor
 	}
 	return time.Duration(t) // #nosec G115
-}
-
-func BeaconRoleToConvertRole(beaconRole spectypes.BeaconRole) convert.RunnerRole {
-	return convert.RunnerRole(beaconRole) // #nosec G115
 }
 
 func BeaconRoleToRunnerRole(beaconRole spectypes.BeaconRole) spectypes.RunnerRole {
