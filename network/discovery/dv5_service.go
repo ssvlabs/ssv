@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -19,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 var (
@@ -141,25 +141,26 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		enr    string
 		peerID peer.ID
 	}
-	logCache := hashmap.New[logCacheKey, time.Time]()
-	const logInterval = 5 * time.Minute
+	logInterval := 2 * time.Duration(dvs.networkConfig.SlotsPerEpoch()) * dvs.networkConfig.SlotDurationSec()
+	logCache := ttlcache.New[logCacheKey, struct{}](
+		ttlcache.WithTTL[logCacheKey, struct{}](logInterval),
+	)
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		logger := logger.With(
-			fields.ENR(e.Node),
-			fields.PeerID(e.AddrInfo.ID),
-			zap.Duration("rate_limit", logInterval),
-		)
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
 			key := logCacheKey{
 				enr:    e.Node.String(),
 				peerID: e.AddrInfo.ID,
 			}
-			now := time.Now()
-			if lastSeen, ok := logCache.Get(key); !ok || now.Sub(lastSeen) > logInterval {
-				logger.Debug("skipped discovered peer", zap.Error(err))
-				logCache.Set(key, now)
+			if v := logCache.Get(key); v == nil {
+				logger.Debug("skipped discovered peer",
+					fields.ENR(e.Node),
+					fields.PeerID(e.AddrInfo.ID),
+					zap.Duration("rate_limit", logInterval),
+					zap.Error(err),
+				)
+				logCache.Set(key, struct{}{}, ttlcache.DefaultTTL)
 			}
 
 			return
