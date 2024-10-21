@@ -8,14 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -34,7 +33,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, ks, convert.RunnerRole(msgId.GetRoleType())), // #nosec G104
+		qbfttesting.TestingConfig(logger, ks, msgId.GetRoleType()), // #nosec G104
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
