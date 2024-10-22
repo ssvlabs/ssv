@@ -84,7 +84,6 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 	var ignoredConnection = errors.New("ignored connection")
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) (err error) {
-		// Update PeerInfo with the result of this handshake.
 		defer func() {
 			if r := recover(); r != nil {
 				err = errors.Errorf("panic: %v", r)
