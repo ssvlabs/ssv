@@ -9,6 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
@@ -60,7 +61,7 @@ func getTestingData(t *testing.T) TestData {
 				NodeVersion:   "test-node-version",
 				ExecutionNode: "test-execution-node",
 				ConsensusNode: "test-consensus-node",
-				Subnets:       strings.Repeat("0", 32),
+				Subnets:       strings.Repeat("1", 32),
 			},
 		},
 		MockSelfSealed: []byte("something"),
@@ -93,6 +94,7 @@ func getTestingData(t *testing.T) TestData {
 		ctx:                context.Background(),
 		nodeInfos:          nii,
 		peerInfos:          ns,
+		subnetsIdx:         peers.NewSubnetsIndex(commons.Subnets()),
 		ids:                ids,
 		net:                net,
 		streams:            sc,
