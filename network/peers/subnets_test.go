@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 	nettesting "github.com/ssvlabs/ssv/network/testing"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSubnetsIndex(t *testing.T) {
@@ -35,15 +36,27 @@ func TestSubnetsIndex(t *testing.T) {
 
 	subnetsIdx := NewSubnetsIndex(128)
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sAll.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[1], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[2], sPartial.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[3], sPartial.Clone())
+	initialMapping := map[peer.ID]records.Subnets{
+		pids[0]: sAll,
+		pids[1]: sNone,
+		pids[2]: sPartial,
+		pids[3]: sPartial,
+	}
+
+	for pid, subnets := range initialMapping {
+		subnetsIdx.UpdatePeerSubnets(pid, subnets)
+	}
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 1)
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sPartial.Clone())
+	for _, pid := range pids {
+		subnets, ok := subnetsIdx.GetPeerSubnets(pid)
+		require.True(t, ok)
+		require.Equal(t, initialMapping[pid], subnets)
+	}
+
+	subnetsIdx.UpdatePeerSubnets(pids[0], sPartial)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
@@ -51,30 +64,29 @@ func TestSubnetsIndex(t *testing.T) {
 	stats := subnetsIdx.GetSubnetsStats()
 	require.Equal(t, 3, stats.PeersCount[0])
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[2], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[3], sNone.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[0], sNone)
+	subnetsIdx.UpdatePeerSubnets(pids[2], sNone)
+	subnetsIdx.UpdatePeerSubnets(pids[3], sNone)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 0)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
 }
 
 func TestSubnetsDistributionScores(t *testing.T) {
-	nsubnets := 128
-	mysubnets := make(records.Subnets, nsubnets)
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	for sub := range allSubs {
-		if sub%2 == 0 {
-			mysubnets[sub] = byte(0)
-		} else {
-			mysubnets[sub] = byte(1)
+	mySubnets := records.Subnets{}
+	for i := 0; i < commons.Subnets(); i++ {
+		if i%2 != 0 {
+			mySubnets[i] = byte(1)
 		}
 	}
+
+	t.Logf("my subnets: %v", mySubnets.String())
+
 	stats := &SubnetsStats{
-		PeersCount: make([]int, len(mysubnets)),
-		Connected:  make([]int, len(mysubnets)),
+		PeersCount: make([]int, len(mySubnets)),
+		Connected:  make([]int, len(mySubnets)),
 	}
-	for sub := range mysubnets {
+	for sub := range mySubnets {
 		stats.Connected[sub] = 1 + rand.Intn(20)
 		stats.PeersCount[sub] = stats.Connected[sub] + rand.Intn(10)
 	}
@@ -83,9 +95,9 @@ func TestSubnetsDistributionScores(t *testing.T) {
 	stats.Connected[5] = 30
 	stats.PeersCount[5] = 30
 
-	distScores := GetSubnetsDistributionScores(stats, 3, mysubnets, 5)
+	distScores := GetSubnetsDistributionScores(stats, 3, mySubnets, 5)
 
-	require.Len(t, distScores, len(mysubnets))
+	require.Len(t, distScores, len(mySubnets))
 	require.Equal(t, float64(0), distScores[0])
 	require.Equal(t, float64(4.2), distScores[1])
 	require.Equal(t, float64(2.533333333333333), distScores[3])

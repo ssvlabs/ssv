@@ -83,10 +83,11 @@ func TestCheckPeer(t *testing.T) {
 				expectedError:  nil,
 			},
 			{
-				name:          "missing subnets",
-				domainType:    &myDomainType,
-				subnets:       nil,
-				expectedError: errors.New("could not read subnets"),
+				name:           "missing subnets",
+				domainType:     &myDomainType,
+				subnets:        records.Subnets{},
+				missingSubnets: true,
+				expectedError:  errors.New("could not read subnets"),
 			},
 			{
 				name:          "inactive subnets",
@@ -138,7 +139,7 @@ func TestCheckPeer(t *testing.T) {
 				err := records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, *test.nextDomainType)
 				require.NoError(t, err)
 			}
-			if test.subnets != nil {
+			if !test.missingSubnets {
 				err := records.SetSubnetsEntry(localNode, test.subnets)
 				require.NoError(t, err)
 			}
@@ -176,13 +177,14 @@ type checkPeerTest struct {
 	name           string
 	domainType     *spectypes.DomainType
 	nextDomainType *spectypes.DomainType
-	subnets        []byte
+	subnets        records.Subnets
+	missingSubnets bool
 	localNode      *enode.LocalNode
 	expectedError  error
 }
 
-func mockSubnets(active ...int) []byte {
-	subnets := make([]byte, commons.Subnets())
+func mockSubnets(active ...int) records.Subnets {
+	subnets := records.Subnets{}
 	for _, subnet := range active {
 		subnets[subnet] = 1
 	}

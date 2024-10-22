@@ -172,7 +172,10 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		resp[i] = peerJSON{
 			ID:            id,
 			Connectedness: h.Network.Connectedness(id).String(),
-			Subnets:       h.PeersIndex.GetPeerSubnets(id).String(),
+		}
+		subnets, ok := h.PeersIndex.GetPeerSubnets(id)
+		if ok {
+			resp[i].Subnets = subnets.String()
 		}
 
 		for _, addr := range h.Network.Peerstore().Addrs(id) {
