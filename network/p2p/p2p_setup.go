@@ -21,7 +21,6 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -50,14 +49,12 @@ const (
 )
 
 // Setup is used to setup the network
-func (n *p2pNetwork) Setup(logger *zap.Logger) error {
-	logger = logger.Named(logging.NameP2PNetwork)
-
+func (n *p2pNetwork) Setup() error {
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
 
-	logger.Info("configuring")
+	n.logger.Info("configuring")
 
 	if err := n.initCfg(); err != nil {
 		return fmt.Errorf("init config: %w", err)
@@ -68,7 +65,7 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 		return err
 	}
 
-	logger = logger.With(zap.String("selfPeer", n.host.ID().String()))
+	logger := n.logger.With(zap.String("selfPeer", n.host.ID().String()))
 	logger.Debug("host configured")
 
 	err = n.SetupServices(logger)

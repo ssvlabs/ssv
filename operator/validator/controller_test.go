@@ -1038,6 +1038,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 			WorkersCount: 1,
 			Buffer:       100,
 		}),
+		metadataFetcher: beacon.NewMetadataFetcher(logger, opts.beacon),
 	}
 }
 

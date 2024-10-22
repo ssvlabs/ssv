@@ -368,7 +368,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metricsReporter.SSVNodeHealthy()
 
-		eventSyncer := setupEventHandling(
+		eventSyncer := syncContractEvents(
 			cmd.Context(),
 			logger,
 			executionClient,
@@ -387,10 +387,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
-		if err := p2pNetwork.Setup(logger); err != nil {
+		if err := p2pNetwork.Setup(); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
 		}
-		if err := p2pNetwork.Start(logger); err != nil {
+		if err := p2pNetwork.Start(); err != nil {
 			logger.Fatal("failed to start network", zap.Error(err))
 		}
 
@@ -417,7 +417,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		if err := operatorNode.Start(logger); err != nil {
+		if err := operatorNode.Start(); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
@@ -675,7 +675,8 @@ func setupConsensusClient(
 	return cl
 }
 
-func setupEventHandling(
+// syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
+func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,

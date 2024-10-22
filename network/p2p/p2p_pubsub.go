@@ -65,7 +65,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
+			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
@@ -141,14 +141,14 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 
 // subscribeCommittee handles the subscription logic for committee subnets
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
-	n.interfaceLogger.Debug("subscribing to committee", fields.CommitteeID(cid))
+	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid))
 	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
 
 	for _, topic := range commons.CommitteeTopicID(cid) {
-		if err := n.topicsCtrl.Subscribe(n.interfaceLogger, topic); err != nil {
+		if err := n.topicsCtrl.Subscribe(n.logger, topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
@@ -159,13 +159,13 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 // subscribeValidator handles the subscription logic for validator subnets
 func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
 	pkHex := hex.EncodeToString(pk[:])
-	n.interfaceLogger.Debug("subscribing to validator", zap.String("validator", pkHex))
+	n.logger.Debug("subscribing to validator", zap.String("validator", pkHex))
 	status, found := n.activeValidators.GetOrSet(pkHex, validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
 	for _, topic := range commons.ValidatorTopicID(pk[:]) {
-		if err := n.topicsCtrl.Subscribe(n.interfaceLogger, topic); err != nil {
+		if err := n.topicsCtrl.Subscribe(n.logger, topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
