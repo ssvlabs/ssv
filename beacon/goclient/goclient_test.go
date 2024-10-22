@@ -145,7 +145,7 @@ func mockServer(t *testing.T, onRequestFn func(r *http.Request) error) *httptest
 			return
 		}
 
-		err = onRequestFn(r)
+		err := onRequestFn(r)
 		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
