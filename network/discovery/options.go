@@ -35,7 +35,7 @@ type DiscV5Options struct {
 	NetworkKey *ecdsa.PrivateKey
 	// Bootnodes is a list of bootstrapper nodes
 	Bootnodes []string
-	// Subnets is a bool slice encoded in hex, it represents all the subnets the node is interested in
+	// Subnets is a bool slice represents all the subnets the node is interested in
 	Subnets records.Subnets
 	// EnableLogging when true enables logs to be emitted
 	EnableLogging bool
