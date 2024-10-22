@@ -5,18 +5,16 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
@@ -98,14 +96,14 @@ var ConstructBaseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySet, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
 	}
 	config.Network = net
 	config.BeaconSigner = km
-	config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
+	config.Storage = testing.TestingStores(logger).Get(role)
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
@@ -352,13 +350,13 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = nil
 		}
 
-		config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
+		config := testing.TestingConfig(logger, keySetInstance, identifier.GetRoleType())
 		config.ValueCheckF = valCheck
 		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		}
 		config.Network = net
-		config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
+		config.Storage = testing.TestingStores(logger).Get(role)
 
 		contr = testing.NewTestingQBFTController(
 			spectestingutils.Testing4SharesSet(),

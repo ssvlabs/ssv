@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -73,7 +73,7 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		nm.Msg = res
 		return
 	}
-	runnerRole := casts.BeaconRoleToConvertRole(beaconRole)
+	runnerRole := casts.BeaconRoleToRunnerRole(beaconRole)
 	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
 		logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))
