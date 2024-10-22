@@ -44,7 +44,9 @@ func UpdateSubnets(node *enode.LocalNode, added []uint64, removed []uint64) (Sub
 	return subnets, true, nil
 }
 
-// Subnets holds all the subscribed subnets of a specific node
+// Subnets holds all the subscribed subnets of a specific node.
+// The array index represents a subnet number,
+// the value holds either 0 or 1 representing if the node is subscribed to the subnet number.
 type Subnets [commons.SubnetsCount]byte
 
 func (s Subnets) String() string {
@@ -75,7 +77,7 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	}
 
 	if len(data) != commons.Subnets() {
-		return Subnets{}, fmt.Errorf("invalid subnets length: %d", len(data))
+		return Subnets{}, fmt.Errorf("invalid subnets length %d", len(data))
 	}
 
 	return Subnets(data), nil
@@ -93,7 +95,7 @@ func (s Subnets) Active() int {
 
 // ToMap returns a map with all subnets and their values
 func (s Subnets) ToMap() map[int]byte {
-	m := make(map[int]byte)
+	m := make(map[int]byte, len(s))
 	for subnet, v := range s {
 		m[subnet] = v
 	}
@@ -101,10 +103,14 @@ func (s Subnets) ToMap() map[int]byte {
 }
 
 // SharedSubnets returns the shared subnets
-func (s Subnets) SharedSubnets(other Subnets, maxLen int) []int {
+func (s Subnets) SharedSubnets(other Subnets) []int {
+	return s.SharedSubnetsN(other, 0)
+}
+
+func (s Subnets) SharedSubnetsN(other Subnets, n int) []int {
 	var shared []int
-	if maxLen == 0 {
-		maxLen = len(s)
+	if n == 0 {
+		n = len(s)
 	}
 	for subnet, v := range s {
 		if v == 0 {
@@ -114,7 +120,7 @@ func (s Subnets) SharedSubnets(other Subnets, maxLen int) []int {
 			continue
 		}
 		shared = append(shared, subnet)
-		if len(shared) == maxLen {
+		if len(shared) == n {
 			break
 		}
 	}

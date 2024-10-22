@@ -76,7 +76,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.fixedSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
+	n.initialSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
@@ -108,7 +108,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	}
 
 	for _, subnet := range randomSubnets {
-		n.fixedSubnets[subnet] = byte(1)
+		n.initialSubnets[subnet] = byte(1)
 	}
 
 	return nil
@@ -245,11 +245,11 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
-	if len(n.fixedSubnets) == 0 {
+	if len(n.initialSubnets) == 0 {
 		return nil
 	}
-	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
-	for i, val := range n.fixedSubnets {
+	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.initialSubnets))
+	for i, val := range n.initialSubnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)
 			if err := n.topicsCtrl.Subscribe(logger, subnet); err != nil {

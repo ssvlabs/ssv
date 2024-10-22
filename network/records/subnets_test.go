@@ -99,7 +99,7 @@ func TestSharedSubnets(t *testing.T) {
 			expectedShared = append(expectedShared, subnet)
 		}
 	}
-	shared := s1.SharedSubnets(s2, 0)
+	shared := s1.SharedSubnets(s2)
 	require.Equal(t, expectedShared, shared)
 }
 

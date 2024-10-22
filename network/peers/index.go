@@ -105,8 +105,8 @@ type SubnetsIndex interface {
 	// GetSubnetPeers returns peers that are interested in the given subnet
 	GetSubnetPeers(s int) []peer.ID
 
-	// GetPeerSubnets returns subnets of the given peer
-	GetPeerSubnets(id peer.ID) (records.Subnets, bool)
+	// GetPeerSubnets returns subnets of the given peer and whether it was found
+	GetPeerSubnets(id peer.ID) (subnets records.Subnets, ok bool)
 
 	// GetSubnetsStats collects and returns subnets stats
 	GetSubnetsStats() *SubnetsStats
