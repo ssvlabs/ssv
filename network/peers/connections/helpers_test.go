@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -48,7 +49,7 @@ func getTestingData(t *testing.T) TestData {
 			NodeVersion:   "some-node-version",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
-			Subnets:       "some-subnets",
+			Subnets:       strings.Repeat("0", 32),
 		},
 	}
 
@@ -59,7 +60,7 @@ func getTestingData(t *testing.T) TestData {
 				NodeVersion:   "test-node-version",
 				ExecutionNode: "test-execution-node",
 				ConsensusNode: "test-consensus-node",
-				Subnets:       "test-subnets",
+				Subnets:       strings.Repeat("0", 32),
 			},
 		},
 		MockSelfSealed: []byte("something"),
