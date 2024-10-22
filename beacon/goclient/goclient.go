@@ -203,7 +203,7 @@ func New(
 		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 
-	epochDuration := time.Duration(opt.Network.SlotsPerEpoch()) * opt.Network.SlotDurationSec()
+	epochDuration := casts.DurationFromUint64(opt.Network.SlotsPerEpoch()) * opt.Network.SlotDurationSec()
 
 	client := &GoClient{
 		log:               logger,
