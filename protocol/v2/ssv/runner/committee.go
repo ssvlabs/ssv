@@ -14,14 +14,13 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 var (
@@ -667,11 +666,12 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	start := time.Now()
 	slot := duty.DutySlot()
+	// We set committeeIndex to 0 for simplicity, there is no need to specify it exactly because
+	// all 64 Ethereum committees assigned to this slot will get the same data to attest for.
 	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot, 0)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
-	//TODO committeeIndex is 0, is this correct?
 	logger = logger.With(
 		zap.Duration("attestation_data_time", time.Since(start)),
 		fields.Slot(slot),

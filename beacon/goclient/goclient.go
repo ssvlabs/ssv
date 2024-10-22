@@ -13,17 +13,18 @@ import (
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
 )
 
 const (
@@ -141,19 +142,35 @@ var _ NodeClientProvider = (*GoClient)(nil)
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log                  *zap.Logger
-	ctx                  context.Context
-	network              beaconprotocol.Network
-	client               Client
-	nodeVersion          string
-	nodeClient           NodeClient
-	gasLimit             uint64
-	operatorDataStore    operatordatastore.OperatorDataStore
+	log         *zap.Logger
+	ctx         context.Context
+	network     beaconprotocol.Network
+	client      Client
+	nodeVersion string
+	nodeClient  NodeClient
+	gasLimit    uint64
+
+	operatorDataStore operatordatastore.OperatorDataStore
+
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
-	commonTimeout        time.Duration
-	longTimeout          time.Duration
+
+	// attestationReqInflight helps us prevent the sending of multiple attestation data requests
+	// for the same slot number (to avoid doing unnecessary work).
+	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
+	// attestationDataCache stores attestation data from Beacon node for a bunch of recently made
+	// requests (by slot number). It allows for requesting attestation data once per slot from
+	// Beacon node as well as always having/observing the same consistent data in any given slot
+	// (eg, Beacon node might return different merkle root for the same slot for different requests,
+	// and this can lead to undesirable effects for GoClient users).
+	// attestationDataCache is used concurrently, hence thread-safe map.
+	// Note, we cache attestation data by slot (and not slot+committee_index) because it's the same
+	// data across all 64 Ethereum committees assigned for each slot.
+	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+
+	commonTimeout time.Duration
+	longTimeout   time.Duration
 }
 
 // New init new client and go-client instance
@@ -186,6 +203,8 @@ func New(
 		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 
+	epochDuration := time.Duration(opt.Network.SlotsPerEpoch()) * opt.Network.SlotDurationSec()
+
 	client := &GoClient{
 		log:               logger,
 		ctx:               opt.Context,
@@ -194,8 +213,11 @@ func New(
 		gasLimit:          opt.GasLimit,
 		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		commonTimeout:     commonTimeout,
-		longTimeout:       longTimeout,
+		attestationDataCache: ttlcache.New(
+			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * epochDuration),
+		),
+		commonTimeout: commonTimeout,
+		longTimeout:   longTimeout,
 	}
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
@@ -216,6 +238,8 @@ func New(
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)
+	// Start automatic expired item deletion for attestationDataCache.
+	go client.attestationDataCache.Start()
 
 	return client, nil
 }
