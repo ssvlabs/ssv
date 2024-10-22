@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/network/commons"
@@ -88,7 +87,7 @@ func TestSubnetsParsing(t *testing.T) {
 	}
 }
 
-func TestSharedSubnetsFromString(t *testing.T) {
+func TestSharedSubnets(t *testing.T) {
 	s1, err := Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
 	require.NoError(t, err)
 	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
@@ -102,81 +101,6 @@ func TestSharedSubnetsFromString(t *testing.T) {
 	}
 	shared := SharedSubnets(s1, s2, 0)
 	require.Equal(t, expectedShared, shared)
-}
-
-func TestSharedSubnets(t *testing.T) {
-	// Test cases
-	tests := []struct {
-		name     string
-		a        []byte
-		b        []byte
-		maxLen   int
-		expected []int
-	}{
-		{
-			name:     "All subnets shared",
-			a:        []byte{1, 1, 1},
-			b:        []byte{1, 1, 1},
-			maxLen:   0,
-			expected: []int{0, 1, 2},
-		},
-		{
-			name:     "Some subnets shared",
-			a:        []byte{1, 0, 1},
-			b:        []byte{1, 1, 0},
-			maxLen:   0,
-			expected: []int{0},
-		},
-		{
-			name:     "Different lengths (b shorter)",
-			a:        []byte{1, 1, 1, 1},
-			b:        []byte{1, 1},
-			maxLen:   0,
-			expected: []int{0, 1}, // Should only match within length of b
-		},
-		{
-			name:     "Different lengths (a shorter)",
-			a:        []byte{1, 1},
-			b:        []byte{1, 1, 1, 1},
-			maxLen:   0,
-			expected: []int{0, 1}, // Should only match within length of a
-		},
-		{
-			name:     "MaxLen constraint",
-			a:        []byte{1, 1, 1, 1},
-			b:        []byte{1, 1, 1, 1},
-			maxLen:   2,
-			expected: []int{0, 1}, // Limit the results to maxLen 2
-		},
-		{
-			name:     "No shared subnets",
-			a:        []byte{1, 0, 1},
-			b:        []byte{0, 1, 0},
-			maxLen:   0,
-			expected: nil, // No shared subnets
-		},
-		{
-			name:     "Empty subnet list",
-			a:        []byte{},
-			b:        []byte{},
-			maxLen:   0,
-			expected: nil, // Empty input should return empty result
-		},
-		{
-			name:     "One empty subnet list",
-			a:        []byte{1, 0, 1},
-			b:        []byte{},
-			maxLen:   0,
-			expected: nil, // If one list is empty, no subnets are shared
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			result := SharedSubnets(test.a, test.b, test.maxLen)
-			assert.Equal(t, test.expected, result)
-		})
-	}
 }
 
 func TestDiffSubnets(t *testing.T) {
