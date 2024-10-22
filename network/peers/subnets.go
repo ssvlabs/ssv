@@ -115,7 +115,7 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (records.Subnets, bool) {
 		return records.Subnets{}, false
 	}
 
-	return subnets, false
+	return subnets, true
 }
 
 // GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
@@ -125,7 +125,7 @@ func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubne
 	const activeSubnetBoost = 0.2
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	activeSubnets := allSubs.SharedSubnets(mySubnets, 0)
+	activeSubnets := allSubs.SharedSubnets(mySubnets)
 
 	scores := make([]float64, len(allSubs))
 	for _, s := range activeSubnets {

@@ -129,7 +129,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		peerLogs = append(peerLogs, peerLog{
 			Peer:          pid,
 			Score:         score,
-			SharedSubnets: len(peerSubnets.SharedSubnets(mySubnets, len(mySubnets))),
+			SharedSubnets: len(peerSubnets.SharedSubnets(mySubnets)),
 		})
 	}
 
@@ -234,7 +234,7 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnec
 		var sharedSubnets []int
 		peerSubnets, ok := c.subnetsIdx.GetPeerSubnets(peerID)
 		if ok {
-			sharedSubnets = mySubnets.SharedSubnets(peerSubnets, len(mySubnets))
+			sharedSubnets = mySubnets.SharedSubnets(peerSubnets)
 		}
 
 		// If there's no common subnet, disconnect from peer.
