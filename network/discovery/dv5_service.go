@@ -248,25 +248,26 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	)
 
 	// Previous discovery, without ProtocolID restriction, to be discontinued after the fork
-	dv5PreForkCfg, err := opts.DiscV5Cfg(logger)
-	if err != nil {
-		return err
-	}
+	// dv5PreForkCfg, err := opts.DiscV5Cfg(logger)
+	// if err != nil {
+	// 	return err
+	// }
 
-	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
-	if err != nil {
-		return errors.Wrap(err, "could not create discV5 pre-fork listener")
-	}
+	// dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
+	// if err != nil {
+	// 	return errors.Wrap(err, "could not create discV5 pre-fork listener")
+	// }
 
-	logger.Debug("started discv5 pre-fork listener (UDP)",
-		fields.BindIP(bindIP),
-		zap.Uint16("UdpPort", opts.Port),
-		fields.ENRLocalNode(localNode),
-		fields.Domain(discOpts.NetworkConfig.DomainType()),
-	)
+	// logger.Debug("started discv5 pre-fork listener (UDP)",
+	// 	fields.BindIP(bindIP),
+	// 	zap.Uint16("UdpPort", opts.Port),
+	// 	fields.ENRLocalNode(localNode),
+	// 	fields.Domain(discOpts.NetworkConfig.DomainType()),
+	// )
 
-	dvs.dv5Listener = NewForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
-	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
+	// dvs.dv5Listener = NewForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
+	dvs.dv5Listener = dv5PostForkListener
+	dvs.bootnodes = dv5PostForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil
 }
