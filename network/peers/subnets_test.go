@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 	nettesting "github.com/ssvlabs/ssv/network/testing"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSubnetsIndex(t *testing.T) {
@@ -35,15 +36,15 @@ func TestSubnetsIndex(t *testing.T) {
 
 	subnetsIdx := NewSubnetsIndex(128)
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sAll.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[1], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[2], sPartial.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[3], sPartial.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[0], sAll)
+	subnetsIdx.UpdatePeerSubnets(pids[1], sNone)
+	subnetsIdx.UpdatePeerSubnets(pids[2], sPartial)
+	subnetsIdx.UpdatePeerSubnets(pids[3], sPartial)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 1)
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sPartial.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[0], sPartial)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
@@ -51,23 +52,21 @@ func TestSubnetsIndex(t *testing.T) {
 	stats := subnetsIdx.GetSubnetsStats()
 	require.Equal(t, 3, stats.PeersCount[0])
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[2], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[3], sNone.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[0], sNone)
+	subnetsIdx.UpdatePeerSubnets(pids[2], sNone)
+	subnetsIdx.UpdatePeerSubnets(pids[3], sNone)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 0)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
 }
 
 func TestSubnetsDistributionScores(t *testing.T) {
-	nsubnets := 128
-	mysubnets := make(records.Subnets, nsubnets)
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	for sub := range allSubs {
-		if sub%2 == 0 {
-			mysubnets[sub] = byte(0)
+	mysubnets := records.Subnets{}
+	for i := 0; i < commons.Subnets(); i++ {
+		if i%2 == 0 {
+			mysubnets[i] = byte(0)
 		} else {
-			mysubnets[sub] = byte(1)
+			mysubnets[i] = byte(1)
 		}
 	}
 	stats := &SubnetsStats{

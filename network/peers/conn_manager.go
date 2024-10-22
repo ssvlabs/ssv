@@ -116,9 +116,9 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	// Compute the score for each peer according to peer's subnets and subnets' score
 	var peerLogs []peerLog
 	for _, pid := range allPeers {
-		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
+		peerSubnets, ok := c.subnetsIdx.GetPeerSubnets(pid)
 		var score PeerScore
-		if len(peerSubnets) == 0 {
+		if !ok {
 			// TODO: shouldn't we not connect to peers with no subnets?
 			c.logger.Debug("peer has no subnets", zap.String("peer", pid.String()))
 			score = -1000
@@ -129,7 +129,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		peerLogs = append(peerLogs, peerLog{
 			Peer:          pid,
 			Score:         score,
-			SharedSubnets: len(records.SharedSubnets(peerSubnets, mySubnets, len(mySubnets))),
+			SharedSubnets: len(peerSubnets.SharedSubnets(mySubnets, len(mySubnets))),
 		})
 	}
 
@@ -231,8 +231,11 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int {
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
-		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
-		sharedSubnets := records.SharedSubnets(mySubnets, peerSubnets, len(mySubnets))
+		var sharedSubnets []int
+		peerSubnets, ok := c.subnetsIdx.GetPeerSubnets(peerID)
+		if ok {
+			sharedSubnets = mySubnets.SharedSubnets(peerSubnets, len(mySubnets))
+		}
 
 		// If there's no common subnet, disconnect from peer.
 		if len(sharedSubnets) == 0 {

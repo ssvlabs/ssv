@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -281,7 +282,7 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs.conns.(*MockConnection).SetAtLimit(false)
 
 	// Valid peer but no common subnet
-	subnets := make([]byte, len(records.ZeroSubnets))
+	subnets := records.Subnets{}
 	subnets[10] = 1
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")

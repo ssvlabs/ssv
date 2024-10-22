@@ -4,8 +4,9 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 // limitNodeFilter returns true if the limit is exceeded
@@ -71,14 +72,11 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 		if n == 0 {
 			return true
 		}
-		if len(dvs.subnets) == 0 {
-			return true
-		}
 		nodeSubnets, err := records.GetSubnetsEntry(node.Record())
 		if err != nil {
 			return false
 		}
-		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
+		shared := dvs.subnets.SharedSubnets(nodeSubnets, n)
 		// logger.Debug("shared subnets", zap.Ints("shared", shared),
 		//	zap.String("node", node.String()))
 

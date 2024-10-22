@@ -1,7 +1,6 @@
 package records
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"strconv"
@@ -10,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 const (
@@ -21,41 +22,30 @@ const (
 
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
-func UpdateSubnets(node *enode.LocalNode, count int, added []uint64, removed []uint64) ([]byte, error) {
+func UpdateSubnets(node *enode.LocalNode, added []uint64, removed []uint64) (Subnets, bool, error) {
 	subnets, err := GetSubnetsEntry(node.Node().Record())
 	if err != nil && !errors.Is(err, ErrEntryNotFound) {
-		return nil, errors.Wrap(err, "could not read subnets entry")
+		return Subnets{}, false, errors.Wrap(err, "could not read subnets entry")
 	}
-	orig := make([]byte, len(subnets))
-	if len(subnets) == 0 { // not exist, creating slice
-		subnets = make([]byte, count)
-	} else {
-		copy(orig, subnets)
-	}
+
+	orig := subnets
 	for _, i := range added {
 		subnets[i] = 1
 	}
 	for _, i := range removed {
 		subnets[i] = 0
 	}
-	if bytes.Equal(orig, subnets) {
-		return nil, nil
+	if orig == subnets {
+		return Subnets{}, false, nil
 	}
 	if err := SetSubnetsEntry(node, subnets); err != nil {
-		return nil, errors.Wrap(err, "could not update subnets entry")
+		return Subnets{}, false, errors.Wrap(err, "could not update subnets entry")
 	}
-	return subnets, nil
+	return subnets, true, nil
 }
 
 // Subnets holds all the subscribed subnets of a specific node
-type Subnets []byte
-
-// Clone clones the independent byte slice
-func (s Subnets) Clone() Subnets {
-	cp := make([]byte, len(s))
-	copy(cp, s)
-	return cp
-}
+type Subnets [commons.SubnetsCount]byte
 
 func (s Subnets) String() string {
 	subnetsVec := bitfield.NewBitvector128()
@@ -74,16 +64,21 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	for i := 0; i+1 < len(subnetsStr); i += 2 {
 		maskData1, err := getCharMask(string(subnetsStr[i]))
 		if err != nil {
-			return nil, err
+			return Subnets{}, err
 		}
 		maskData2, err := getCharMask(string(subnetsStr[i+1]))
 		if err != nil {
-			return nil, err
+			return Subnets{}, err
 		}
 		data = append(data, maskData2...)
 		data = append(data, maskData1...)
 	}
-	return data, nil
+
+	if len(data) != commons.Subnets() {
+		return Subnets{}, fmt.Errorf("invalid subnets length: %d", len(data))
+	}
+
+	return Subnets(data), nil
 }
 
 func (s Subnets) Active() int {
@@ -96,20 +91,26 @@ func (s Subnets) Active() int {
 	return active
 }
 
+// ToMap returns a map with all subnets and their values
+func (s Subnets) ToMap() map[int]byte {
+	m := make(map[int]byte)
+	for subnet, v := range s {
+		m[subnet] = v
+	}
+	return m
+}
+
 // SharedSubnets returns the shared subnets
-func SharedSubnets(a, b []byte, maxLen int) []int {
+func (s Subnets) SharedSubnets(other Subnets, maxLen int) []int {
 	var shared []int
 	if maxLen == 0 {
-		maxLen = len(a)
+		maxLen = len(s)
 	}
-	if len(a) == 0 || len(b) == 0 {
-		return shared
-	}
-	for subnet, aval := range a {
-		if aval == 0 {
+	for subnet, v := range s {
+		if v == 0 {
 			continue
 		}
-		if b[subnet] == 0 {
+		if other[subnet] == 0 {
 			continue
 		}
 		shared = append(shared, subnet)
@@ -122,12 +123,10 @@ func SharedSubnets(a, b []byte, maxLen int) []int {
 
 // DiffSubnets returns a diff of the two given subnets.
 // returns a map with all the different entries and their post change value
-func DiffSubnets(a, b []byte) map[int]byte {
+func (s Subnets) DiffSubnets(other Subnets) map[int]byte {
 	diff := make(map[int]byte)
-	for subnet, bval := range b {
-		if subnet >= len(a) {
-			diff[subnet] = bval
-		} else if aval := a[subnet]; aval != bval {
+	for subnet, bval := range other {
+		if aval := s[subnet]; aval != bval {
 			diff[subnet] = bval
 		}
 	}

@@ -22,7 +22,7 @@ func Test_SubnetsEntry(t *testing.T) {
 	node, err := CreateLocalNode(sk, "", ip, commons.DefaultUDP, commons.DefaultTCP)
 	require.NoError(t, err)
 
-	subnets := make([]byte, SubnetsCount)
+	subnets := Subnets{}
 	for i := 0; i < SubnetsCount; i++ {
 		if i%4 == 0 {
 			subnets[i] = 1
@@ -99,7 +99,7 @@ func TestSharedSubnets(t *testing.T) {
 			expectedShared = append(expectedShared, subnet)
 		}
 	}
-	shared := SharedSubnets(s1, s2, 0)
+	shared := s1.SharedSubnets(s2, 0)
 	require.Equal(t, expectedShared, shared)
 }
 
@@ -109,6 +109,6 @@ func TestDiffSubnets(t *testing.T) {
 	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
-	diff := DiffSubnets(s1, s2)
+	diff := s1.DiffSubnets(s2)
 	require.Len(t, diff, 128-62)
 }

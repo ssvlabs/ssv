@@ -19,11 +19,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 var (
@@ -58,8 +60,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
+	subnetsIndex := peers.NewSubnetsIndex(commons.Subnets())
 	connectionIndex := NewMockConnection()
 
 	return &Options{
@@ -160,7 +161,7 @@ func NodeWithoutNextDomain(t *testing.T) *enode.Node {
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), false, records.Subnets{})
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
@@ -171,14 +172,14 @@ func NodeWithZeroSubnets(t *testing.T) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, zeroSubnets)
 }
 
-func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
+func NodeWithCustomSubnets(t *testing.T, subnets records.Subnets) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, subnets)
 }
 
 func CustomNode(t *testing.T,
 	setDomainType bool, domainType spectypes.DomainType,
 	setNextDomainType bool, nextDomainType spectypes.DomainType,
-	setSubnets bool, subnets []byte) *enode.Node {
+	setSubnets bool, subnets records.Subnets) *enode.Node {
 
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

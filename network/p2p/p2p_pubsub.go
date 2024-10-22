@@ -107,13 +107,9 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 		}
 	}
 
-	// Update the subnets slice.
-	subnets := make([]byte, commons.Subnets())
-	copy(subnets, n.fixedSubnets)
 	for _, subnet := range randomSubnets {
-		subnets[subnet] = byte(1)
+		n.fixedSubnets[subnet] = byte(1)
 	}
-	n.fixedSubnets = subnets
 
 	return nil
 }

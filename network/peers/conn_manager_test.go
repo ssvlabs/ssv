@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -19,8 +20,7 @@ func TestTagBestPeers(t *testing.T) {
 	logger := logging.TestLogger(t)
 	connMgrMock := newConnMgr()
 
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	si := NewSubnetsIndex(len(allSubs))
+	si := NewSubnetsIndex(commons.Subnets())
 
 	cm := NewConnManager(zap.NewNop(), connMgrMock, si, nil).(*connManager)
 
@@ -28,7 +28,7 @@ func TestTagBestPeers(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, pid := range pids {
-		r := rand.Intn(len(allSubs) / 3)
+		r := rand.Intn(commons.Subnets() / 3)
 		si.UpdatePeerSubnets(pid, createRandomSubnets(r))
 	}
 	mySubnets := createRandomSubnets(40)

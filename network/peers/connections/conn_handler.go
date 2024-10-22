@@ -216,19 +216,20 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
-	subnets := ch.subnetsIndex.GetPeerSubnets(pid)
-	if len(subnets) == 0 {
-		// no subnets for this peer
-		return false
+	subnets, ok := ch.subnetsIndex.GetPeerSubnets(pid)
+	if ok {
+		logger = logger.With(fields.Subnets(subnets))
+	} else {
+		logger = logger.With(zap.String(fields.FieldSubnets, "-"))
 	}
-	mySubnets := ch.subnetsProvider()
 
-	logger = logger.With(fields.Subnets(subnets), zap.String("my_subnets", mySubnets.String()))
+	mySubnets := ch.subnetsProvider()
+	logger = logger.With(zap.String("my_subnets", mySubnets.String()))
 
 	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets
 		return true
 	}
-	shared := records.SharedSubnets(mySubnets, subnets, 1)
+	shared := mySubnets.SharedSubnets(subnets, 1)
 	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
 	return len(shared) == 1

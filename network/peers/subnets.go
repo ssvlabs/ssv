@@ -29,10 +29,12 @@ func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
 	defer si.lock.Unlock()
 
 	existing, ok := si.peerSubnets[id]
+	var diff map[int]byte
 	if !ok {
-		existing = make([]byte, 0)
+		diff = s.ToMap()
+	} else {
+		diff = existing.DiffSubnets(s)
 	}
-	diff := records.DiffSubnets(existing, s)
 	if len(diff) == 0 {
 		return false
 	}
@@ -104,17 +106,16 @@ func (si *subnetsIndex) GetSubnetsStats() *SubnetsStats {
 	return stats
 }
 
-func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
+func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (records.Subnets, bool) {
 	si.lock.RLock()
 	defer si.lock.RUnlock()
 
 	subnets, ok := si.peerSubnets[id]
 	if !ok {
-		return nil
+		return records.Subnets{}, false
 	}
-	cp := make(records.Subnets, len(subnets))
-	copy(cp, subnets)
-	return cp
+
+	return subnets, false
 }
 
 // GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
@@ -124,7 +125,7 @@ func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubne
 	const activeSubnetBoost = 0.2
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	activeSubnets := records.SharedSubnets(allSubs, mySubnets, 0)
+	activeSubnets := allSubs.SharedSubnets(mySubnets, 0)
 
 	scores := make([]float64, len(allSubs))
 	for _, s := range activeSubnets {

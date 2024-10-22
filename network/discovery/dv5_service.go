@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -62,7 +61,7 @@ type DiscV5Service struct {
 	sharedConn *SharedUDPConn
 
 	networkConfig networkconfig.NetworkConfig
-	subnets       []byte
+	subnets       records.Subnets
 
 	publishLock chan struct{}
 }
@@ -177,7 +176,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
+	if zeroSubnets == nodeSubnets {
 		return errors.New("zero subnets")
 	}
 
@@ -321,11 +320,11 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64)
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), subnets, nil)
+	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), subnets, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updatedSubnets != nil {
+	if isUpdated {
 		dvs.subnets = updatedSubnets
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
@@ -340,11 +339,11 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint6
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), nil, subnets)
+	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), nil, subnets)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updatedSubnets != nil {
+	if isUpdated {
 		dvs.subnets = updatedSubnets
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
