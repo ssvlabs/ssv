@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -164,14 +163,10 @@ func TestStreamLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	logs := client.StreamLogs(ctx, 0)
-	var wg sync.WaitGroup
 	var streamedLogs []ethtypes.Log
-
-	// Receive emitted events
-	wg.Add(1)
 	var streamedLogsCount atomic.Int64
 	go func() {
-		defer wg.Done()
+		// Receive emitted events, this func will exit when test exits.
 		for block := range logs {
 			streamedLogs = append(streamedLogs, block.Logs...)
 			streamedLogsCount.Add(int64(len(block.Logs)))
@@ -189,29 +184,40 @@ func TestStreamLogs(t *testing.T) {
 	}
 
 	// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
-Unfollowed:
+Wait1:
 	for {
 		select {
 		case <-ctx.Done():
-			require.Equal(t, int64(blocksWithLogsLength-followDistance), streamedLogsCount.Load())
+			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", ctx.Err(), streamedLogsCount.Load())
 		case <-time.After(time.Millisecond * 5):
 			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
-				break Unfollowed
+				break Wait1
 			}
 		}
 	}
 
 	// Create empty blocks with no transactions to advance the chain
-	// to followDistance blocks behind the head.
+	// followDistance blocks ahead.
 	for i := 0; i < followDistance; i++ {
 		sim.Commit()
 		time.Sleep(delay)
 	}
-
-	require.NoError(t, client.Close())
-	wg.Wait()
+	// Wait for streamed logs to advance accordingly.
+Wait2:
+	for {
+		select {
+		case <-ctx.Done():
+			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", ctx.Err(), streamedLogsCount.Load())
+		case <-time.After(time.Millisecond * 5):
+			if streamedLogsCount.Load() == int64(blocksWithLogsLength) {
+				break Wait2
+			}
+		}
+	}
 	require.NotEmpty(t, streamedLogs)
 	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
+
+	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
 }
 
