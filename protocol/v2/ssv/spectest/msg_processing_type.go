@@ -15,9 +15,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -27,6 +24,8 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type MsgProcessingSpecTest struct {
@@ -248,7 +247,7 @@ var baseCommitteeWithRunnerSample = func(
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
-	committeeDutyGuard runner.CommitteeDutyGuard,
+	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
 
 	var keySetSample *spectestingutils.TestKeySet
@@ -292,6 +291,7 @@ var baseCommitteeWithRunnerSample = func(
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
+		committeeDutyGuard,
 	)
 
 	return c
