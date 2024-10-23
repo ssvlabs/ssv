@@ -36,6 +36,9 @@ func init() {
 }
 
 // getVersion returns the highest available OpenSSL version.
+// Note, this func is borrowed from https://github.com/golang-fips/openssl/blob/v2/openssl_test.go
+// as I found it working (when testing in Docker) and there is no documented example for how this
+// actually should be done.
 func getVersion() string {
 	v := os.Getenv("GO_OPENSSL_VERSION_OVERRIDE")
 	if v != "" {
