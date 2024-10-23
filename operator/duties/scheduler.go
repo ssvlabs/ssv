@@ -401,7 +401,7 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
-	logger.Debug("got alan duties", zap.Int("genesys-in-process", int(s.genesysDutiesInFlight.Load())))
+	logger.Debug("got alan duties", zap.Int("inflight", int(s.genesysDutiesInFlight.Load())))
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -421,7 +421,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Valida
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
-	logger.Debug("got committee duties", zap.Int("genesys-in-process", int(s.genesysDutiesInFlight.Load())))
+	logger.Debug("got committee duties", zap.Int("inflight", int(s.genesysDutiesInFlight.Load())))
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
