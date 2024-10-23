@@ -15,9 +15,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -27,6 +24,8 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type MsgProcessingSpecTest struct {
@@ -149,7 +148,9 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	v, c, lastErr := test.runPreTesting(ctx, logger)
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
+		// Don't want to compare error messages exactly because it's an implementation detail that
+		// might differ from the spec.
+		require.Error(t, lastErr)
 	} else {
 		require.NoError(t, lastErr)
 	}

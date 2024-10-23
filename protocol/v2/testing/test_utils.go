@@ -18,11 +18,10 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"golang.org/x/mod/modfile"
-	"golang.org/x/mod/module"
-
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 )
 
 var (

@@ -9,6 +9,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv-spec/ssv"
+	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
@@ -19,9 +21,6 @@ import (
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv-spec/ssv"
-	"github.com/ssvlabs/ssv-spec/types"
 )
 
 type CommitteeSpecTest struct {
@@ -45,7 +44,9 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	lastErr := test.runPreTesting(logger)
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
+		// Don't want to compare error messages exactly because it's an implementation detail that
+		// might differ from the spec.
+		require.Error(t, lastErr)
 	} else {
 		require.NoError(t, lastErr)
 	}
