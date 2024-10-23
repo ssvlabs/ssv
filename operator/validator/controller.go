@@ -19,8 +19,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -59,6 +57,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -199,6 +198,7 @@ type controller struct {
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
+	dutyGuard               *validator.CommitteeDutyGuard
 
 	metadataUpdateInterval time.Duration
 
@@ -323,6 +323,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
+		dutyGuard:               validator.NewCommitteeDutyGuard(),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -964,7 +965,16 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
-		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc, nil)
+		vc = validator.NewCommittee(
+			ctx,
+			cancel,
+			logger,
+			c.beacon.GetBeaconNetwork(),
+			operator,
+			committeeRunnerFunc,
+			nil,
+			c.dutyGuard,
+		)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 
