@@ -5,26 +5,16 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"log"
-	"math/big"
-	"net/http"
-	"os"
-	"strings"
-	"time"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/beacon/goclient/genesisgoclient"
-	global_config "github.com/ssvlabs/ssv/cli/config"
+	globalcfg "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -67,6 +57,13 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"go.uber.org/zap"
+	"log"
+	"math/big"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 )
 
 type KeyStore struct {
@@ -75,27 +72,27 @@ type KeyStore struct {
 }
 
 type config struct {
-	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options                   `yaml:"db"`
-	SSVOptions                 operator.Options                 `yaml:"ssv"`
-	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
-	KeyStore                   KeyStore                         `yaml:"KeyStore"`
-	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"SSV.Network" `
-	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
-	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-	WsAPIPort                  int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
-	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
-	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
-	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	globalcfg.Global   `yaml:"global"`
+	DBOptions          basedb.Options                   `yaml:"db"`
+	SSVOptions         operator.Options                 `yaml:"ssv"`
+	ExecutionClient    executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient    beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig   p2pv1.Config                     `yaml:"p2p"`
+	KeyStore           KeyStore                         `yaml:"KeyStore"`
+	Graffiti           string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"SSV.Network" `
+	OperatorPrivateKey string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	MetricsAPIPort     int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
+	EnableProfile      bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey  string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	WsAPIPort          int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
+	WithPing           bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+	SSVAPIPort         int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
+	LocalEventsPath    string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
 }
 
 var cfg config
 
-var globalArgs global_config.Args
+var globalArgs globalcfg.Args
 
 var operatorNode operator.Node
 
@@ -106,11 +103,25 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		logger, err := setupGlobal()
+		err := globalcfg.Prepare(&cfg, &globalArgs)
 		if err != nil {
-			log.Fatal("could not create logger", err)
+			log.Fatalf("could not prepare config: %v", err)
 		}
 
+		err = logging.SetGlobalLogger(
+			cfg.LogLevel,
+			cfg.LogLevelFormat,
+			cfg.LogFormat,
+			&logging.LogFileOptions{
+				FileName:   cfg.LogFilePath,
+				MaxSize:    cfg.LogFileSize,
+				MaxBackups: cfg.LogFileBackups,
+			},
+		)
+		if err != nil {
+			log.Fatalf("could not create logger: %v", err)
+		}
+		logger := zap.L()
 		defer logging.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
@@ -167,7 +178,6 @@ var StartNodeCmd = &cobra.Command{
 		operatorDataStore := operatordatastore.New(operatorData)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
-
 		if err := validateConfig(nodeStorage, networkConfig.AlanForkNetworkName(), usingLocalEvents); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
@@ -349,39 +359,39 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber := nodeprobe.NewProber(
 			logger,
 			func() {
-				logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.")
+				logger.Fatal("Ethereum nodes are either out of sync or down. Make sure the nodes are healthy to resume.")
 			},
 			map[string]nodeprobe.Node{
-				"execution client": executionClient,
+				nodeprobe.ExecutionClientNode: executionClient,
 
 				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
 				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
 				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-				"consensus client": consensusClient,
+				nodeprobe.ConsensusClientNode: consensusClient,
 			},
 		)
+		if len(cfg.LocalEventsPath) == 0 {
+			eventSyncer := setupEventHandling(
+				cmd.Context(),
+				logger,
+				executionClient,
+				validatorCtrl,
+				metricsReporter,
+				networkConfig,
+				nodeStorage,
+				operatorDataStore,
+				operatorPrivKey,
+				keyManager,
+			)
+			nodeProber.AddNode(nodeprobe.EvenSyncerNode, eventSyncer)
+		}
 
 		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
-		logger.Info("ethereum node(s) are healthy")
+
+		logger.Info("Ethereum nodes are healthy")
 
 		metricsReporter.SSVNodeHealthy()
-
-		eventSyncer := setupEventHandling(
-			cmd.Context(),
-			logger,
-			executionClient,
-			validatorCtrl,
-			metricsReporter,
-			networkConfig,
-			nodeStorage,
-			operatorDataStore,
-			operatorPrivKey,
-			keyManager,
-		)
-		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode("event syncer", eventSyncer)
-		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
@@ -448,36 +458,7 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 }
 
 func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
-}
-
-func setupGlobal() (*zap.Logger, error) {
-	if globalArgs.ConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read config: %w", err)
-		}
-	}
-	if globalArgs.ShareConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %w", err)
-		}
-	}
-
-	err := logging.SetGlobalLogger(
-		cfg.LogLevel,
-		cfg.LogLevelFormat,
-		cfg.LogFormat,
-		&logging.LogFileOptions{
-			FileName:   cfg.LogFilePath,
-			MaxSize:    cfg.LogFileSize,
-			MaxBackups: cfg.LogFileBackups,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
-	}
-
-	return zap.L(), nil
+	globalcfg.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
 func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {

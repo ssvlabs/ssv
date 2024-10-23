@@ -89,6 +89,8 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 	if options.GCInterval > 0 {
 		badgerDB.wg.Add(1)
 		go badgerDB.periodicallyCollectGarbage(logger, options.GCInterval)
+		// TODO
+		//go badgerDB.periodicallyCollectGarbage(logger, 10*time.Second)
 	}
 
 	return &badgerDB, nil

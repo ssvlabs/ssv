@@ -506,13 +506,13 @@ func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *c
 	return nil
 }
 
-// StartValidators loads all persisted shares and setup the corresponding validators
+// StartValidators loads all persisted shares and set up the corresponding validators
 func (c *controller) StartValidators() {
 	// Load non-liquidated shares.
 	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		close(c.committeeValidatorSetup)
-		c.logger.Info("could not find validators")
+		c.logger.Info("found no validator shares in storage")
 		return
 	}
 

@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -72,16 +73,17 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 		},
 	}
 
-	var usedcore zapcore.Core
-
+	var zapCore zapcore.Core
 	if logFormat == "console" {
-		usedcore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
+		zapCore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
 	} else if logFormat == "json" {
-		usedcore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
+		zapCore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
+	} else {
+		return fmt.Errorf("unknown log format: %s", logFormat)
 	}
 
 	if fileOptions == nil {
-		zap.ReplaceGlobals(zap.New(usedcore))
+		zap.ReplaceGlobals(zap.New(zapCore))
 		return nil
 	}
 
@@ -93,7 +95,7 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 	fileWriter := fileOptions.writer(fileOptions)
 	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
 
-	zap.ReplaceGlobals(zap.New(zapcore.NewTee(usedcore, fileCore)))
+	zap.ReplaceGlobals(zap.New(zapcore.NewTee(zapCore, fileCore)))
 	return nil
 }
 

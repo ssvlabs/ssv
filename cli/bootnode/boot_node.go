@@ -9,22 +9,21 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 
-	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	global_config "github.com/ssvlabs/ssv/cli/config"
+	globalcfg "github.com/ssvlabs/ssv/cli/config"
 	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
 )
 
 type config struct {
-	global_config.GlobalConfig `yaml:"global"`
-	Options                    bootnode.Options `yaml:"bootnode"`
+	globalcfg.Global `yaml:"global"`
+	Options          bootnode.Options `yaml:"bootnode"`
 }
 
 var cfg config
 
-var globalArgs global_config.Args
+var globalArgs globalcfg.Args
 
 // StartBootNodeCmd is the command to start SSV boot node
 var StartBootNodeCmd = &cobra.Command{
@@ -33,11 +32,12 @@ var StartBootNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			log.Fatal(err)
+		err := globalcfg.Prepare(&cfg, &globalArgs)
+		if err != nil {
+			log.Fatalf("could not prepare config: %v", err)
 		}
 
-		err := logging.SetGlobalLogger(
+		err = logging.SetGlobalLogger(
 			cfg.LogLevel,
 			cfg.LogLevelFormat,
 			cfg.LogFormat,
@@ -47,12 +47,11 @@ var StartBootNodeCmd = &cobra.Command{
 				MaxBackups: cfg.LogFileBackups,
 			},
 		)
-
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("could not create logger: %v", err)
 		}
-
 		logger := zap.L()
+		defer logging.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
@@ -71,5 +70,5 @@ var StartBootNodeCmd = &cobra.Command{
 }
 
 func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartBootNodeCmd)
+	globalcfg.ProcessArgs(&cfg, &globalArgs, StartBootNodeCmd)
 }

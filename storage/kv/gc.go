@@ -18,11 +18,13 @@ func (b *BadgerDB) periodicallyCollectGarbage(logger *zap.Logger, interval time.
 			return
 		case <-time.After(interval):
 			start := time.Now()
+			// TODO
+			//err := b.FullGC(context.Background())
 			err := b.QuickGC(context.Background())
 			if err != nil {
 				logger.Error("periodic GC cycle failed", zap.Error(err))
 			} else {
-				logger.Debug("periodic GC cycle completed", zap.Duration("took", time.Since(start)))
+				logger.Info("periodic GC cycle completed", zap.Duration("took", time.Since(start)))
 			}
 		}
 	}

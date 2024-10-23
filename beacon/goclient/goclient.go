@@ -227,7 +227,11 @@ func (gc *GoClient) NodeClient() NodeClient {
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
+	// TODO
+	//startTime := time.Now()
 	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	//endTime := time.Now()
+	//fmt.Printf("TODO TOOK %v\n", endTime.Sub(startTime))
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))

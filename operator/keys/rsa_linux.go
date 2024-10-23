@@ -6,6 +6,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
+	"fmt"
 	"math/big"
 	"sync"
 
@@ -26,6 +27,9 @@ type publicKey struct {
 }
 
 func init() {
+	// TODO
+	fmt.Println("LINUX RSA")
+
 	// TODO: check multiple versions of openssl
 	// TODO: fallback to stdlib when openssl is not available
 	if err := openssl.Init(); err != nil {

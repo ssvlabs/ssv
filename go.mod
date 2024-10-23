@@ -8,6 +8,7 @@ require (
 	github.com/bloxapp/eth2-key-manager v1.4.1-0.20240829091006-b5848884a7a5
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/davecgh/go-spew v1.1.1
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/ethereum/go-ethereum v1.14.8
@@ -21,7 +22,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/holiman/uint256 v1.3.1
-	github.com/ilyakaznacheev/cleanenv v1.4.2
+	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/jellydator/ttlcache/v3 v3.2.0
 	github.com/libp2p/go-libp2p v0.36.3
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
@@ -77,7 +78,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/crate-crypto/go-ipa v0.0.0-20240223125850-b1e8a79f509c // indirect
 	github.com/crate-crypto/go-kzg-4844 v1.0.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
@@ -126,7 +126,7 @@ require (
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
-	github.com/joho/godotenv v1.4.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/koron/go-ssdp v0.0.4 // indirect

@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -155,6 +154,45 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	go n.feeRecipientCtrl.Start(logger)
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+
+	//// TODO
+	//fmt.Println(fmt.Sprintf("TODO: GENERATING PRIV key"))
+	//privKey, err := keys.GeneratePrivateKey()
+	//if err != nil {
+	//	logger.Fatal("failed to generate private key", zap.Error(err))
+	//}
+	//// msg we'll use for benchmarking.
+	//msg := []byte("Some message example to be hashed for benchmarking, let's make it at " +
+	//	"least 100 bytes long so we can benchmark against somewhat real-world message size. " +
+	//	"Although it still might be way too small. Lajfklflfaslfjsalfalsfjsla fjlajlfaslkfjaslkf" +
+	//	"lasjflkasljfLFSJLfjsalfjaslfLKFsalfjalsfjalsfjaslfjaslfjlasflfslafasklfjsalfj;eqwfgh442")
+	//// msgHash is a typical sha256 hash, we use it for benchmarking because it's the most
+	//// common type of data we work with.
+	//msgHash := func() []byte {
+	//	hash := sha256.Sum256(msg)
+	//	return hash[:]
+	//}()
+	//result, err := privKey.Sign(msgHash)
+	//if err != nil {
+	//	logger.Fatal("failed to Sign message", zap.Error(err))
+	//}
+	//fmt.Println(fmt.Sprintf("Signed message: %s", result))
+	//// TODO
+	//storedConfig, foundConfig, err := n.storage.GetConfig(nil)
+	//if err != nil {
+	//	return fmt.Errorf("failed to get stored config: %w", err)
+	//}
+	//if !foundConfig {
+	//	return fmt.Errorf("failed to get stored config: not found")
+	//}
+	//fmt.Println(fmt.Sprintf("TODO: %s", spew.Sdump(storedConfig)))
+	//// TODO
+	//result, err = privKey.Public().Encrypt(msgHash)
+	//if err != nil {
+	//	logger.Fatal("failed to Encrypt message", zap.Error(err))
+	//}
+	//fmt.Println(fmt.Sprintf("Encrypted message: %s", result))
+	//// TODO
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))
