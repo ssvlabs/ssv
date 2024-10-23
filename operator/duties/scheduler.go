@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -128,6 +129,8 @@ type Scheduler struct {
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
+
+	genesysDutiesInFlight atomic.Int32
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
@@ -376,7 +379,9 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 }
 
 func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty) {
+	defer func() { logger.Debug("got genesis duties", zap.Int("inflight", int(s.genesysDutiesInFlight.Load()))) }()
 	for _, duty := range duties {
+		s.genesysDutiesInFlight.Add(1)
 		duty := duty
 		logger := s.loggerWithGenesisDutyContext(logger, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
@@ -385,6 +390,7 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 		}
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
+			defer s.genesysDutiesInFlight.Add(-1)
 			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
@@ -395,6 +401,7 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
+	logger.Debug("got alan duties", zap.Int("genesys-in-process", int(s.genesysDutiesInFlight.Load())))
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -414,6 +421,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Valida
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
+	logger.Debug("got committee duties", zap.Int("genesys-in-process", int(s.genesysDutiesInFlight.Load())))
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
