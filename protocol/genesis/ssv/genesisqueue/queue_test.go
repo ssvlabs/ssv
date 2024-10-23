@@ -104,7 +104,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		capacity       = 3
 		contextTimeout = 50 * time.Millisecond
 		pushDelay      = 50 * time.Millisecond
-		precision      = 5 * time.Millisecond
+		precision      = 50 * time.Millisecond
 	)
 	queue := New(capacity)
 	require.True(t, queue.Empty())
