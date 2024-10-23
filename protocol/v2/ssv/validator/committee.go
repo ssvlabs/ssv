@@ -90,36 +90,39 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	r, err := c.prepareDutyRunner(logger, duty)
+	r, trimmedDuty, err := c.prepareDutyRunner(logger, duty)
 	if err != nil {
 		return fmt.Errorf("could not prepare duty runner: %w", err)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	err = r.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
+	err = r.StartNewDuty(logger, trimmedDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
 		return errors.Wrap(err, "runner failed to start duty")
 	}
 	return nil
 }
 
-func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.CommitteeDuty) (runner.Runner, error) {
+func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+	r *runner.CommitteeRunner,
+	trimmedDuty *spectypes.CommitteeDuty,
+	err error,
+) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
-		return nil, errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
+		return nil, nil, fmt.Errorf("CommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
 	shares, attesters, trimmedDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		return nil, fmt.Errorf("prepare duty: %w", err)
+		return nil, nil, fmt.Errorf("prepare duty: %w", err)
 	}
-	duty = trimmedDuty
 
-	r, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
+	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create CommitteeRunner")
+		return nil, nil, errors.Wrap(err, "could not create CommitteeRunner")
 	}
 
 	// Set timeout function.
@@ -144,7 +147,7 @@ func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.Commit
 		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
-	return r, nil
+	return r, trimmedDuty, nil
 }
 
 // prepareDuty will analyse duty and prepare the data we need to further process it.

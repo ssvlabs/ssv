@@ -72,12 +72,12 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	// Setting the cancel function separately due the queue could be created in HandleMessage
 	q, found := c.Queues[duty.Slot]
 	if !found {
-		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+		return fmt.Errorf("no queue found for slot %d", duty.Slot)
 	}
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
-		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
+		return fmt.Errorf("no runner found for slot %d", duty.Slot)
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
