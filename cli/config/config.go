@@ -8,7 +8,10 @@ import (
 
 // Args expose available global args for cli command
 type Args struct {
-	ConfigPath      string
+	// ConfigPath is a path to main configuration file.
+	ConfigPath string
+	// ShareConfigPath is an additional config file (path) that (if present) will overwrite
+	// configuration supplied from config file at ConfigPath.
 	ShareConfigPath string
 }
 
@@ -42,20 +45,24 @@ func Prepare(cfg interface{}, a *Args) error {
 		if err != nil {
 			return fmt.Errorf("could not read config: %w", err)
 		}
-		return nil
 	}
 	if a.ShareConfigPath != "" {
 		err := cleanenv.ReadConfig(a.ShareConfigPath, cfg)
 		if err != nil {
 			return fmt.Errorf("could not read share config: %w", err)
 		}
-		return nil
 	}
 
-	// When no config file is provided fall back to env vars + default annotations defined on cfg struct.
-	err := cleanenv.ReadEnv(cfg)
-	if err != nil {
-		return fmt.Errorf("could not set up config based on environment variables and struct defaults: %w", err)
+	//// TODO
+	//fmt.Println(fmt.Sprintf("TODO: %s", spew.Sdump(cfg)))
+
+	if a.ConfigPath == "" && a.ShareConfigPath == "" {
+		// When no config file is provided fall back to env vars + default annotations defined on cfg struct.
+		err := cleanenv.ReadEnv(cfg)
+		if err != nil {
+			return fmt.Errorf("could not set up config based on environment variables and struct defaults: %w", err)
+		}
 	}
+
 	return nil
 }

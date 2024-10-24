@@ -111,6 +111,7 @@ build:
 start-node:
 	@echo "Build binary: ${BUILD_PATH}"
 	@echo "Config path: ${CONFIG_PATH}"
+	@echo "Share config path: ${SHARE_CONFIG}"
 	@echo "Command provided: ${NODE_COMMAND_ARGS}"
 ifdef DEBUG_PORT
 	@echo "Running node-${NODE_ID} in debug mode"
