@@ -10,14 +10,15 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
-
 	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 )
+
+//go:generate mockgen -package=mocks -destination=./mocks/shares.go -source=./shares.go
 
 var sharesPrefix = []byte("shares")
 
@@ -52,28 +53,12 @@ type Shares interface {
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
-type sharesStorage struct {
-	logger         *zap.Logger
-	db             basedb.Database
-	prefix         []byte
-	shares         map[string]*types.SSVShare
-	validatorStore *validatorStore
-	// storageMtx serializes access to the database in order to avoid
-	// re-creation of a deleted share during update metadata
-	storageMtx sync.Mutex
-	// memoryMtx allows more granular access to in-memory shares map
-	// to minimize time spent in 'locked' mode when updating state
-	memoryMtx sync.RWMutex
-}
-
 type storageOperator struct {
 	OperatorID spectypes.OperatorID
 	PubKey     []byte `ssz-size:"48"`
 }
 
 // Share represents a storage share.
-// The better name of the struct is storageShare,
-// but we keep the name Share to avoid conflicts with gob encoding.
 type Share struct {
 	OperatorID            spectypes.OperatorID
 	ValidatorPubKey       []byte             `ssz-size:"48"`
@@ -113,6 +98,20 @@ func (s *storageShare) Decode(data []byte) error {
 	}
 	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
 	return nil
+}
+
+type sharesStorage struct {
+	logger         *zap.Logger
+	db             basedb.Database
+	prefix         []byte
+	shares         map[string]*types.SSVShare
+	validatorStore *validatorStore
+	// storageMtx serializes access to the database in order to avoid
+	// re-creation of a deleted share during update metadata
+	storageMtx sync.Mutex
+	// memoryMtx allows more granular access to in-memory shares map
+	// to minimize time spent in 'locked' mode when updating state
+	memoryMtx sync.RWMutex
 }
 
 func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {

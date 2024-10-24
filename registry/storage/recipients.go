@@ -8,10 +8,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
+
+//go:generate mockgen -package=mocks -destination=./mocks/recipients.go -source=./recipients.go
 
 var (
 	recipientsPrefix = []byte("recipients")

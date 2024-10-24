@@ -16,14 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/ekm"
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -33,7 +28,7 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/operator/validator/mocks"
+	vmocks "github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -43,8 +38,12 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	smocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 const (
@@ -57,8 +56,8 @@ const (
 
 type MockControllerOptions struct {
 	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
+	recipientsStorage registrystorage.Recipients
+	sharesStorage     registrystorage.Shares
 	metrics           validator.Metrics
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
@@ -664,9 +663,9 @@ func TestSetupValidators(t *testing.T) {
 			defer ctrl.Finish()
 			bc := beacon.NewMockBeaconNode(ctrl)
 			storageMap := ibftstorage.NewStores()
-			network := mocks.NewMockP2PNetwork(ctrl)
-			recipientStorage := mocks.NewMockRecipients(ctrl)
-			sharesStorage := mocks.NewMockSharesStorage(ctrl)
+			network := vmocks.NewMockP2PNetwork(ctrl)
+			recipientStorage := smocks.NewMockRecipients(ctrl)
+			sharesStorage := smocks.NewMockShares(ctrl)
 			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
 				return shareWithMetaData, true
 			}).AnyTimes()
@@ -757,7 +756,7 @@ func TestGetValidatorStats(t *testing.T) {
 	// Common setup
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
-	sharesStorage := mocks.NewMockSharesStorage(ctrl)
+	sharesStorage := smocks.NewMockShares(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
 	passedEpoch := phase0.Epoch(1)
 
@@ -1169,13 +1168,14 @@ func createKey() ([]byte, error) {
 	return pubKey, nil
 }
 
-func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *mocks.MockSharesStorage, *mocks.MockP2PNetwork, ekm.KeyManager, *mocks.MockRecipients, *beacon.MockBeaconNode) {
+func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *smocks.MockShares, *vmocks.MockP2PNetwork, ekm.KeyManager, *smocks.MockRecipients, *beacon.MockBeaconNode) {
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	bc := beacon.NewMockBeaconNode(ctrl)
-	network := mocks.NewMockP2PNetwork(ctrl)
-	sharesStorage := mocks.NewMockSharesStorage(ctrl)
-	recipientStorage := mocks.NewMockRecipients(ctrl)
+	network := vmocks.NewMockP2PNetwork(ctrl)
+	// TODO
+	sharesStorage := smocks.NewMockShares(ctrl)
+	recipientStorage := smocks.NewMockRecipients(ctrl)
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
@@ -1187,7 +1187,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 func setupGenesisQBFTStorage(t *testing.T) *genesisibftstorage.QBFTStores {
 	logger := logging.TestLogger(t)
 	// ctrl := gomock.NewController(t)
-	// network := mocks.NewMockP2PNetwork(ctrl)
+	// network := vmocks.NewMockP2PNetwork(ctrl)
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)

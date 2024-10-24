@@ -14,11 +14,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/maps"
-
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/maps"
 )
 
 var share1 = &ssvtypes.SSVShare{

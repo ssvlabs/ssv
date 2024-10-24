@@ -19,8 +19,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -59,6 +57,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -90,7 +89,7 @@ type ControllerOptions struct {
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
-	RecipientsStorage          Recipients
+	RecipientsStorage          registrystorage.Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
@@ -150,19 +149,6 @@ type committeeObserver struct {
 	sync.Mutex
 }
 
-type Nonce uint16
-
-type Recipients interface {
-	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
-}
-
-type SharesStorage interface {
-	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
-	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
-	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
-}
-
 type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
@@ -182,9 +168,9 @@ type controller struct {
 	metrics validator.Metrics
 
 	networkConfig     networkconfig.NetworkConfig
-	sharesStorage     SharesStorage
+	sharesStorage     registrystorage.Shares
 	operatorsStorage  registrystorage.Operators
-	recipientsStorage Recipients
+	recipientsStorage registrystorage.Recipients
 	ibftStorageMap    *storage.QBFTStores
 
 	beacon         beaconprotocol.BeaconNode
