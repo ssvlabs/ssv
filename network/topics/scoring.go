@@ -55,13 +55,6 @@ func scoreInspector(logger *zap.Logger,
 		}
 		gossipScoreIndex.SetScores(peerScores)
 
-		// Skip if it's not time to log yet.
-		if inspections%logFrequency != 0 {
-			inspections++
-			return
-		}
-		inspections++
-
 		// Reset metrics before updating them.
 		metrics.ResetPeerScores()
 
@@ -154,6 +147,11 @@ func scoreInspector(logger *zap.Logger,
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
+			if inspections%logFrequency != 0 {
+				// Don't log yet.
+				continue
+			}
+
 			// Log.
 			fields := []zap.Field{
 				fields.PeerID(pid),
@@ -185,6 +183,8 @@ func scoreInspector(logger *zap.Logger,
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
+
+		inspections++
 	}
 }
 
