@@ -78,7 +78,7 @@ type ControllerOptions struct {
 	Context                    context.Context
 	DB                         basedb.Database
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
-	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
+	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"` // used outside of validator controller, left for compatibility
 	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
 	Network                    P2PNetwork
@@ -122,10 +122,9 @@ type GenesisControllerOptions struct {
 // Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
-	StartValidators()
+	StartValidators(ctx context.Context)
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validators.ValidatorContainer, bool)
-	UpdateValidatorMetaDataLoop()
 	ForkListener(logger *zap.Logger)
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
@@ -200,8 +199,7 @@ type controller struct {
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
 
-	metadataUpdater        *metadata.Updater
-	metadataUpdateInterval time.Duration
+	metadataUpdater *metadata.Updater
 
 	operatorsIDs         *sync.Map
 	network              P2PNetwork
@@ -310,8 +308,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		validatorOptions:        validatorOptions,
 		genesisValidatorOptions: genesisValidatorOptions,
 
-		metadataUpdater:        options.MetadataUpdater,
-		metadataUpdateInterval: options.MetadataUpdateInterval,
+		metadataUpdater: options.MetadataUpdater,
 
 		operatorsIDs: operatorsIDs,
 
@@ -509,7 +506,9 @@ func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *c
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators() {
+func (c *controller) StartValidators(ctx context.Context) {
+	// TODO: Pass context whereever the execution flow may be blocked.
+
 	// Load non-liquidated shares.
 	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
@@ -543,6 +542,9 @@ func (c *controller) StartValidators() {
 		// Start validators.
 		c.startValidators(inited, committees)
 	}
+
+	ch := c.metadataUpdater.Stream(ctx)
+	go c.handleMetadataUpdates(ctx, ch)
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -610,16 +612,19 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-func (c *controller) startValidatorsForMetadata(metadata map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) {
-	// Start validators, if needed.
+func (c *controller) startValidatorsForMetadata(_ context.Context, validators metadata.Validators) (count int) {
+	// TODO: use context
+
 	shares := c.sharesStorage.List(
 		nil,
 		registrystorage.ByNotLiquidated(),
 		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
 		func(share *ssvtypes.SSVShare) bool {
-			return metadata[share.ValidatorPubKey] != nil
+			return validators[share.ValidatorPubKey] != nil
 		},
 	)
+
+	startedValidators := 0
 
 	for _, share := range shares {
 		// Start validator (if not already started).
@@ -633,9 +638,12 @@ func (c *controller) startValidatorsForMetadata(metadata map[spectypes.Validator
 					s.BeaconMetadata = share.BeaconMetadata
 				},
 			)
-			_, err := c.startValidator(v)
+			started, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
+			}
+			if started {
+				startedValidators++
 			}
 			vc, found := c.validatorsMap.GetCommittee(v.Share().CommitteeID())
 			if found {
@@ -650,10 +658,13 @@ func (c *controller) startValidatorsForMetadata(metadata map[spectypes.Validator
 				continue
 			}
 			if started {
+				startedValidators++
 				c.logger.Debug("started share after metadata update", zap.Bool("started", started))
 			}
 		}
 	}
+
+	return startedValidators
 }
 
 // GetValidator returns a validator instance from ValidatorsMap
@@ -1047,7 +1058,7 @@ func (c *controller) startValidator(v *validators.ValidatorContainer) (bool, err
 		c.recentlyStartedValidators++
 	}
 
-	return true, nil
+	return true, nil // TODO: what should be returned if c.validatorStart(v) returns false?
 }
 
 func (c *controller) ForkListener(logger *zap.Logger) {
@@ -1086,95 +1097,47 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 	}()
 }
 
-// UpdateValidatorMetaDataLoop updates metadata of validators in an interval
-func (c *controller) UpdateValidatorMetaDataLoop() {
-	const batchSize = 512
-	var sleep = 2 * time.Second
-
-	for {
-		// Get the shares to fetch metadata for.
-		start := time.Now()
-		var existingShares, newShares []*ssvtypes.SSVShare
-		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-			if share.Liquidated {
-				return true
-			}
-			if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
-				newShares = append(newShares, share)
-			} else if time.Since(share.MetadataLastUpdated()) > c.metadataUpdateInterval {
-				existingShares = append(existingShares, share)
-			}
-			return len(newShares) < batchSize
-		})
-
-		// Combine validators up to batchSize, prioritizing the new ones.
-		shares := newShares
-		if remainder := batchSize - len(shares); remainder > 0 {
-			end := remainder
-			if end > len(existingShares) {
-				end = len(existingShares)
-			}
-			shares = append(shares, existingShares[:end]...)
-		}
-		for _, share := range shares {
-			share.SetMetadataLastUpdated(time.Now())
-		}
-
-		filteringTook := time.Since(start)
-		if len(shares) > 0 {
-			pubKeys := make([]spectypes.ValidatorPK, len(shares))
-			for i, s := range shares {
-				pubKeys[i] = s.ValidatorPubKey
-			}
-
-			if err := c.fetchAndUpdateValidatorsMetadata(pubKeys); err != nil {
-				c.logger.Warn("failed to update validators metadata", zap.Error(err))
-				continue
-			}
-		}
-		c.logger.Debug("updated validators metadata",
-			zap.Int("validators", len(shares)),
-			zap.Int("new_validators", len(newShares)),
-			zap.Uint64("started_validators", c.recentlyStartedValidators),
-			zap.Duration("filtering_took", filteringTook),
-			fields.Took(time.Since(start)))
-
-		// Only sleep if there aren't more validators to fetch metadata for.
-		if len(shares) < batchSize {
-			time.Sleep(sleep)
+func (c *controller) handleMetadataUpdates(ctx context.Context, updates <-chan metadata.Update) {
+	for update := range updates {
+		if err := c.handleMetadataUpdate(ctx, update); err != nil {
+			c.logger.Warn("could not handle metadata update", zap.Error(err))
 		}
 	}
 }
 
-func (c *controller) fetchAndUpdateValidatorsMetadata(pks []spectypes.ValidatorPK) error {
-	// Fetch metadata for all validators.
-	c.recentlyStartedValidators = 0
-	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
-
-	updatedMetadata, err := c.metadataUpdater.Update(c.ctx, pks)
-	if err != nil {
-		return fmt.Errorf("fetch validators metadata: %w", err)
-	}
-
+func (c *controller) handleMetadataUpdate(ctx context.Context, update metadata.Update) error {
+	startedValidators := 0
 	if c.operatorDataStore.GetOperatorID() != 0 {
-		c.startValidatorsForMetadata(updatedMetadata)
+		startedValidators = c.startValidatorsForMetadata(ctx, update.Validators)
 	}
 
-	// Refresh duties if there are any new active validators.
-	afterUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
-	if c.recentlyStartedValidators > 0 || hasNewValidators(beforeUpdate, afterUpdate) {
+	if startedValidators > 0 || hasNewValidators(update.IndicesBefore, update.IndicesAfter) {
 		c.logger.Debug("new validators found after metadata update",
-			zap.Int("before", len(beforeUpdate)),
-			zap.Int("after", len(afterUpdate)),
-			zap.Uint64("started_validators", c.recentlyStartedValidators),
+			zap.Int("before", len(update.IndicesBefore)),
+			zap.Int("after", len(update.IndicesAfter)),
+			zap.Int("started_validators", startedValidators),
 		)
-		select {
-		case c.indicesChange <- struct{}{}:
-		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+		if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
 	}
+
+	c.logger.Debug("started validators after metadata update",
+		fields.Count(startedValidators),
+	)
+
 	return nil
+}
+
+func (c *controller) reportIndicesChange(ctx context.Context, timeout time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case c.indicesChange <- struct{}{}:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {

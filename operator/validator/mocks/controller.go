@@ -10,6 +10,7 @@
 package mocks
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -228,7 +229,7 @@ func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 }
 
 // StartValidators mocks base method.
-func (m *MockController) StartValidators() {
+func (m *MockController) StartValidators(context.Context) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StartValidators")
 }
@@ -265,18 +266,6 @@ func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address) err
 func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient)
-}
-
-// UpdateValidatorMetaDataLoop mocks base method.
-func (m *MockController) UpdateValidatorMetaDataLoop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateValidatorMetaDataLoop")
-}
-
-// UpdateValidatorMetaDataLoop indicates an expected call of UpdateValidatorMetaDataLoop.
-func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
 }
 
 // ValidatorExitChan mocks base method.

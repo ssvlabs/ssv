@@ -229,7 +229,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators()
+			ctr.StartValidators(context.TODO())
 		})
 	}
 }
@@ -868,7 +868,6 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 	}
 
 	return controller{
-		metadataUpdateInterval:  0,
 		logger:                  logger,
 		beacon:                  opts.beacon,
 		network:                 opts.network,

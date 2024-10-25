@@ -15,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -118,7 +119,7 @@ func TestUpdater(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			metadataUpdater := NewUpdater(logger, sharesStorage, beaconNode)
+			metadataUpdater := NewUpdater(logger, sharesStorage, networkconfig.TestNetwork.Beacon, beaconNode)
 
 			_, err := metadataUpdater.Update(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {

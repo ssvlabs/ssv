@@ -382,7 +382,13 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
-		metadataUpdater := metadata.NewUpdater(logger, nodeStorage.Shares(), consensusClient)
+		metadataUpdater := metadata.NewUpdater(
+			logger,
+			nodeStorage.Shares(),
+			networkConfig.Beacon,
+			consensusClient,
+			metadata.WithUpdateInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
+		)
 		cfg.SSVOptions.ValidatorOptions.MetadataUpdater = metadataUpdater
 
 		if _, err := metadataUpdater.RetrieveInitialMetadata(cmd.Context()); err != nil {
