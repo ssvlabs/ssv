@@ -2,8 +2,11 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"fmt"
+	"hash"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -11,11 +14,11 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"go.uber.org/zap"
-
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"go.uber.org/zap"
 )
 
 type AggregatorRunner struct {
@@ -96,17 +99,29 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *ge
 		fields.Slot(duty.Slot),
 	)
 
-	r.metrics.PauseDutyFullFlow()
+	// this is the earliest in aggregator runner flow where we get to know whether we are meant
+	// to perform this aggregation duty or not
+	ok, err := isAggregator(duty.CommitteeLength, fullSig)
+	if err != nil {
+		return fmt.Errorf("check if validator is an aggregator: %w", err)
+	}
+	if !ok {
+		logger.Debug("aggregation duty won't be needed from this validator for this slot",
+			zap.Any("signer", signedMsg.Signer),
+			fields.Slot(duty.Slot),
+		)
+		return nil
+	}
 
+	r.metrics.PauseDutyFullFlow()
 	// get block data
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
-
 	r.metrics.ContinueDutyFullFlow()
-	r.metrics.StartConsensus()
 
+	r.metrics.StartConsensus()
 	byts, err := res.MarshalSSZ()
 	if err != nil {
 		return errors.Wrap(err, "could not marshal aggregate and proof")
@@ -116,7 +131,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *ge
 		Version: ver,
 		DataSSZ: byts,
 	}
-
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
@@ -329,7 +343,6 @@ func (r *AggregatorRunner) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-// GetRoot returns the root used for signing and verification
 func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
@@ -337,4 +350,54 @@ func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+// isAggregator returns true if the signature is from the input validator. The committee
+// count is provided as an argument rather than imported implementation from spec. Having
+// committee count as an argument allows cheaper computation at run time.
+//
+// Spec pseudocode definition:
+//
+//	def is_aggregator(state: BeaconState, slot: Slot, index: CommitteeIndex, slot_signature: BLSSignature) -> bool:
+//	 committee = get_beacon_committee(state, slot, index)
+//	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
+//	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
+func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
+	const targetAggregatorsPerCommittee uint64 = 16
+
+	modulo := committeeCount / targetAggregatorsPerCommittee
+	if modulo == 0 {
+		// Modulo must be at least 1.
+		modulo = 1
+	}
+
+	b := hashSha256(slotSig)
+	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
+}
+
+var sha256Pool = sync.Pool{New: func() interface{} {
+	return sha256.New()
+}}
+
+// hashSha256 defines a function that returns the sha256 checksum of the data passed in.
+// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/core/0_beacon-chain.md#hash
+func hashSha256(data []byte) [32]byte {
+	h, ok := sha256Pool.Get().(hash.Hash)
+	if !ok {
+		h = sha256.New()
+	}
+	defer sha256Pool.Put(h)
+	h.Reset()
+
+	var b [32]byte
+
+	// The hash interface never returns an error, for that reason
+	// we are not handling the error below. For reference, it is
+	// stated here https://golang.org/pkg/hash/#Hash
+
+	// #nosec G104
+	h.Write(data)
+	h.Sum(b[:0])
+
+	return b
 }
