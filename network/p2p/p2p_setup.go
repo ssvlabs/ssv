@@ -60,16 +60,14 @@ func (n *p2pNetwork) Setup() error {
 		return fmt.Errorf("init config: %w", err)
 	}
 
-	err := n.SetupHost(logger)
-	if err != nil {
+	if err := n.SetupHost(); err != nil {
 		return err
 	}
 
 	logger := n.logger.With(zap.String("selfPeer", n.host.ID().String()))
 	logger.Debug("host configured")
 
-	err = n.SetupServices(logger)
-	if err != nil {
+	if err := n.SetupServices(logger); err != nil {
 		return err
 	}
 	logger.Info("services configured")
@@ -113,8 +111,8 @@ func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
 }
 
 // SetupHost configures a libp2p host and backoff connector utility
-func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
-	opts, err := n.cfg.Libp2pOptions(logger)
+func (n *p2pNetwork) SetupHost() error {
+	opts, err := n.cfg.Libp2pOptions(n.logger)
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
@@ -125,7 +123,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
+	n.connGater = connections.NewConnectionGater(n.logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {

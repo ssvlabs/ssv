@@ -3,15 +3,7 @@ package beacon
 import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
-
-//go:generate mockgen -package=beacon -destination=./mock_validator_metadata.go -source=./validator_metadata.go
-
-// ValidatorMetadataStorage interface for validator metadata
-type ValidatorMetadataStorage interface {
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*ValidatorMetadata) error
-}
 
 // ValidatorMetadata represents validator metdata from beacon
 type ValidatorMetadata struct {

@@ -31,6 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
+	"github.com/ssvlabs/ssv/operator/metadata"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -80,7 +81,6 @@ type ControllerOptions struct {
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
-	BeaconNetwork              beaconprotocol.Network
 	Network                    P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
 	GenesisBeacon              genesisbeaconprotocol.BeaconNode
@@ -99,6 +99,7 @@ type ControllerOptions struct {
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
+	MetadataUpdater            *metadata.Updater
 	Graffiti                   []byte
 
 	// worker flags
@@ -160,7 +161,6 @@ type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
 type P2PNetwork interface {
@@ -200,7 +200,7 @@ type controller struct {
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
 
-	metadataFetcher        *beaconprotocol.MetadataFetcher
+	metadataUpdater        *metadata.Updater
 	metadataUpdateInterval time.Duration
 
 	operatorsIDs         *sync.Map
@@ -310,7 +310,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		validatorOptions:        validatorOptions,
 		genesisValidatorOptions: genesisValidatorOptions,
 
-		metadataFetcher:        beaconprotocol.NewMetadataFetcher(logger, options.Beacon),
+		metadataUpdater:        options.MetadataUpdater,
 		metadataUpdateInterval: options.MetadataUpdateInterval,
 
 		operatorsIDs: operatorsIDs,
@@ -519,12 +519,10 @@ func (c *controller) StartValidators() {
 	}
 
 	var ownShares []*ssvtypes.SSVShare
-	var allPubKeys = make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
 	}
 
 	if c.validatorOptions.Exporter {
@@ -544,29 +542,6 @@ func (c *controller) StartValidators() {
 
 		// Start validators.
 		c.startValidators(inited, committees)
-	}
-
-	// Fetch metadata now if there is none. Otherwise, UpdateValidatorsMetadataLoop will handle it.
-	var hasMetadata bool
-	for _, share := range shares {
-		if !share.Liquidated && share.HasBeaconMetadata() {
-			hasMetadata = true
-			break
-		}
-	}
-	if !hasMetadata {
-		start := time.Now()
-		err := c.fetchAndUpdateValidatorsMetadata(allPubKeys)
-		if err != nil {
-			c.logger.Error("failed to update validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
-				fields.Took(time.Since(start)),
-				zap.Error(err))
-		} else {
-			c.logger.Debug("updated validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
-				fields.Took(time.Since(start)))
-		}
 	}
 }
 
@@ -635,29 +610,14 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-// UpdateValidatorsMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
-func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	// Save metadata to share storage.
-	start := time.Now()
-	err := c.sharesStorage.UpdateValidatorsMetadata(data)
-	if err != nil {
-		return errors.Wrap(err, "could not update validator metadata")
-	}
-	c.logger.Debug("🆕 updated validators metadata in storage",
-		fields.Took(time.Since(start)), zap.Int("count", len(data)))
-
-	// If we're not an operator, return early.
-	if c.operatorDataStore.GetOperatorID() == 0 {
-		return nil
-	}
-
+func (c *controller) handleMetadataUpdate(metadata map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) {
 	// Start validators, if needed.
 	shares := c.sharesStorage.List(
 		nil,
 		registrystorage.ByNotLiquidated(),
 		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
 		func(share *ssvtypes.SSVShare) bool {
-			return data[share.ValidatorPubKey] != nil
+			return metadata[share.ValidatorPubKey] != nil
 		},
 	)
 
@@ -694,8 +654,6 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 			}
 		}
 	}
-
-	return nil
 }
 
 // GetValidator returns a validator instance from ValidatorsMap
@@ -1168,8 +1126,8 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			for i, s := range shares {
 				pubKeys[i] = s.ValidatorPubKey
 			}
-			err := c.fetchAndUpdateValidatorsMetadata(pubKeys)
-			if err != nil {
+
+			if err := c.fetchAndUpdateValidatorsMetadata(pubKeys); err != nil {
 				c.logger.Warn("failed to update validators metadata", zap.Error(err))
 				continue
 			}
@@ -1193,13 +1151,13 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(pks []spectypes.ValidatorP
 	c.recentlyStartedValidators = 0
 	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
 
-	metadata, err := c.metadataFetcher.Fetch(pks)
+	metadata, err := c.metadataUpdater.Update(pks)
 	if err != nil {
 		return fmt.Errorf("fetch validators metadata: %w", err)
 	}
 
-	if err := c.UpdateValidatorsMetadata(metadata); err != nil {
-		return fmt.Errorf("update validators metadata: %w", err)
+	if c.operatorDataStore.GetOperatorID() != 0 {
+		c.handleMetadataUpdate(metadata)
 	}
 
 	// Refresh duties if there are any new active validators.

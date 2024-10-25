@@ -120,8 +120,8 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 	return node
 }
 
-// Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
+	// Start starts to stream duties and run IBFT instances
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
