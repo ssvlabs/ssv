@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,11 +13,11 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
-
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"go.uber.org/zap"
 )
 
 type SyncCommitteeRunner struct {
@@ -211,7 +210,6 @@ func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 	}
 
 	r.metrics.StartDutyFullFlow()
-	r.metrics.StartConsensus()
 
 	input := &genesisspectypes.ConsensusData{
 		Duty:    *duty,
@@ -219,6 +217,7 @@ func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *genesisspect
 		DataSSZ: root[:],
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

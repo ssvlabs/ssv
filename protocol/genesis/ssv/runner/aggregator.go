@@ -121,7 +121,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *ge
 	}
 	r.metrics.ContinueDutyFullFlow()
 
-	r.metrics.StartConsensus()
 	byts, err := res.MarshalSSZ()
 	if err != nil {
 		return errors.Wrap(err, "could not marshal aggregate and proof")
@@ -131,6 +130,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *ge
 		Version: ver,
 		DataSSZ: byts,
 	}
+
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

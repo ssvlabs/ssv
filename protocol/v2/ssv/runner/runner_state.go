@@ -18,7 +18,7 @@ type State struct {
 	RunningInstance        *instance.Instance
 	DecidedValue           []byte //spectypes.Encoder
 	// StartingDuty is the duty the node pulled locally from the beacon node, might be different
-	// from the actual duty operators have decided upon.
+	// from the actual duty operators will have decided upon.
 	StartingDuty spectypes.Duty `json:"StartingDuty,omitempty"`
 	// Finished marked true when the full successful cycle (pre, consensus and post) got quorum.
 	Finished bool
