@@ -41,14 +41,14 @@ type shareStorage interface {
 
 func NewUpdater(
 	logger *zap.Logger,
-	sharesStorage shareStorage,
+	shareStorage shareStorage,
 	beaconNetwork beacon.BeaconNetwork,
 	beaconNode beacon.BeaconNode,
 	opts ...Option,
 ) *Updater {
 	u := &Updater{
 		logger:         logger,
-		shareStorage:   sharesStorage,
+		shareStorage:   shareStorage,
 		beaconNetwork:  beaconNetwork,
 		fetcher:        NewFetcher(logger, beaconNode),
 		updateInterval: defaultUpdateInterval,
