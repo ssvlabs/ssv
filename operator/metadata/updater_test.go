@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"testing"
@@ -119,7 +120,7 @@ func TestUpdater(t *testing.T) {
 
 			metadataUpdater := NewUpdater(logger, sharesStorage, beaconNode)
 
-			_, err := metadataUpdater.Update([]spectypes.ValidatorPK{tc.testPublicKey})
+			_, err := metadataUpdater.Update(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
 			} else {

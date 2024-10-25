@@ -385,7 +385,7 @@ var StartNodeCmd = &cobra.Command{
 		metadataUpdater := metadata.NewUpdater(logger, nodeStorage.Shares(), consensusClient)
 		cfg.SSVOptions.ValidatorOptions.MetadataUpdater = metadataUpdater
 
-		if _, err := metadataUpdater.RetrieveInitialMetadata(); err != nil {
+		if _, err := metadataUpdater.RetrieveInitialMetadata(cmd.Context()); err != nil {
 			logger.Fatal("failed to retrieve initial metadata", zap.Error(err))
 		}
 

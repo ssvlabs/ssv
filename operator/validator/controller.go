@@ -610,7 +610,7 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-func (c *controller) handleMetadataUpdate(metadata map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) {
+func (c *controller) startValidatorsForMetadata(metadata map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) {
 	// Start validators, if needed.
 	shares := c.sharesStorage.List(
 		nil,
@@ -1151,13 +1151,13 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(pks []spectypes.ValidatorP
 	c.recentlyStartedValidators = 0
 	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
 
-	metadata, err := c.metadataUpdater.Update(pks)
+	updatedMetadata, err := c.metadataUpdater.Update(c.ctx, pks)
 	if err != nil {
 		return fmt.Errorf("fetch validators metadata: %w", err)
 	}
 
 	if c.operatorDataStore.GetOperatorID() != 0 {
-		c.handleMetadataUpdate(metadata)
+		c.startValidatorsForMetadata(updatedMetadata)
 	}
 
 	// Refresh duties if there are any new active validators.

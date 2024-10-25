@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"context"
 	"encoding/hex"
 	"strings"
 	"sync"
@@ -88,7 +89,7 @@ func TestFetcher(t *testing.T) {
 		spectypes.ValidatorPK(blsPubKeys[1]),
 		spectypes.ValidatorPK(blsPubKeys[2]),
 	}
-	results, err := mf.Fetch(pubKeys)
+	results, err := mf.Fetch(context.TODO(), pubKeys)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.UpdateValidatorsMetadata(results))

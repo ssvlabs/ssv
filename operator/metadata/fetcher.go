@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -24,7 +25,7 @@ func NewFetcher(logger *zap.Logger, beaconNode beacon.BeaconNode) *Fetcher {
 	}
 }
 
-func (mf *Fetcher) Fetch(pubKeys []spectypes.ValidatorPK) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+func (mf *Fetcher) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -35,6 +36,7 @@ func (mf *Fetcher) Fetch(pubKeys []spectypes.ValidatorPK) (map[spectypes.Validat
 	}
 
 	start := time.Now()
+	// TODO: Refactor beacon.BeaconNode to support passing context.
 	validatorsIndexMap, err := mf.beaconNode.GetValidatorData(blsPubKeys)
 	if err != nil {
 		mf.logger.Error("failed to fetch initial validators metadata",
