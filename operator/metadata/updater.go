@@ -20,8 +20,9 @@ import (
 
 const (
 	defaultUpdateInterval = 12 * time.Minute
-	defaultStreamInterval = 2 * time.Second
-	defaultBatchSize      = 512
+	streamInterval        = 2 * time.Second
+	batchSize             = 512
+	streamChanSize        = 1024
 )
 
 type Updater struct {
@@ -30,8 +31,6 @@ type Updater struct {
 	beaconNetwork  beacon.BeaconNetwork
 	fetcher        *Fetcher
 	updateInterval time.Duration
-	streamInterval time.Duration
-	batchSize      int
 }
 
 type shareStorage interface {
@@ -53,7 +52,6 @@ func NewUpdater(
 		beaconNetwork:  beaconNetwork,
 		fetcher:        NewFetcher(logger, beaconNode),
 		updateInterval: defaultUpdateInterval,
-		streamInterval: defaultStreamInterval,
 	}
 
 	for _, opt := range opts {
@@ -68,18 +66,6 @@ type Option func(*Updater)
 func WithUpdateInterval(interval time.Duration) Option {
 	return func(u *Updater) {
 		u.updateInterval = interval
-	}
-}
-
-func WithStreamInterval(interval time.Duration) Option {
-	return func(u *Updater) {
-		u.updateInterval = interval
-	}
-}
-
-func WithBatchSize(batchSize int) Option {
-	return func(u *Updater) {
-		u.batchSize = batchSize
 	}
 }
 
@@ -155,7 +141,7 @@ type Update struct {
 }
 
 func (u *Updater) Stream(ctx context.Context) <-chan Update {
-	metadataUpdates := make(chan Update)
+	metadataUpdates := make(chan Update, streamChanSize)
 
 	go func() {
 		defer close(metadataUpdates)
@@ -194,8 +180,8 @@ func (u *Updater) Stream(ctx context.Context) <-chan Update {
 				}
 
 				// Only sleep if there aren't more validators to fetch metadata for.
-				if len(shares) < u.batchSize {
-					time.Sleep(u.streamInterval)
+				if len(shares) < batchSize {
+					time.Sleep(streamInterval)
 				}
 			}
 		}
@@ -215,12 +201,12 @@ func (u *Updater) sharesForUpdate() []*ssvtypes.SSVShare {
 		} else if time.Since(share.MetadataLastUpdated()) > u.updateInterval {
 			existingShares = append(existingShares, share)
 		}
-		return len(newShares) < u.batchSize
+		return len(newShares) < batchSize
 	})
 
 	// Combine validators up to batchSize, prioritizing the new ones.
 	shares := newShares
-	if remainder := u.batchSize - len(shares); remainder > 0 {
+	if remainder := batchSize - len(shares); remainder > 0 {
 		end := remainder
 		if end > len(existingShares) {
 			end = len(existingShares)

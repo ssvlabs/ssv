@@ -1086,8 +1086,7 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
-	updates := c.metadataUpdater.Stream(ctx)
-	for update := range updates {
+	for update := range c.metadataUpdater.Stream(ctx) {
 		if err := c.handleMetadataUpdate(ctx, update); err != nil {
 			c.logger.Warn("could not handle metadata update", zap.Error(err))
 		}
