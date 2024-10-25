@@ -335,6 +335,15 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
 
+		metadataUpdater := metadata.NewUpdater(
+			logger,
+			nodeStorage.Shares(),
+			networkConfig.Beacon,
+			consensusClient,
+			metadata.WithUpdateInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
+		)
+		cfg.SSVOptions.ValidatorOptions.MetadataUpdater = metadataUpdater
+
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
@@ -381,15 +390,6 @@ var StartNodeCmd = &cobra.Command{
 		if len(cfg.LocalEventsPath) == 0 {
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
-
-		metadataUpdater := metadata.NewUpdater(
-			logger,
-			nodeStorage.Shares(),
-			networkConfig.Beacon,
-			consensusClient,
-			metadata.WithUpdateInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
-		)
-		cfg.SSVOptions.ValidatorOptions.MetadataUpdater = metadataUpdater
 
 		if _, err := metadataUpdater.RetrieveInitialMetadata(cmd.Context()); err != nil {
 			logger.Fatal("failed to retrieve initial metadata", zap.Error(err))
