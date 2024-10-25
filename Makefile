@@ -3,6 +3,7 @@ ifndef GOPATH
     export GOPATH
 endif
 
+
 ifndef HOST_ADDRESS
     HOST_ADDRESS=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
     export HOST_ADDRESS
