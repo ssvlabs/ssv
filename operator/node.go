@@ -154,6 +154,7 @@ func (n *operatorNode) Start() error {
 	go n.reportOperators()
 
 	go n.feeRecipientCtrl.Start(n.logger)
+	go n.validatorsCtrl.HandleMetadataUpdates(n.context)
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))

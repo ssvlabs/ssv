@@ -123,6 +123,7 @@ type GenesisControllerOptions struct {
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
 	StartValidators(ctx context.Context)
+	HandleMetadataUpdates(ctx context.Context)
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	ForkListener(logger *zap.Logger)
 	StartNetworkHandlers()
@@ -532,9 +533,6 @@ func (c *controller) StartValidators(ctx context.Context) {
 		// Start validators.
 		c.startValidators(inited, committees)
 	}
-
-	ch := c.metadataUpdater.Stream(ctx)
-	go c.handleMetadataUpdates(ctx, ch)
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -1087,7 +1085,8 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 	}()
 }
 
-func (c *controller) handleMetadataUpdates(ctx context.Context, updates <-chan metadata.Update) {
+func (c *controller) HandleMetadataUpdates(ctx context.Context) {
+	updates := c.metadataUpdater.Stream(ctx)
 	for update := range updates {
 		if err := c.handleMetadataUpdate(ctx, update); err != nil {
 			c.logger.Warn("could not handle metadata update", zap.Error(err))
