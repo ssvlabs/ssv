@@ -204,7 +204,7 @@ func (u *Updater) sendUpdate(ctx context.Context, updates chan<- Update) ([]*ssv
 	case <-ctx.Done():
 		return shares, ctx.Err()
 	case <-timer.C:
-		return nil, fmt.Errorf("timed out waiting for sending update")
+		return shares, fmt.Errorf("timed out waiting for sending update")
 	case updates <- update:
 		return shares, nil
 	}
