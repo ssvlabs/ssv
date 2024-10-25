@@ -91,7 +91,6 @@ func (u *Updater) RetrieveInitialMetadata(ctx context.Context) (map[spectypes.Va
 		return nil, nil
 	}
 
-	// Fetch metadata now if there is none. Otherwise, Stream will handle it.
 	return u.Update(ctx, allPubKeys)
 }
 
