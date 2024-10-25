@@ -18,26 +18,26 @@ import (
 
 type Updater struct {
 	logger          *zap.Logger
-	sharesStorage   SharesStorage // TODO: use registrystorage.Shares?
+	shareStorage    shareStorage
 	metadataFetcher *Fetcher
 }
 
-type SharesStorage interface {
+type shareStorage interface {
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error
 }
 
-func NewUpdater(logger *zap.Logger, sharesStorage SharesStorage, beaconNode beacon.BeaconNode) *Updater {
+func NewUpdater(logger *zap.Logger, sharesStorage shareStorage, beaconNode beacon.BeaconNode) *Updater {
 	return &Updater{
 		logger:          logger,
-		sharesStorage:   sharesStorage,
+		shareStorage:    sharesStorage,
 		metadataFetcher: NewFetcher(logger, beaconNode),
 	}
 }
 
 func (u *Updater) RetrieveInitialMetadata() (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
 	// Load non-liquidated shares.
-	shares := u.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
+	shares := u.shareStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		u.logger.Info("could not find validators")
 		return nil, nil
@@ -80,7 +80,7 @@ func (u *Updater) Update(allPubKeys []spectypes.ValidatorPK) (map[spectypes.Vali
 	)
 
 	updateStart := time.Now()
-	if err := u.sharesStorage.UpdateValidatorsMetadata(metadata); err != nil {
+	if err := u.shareStorage.UpdateValidatorsMetadata(metadata); err != nil {
 		u.logger.Error("failed to update validators metadata after setup",
 			zap.Int("shares", len(allPubKeys)),
 			fields.Took(time.Since(updateStart)),
