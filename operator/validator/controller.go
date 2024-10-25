@@ -124,10 +124,8 @@ type GenesisControllerOptions struct {
 type Controller interface {
 	StartValidators(ctx context.Context)
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-	GetValidator(pubKey spectypes.ValidatorPK) (*validators.ValidatorContainer, bool)
 	ForkListener(logger *zap.Logger)
 	StartNetworkHandlers()
-	GetOperatorShares() []*ssvtypes.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
@@ -331,14 +329,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.committeesObservers.Start()
 
 	return &ctrl
-}
-
-func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
-	return c.sharesStorage.List(
-		nil,
-		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
-		registrystorage.ByActiveValidator(),
-	)
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
