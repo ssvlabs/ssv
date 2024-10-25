@@ -1105,6 +1105,7 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, update metadata.U
 			zap.Int("after", len(update.IndicesAfter)),
 			zap.Int("started_validators", startedValidators),
 		)
+		// Refresh duties if there are any new active validators.
 		if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}

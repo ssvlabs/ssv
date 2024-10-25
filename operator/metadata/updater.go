@@ -21,6 +21,7 @@ import (
 const (
 	defaultUpdateInterval = 12 * time.Minute
 	streamInterval        = 2 * time.Second
+	updateSendTimeout     = 30 * time.Second
 	batchSize             = 512
 	streamChanSize        = 1024
 )
@@ -150,32 +151,13 @@ func (u *Updater) Stream(ctx context.Context) <-chan Update {
 			case <-ctx.Done():
 				return
 			default:
-				shares := u.sharesForUpdate()
-
-				if len(shares) > 0 {
-					pubKeys := make([]spectypes.ValidatorPK, len(shares))
-					for i, s := range shares {
-						pubKeys[i] = s.ValidatorPubKey
-					}
-
-					beforeUpdate := u.allActiveIndices(u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
-
-					updatedMetadata, err := u.Update(ctx, pubKeys)
-					if err != nil {
-						u.logger.Warn("failed to update validators metadata",
-							zap.Int("shares", len(shares)),
-							zap.Error(err))
-						continue
-					}
-
-					// Refresh duties if there are any new active validators.
-					afterUpdate := u.allActiveIndices(u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
-
-					metadataUpdates <- Update{
-						IndicesBefore: beforeUpdate,
-						IndicesAfter:  afterUpdate,
-						Validators:    updatedMetadata,
-					}
+				shares, err := u.sendUpdate(ctx, metadataUpdates)
+				if err != nil {
+					u.logger.Warn("failed to update validators metadata",
+						zap.Int("shares", len(shares)),
+						zap.Error(err),
+					)
+					continue
 				}
 
 				// Only sleep if there aren't more validators to fetch metadata for.
@@ -187,6 +169,45 @@ func (u *Updater) Stream(ctx context.Context) <-chan Update {
 	}()
 
 	return metadataUpdates
+}
+
+func (u *Updater) sendUpdate(ctx context.Context, updates chan<- Update) ([]*ssvtypes.SSVShare, error) {
+	shares := u.sharesForUpdate()
+	if len(shares) == 0 {
+		return shares, nil
+	}
+
+	pubKeys := make([]spectypes.ValidatorPK, len(shares))
+	for i, s := range shares {
+		pubKeys[i] = s.ValidatorPubKey
+	}
+
+	indicesBefore := u.allActiveIndices(u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
+
+	updatedMetadata, err := u.Update(ctx, pubKeys)
+	if err != nil {
+		return shares, fmt.Errorf("update metadata: %w", err)
+	}
+
+	indicesAfter := u.allActiveIndices(u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
+
+	update := Update{
+		IndicesBefore: indicesBefore,
+		IndicesAfter:  indicesAfter,
+		Validators:    updatedMetadata,
+	}
+
+	timer := time.NewTimer(updateSendTimeout)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return shares, ctx.Err()
+	case <-timer.C:
+		return nil, fmt.Errorf("timed out waiting for sending update")
+	case updates <- update:
+		return shares, nil
+	}
 }
 
 func (u *Updater) sharesForUpdate() []*ssvtypes.SSVShare {
