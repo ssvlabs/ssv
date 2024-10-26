@@ -7,7 +7,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -172,19 +171,6 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		return
 	}
 
-	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-		return
-	}
-
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
@@ -250,19 +236,6 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
 	return &spectypes.ValidatorDuty{
-		Type:                    role,
-		PubKey:                  duty.PubKey,
-		Slot:                    duty.Slot,
-		ValidatorIndex:          duty.ValidatorIndex,
-		CommitteeIndex:          duty.CommitteeIndex,
-		CommitteeLength:         duty.CommitteeLength,
-		CommitteesAtSlot:        duty.CommitteesAtSlot,
-		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
-	}
-}
-
-func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
-	return &genesisspectypes.Duty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,

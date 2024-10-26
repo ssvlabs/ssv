@@ -18,7 +18,6 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -55,14 +54,12 @@ const (
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty)
 	ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty)
 	ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
-	ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDuty)
 	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 }
@@ -375,24 +372,6 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 	}
 }
 
-func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty) {
-	for _, duty := range duties {
-		duty := duty
-		logger := s.loggerWithGenesisDutyContext(logger, duty)
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
-		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
-		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
-		go func() {
-			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(duty.Slot)
-			}
-			s.dutyExecutor.ExecuteGenesisDuty(logger, duty)
-		}()
-	}
-}
-
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
@@ -430,18 +409,6 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeD
 			s.dutyExecutor.ExecuteCommitteeDuty(logger, committee.id, duty)
 		}()
 	}
-}
-
-// loggerWithGenesisDutyContext returns an instance of logger with the given genesis duty's information
-func (s *Scheduler) loggerWithGenesisDutyContext(logger *zap.Logger, duty *genesisspectypes.Duty) *zap.Logger {
-	return logger.
-		With(zap.Stringer(fields.FieldRole, duty.Type)).
-		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
-		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
-		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information

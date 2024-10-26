@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -162,10 +163,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		}
 
 		topicScoreFactory = func(t string) *pubsub.TopicScoreParams {
-			if cfg.NetworkConfig.PastAlanFork() {
-				return topicScoreParams(logger, cfg, committeesProvider)(t)
-			}
-			return validatorTopicScoreParams(logger, cfg)(t)
+			return topicScoreParams(logger, cfg, committeesProvider)(t)
 		}
 
 		// Get overall score params

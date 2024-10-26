@@ -21,8 +21,8 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -142,10 +142,10 @@ func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
 }
 
 // GetValidator mocks base method.
-func (m *MockController) GetValidator(pubKey types0.ValidatorPK) (*validators.ValidatorContainer, bool) {
+func (m *MockController) GetValidator(pubKey types0.ValidatorPK) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidator", pubKey)
-	ret0, _ := ret[0].(*validators.ValidatorContainer)
+	ret0, _ := ret[0].(*validator.Validator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }

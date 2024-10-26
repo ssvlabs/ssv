@@ -2,10 +2,11 @@ package validator
 
 import (
 	"fmt"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -52,7 +53,7 @@ type CommitteeObserverOptions struct {
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:      opts.NetworkConfig.DomainType(),
+		Domain:      opts.NetworkConfig.DomainType,
 		Storage:     opts.Storage.Get(identifier.GetRoleType()),
 		Network:     opts.Network,
 		CutOffRound: roundtimer.CutOffRound,

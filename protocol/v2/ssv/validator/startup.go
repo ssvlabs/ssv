@@ -40,7 +40,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			continue
 		}
 
-		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType(), share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)
 		if ctrl := dutyRunner.GetBaseRunner().QBFTController; ctrl != nil {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {

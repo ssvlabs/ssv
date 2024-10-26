@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -127,7 +127,7 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	}
 	err := localNode.Node().Record().Load(&domainEntry)
 	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType(), domainEntry.DomainType)
+	require.Equal(t, netConfig.DomainType, domainEntry.DomainType)
 
 	// Check next domain entry
 	nextDomainEntry := records.DomainTypeEntry{
@@ -136,7 +136,7 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	}
 	err = localNode.Node().Record().Load(&nextDomainEntry)
 	require.NoError(t, err)
-	require.Equal(t, netConfig.NextDomainType(), nextDomainEntry.DomainType)
+	require.Equal(t, netConfig.DomainType, nextDomainEntry.DomainType)
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
@@ -255,11 +255,11 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Matching main domain
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType(), spectypes.DomainType{})))
+	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
 	require.NoError(t, err)
 
 	// Matching next domain
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType())))
+	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
 	require.NoError(t, err)
 
 	// Mismatching domains
@@ -285,46 +285,4 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	subnets[10] = 1
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
-}
-
-func TestDiscV5ServiceListenerType(t *testing.T) {
-
-	t.Run("Post-Fork", func(t *testing.T) {
-		netConfig := PostForkNetworkConfig()
-		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
-
-		// Check listener type
-		_, ok := dvs.dv5Listener.(*forkingDV5Listener)
-		require.True(t, ok)
-
-		_, ok = dvs.dv5Listener.(*discover.UDPv5)
-		require.False(t, ok)
-
-		// Check bootnodes
-		CheckBootnodes(t, dvs, netConfig)
-
-		// Close
-		err := dvs.Close()
-		require.NoError(t, err)
-	})
-
-	t.Run("Pre-Fork", func(t *testing.T) {
-
-		netConfig := PreForkNetworkConfig()
-		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
-
-		// Check listener type
-		_, ok := dvs.dv5Listener.(*discover.UDPv5)
-		require.False(t, ok)
-
-		_, ok = dvs.dv5Listener.(*forkingDV5Listener)
-		require.True(t, ok)
-
-		// Check bootnodes
-		CheckBootnodes(t, dvs, netConfig)
-
-		// Close
-		err := dvs.Close()
-		require.NoError(t, err)
-	})
 }

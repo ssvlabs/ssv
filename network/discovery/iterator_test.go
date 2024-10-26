@@ -121,3 +121,38 @@ func TestFairMixIterator_PreForkEmpty(t *testing.T) {
 	// No more elements even after switch
 	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
 }
+
+func requireNextTimeout(t *testing.T, expected bool, iter enode.Iterator, timeout time.Duration) {
+	const maxTries = 10
+	var deadline = time.After(timeout)
+	next := make(chan bool)
+	go func() {
+		defer close(next)
+		for {
+			ok := iter.Next()
+			select {
+			case next <- ok:
+			case <-deadline:
+				return
+			}
+			if ok {
+				return
+			}
+			time.Sleep(timeout / maxTries)
+		}
+	}()
+	for {
+		select {
+		case ok := <-next:
+			require.Equal(t, expected, ok, "expected next to be %v", expected)
+			if ok {
+				return
+			}
+		case <-deadline:
+			if expected {
+				require.Fail(t, "expected next to be %v", expected)
+			}
+			return
+		}
+	}
+}

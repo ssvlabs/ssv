@@ -8,7 +8,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -169,19 +168,6 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 		return
 	}
 
-	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d, slot) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommittee))
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommitteeContribution))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-		return
-	}
-
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
@@ -265,20 +251,6 @@ func (h *SyncCommitteeHandler) prepareDutiesResultLog(period uint64, duties []*e
 		zap.String("period", fmt.Sprintf("p%v", period)),
 		zap.Any("duties", b.String()),
 		fields.Duration(start))
-}
-
-func (h *SyncCommitteeHandler) toGenesisSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
-	indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
-	for i, index := range duty.ValidatorSyncCommitteeIndices {
-		indices[i] = uint64(index)
-	}
-	return &genesisspectypes.Duty{
-		Type:                          role,
-		PubKey:                        duty.PubKey,
-		Slot:                          slot, // in order for the duty scheduler to execute
-		ValidatorIndex:                duty.ValidatorIndex,
-		ValidatorSyncCommitteeIndices: indices,
-	}
 }
 
 func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.ValidatorDuty {

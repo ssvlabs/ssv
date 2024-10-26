@@ -75,12 +75,12 @@ func (s *Scenario) Run(t *testing.T, role spectypes.RunnerRole) {
 				var ssvMsg *spectypes.SSVMessage
 				switch d := duty.(type) {
 				case *spectypes.ValidatorDuty:
-					msg, err := validator.CreateDutyExecuteMsg(d, pk[:], networkconfig.TestNetwork.DomainType())
+					msg, err := validator.CreateDutyExecuteMsg(d, pk[:], networkconfig.TestNetwork.DomainType)
 					require.NoError(t, err)
 
 					ssvMsg = msg
 				case *spectypes.CommitteeDuty:
-					msg, err := validator.CreateCommitteeDutyExecuteMsg(d, spectypes.CommitteeID(pk[16:]), networkconfig.TestNetwork.DomainType())
+					msg, err := validator.CreateCommitteeDutyExecuteMsg(d, spectypes.CommitteeID(pk[16:]), networkconfig.TestNetwork.DomainType)
 					require.NoError(t, err)
 
 					ssvMsg = msg
@@ -95,7 +95,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.RunnerRole) {
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
+			identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, getKeySet(s.Committee).ValidatorPK.Serialize(), role)
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {

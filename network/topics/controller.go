@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -275,11 +274,6 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(m.MsgType), 10),
-			).Inc()
-		case *genesisqueue.GenesisSSVMessage:
 			metricPubsubInbound.WithLabelValues(
 				commons.GetTopicBaseName(topicName),
 				strconv.FormatUint(uint64(m.MsgType), 10),

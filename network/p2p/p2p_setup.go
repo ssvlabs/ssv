@@ -176,7 +176,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.Network.DomainType()
+	d := n.cfg.Network.DomainType
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -207,7 +207,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.Network.DomainType()
+		newDomain := n.cfg.Network.DomainType
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
@@ -216,15 +216,15 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
-		Streams:            n.streamCtrl,
-		NodeInfos:          n.idx,
-		PeerInfos:          n.idx,
-		ConnIdx:            n.idx,
-		SubnetsIdx:         n.idx,
-		IDService:          ids,
-		Network:            n.host.Network(),
-		DomainTypeProvider: n.cfg.Network,
-		SubnetsProvider:    subnetsProvider,
+		Streams:         n.streamCtrl,
+		NodeInfos:       n.idx,
+		PeerInfos:       n.idx,
+		ConnIdx:         n.idx,
+		SubnetsIdx:      n.idx,
+		IDService:       ids,
+		Network:         n.host.Network(),
+		DomainType:      n.cfg.Network.DomainType,
+		SubnetsProvider: subnetsProvider,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
