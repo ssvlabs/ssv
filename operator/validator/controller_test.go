@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -211,13 +210,12 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(context.TODO())
 
-			var subnets []byte
+			subnets := [commons.SubnetsCount]byte{}
 			for _, share := range sharesWithMetadata {
-				subnets = append(subnets, byte(commons.CommitteeSubnet(share.CommitteeID())))
+				subnets[commons.CommitteeSubnet(share.CommitteeID())] = 1
 			}
-			slices.Sort(subnets)
 
-			network.EXPECT().ActiveSubnets().Return(subnets).AnyTimes()
+			network.EXPECT().ActiveSubnets().Return(subnets[:]).AnyTimes()
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
