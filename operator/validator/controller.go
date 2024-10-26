@@ -208,7 +208,7 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized committeeObserver instances
+	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
 

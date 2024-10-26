@@ -104,7 +104,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			if reorgEvent.Previous {
 				h.duties.ResetEpoch(currentEpoch)
 				h.fetchCurrentEpoch = true
-				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
+				if h.shouldFetchNextEpoch(reorgEvent.Slot) {
 					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
@@ -113,7 +113,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.
-				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
+				if h.shouldFetchNextEpoch(reorgEvent.Slot) {
 					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
@@ -128,7 +128,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.fetchCurrentEpoch = true
 
 			// reset next epoch duties if in appropriate slot range
-			if h.shouldFetchNexEpoch(slot) {
+			if h.shouldFetchNextEpoch(slot) {
 				h.duties.ResetEpoch(currentEpoch + 1)
 				h.fetchNextEpoch = true
 			}
@@ -157,7 +157,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		h.fetchCurrentEpoch = false
 	}
 
-	if h.fetchNextEpoch && h.shouldFetchNexEpoch(slot) {
+	if h.fetchNextEpoch && h.shouldFetchNextEpoch(slot) {
 		if err := h.fetchAndProcessDuties(ctx, epoch+1); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
@@ -310,6 +310,6 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 	}
 }
 
-func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
+func (h *AttesterHandler) shouldFetchNextEpoch(slot phase0.Slot) bool {
 	return uint64(slot)%h.network.Beacon.SlotsPerEpoch() > h.network.Beacon.SlotsPerEpoch()/2-2
 }
