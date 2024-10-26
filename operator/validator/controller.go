@@ -526,7 +526,8 @@ func (c *controller) StartValidators() {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		if activeSubnets[commons.CommitteeSubnet(share.CommitteeID())] != 0 {
+		subnet := commons.CommitteeSubnet(share.CommitteeID())
+		if uint64(len(activeSubnets)) >= subnet && activeSubnets[subnet] != 0 {
 			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
 		}
 	}
@@ -1147,7 +1148,8 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 				return true
 			}
 
-			if activeSubnets[commons.CommitteeSubnet(share.CommitteeID())] == 0 {
+			subnet := commons.CommitteeSubnet(share.CommitteeID())
+			if uint64(len(activeSubnets)) < subnet || activeSubnets[subnet] == 0 {
 				return true
 			}
 
