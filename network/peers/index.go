@@ -8,9 +8,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/records"
+	"go.uber.org/zap"
 )
 
 const (
@@ -114,7 +113,7 @@ type SubnetsIndex interface {
 
 // GossipScoreIndex serves as an interface to get a peer's Gossip score
 type GossipScoreIndex interface {
-	// AddScore adds a score for a peer
+	// SetScores sets a score for a peer
 	SetScores(scores map[peer.ID]float64)
 	// GetGossipScore returns the peer score and a boolean flag for whether it has such score or not
 	GetGossipScore(peerID peer.ID) (float64, bool)

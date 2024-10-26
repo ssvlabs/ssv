@@ -14,7 +14,7 @@ Execution layer communication is an important part of SSV, we are basing our sta
 
 ## :feet: Goals
 
-- Alawys be up-top-date with synced-el-node that reads the contract events.
+- Always be up-top-date with synced-el-node that reads the contract events.
 - Stop the node if el-node is out of sync.
 - Atomic event handling - support crash recovery, interlock actions on validators with live incoming events.
 - Simple flow between history and ongiong sync.
@@ -75,7 +75,7 @@ for {
 ### EL sync
 
 if the EL node is not synced, we should stop event processing and signal the node to crash becasue we can't resume.
-a synecd EL node is a prerequisite to run SSV.
+a synced EL node is a prerequisite to run SSV.
 
 After crash the SSV node will launch and will wait and retry until it synced, so it won't be in a crash loop.
 

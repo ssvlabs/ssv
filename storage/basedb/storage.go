@@ -20,7 +20,7 @@ type Reader interface {
 	GetAll(prefix []byte, handler func(int, Obj) error) error
 }
 
-// ReadWrite is a read-write accessor to the database.
+// ReadWriter is a read-write accessor to the database.
 type ReadWriter interface {
 	Reader
 	Set(prefix []byte, key []byte, value []byte) error

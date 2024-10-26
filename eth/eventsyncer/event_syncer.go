@@ -8,20 +8,14 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/logging/fields"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
+	"go.uber.org/zap"
 )
 
 // TODO: check if something from these PRs need to be ported:
 // https://github.com/ssvlabs/ssv/pull/1053
-
-var (
-	// ErrNodeNotReady is returned when node is not ready.
-	ErrNodeNotReady = fmt.Errorf("node not ready")
-)
 
 type ExecutionClient interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
@@ -66,7 +60,7 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 }
 
 // Healthy returns nil if the syncer is syncing ongoing events.
-func (es *EventSyncer) Healthy(ctx context.Context) error {
+func (es *EventSyncer) Healthy(_ context.Context) error {
 	lastProcessedBlock, found, err := es.nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
 		return fmt.Errorf("failed to read last processed block: %w", err)
@@ -74,6 +68,7 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	if !found || lastProcessedBlock == nil || lastProcessedBlock.Uint64() == 0 {
 		return fmt.Errorf("last processed block is not set")
 	}
+
 	if es.lastProcessedBlock != lastProcessedBlock.Uint64() {
 		es.lastProcessedBlock = lastProcessedBlock.Uint64()
 		es.lastProcessedBlockChange = time.Now()

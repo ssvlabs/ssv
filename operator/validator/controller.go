@@ -19,8 +19,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -59,6 +57,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -506,13 +505,13 @@ func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *c
 	return nil
 }
 
-// StartValidators loads all persisted shares and setup the corresponding validators
+// StartValidators loads all persisted shares and set up the corresponding validators
 func (c *controller) StartValidators() {
 	// Load non-liquidated shares.
 	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		close(c.committeeValidatorSetup)
-		c.logger.Info("could not find validators")
+		c.logger.Info("found no validator shares in storage")
 		return
 	}
 
