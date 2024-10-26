@@ -15,6 +15,14 @@ RUN apt-get update                                                        && \
   make=4.3-4.1 \
   && rm -rf /var/lib/apt/lists/*
 
+# install jemalloc
+WORKDIR /tmp/jemalloc-temp
+RUN curl -s -L "https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2" -o jemalloc.tar.bz2 \
+  && tar xjf ./jemalloc.tar.bz2
+RUN cd jemalloc-5.3.0 \
+  && ./configure --with-jemalloc-prefix='je_' --with-malloc-conf='background_thread:true,metadata_thp:auto' \
+  && make && make install
+
 RUN go version
 
 WORKDIR /go/src/github.com/ssvlabs/ssv/
@@ -38,13 +46,15 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   COMMIT=$(git rev-parse HEAD) && \
   VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
   CGO_ENABLED=1 GOOS=linux go install \
-  -tags="blst_enabled" \
+  -tags="blst_enabled,jemalloc,allocator" \
   -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
   ./cmd/ssvnode
 
 #
 # STEP 3: Prepare image to run the binary
 #
+# IMPORTANT: before upgrading to go 1.23 or higher make sure the following issue has been resolved:
+# https://github.com/golang/go/issues/69978
 FROM golang:1.22 AS runner
 
 RUN apt-get update     && \
