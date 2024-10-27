@@ -140,7 +140,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	// Log every 10th skipped peer.
 	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
 	const logFrequency = 10
-	var skippedPeers = 0
+	var skippedPeers uint64 = 0
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		logger := logger.With(
