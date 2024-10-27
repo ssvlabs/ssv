@@ -137,6 +137,11 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
 
+	// Log every 10th skipped peer.
+	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
+	const logFrequency = 10
+	var skippedPeers = 0
+
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		logger := logger.With(
 			fields.ENR(e.Node),
@@ -144,7 +149,10 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		)
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			logger.Debug("skipped discovered peer", zap.Error(err))
+			if skippedPeers%logFrequency == 0 {
+				logger.Debug("skipped discovered peer", zap.Error(err))
+			}
+			skippedPeers++
 			return
 		}
 		handler(e)
