@@ -53,7 +53,6 @@ type Database interface {
 
 	// TODO: consider moving these functions into Reader and ReadWriter interfaces?
 	CountPrefix(prefix []byte) (int64, error)
-	DeletePrefix(prefix []byte) (int, error)
 	DropPrefix(prefix []byte) error
 	Update(fn func(Txn) error) error
 	Close() error

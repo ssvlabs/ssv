@@ -190,7 +190,6 @@ func setupEventHandler(
 			operator.privateKey,
 			keyManager,
 			bc,
-			storageMap,
 			eventhandler.WithFullNode(),
 			eventhandler.WithLogger(logger),
 		)
@@ -222,7 +221,6 @@ func setupEventHandler(
 		operator.privateKey,
 		keyManager,
 		bc,
-		storageMap,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)
