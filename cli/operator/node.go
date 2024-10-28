@@ -407,6 +407,7 @@ func setupGlobal() (*zap.Logger, error) {
 			return nil, fmt.Errorf("could not read share config: %w", err)
 		}
 	}
+	cfg.SSVOptions.ValidatorOptions.BuilderProposals = true
 
 	err := logging.SetGlobalLogger(
 		cfg.LogLevel,
