@@ -833,7 +833,7 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 	}
 
 	// Set up concurrency.
-	const goroutineCount = 100
+	const goroutineCount = 1000
 	var wg sync.WaitGroup
 	errChan := make(chan error, goroutineCount)
 
@@ -888,7 +888,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	}
 
 	// Set up concurrency.
-	const goroutineCount = 100
+	const goroutineCount = 1000
 	var wg sync.WaitGroup
 	errChan := make(chan error, goroutineCount)
 
