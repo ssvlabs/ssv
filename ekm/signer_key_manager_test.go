@@ -849,9 +849,12 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 	// Count errors and successes.
 	var slashableErrors, successCount int
 	for err := range errChan {
-		if err != nil && err.Error() == "slashable attestation (HighestAttestationVote), not signing" {
+		if err != nil {
+			if err.Error() != "slashable attestation (HighestAttestationVote), not signing" {
+				require.Fail(t, "unexpected error: %v", err)
+			}
 			slashableErrors++
-		} else if err == nil {
+		} else {
 			successCount++
 		}
 	}
@@ -904,9 +907,12 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	// Count errors and successes.
 	var slashableErrors, successCount int
 	for err := range errChan {
-		if err != nil && err.Error() == "slashable proposal (HighestProposalVote), not signing" {
+		if err != nil {
+			if err.Error() != "slashable proposal (HighestProposalVote), not signing" {
+				require.Fail(t, "unexpected error: %v", err)
+			}
 			slashableErrors++
-		} else if err == nil {
+		} else {
 			successCount++
 		}
 	}
