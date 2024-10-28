@@ -80,12 +80,12 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 			fields.Round(i.State.Round),
 			fields.Height(i.State.Height))
 
-		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
+		proposerID := i.proposer(i.GetConfig(), specqbft.FirstRound)
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
 		if proposerID == i.State.CommitteeMember.OperatorID {
-			proposal, err := CreateProposal(i.State, i.signer, i.StartValue, nil, nil)
+			proposal, err := i.CreateProposal(i.signer, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
 				logger.Warn("❗ failed to create proposal", zap.Error(err))
@@ -125,7 +125,10 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
+func (i *Instance) ProcessMsg(
+	logger *zap.Logger,
+	msg *specqbft.ProcessingMessage,
+) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
 	if !i.CanProcessMessages() {
 		return false, nil, nil, errors.New("instance stopped processing messages")
 	}
@@ -135,18 +138,13 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.ProcessingMessag
 	}
 
 	res := i.processMsgF.Run(func() interface{} {
-
 		switch msg.QBFTMessage.MsgType {
 		case specqbft.ProposalMsgType:
 			return i.uponProposal(logger, msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
 			return i.uponPrepare(logger, msg, i.State.PrepareContainer)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
-			if decided {
-				i.State.Decided = decided
-				i.State.DecidedValue = decidedValue
-			}
+			decided, decidedValue, aggregatedCommit, err = i.uponCommit(logger, msg, i.State.CommitContainer)
 			return err
 		case specqbft.RoundChangeMsgType:
 			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
@@ -171,8 +169,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 
 	switch msg.QBFTMessage.MsgType {
 	case specqbft.ProposalMsgType:
-		return isValidProposal(
-			i.State,
+		return i.validProposal(
 			i.config,
 			msg,
 			i.config.GetValueCheckF(),
@@ -199,7 +196,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 			i.State.CommitteeMember.Committee,
 		)
 	case specqbft.RoundChangeMsgType:
-		return validRoundChangeForDataIgnoreSignature(i.State, msg, i.State.Height, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
+		return i.validRoundChangeForDataIgnoreSignature(msg, i.State.Height, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
 	default:
 		return errors.New("signed message type not supported")
 	}

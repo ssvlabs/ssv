@@ -13,9 +13,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// UponCommit returns true if a quorum of commit messages was received.
+// uponCommit returns true if a quorum of commit messages was received.
 // Assumes commit message is valid!
-func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *spectypes.SignedSSVMessage, error) {
+func (i *Instance) uponCommit(
+	logger *zap.Logger,
+	msg *specqbft.ProcessingMessage,
+	commitMsgContainer *specqbft.MsgContainer,
+) (bool, []byte, *spectypes.SignedSSVMessage, error) {
 	logger.Debug("📬 got commit message",
 		fields.Round(i.State.Round),
 		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
@@ -26,11 +30,11 @@ func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessag
 		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
 	}
 	if !addMsg {
-		return false, nil, nil, nil // UponCommit was already called
+		return false, nil, nil, nil // uponCommit was already called
 	}
 
 	// calculate commit quorum and act upon it
-	quorum, commitMsgs, err := commitQuorumForRoundRoot(i.State, commitMsgContainer, msg.QBFTMessage.Root, msg.QBFTMessage.Round)
+	quorum, commitMsgs, err := i.commitQuorumForRoundRoot(commitMsgContainer, msg.QBFTMessage.Root, msg.QBFTMessage.Round)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not calculate commit quorum")
 	}
@@ -50,6 +54,9 @@ func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessag
 
 		i.metrics.EndStageCommit()
 
+		i.State.Decided = true
+		i.State.DecidedValue = fullData
+
 		return true, fullData, agg, nil
 	}
 
@@ -57,9 +64,9 @@ func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessag
 }
 
 // returns true if there is a quorum for the current round for this provided value
-func commitQuorumForRoundRoot(state *specqbft.State, commitMsgContainer *specqbft.MsgContainer, root [32]byte, round specqbft.Round) (bool, []*specqbft.ProcessingMessage, error) {
+func (i *Instance) commitQuorumForRoundRoot(commitMsgContainer *specqbft.MsgContainer, root [32]byte, round specqbft.Round) (bool, []*specqbft.ProcessingMessage, error) {
 	signers, msgs := commitMsgContainer.LongestUniqueSignersForRoundAndRoot(round, root)
-	return state.CommitteeMember.HasQuorum(len(signers)), msgs, nil
+	return i.State.CommitteeMember.HasQuorum(len(signers)), msgs, nil
 }
 
 func aggregateCommitMsgs(msgs []*specqbft.ProcessingMessage, fullData []byte) (*spectypes.SignedSSVMessage, error) {
@@ -120,16 +127,16 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *specqbft.State, signer ssvtypes.OperatorSigner, root [32]byte) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreateCommit(signer ssvtypes.OperatorSigner, root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
-		Height:     state.Height,
-		Round:      state.Round,
-		Identifier: state.ID,
+		Height:     i.State.Height,
+		Round:      i.State.Round,
+		Identifier: i.State.ID,
 
 		Root: root,
 	}
-	return ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	return ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, signer)
 }
 
 func baseCommitValidationIgnoreSignature(

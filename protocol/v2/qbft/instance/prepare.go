@@ -49,7 +49,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 		fields.Round(i.State.Round),
 		zap.Any("prepare_signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))))
 
-	commitMsg, err := CreateCommit(i.State, i.signer, proposedRoot)
+	commitMsg, err := i.CreateCommit(i.signer, proposedRoot)
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
 	}
@@ -64,39 +64,6 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 	}
 
 	return nil
-}
-
-// getRoundChangeJustification returns the round change justification for the current round.
-// The justification is a quorum of signed prepare messages that agree on state.LastPreparedValue
-func getRoundChangeJustification(state *specqbft.State, prepareMsgContainer *specqbft.MsgContainer) ([]*specqbft.ProcessingMessage, error) {
-	if state.LastPreparedValue == nil {
-		return nil, nil
-	}
-
-	r, err := specqbft.HashDataRoot(state.LastPreparedValue)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not hash input data")
-	}
-
-	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
-	ret := make([]*specqbft.ProcessingMessage, 0)
-	for _, msg := range prepareMsgs {
-		if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(
-			msg,
-			state.Height,
-			state.LastPreparedRound,
-			r,
-			state.CommitteeMember.Committee,
-		); err == nil {
-			ret = append(ret, msg)
-		}
-	}
-
-	if !specqbft.HasQuorum(state.CommitteeMember, ret) {
-		return nil, nil
-	}
-
-	return ret, nil
 }
 
 // validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
@@ -170,15 +137,15 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, signer ssvtypes.OperatorSigner, newRound specqbft.Round, root [32]byte) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreatePrepare(signer ssvtypes.OperatorSigner, newRound specqbft.Round, root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
-		Height:     state.Height,
+		Height:     i.State.Height,
 		Round:      newRound,
-		Identifier: state.ID,
+		Identifier: i.State.ID,
 
 		Root: root,
 	}
 
-	return ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	return ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, signer)
 }

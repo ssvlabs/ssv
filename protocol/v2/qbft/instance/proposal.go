@@ -45,7 +45,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 		return errors.Wrap(err, "could not hash input data")
 	}
 
-	prepare, err := CreatePrepare(i.State, i.signer, newRound, r)
+	prepare, err := i.CreatePrepare(i.signer, newRound, r)
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}
@@ -61,8 +61,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 	return nil
 }
 
-func isValidProposal(
-	state *specqbft.State,
+func (i *Instance) validProposal(
 	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	valCheck specqbft.ProposedValueCheckF,
@@ -70,18 +69,18 @@ func isValidProposal(
 	if msg.QBFTMessage.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
-	if msg.QBFTMessage.Height != state.Height {
+	if msg.QBFTMessage.Height != i.State.Height {
 		return errors.New("wrong msg height")
 	}
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
 
-	if !msg.SignedMessage.CheckSignersInCommittee(state.CommitteeMember.Committee) {
+	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
 		return errors.New("signer not in committee")
 	}
 
-	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{proposer(state, config, msg.QBFTMessage.Round)}) {
+	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{i.proposer(config, msg.QBFTMessage.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
 
@@ -119,11 +118,10 @@ func isValidProposal(
 		prepareJustificationWrapped = append(prepareJustificationWrapped, prepareWrapped)
 	}
 
-	if err := isProposalJustification(
-		state,
+	if err := i.isProposalJustification(
 		roundChangeJustificationsWrapped,
 		prepareJustificationWrapped,
-		state.Height,
+		i.State.Height,
 		msg.QBFTMessage.Round,
 		msg.SignedMessage.FullData,
 		valCheck,
@@ -131,8 +129,8 @@ func isValidProposal(
 		return errors.Wrap(err, "proposal not justified")
 	}
 
-	if (state.ProposalAcceptedForCurrentRound == nil && msg.QBFTMessage.Round == state.Round) ||
-		msg.QBFTMessage.Round > state.Round {
+	if (i.State.ProposalAcceptedForCurrentRound == nil && msg.QBFTMessage.Round == i.State.Round) ||
+		msg.QBFTMessage.Round > i.State.Round {
 		return nil
 	}
 	return errors.New("proposal is not valid with current state")
@@ -147,8 +145,7 @@ func isValidProposal(
 //     for round change to happen)
 //   - whether proposedValue matches the highest(freshest) prepared value from previous
 //     rounds (IF it exists) for operator cluster (in that case prepareMsgs must justify it)
-func isProposalJustification(
-	state *specqbft.State,
+func (i *Instance) isProposalJustification(
 	roundChangeMsgs []*specqbft.ProcessingMessage,
 	prepareMsgs []*specqbft.ProcessingMessage,
 	height specqbft.Height,
@@ -170,12 +167,12 @@ func isProposalJustification(
 	// we are changing round then, check all round change messages we've got for this round
 
 	for _, rc := range roundChangeMsgs {
-		if err := validRoundChangeForDataVerifySignature(state, rc, height, round, proposedValue); err != nil {
+		if err := i.validRoundChangeForDataVerifySignature(rc, height, round, proposedValue); err != nil {
 			return errors.Wrap(err, "change round msg not valid")
 		}
 	}
 
-	if !specqbft.HasQuorum(state.CommitteeMember, roundChangeMsgs) {
+	if !specqbft.HasQuorum(i.State.CommitteeMember, roundChangeMsgs) {
 		return errors.New("change round has no quorum")
 	}
 
@@ -198,7 +195,7 @@ func isProposalJustification(
 	}
 
 	// check prepare quorum
-	if !specqbft.HasQuorum(state.CommitteeMember, prepareMsgs) {
+	if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgs) {
 		return errors.New("prepares has no quorum")
 	}
 
@@ -227,7 +224,7 @@ func isProposalJustification(
 			height,
 			rcMsg.QBFTMessage.DataRound,
 			rcMsg.QBFTMessage.Root,
-			state.CommitteeMember.Committee,
+			i.State.CommitteeMember.Committee,
 		); err != nil {
 			return errors.New("signed prepare not valid")
 		}
@@ -235,9 +232,9 @@ func isProposalJustification(
 	return nil
 }
 
-func proposer(state *specqbft.State, config qbft.IConfig, round specqbft.Round) spectypes.OperatorID {
+func (i *Instance) proposer(config qbft.IConfig, round specqbft.Round) spectypes.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
-	return config.GetProposerF()(state, round)
+	return config.GetProposerF()(i.State, round)
 }
 
 // CreateProposal
@@ -253,7 +250,7 @@ func proposer(state *specqbft.State, config qbft.IConfig, round specqbft.Round) 
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *specqbft.State, signer ssvtypes.OperatorSigner, fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreateProposal(signer ssvtypes.OperatorSigner, fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
@@ -279,16 +276,16 @@ func CreateProposal(state *specqbft.State, signer ssvtypes.OperatorSigner, fullD
 
 	msg := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
-		Height:     state.Height,
-		Round:      state.Round,
-		Identifier: state.ID,
+		Height:     i.State.Height,
+		Round:      i.State.Round,
+		Identifier: i.State.ID,
 
 		Root:                     r,
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
 
-	signedMsg, err := ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	signedMsg, err := ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, signer)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not wrap proposal message")
 	}

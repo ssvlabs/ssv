@@ -3,9 +3,8 @@ package instance
 import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
+	"go.uber.org/zap"
 )
 
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
@@ -25,7 +24,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.signer, newRound, i.StartValue)
+	roundChange, err := i.CreateRoundChange(i.signer, newRound, i.StartValue)
 	if err != nil {
 		return errors.Wrap(err, "could not generate round change msg")
 	}
