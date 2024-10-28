@@ -7,11 +7,10 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	"go.uber.org/zap"
 )
 
 // uponRoundChange process round change messages.
@@ -99,7 +98,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound gen
 
 	i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 
-	roundChange, err := CreateRoundChange(i.State, i.config, newRound, instanceStartValue)
+	roundChange, err := CreateRoundChange(i.State, i.config, newRound)
 	if err != nil {
 		return errors.Wrap(err, "failed to create round change message")
 	}
@@ -152,7 +151,6 @@ func hasReceivedProposalJustificationForLeadingRound(
 	// Important!
 	// We iterate on all round chance msgs for liveliness in case the last round change msg is malicious.
 	for _, msg := range roundChanges {
-
 		// Chose proposal value.
 		// If justifiedRoundChangeMsg has no prepare justification chose state value
 		// If justifiedRoundChangeMsg has prepare justification chose prepared value
@@ -337,7 +335,7 @@ func minRound(roundChangeMsgs []*genesisspecqbft.SignedMessage) genesisspecqbft.
 	return ret
 }
 
-func getRoundChangeData(state *genesisspecqbft.State, config qbft.IConfig, instanceStartValue []byte) (genesisspecqbft.Round, [32]byte, []byte, []*genesisspecqbft.SignedMessage, error) {
+func getRoundChangeData(state *genesisspecqbft.State, config qbft.IConfig) (genesisspecqbft.Round, [32]byte, []byte, []*genesisspecqbft.SignedMessage, error) {
 	if state.LastPreparedRound != genesisspecqbft.NoRound && state.LastPreparedValue != nil {
 		justifications, err := getRoundChangeJustification(state, config, state.PrepareContainer)
 		if err != nil {
@@ -368,11 +366,16 @@ RoundChange(
            getRoundChangeJustification(current)
        )
 */
-func CreateRoundChange(state *genesisspecqbft.State, config qbft.IConfig, newRound genesisspecqbft.Round, instanceStartValue []byte) (*genesisspecqbft.SignedMessage, error) {
-	round, root, fullData, justifications, err := getRoundChangeData(state, config, instanceStartValue)
+func CreateRoundChange(state *genesisspecqbft.State, config qbft.IConfig, newRound genesisspecqbft.Round) (*genesisspecqbft.SignedMessage, error) {
+	round, root, fullData, justifications, err := getRoundChangeData(state, config)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")
 	}
+
+	// TODO
+	// so we can have fullData==nil and root==0 here
+	// - if current state.LastPreparedValue == nil
+	// - or state.LastPreparedRound != 0
 
 	justificationsData, err := genesisspecqbft.MarshalJustifications(justifications)
 	if err != nil {

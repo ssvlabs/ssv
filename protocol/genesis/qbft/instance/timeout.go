@@ -2,11 +2,9 @@ package instance
 
 import (
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-
 	"github.com/ssvlabs/ssv/logging/fields"
+	"go.uber.org/zap"
 )
 
 var CutoffRound = uint64(15) // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
@@ -28,19 +26,19 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)
+	roundChangeMsg, err := CreateRoundChange(i.State, i.config, newRound)
 	if err != nil {
 		return errors.Wrap(err, "could not generate round change msg")
 	}
 
 	logger.Debug("📢 broadcasting round change message",
 		fields.Round(specqbft.Round(i.State.Round)),
-		fields.Root(roundChange.Message.Root),
-		zap.Any("round_change_signers", roundChange.Signers),
+		fields.Root(roundChangeMsg.Message.Root),
+		zap.Any("round_change_signers", roundChangeMsg.Signers),
 		fields.Height(specqbft.Height(i.State.Height)),
 		zap.String("reason", "timeout"))
 
-	if err := i.Broadcast(logger, roundChange); err != nil {
+	if err := i.Broadcast(logger, roundChangeMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
 	}
 

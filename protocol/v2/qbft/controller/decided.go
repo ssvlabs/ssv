@@ -8,14 +8,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	if err := ValidateDecided(
-		c.config,
 		msg,
 		c.CommitteeMember,
 	); err != nil {
@@ -87,7 +85,6 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMes
 }
 
 func ValidateDecided(
-	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	committeeMember *spectypes.CommitteeMember,
 ) error {
@@ -99,7 +96,7 @@ func ValidateDecided(
 		return errors.New("not a decided msg")
 	}
 
-	if err := instance.BaseCommitValidationVerifySignature(config, msg, msg.QBFTMessage.Height, committeeMember.Committee); err != nil {
+	if err := instance.BaseCommitValidationVerifySignature(msg, msg.QBFTMessage.Height, committeeMember.Committee); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
 	}
 

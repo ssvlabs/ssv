@@ -7,11 +7,10 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	"go.uber.org/zap"
 )
 
 // uponProposal process proposal message
@@ -46,7 +45,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 		return errors.Wrap(err, "could not hash input data")
 	}
 
-	prepare, err := CreatePrepare(i.State, i.config, newRound, r)
+	prepareMsg, err := CreatePrepare(i.State, i.config, newRound, r)
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}
@@ -54,9 +53,10 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 	logger.Debug("📢 got proposal, broadcasting prepare message",
 		fields.Round(specqbft.Round(i.State.Round)),
 		zap.Any("proposal_signers", signedProposal.Signers),
-		zap.Any("prepare_signers", prepare.Signers))
+		zap.Any("prepare_signers", prepareMsg.Signers),
+		fields.Root(prepareMsg.Message.Root))
 
-	if err := i.Broadcast(logger, prepare); err != nil {
+	if err := i.Broadcast(logger, prepareMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
 	}
 	return nil

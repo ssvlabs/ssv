@@ -7,11 +7,10 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
+	"go.uber.org/zap"
 )
 
 // uponPrepare process prepare message
@@ -103,29 +102,6 @@ func getRoundChangeJustification(state *genesisspecqbft.State, config qbft.IConf
 	return ret, nil
 }
 
-// validPreparesForHeightRoundAndValue returns an aggregated prepare msg for a specific Height and round
-// func validPreparesForHeightRoundAndValue(
-//	config IConfig,
-//	prepareMessages []*SignedMessage,
-//	height Height,
-//	round Round,
-//	value []byte,
-//	operators []*types.Operator) *SignedMessage {
-//	var aggregatedPrepareMsg *SignedMessage
-//	for _, signedMsg := range prepareMessages {
-//		if err := validSignedPrepareForHeightRoundAndValue(config, signedMsg, height, round, value, operators); err == nil {
-//			if aggregatedPrepareMsg == nil {
-//				aggregatedPrepareMsg = signedMsg
-//			} else {
-//				// TODO: check error
-//				// nolint
-//				aggregatedPrepareMsg.Aggregate(signedMsg)
-//			}
-//		}
-//	}
-//	return aggregatedPrepareMsg
-// }
-
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndRoot(
@@ -134,7 +110,8 @@ func validSignedPrepareForHeightRoundAndRoot(
 	height genesisspecqbft.Height,
 	round genesisspecqbft.Round,
 	root [32]byte,
-	operators []*genesisspectypes.Operator) error {
+	operators []*genesisspectypes.Operator,
+) error {
 	if signedPrepare.Message.MsgType != genesisspecqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}

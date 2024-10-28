@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -9,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -105,9 +105,9 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	msg *specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
-	root [32]byte,
-	operators []*spectypes.Operator) error {
-
+	wantRoot [32]byte,
+	operators []*spectypes.Operator,
+) error {
 	if msg.QBFTMessage.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -122,12 +122,14 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return errors.Wrap(err, "prepareData invalid")
 	}
 
-	if !bytes.Equal(msg.QBFTMessage.Root[:], root[:]) {
-		return errors.New("proposed data mismatch")
+	gotRoot := msg.QBFTMessage.Root[:]
+	if !bytes.Equal(gotRoot, wantRoot[:]) {
+		return fmt.Errorf("proposed data root mismatch, want: %s, got: %s", wantRoot, gotRoot)
 	}
 
-	if len(msg.SignedMessage.OperatorIDs) != 1 {
-		return errors.New("msg allows 1 signer")
+	signerCnt := len(msg.SignedMessage.OperatorIDs)
+	if signerCnt != 1 {
+		return fmt.Errorf("msg must have exactly 1 signer, got: %d", signerCnt)
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(operators) {
@@ -138,13 +140,12 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 }
 
 func validSignedPrepareForHeightRoundAndRootVerifySignature(
-	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator) error {
-
+	operators []*spectypes.Operator,
+) error {
 	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, height, round, root, operators); err != nil {
 		return err
 	}

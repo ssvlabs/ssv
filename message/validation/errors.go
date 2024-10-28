@@ -7,19 +7,22 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"go.uber.org/zap"
 )
 
 type Error struct {
-	text     string
+	// text is the main/core factor defining this error
+	text string
+	// reject signals if we want to reject incoming message based on this error
+	reject bool
+
 	got      any
 	want     any
 	innerErr error
-	reject   bool
-	silent   bool
+
+	silent bool
 }
 
 func (e Error) Error() string {
@@ -37,6 +40,17 @@ func (e Error) Error() string {
 	}
 
 	return sb.String()
+}
+
+// Is defines the equivalency of Error (compared to other errors), 2 Error(s) are same if
+// they have matching Error.text and Error.reject values.
+func (e Error) Is(target error) bool {
+	var targetErr Error
+	ok := errors.As(target, &targetErr)
+	if !ok {
+		return false
+	}
+	return targetErr.text == e.text && targetErr.reject == e.reject
 }
 
 func (e Error) Reject() bool {
@@ -88,16 +102,17 @@ var (
 	ErrSignerNotLeader                         = Error{text: "signer is not leader", reject: true}
 	ErrSignersNotSorted                        = Error{text: "signers are not sorted", reject: true}
 	ErrInconsistentSigners                     = Error{text: "signer is not expected", reject: true}
-	ErrInvalidHash                             = Error{text: "root doesn't match full data hash", reject: true}
-	ErrFullDataHash                            = Error{text: "couldn't hash root", reject: true}
+	ErrZeroRootHash                            = Error{text: "root hash is zero", reject: true}
+	ErrInvalidRootHash                         = Error{text: "root doesn't match full data hash", reject: true}
+	ErrComputeFullDataHash                     = Error{text: "couldn't hash root", reject: true}
 	ErrUndecodableMessageData                  = Error{text: "message data could not be decoded", reject: true}
 	ErrEventMessage                            = Error{text: "unexpected event message", reject: true}
 	ErrUnknownSSVMessageType                   = Error{text: "unknown SSV message type", reject: true}
 	ErrUnknownQBFTMessageType                  = Error{text: "unknown QBFT message type", reject: true}
 	ErrInvalidPartialSignatureType             = Error{text: "unknown partial signature message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
-	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
-	ErrDecidedNotEnoughSigners                 = Error{text: "not enough signers in decided message", reject: true}
+	ErrMultipleSigners                         = Error{text: "message with multiple signers", reject: true}
+	ErrCommitSignersNotEnoughForQuorum         = Error{text: "commit message has > 1 signers, but not enough for quorum", reject: true}
 	ErrDifferentProposalData                   = Error{text: "different proposal data", reject: true}
 	ErrMalformedPrepareJustifications          = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
@@ -108,8 +123,11 @@ var (
 	ErrNoSignatures                            = Error{text: "no signatures", reject: true}
 	ErrSignersAndSignaturesWithDifferentLength = Error{text: "signature and operator ID length mismatch", reject: true}
 	ErrPartialSigOneSigner                     = Error{text: "partial signature message must have only one signer", reject: true}
-	ErrPrepareOrCommitWithFullData             = Error{text: "prepare or commit with full data", reject: true}
-	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
+	ErrProposalWithoutFullData                 = Error{text: "proposal without full data", reject: true}
+	ErrPrepareWithFullData                     = Error{text: "prepare with full data", reject: true}
+	ErrCommitWithFullData                      = Error{text: "commit with full data", reject: true}
+	ErrDecidedCommitWithoutFullData            = Error{text: "decided commit without full data", reject: true}
+	ErrFullDataNotInPartialSignatureMessage    = Error{text: "full data not in partial signature message", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
 	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}

@@ -2,16 +2,15 @@ package instance
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -138,7 +137,6 @@ func baseCommitValidationIgnoreSignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "signed commit invalid")
 	}
@@ -158,12 +156,10 @@ func baseCommitValidationIgnoreSignature(
 }
 
 func BaseCommitValidationVerifySignature(
-	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := baseCommitValidationIgnoreSignature(msg, height, operators); err != nil {
 		return err
 	}
@@ -183,20 +179,28 @@ func validateCommit(
 	proposedMsg *specqbft.ProcessingMessage,
 	operators []*spectypes.Operator,
 ) error {
+	if proposedMsg == nil {
+		return fmt.Errorf("did not receive proposal for round: %d", round)
+	}
+
 	if err := baseCommitValidationIgnoreSignature(msg, height, operators); err != nil {
 		return err
 	}
 
-	if len(msg.SignedMessage.OperatorIDs) != 1 {
-		return errors.New("msg allows 1 signer")
+	signerCnt := len(msg.SignedMessage.OperatorIDs)
+	if signerCnt != 1 {
+		return fmt.Errorf("msg must have exactly 1 signer, got: %d", signerCnt)
 	}
 
-	if msg.QBFTMessage.Round != round {
-		return errors.New("wrong msg round")
+	msgRound := msg.QBFTMessage.Round
+	if msgRound != round {
+		return fmt.Errorf("wrong msg round: %d, want: %d", msg.QBFTMessage.Round, round)
 	}
 
-	if !bytes.Equal(proposedMsg.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {
-		return errors.New("proposed data mismatch")
+	wantRoot := proposedMsg.QBFTMessage.Root[:]
+	gotRoot := msg.QBFTMessage.Root[:]
+	if !bytes.Equal(wantRoot, gotRoot) {
+		return fmt.Errorf("proposed data root mismatch, want: %s, got: %s", wantRoot, gotRoot)
 	}
 
 	return nil

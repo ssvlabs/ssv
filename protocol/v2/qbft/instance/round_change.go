@@ -2,15 +2,16 @@ package instance
 
 import (
 	"bytes"
+	errs "errors"
+	"fmt"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 // uponRoundChange process round change messages.
@@ -46,64 +47,121 @@ func (i *Instance) uponRoundChange(
 		fields.Root(msg.QBFTMessage.Root),
 		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs))
 
-	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
+	// 1) if our current round (i.State.Round) is stale we need to fix it
+
+	partialQuorum, newRound := i.gotPartialQuorumAboveOwnRound(roundChangeMsgContainer)
+	if partialQuorum && newRound > i.State.Round {
+		// this code executes exactly once per round - when partial round quorum has
+		// been achieved (because Instance events are processed sequentially)
+		err = i.uponPartialQuorumAboveOwnRound(logger, newRound, instanceStartValue)
+		if err != nil {
+			return fmt.Errorf("could not process round change with partial quorum above own round: %w", err)
+		}
+
+		// we can stop here, there is no need to check if this message has achieved
+		// round change quorum (for received round change message's round) because
+		// this can't happen on the same message we achieved partial quorum above
+		// our own round (or any prior messages for the same round, for that matter) -
+		// this is because Instance processes every message received sequentially
+		// (meaning no valid message is skipped or processed concurrently)
+		return nil
+	}
+
+	// 2) if we have a quorum on the round from received message we should try to
+	//    finish/end that round by proposing "appropriate value" if we (this operator)
+	//    can lead such proposal
+
+	roundChangesWrapped := roundChangeMsgContainer.MessagesForRound(msg.QBFTMessage.Round)
+	if !specqbft.HasQuorum(i.State.CommitteeMember, roundChangesWrapped) {
+		return nil
+	}
+
+	// code below executes exactly once per round when round quorum has been achieved
+	// (because Instance events are processed sequentially)
+
+	justifiedRoundChangeMsg, valueToPropose, err := buildJustifiedProposalToLeadRound(
 		i.State,
 		i.config,
 		instanceStartValue,
-		msg,
-		roundChangeMsgContainer,
-		valCheck)
-	if err != nil {
-		return errors.Wrap(err, "could not get proposal justification for leading round")
-	}
-
-	if justifiedRoundChangeMsg != nil {
-		roundChangeJustificationSignedMessages, _ := justifiedRoundChangeMsg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
-
-		roundChangeJustification := make([]*specqbft.ProcessingMessage, 0)
-		for _, rcSignedMessage := range roundChangeJustificationSignedMessages {
-			rc, err := specqbft.NewProcessingMessage(rcSignedMessage)
-			if err != nil {
-				return errors.Wrap(err, "could not create ProcessingMessage from round change justification")
-			}
-			roundChangeJustification = append(roundChangeJustification, rc)
-		}
-
-		proposal, err := CreateProposal(
-			i.State,
-			i.signer,
-			valueToPropose,
-			roundChangeMsgContainer.MessagesForRound(i.State.Round), // TODO - might be optimized to include only necessary quorum
-			roundChangeJustification,
+		roundChangesWrapped,
+		msg.QBFTMessage.Round,
+		valCheck,
+	)
+	if errs.Is(err, noJustifiedProposalErr) {
+		logger.Debug(
+			"can't lead round change",
+			fields.Root(msg.QBFTMessage.Root),
+			zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs),
+			zap.Error(err),
 		)
-		if err != nil {
-			return errors.Wrap(err, "failed to create proposal")
-		}
-
-		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happenes in createproposal
-
-		logger.Debug("🔄 got justified round change, broadcasting proposal message",
-			fields.Round(i.State.Round),
-			zap.Any("round_change_signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
-			fields.Root(r))
-
-		if err := i.Broadcast(logger, proposal); err != nil {
-			return errors.Wrap(err, "failed to broadcast proposal message")
-		}
-	} else if partialQuorum, rcs := hasReceivedPartialQuorum(i.State, roundChangeMsgContainer); partialQuorum {
-		newRound := minRound(rcs)
-		if newRound <= i.State.Round {
-			return nil // no need to advance round
-		}
-		err := i.uponChangeRoundPartialQuorum(logger, newRound, instanceStartValue)
-		if err != nil {
-			return err
-		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("could not get proposal justification for leading round: %w", err)
 	}
+
+	// no need to check error, check on isValidRoundChange
+	roundChangeJustifications, _ := justifiedRoundChangeMsg.QBFTMessage.GetRoundChangeJustifications()
+	roundChangeJustificationWrapped := make([]*specqbft.ProcessingMessage, 0, len(roundChangeJustifications))
+	for _, rcSignedMessage := range roundChangeJustifications {
+		rcWrapped, err := specqbft.NewProcessingMessage(rcSignedMessage)
+		if err != nil {
+			return fmt.Errorf("%w: %s", convertJustificationToProcessingMsgErr, err)
+		}
+		roundChangeJustificationWrapped = append(roundChangeJustificationWrapped, rcWrapped)
+	}
+
+	proposal, err := CreateProposal(
+		i.State,
+		i.signer,
+		valueToPropose,
+		roundChangeMsgContainer.MessagesForRound(i.State.Round), // TODO - might be optimized to include only necessary quorum
+		roundChangeJustificationWrapped,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create proposal")
+	}
+
+	r, err := specqbft.HashDataRoot(valueToPropose)
+	if err != nil {
+		return fmt.Errorf("couldn't calculate data root hash: %w", err)
+	}
+
+	logger.Debug("🔄 got justified round change, broadcasting proposal message",
+		fields.Round(i.State.Round),
+		zap.Any("round_change_signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
+		fields.Root(r))
+
+	if err := i.Broadcast(logger, proposal); err != nil {
+		return errors.Wrap(err, "failed to broadcast proposal message")
+	}
+
 	return nil
 }
 
-func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
+// gotPartialQuorumAboveOwnRound returns whether there is a partial quorum of
+// round change messages with rounds higher than current Instance round, also
+// returns a new round this partial quorum supports (which is min round across
+// this quorum).
+func (i *Instance) gotPartialQuorumAboveOwnRound(roundChangeMsgContainer *specqbft.MsgContainer) (bool, specqbft.Round) {
+	all := roundChangeMsgContainer.AllMessages()
+
+	rcMsgsFiltered := make([]*specqbft.ProcessingMessage, 0)
+	for _, msg := range all {
+		if msg.QBFTMessage.Round > i.State.Round {
+			rcMsgsFiltered = append(rcMsgsFiltered, msg)
+		}
+	}
+
+	newRound := minRound(rcMsgsFiltered)
+
+	return specqbft.HasPartialQuorum(i.State.CommitteeMember, rcMsgsFiltered), newRound
+}
+
+func (i *Instance) uponPartialQuorumAboveOwnRound(
+	logger *zap.Logger,
+	newRound specqbft.Round,
+	instanceStartValue []byte,
+) error {
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 
@@ -132,78 +190,73 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	return nil
 }
 
-func hasReceivedPartialQuorum(state *specqbft.State, roundChangeMsgContainer *specqbft.MsgContainer) (bool, []*specqbft.ProcessingMessage) {
-	all := roundChangeMsgContainer.AllMessages()
-
-	rc := make([]*specqbft.ProcessingMessage, 0)
-	for _, msg := range all {
-		if msg.QBFTMessage.Round > state.Round {
-			rc = append(rc, msg)
-		}
-	}
-
-	return specqbft.HasPartialQuorum(state.CommitteeMember, rc), rc
-}
-
-// hasReceivedProposalJustificationForLeadingRound returns
-// if first round or not received round change msgs with prepare justification - returns first rc msg in container and value to propose
-// if received round change msgs with prepare justification - returns the highest prepare justification round change msg and value to propose
-// (all the above considering the operator is a leader for the round
-func hasReceivedProposalJustificationForLeadingRound(
+// buildJustifiedProposalToLeadRound returns
+//   - (if first round or not received round change msgs with prepare justification) first
+//     round change msg in roundChangesWrapped and value to propose
+//   - (if received round change msgs with prepare justification) the highest prepared
+//     justified round change msg and value to propose
+//
+// otherwise (unless there is an actual error that prevents this func from finishing)
+// noJustifiedProposalErr error is returned to signal that justified proposal to finish/end
+// specified round can't be built.
+func buildJustifiedProposalToLeadRound(
 	state *specqbft.State,
 	config qbft.IConfig,
 	instanceStartValue []byte,
-	roundChangeMessage *specqbft.ProcessingMessage,
-	roundChangeMsgContainer *specqbft.MsgContainer,
+	roundChangesWrapped []*specqbft.ProcessingMessage,
+	round specqbft.Round,
 	valCheck specqbft.ProposedValueCheckF,
 ) (*specqbft.ProcessingMessage, []byte, error) {
-	roundChanges := roundChangeMsgContainer.MessagesForRound(roundChangeMessage.QBFTMessage.Round)
-	// optimization, if no round change quorum can return false
-	if !specqbft.HasQuorum(state.CommitteeMember, roundChanges) {
-		return nil, nil, nil
-	}
-
-	// Important!
-	// We iterate on all round chance msgs for liveliness in case the last round change msg is malicious.
-	for _, containerRoundChangeMessage := range roundChanges {
-		// Chose proposal value.
-		// If justifiedRoundChangeMsg has no prepare justification chose state value
-		// If justifiedRoundChangeMsg has prepare justification chose prepared value
+	var combinedErr error
+	// Important! We iterate on all round change msgs for liveliness in case the last
+	// round change msg is malicious.
+	for _, roundChangeMsgWrapped := range roundChangesWrapped {
+		// chose proposal value:
+		// - if justifiedRoundChangeMsg has no prepare justification chose Instance start value
+		// - if justifiedRoundChangeMsg has prepare justification chose prepared value
 		valueToPropose := instanceStartValue
-		if containerRoundChangeMessage.QBFTMessage.RoundChangePrepared() {
-			valueToPropose = containerRoundChangeMessage.SignedMessage.FullData
+		if roundChangeMsgWrapped.QBFTMessage.RoundChangePrepared() {
+			valueToPropose = roundChangeMsgWrapped.SignedMessage.FullData
 		}
 
-		roundChangeSignedMessagesJustification, _ := containerRoundChangeMessage.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on isValidRoundChange
+		// no need to check error, checked on isValidRoundChange
+		roundChangeJustifications, _ := roundChangeMsgWrapped.QBFTMessage.GetRoundChangeJustifications()
 
-		roundChangeJustification := make([]*specqbft.ProcessingMessage, 0)
-		for _, signedMessage := range roundChangeSignedMessagesJustification {
-			msg, err := specqbft.NewProcessingMessage(signedMessage)
+		roundChangeJustificationsWrapped := make([]*specqbft.ProcessingMessage, 0, len(roundChangeJustifications))
+		for _, signedMessage := range roundChangeJustifications {
+			msgWrapped, err := specqbft.NewProcessingMessage(signedMessage)
 			if err != nil {
-				return nil, nil, errors.Wrap(err, "could not create ProcessingMessage from round change justification")
+				return nil, nil, fmt.Errorf("%w: %s", convertJustificationToProcessingMsgErr, err)
 			}
-			roundChangeJustification = append(roundChangeJustification, msg)
+			roundChangeJustificationsWrapped = append(roundChangeJustificationsWrapped, msgWrapped)
 		}
 
-		if isProposalJustificationForLeadingRound(
+		err := isProposalJustificationToLeadRound(
 			state,
 			config,
-			containerRoundChangeMessage,
-			roundChanges,
-			roundChangeJustification,
+			roundChangeMsgWrapped,
+			roundChangesWrapped,
+			roundChangeJustificationsWrapped,
 			valueToPropose,
 			valCheck,
-			roundChangeMessage.QBFTMessage.Round,
-		) == nil {
-			// not returning error, no need to
-			return containerRoundChangeMessage, valueToPropose, nil
+			round,
+		)
+		if err != nil {
+			combinedErr = errs.Join(combinedErr, fmt.Errorf(
+				"check proposal justificaiton for msg: %s, err: %w",
+				roundChangeMsgWrapped.QBFTMessage.Identifier,
+				err,
+			))
+			continue
 		}
+		return roundChangeMsgWrapped, valueToPropose, nil
 	}
-	return nil, nil, nil
+	return nil, nil, fmt.Errorf("%w: %s", noJustifiedProposalErr, combinedErr)
 }
 
-// isProposalJustificationForLeadingRound - returns nil if we have a quorum of round change msgs and highest justified value for leading round
-func isProposalJustificationForLeadingRound(
+// isProposalJustificationToLeadRound - same as isProposalJustification but additionally
+// checks that our operator can lead newRound.
+func isProposalJustificationToLeadRound(
 	state *specqbft.State,
 	config qbft.IConfig,
 	roundChangeMsg *specqbft.ProcessingMessage,
@@ -213,14 +266,15 @@ func isProposalJustificationForLeadingRound(
 	valCheck specqbft.ProposedValueCheckF,
 	newRound specqbft.Round,
 ) error {
-	if err := isReceivedProposalJustification(
+	if err := isProposalJustification(
 		state,
-		config,
 		roundChanges,
 		roundChangeJustifications,
+		roundChangeMsg.QBFTMessage.Height,
 		roundChangeMsg.QBFTMessage.Round,
 		value,
-		valCheck); err != nil {
+		valCheck,
+	); err != nil {
 		return err
 	}
 
@@ -228,43 +282,26 @@ func isProposalJustificationForLeadingRound(
 		return errors.New("not proposer")
 	}
 
-	currentRoundProposal := state.ProposalAcceptedForCurrentRound == nil && state.Round == newRound
-	futureRoundProposal := newRound > state.Round
-
-	if !currentRoundProposal && !futureRoundProposal {
-		return errors.New("proposal round mismatch")
+	if state.Round != newRound {
+		return fmt.Errorf(
+			"can't lead round: %d because qbft Instance is currently at round: %d",
+			newRound,
+			state.Round,
+		)
+	}
+	if state.ProposalAcceptedForCurrentRound != nil {
+		return fmt.Errorf(
+			"can't lead round: %d because already have accepted proposal for round: %d",
+			newRound,
+			state.Round,
+		)
 	}
 
-	return nil
-}
-
-// isReceivedProposalJustification - returns nil if we have a quorum of round change msgs and highest justified value
-func isReceivedProposalJustification(
-	state *specqbft.State,
-	config qbft.IConfig,
-	roundChanges, prepares []*specqbft.ProcessingMessage,
-	newRound specqbft.Round,
-	value []byte,
-	valCheck specqbft.ProposedValueCheckF,
-) error {
-	if err := isProposalJustification(
-		state,
-		config,
-		roundChanges,
-		prepares,
-		state.Height,
-		newRound,
-		value,
-		valCheck,
-	); err != nil {
-		return errors.Wrap(err, "proposal not justified")
-	}
 	return nil
 }
 
 func validRoundChangeForDataIgnoreSignature(
 	state *specqbft.State,
-	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
@@ -298,23 +335,29 @@ func validRoundChangeForDataIgnoreSignature(
 		if err != nil {
 			return errors.Wrap(err, "could not hash input data")
 		}
-
-		// validate prepare message justifications
-		prepareSignedMsgs, _ := msg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on msg.QBFTMessage.Validate()
-
-		prepareMsgs := make([]*specqbft.ProcessingMessage, 0)
-		for _, signedMessage := range prepareSignedMsgs {
-			procMsg, err := specqbft.NewProcessingMessage(signedMessage)
-			if err != nil {
-				return errors.Wrap(err, "could not create ProcessingMessage from prepare message in round change justification")
-			}
-			prepareMsgs = append(prepareMsgs, procMsg)
+		if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
+			return errors.New("H(data) != root")
 		}
 
-		for _, pm := range prepareMsgs {
+		if msg.QBFTMessage.DataRound > round {
+			return errors.New("prepared round > round")
+		}
+
+		// validate prepare message justifications
+
+		// no need to check error, checked on msg.QBFTMessage.Validate()
+		roundChangeJustifications, _ := msg.QBFTMessage.GetRoundChangeJustifications()
+		roundChangeJustificationsWrapped := make([]*specqbft.ProcessingMessage, 0, len(roundChangeJustifications))
+		for _, signedMessage := range roundChangeJustifications {
+			procMsg, err := specqbft.NewProcessingMessage(signedMessage)
+			if err != nil {
+				return fmt.Errorf("%w: %s", convertJustificationToProcessingMsgErr, err)
+			}
+			roundChangeJustificationsWrapped = append(roundChangeJustificationsWrapped, procMsg)
+		}
+		for _, justification := range roundChangeJustificationsWrapped {
 			if err := validSignedPrepareForHeightRoundAndRootVerifySignature(
-				config,
-				pm,
+				justification,
 				state.Height,
 				msg.QBFTMessage.DataRound,
 				msg.QBFTMessage.Root,
@@ -322,17 +365,8 @@ func validRoundChangeForDataIgnoreSignature(
 				return errors.Wrap(err, "round change justification invalid")
 			}
 		}
-
-		if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
-			return errors.New("H(data) != root")
-		}
-
-		if !specqbft.HasQuorum(state.CommitteeMember, prepareMsgs) {
+		if !specqbft.HasQuorum(state.CommitteeMember, roundChangeJustificationsWrapped) {
 			return errors.New("no justifications quorum")
-		}
-
-		if msg.QBFTMessage.DataRound > round {
-			return errors.New("prepared round > round")
 		}
 
 		return nil
@@ -343,13 +377,12 @@ func validRoundChangeForDataIgnoreSignature(
 
 func validRoundChangeForDataVerifySignature(
 	state *specqbft.State,
-	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
 	fullData []byte,
 ) error {
-	if err := validRoundChangeForDataIgnoreSignature(state, config, msg, height, round, fullData); err != nil {
+	if err := validRoundChangeForDataIgnoreSignature(state, msg, height, round, fullData); err != nil {
 		return err
 	}
 
@@ -426,7 +459,7 @@ RoundChange(
        )
 */
 func CreateRoundChange(state *specqbft.State, signer ssvtypes.OperatorSigner, newRound specqbft.Round, instanceStartValue []byte) (*spectypes.SignedSSVMessage, error) {
-	round, root, fullData, justifications, err := getRoundChangeData(state)
+	lastPreparedRound, root, lastPreparedValue, justifications, err := getRoundChangeData(state)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")
 	}
@@ -447,7 +480,7 @@ func CreateRoundChange(state *specqbft.State, signer ssvtypes.OperatorSigner, ne
 		Identifier: state.ID,
 
 		Root:                     root,
-		DataRound:                round,
+		DataRound:                lastPreparedRound,
 		RoundChangeJustification: justificationsData,
 	}
 
@@ -455,6 +488,6 @@ func CreateRoundChange(state *specqbft.State, signer ssvtypes.OperatorSigner, ne
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign round change message")
 	}
-	signedMsg.FullData = fullData
+	signedMsg.FullData = lastPreparedValue
 	return signedMsg, nil
 }

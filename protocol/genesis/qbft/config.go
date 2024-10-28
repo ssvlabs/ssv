@@ -3,7 +3,6 @@ package qbft
 import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/genesis/qbft/storage"
 )
@@ -19,7 +18,7 @@ type IConfig interface {
 	signing
 	// GetValueCheckF returns value check function
 	GetValueCheckF() genesisspecqbft.ProposedValueCheckF
-	// GetProposerF returns func used to calculate proposer
+	// GetProposerF returns func used to calculate proposer(leader)
 	GetProposerF() genesisspecqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() genesisspecqbft.Network
@@ -60,7 +59,7 @@ func (c *Config) GetValueCheckF() genesisspecqbft.ProposedValueCheckF {
 	return c.ValueCheckF
 }
 
-// GetProposerF returns func used to calculate proposer
+// GetProposerF returns func used to calculate proposer(leader)
 func (c *Config) GetProposerF() genesisspecqbft.ProposerF {
 	return c.ProposerF
 }

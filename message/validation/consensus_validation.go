@@ -14,10 +14,8 @@ import (
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -82,48 +80,92 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	committee []spectypes.OperatorID,
 ) error {
 	signers := signedSSVMessage.OperatorIDs
-	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	msgType := consensusMessage.MsgType
-
-	if len(signers) > 1 {
-		// Rule: Decided msg with different type than Commit
-		if msgType != specqbft.CommitMsgType {
-			e := ErrNonDecidedWithMultipleSigners
-			e.got = len(signers)
-			return e
-		}
-
-		// Rule: Number of signers must be >= quorum size
-		if uint64(len(signers)) < quorumSize {
-			e := ErrDecidedNotEnoughSigners
-			e.want = quorumSize
-			e.got = len(signers)
-			return e
-		}
-	}
-
-	if len(signedSSVMessage.FullData) != 0 {
-		// Rule: Prepare or commit messages must not have full data
-		if msgType == specqbft.PrepareMsgType || (msgType == specqbft.CommitMsgType && len(signers) == 1) {
-			return ErrPrepareOrCommitWithFullData
-		}
-
-		hashedFullData, err := specqbft.HashDataRoot(signedSSVMessage.FullData)
-		if err != nil {
-			e := ErrFullDataHash
-			e.innerErr = err
-			return e
-		}
-
-		// Rule: Full data hash must match root
-		if hashedFullData != consensusMessage.Root {
-			return ErrInvalidHash
-		}
-	}
 
 	// Rule: Consensus message type must be valid
 	if !mv.validConsensusMsgType(msgType) {
 		return ErrUnknownQBFTMessageType
+	}
+
+	if msgType == specqbft.ProposalMsgType {
+		// Rule: Proposal message must have exactly 1 signer
+		if err := ensureSingleSignerAtMost(signers); err != nil {
+			return fmt.Errorf("proposal message with > 1 signer: %w", err)
+		}
+		// Rule: Proposal message must have full data
+		if len(signedSSVMessage.FullData) == 0 {
+			return ErrProposalWithoutFullData
+		}
+		// Rule: Full data hash must match root
+		if err := verifyRootAgainstFullData(consensusMessage.Root, signedSSVMessage.FullData); err != nil {
+			return err
+		}
+	}
+	if msgType == specqbft.PrepareMsgType {
+		// Rule: Prepare message must have exactly 1 signer
+		if err := ensureSingleSignerAtMost(signers); err != nil {
+			return fmt.Errorf("prepare message with > 1 signer: %w", err)
+		}
+		// Rule: Prepare message must not have full data
+		if len(signedSSVMessage.FullData) != 0 {
+			return ErrPrepareWithFullData
+		}
+		// Rule: Prepare message must have non-zero root (operator validates it against locally
+		// stored proposal)
+		if consensusMessage.Root == [32]byte{} {
+			return ErrZeroRootHash
+		}
+	}
+	if msgType == specqbft.CommitMsgType && len(signers) == 1 {
+		// Rule: Commit message (unless it's decided commit message, which is handled below)
+		// must not have full data
+		if len(signedSSVMessage.FullData) != 0 {
+			return ErrCommitWithFullData
+		}
+		// Rule: Commit message (unless it's decided commit message, which is handled below)
+		// must have non-zero root (operator validates it against locally stored proposal)
+		if consensusMessage.Root == [32]byte{} {
+			return ErrZeroRootHash
+		}
+	}
+	if msgType == specqbft.CommitMsgType && len(signers) >= 2 {
+		// Rule: Commit message must have exactly 1 signer
+		if err := ensureSingleSignerAtMost(signers); err != nil {
+			return fmt.Errorf("commit message with > 1 signer: %w", err)
+		}
+		// TODO in case we want to spread the data QBFT decided upon via QBFT commit phase we need
+		// to introduce the concept of "decided commit" as well as adjust the rule-set above to the
+		// change it to the rule-set commented out below.
+		// Note also, QBFT itself doesn't support this ^ at the moment and hence will not permit
+		// commit messages with >= 2 signers.
+		//
+		//// Rule: Commit message with multiple signers (aka decided commit) must have full data so
+		//// it can share it with those operator who didn't receive it during proposal stage of QBFT
+		//if len(signedSSVMessage.FullData) == 0 {
+		//	return ErrDecidedCommitWithoutFullData
+		//}
+		//// Rule: Number of signers for decided commit must be >= quorum size
+		//quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
+		//if uint64(len(signers)) < quorumSize {
+		//	e := ErrCommitSignersNotEnoughForQuorum
+		//	e.want = quorumSize
+		//	e.got = len(signers)
+		//	return e
+		//}
+		//// Rule: Full data hash must match root
+		//if err := verifyRootAgainstFullData(consensusMessage.Root, signedSSVMessage.FullData); err != nil {
+		//	return err
+		//}
+	}
+	if msgType == specqbft.RoundChangeMsgType {
+		// Rule: Round change message must have exactly 1 signer
+		if err := ensureSingleSignerAtMost(signers); err != nil {
+			return fmt.Errorf("round change message with > 1 signer: %w", err)
+		}
+		// Rule: Full data hash must match root
+		if err := verifyRootAgainstFullData(consensusMessage.Root, signedSSVMessage.FullData); err != nil {
+			return err
+		}
 	}
 
 	// Rule: Round must not be zero
@@ -288,6 +330,32 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		return err
 	}
 
+	return nil
+}
+
+func ensureSingleSignerAtMost(signers []spectypes.OperatorID) error {
+	if len(signers) > 1 {
+		e := ErrMultipleSigners
+		e.got = len(signers)
+		e.want = 1
+		return e
+	}
+	return nil
+}
+
+func verifyRootAgainstFullData(root [32]byte, fullData []byte) error {
+	hashedFullData, err := specqbft.HashDataRoot(fullData)
+	if err != nil {
+		e := ErrComputeFullDataHash
+		e.innerErr = err
+		return e
+	}
+	if hashedFullData != root {
+		e := ErrInvalidRootHash
+		e.want = hashedFullData
+		e.got = root
+		return e
+	}
 	return nil
 }
 

@@ -79,7 +79,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 
 	// Rule: Partial signature message must not have full data
 	if len(signedSSVMessage.FullData) > 0 {
-		return ErrFullDataNotInConsensusMessage
+		return ErrFullDataNotInPartialSignatureMessage
 	}
 
 	// Rule: Valid signature type
