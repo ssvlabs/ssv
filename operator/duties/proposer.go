@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -67,7 +68,9 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			next = h.ticker.Next()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
+			timeSleep := time.Duration([]int{20, 50, 80, 150}[rand.Intn(4)]) * time.Millisecond
+			time.Sleep(timeSleep)
+			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr), zap.Duration("time_sleep", timeSleep))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
