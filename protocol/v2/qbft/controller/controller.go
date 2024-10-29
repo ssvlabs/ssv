@@ -56,7 +56,6 @@ func NewController(
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
 func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
-
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
 		return errors.Wrap(err, "value invalid")
 	}

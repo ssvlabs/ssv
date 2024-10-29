@@ -25,11 +25,15 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 		return nil // uponPrepare was already called
 	}
 
-	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
-	logger.Debug("📬 got prepare message",
+	logger = logger.With(
+		fields.Height(i.State.Height),
 		fields.Round(i.State.Round),
+		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
+	)
+
+	logger.Debug("📬 got prepare message",
 		zap.Any("prepare_signers", msg.SignedMessage.OperatorIDs),
-		fields.Root(proposedRoot))
+		fields.Root(msg.QBFTMessage.Root))
 
 	if hasQuorumBefore {
 		return nil // already moved to commit stage
@@ -45,18 +49,16 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 	i.metrics.EndStagePrepare()
 
 	logger.Debug("🎯 got prepare quorum",
-		fields.Round(i.State.Round),
 		zap.Any("prepare_signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))))
 
-	commitMsg, err := i.CreateCommit(i.signer, proposedRoot)
+	commitMsg, err := i.CreateCommit(i.signer, i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root)
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
 	}
 
 	logger.Debug("📢 broadcasting commit message",
-		fields.Round(i.State.Round),
 		zap.Any("commit_signers", commitMsg.OperatorIDs),
-		fields.Root(proposedRoot))
+		fields.Root(i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root))
 
 	if err := i.Broadcast(logger, commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")

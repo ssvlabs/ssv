@@ -24,18 +24,22 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 		return nil // uponProposal was already called
 	}
 
-	logger.Debug("📬 got proposal message",
+	logger = logger.With(
+		fields.Height(i.State.Height),
 		fields.Round(i.State.Round),
+		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
+	)
+
+	logger.Debug("📬 got proposal message",
 		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
 
-	newRound := msg.QBFTMessage.Round
 	i.State.ProposalAcceptedForCurrentRound = msg
 
 	// A future justified proposal should bump us into future round and reset timer
 	if msg.QBFTMessage.Round > i.State.Round {
 		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, msg.QBFTMessage.Round)
 	}
-	i.bumpToRound(newRound)
+	i.bumpToRound(msg.QBFTMessage.Round)
 
 	i.metrics.EndStageProposal()
 
@@ -45,19 +49,19 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 		return errors.Wrap(err, "could not hash input data")
 	}
 
-	prepare, err := i.CreatePrepare(i.signer, newRound, r)
+	prepare, err := i.CreatePrepare(i.signer, msg.QBFTMessage.Round, r)
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
-		fields.Round(i.State.Round),
 		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs),
 		zap.Any("prepare_signers", prepare.OperatorIDs))
 
 	if err := i.Broadcast(logger, prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
 	}
+
 	return nil
 }
 

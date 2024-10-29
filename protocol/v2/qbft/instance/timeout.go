@@ -13,18 +13,16 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	}
 
 	newRound := i.State.Round + 1
-	logger.Debug("⌛ round timed out", fields.Round(newRound))
 
-	// TODO: previously this was done outside of a defer, which caused the
-	// round to be bumped before the round change message was created & broadcasted.
-	// Remember to track the impact of this change and revert/modify if necessary.
-	defer func() {
-		i.bumpToRound(newRound)
-		i.State.ProposalAcceptedForCurrentRound = nil
-		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
-	}()
+	logger = logger.With(
+		fields.Height(i.State.Height),
+		fields.Round(i.State.Round),
+		zap.Uint64("new_round", uint64(newRound)),
+	)
 
-	roundChange, err := i.CreateRoundChange(i.signer, newRound, i.StartValue)
+	logger.Debug("⌛ round timed out, readying next round")
+
+	roundChange, err := i.CreateRoundChange(i.signer, newRound)
 	if err != nil {
 		return errors.Wrap(err, "could not generate round change msg")
 	}
@@ -34,15 +32,17 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		return err
 	}
 	logger.Debug("📢 broadcasting round change message",
-		fields.Round(i.State.Round),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.Height(i.State.Height),
 		zap.String("reason", "timeout"))
 
 	if err := i.Broadcast(logger, roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
 	}
+
+	i.bumpToRound(newRound)
+	i.State.ProposalAcceptedForCurrentRound = nil
+	i.config.GetTimer().TimeoutForRound(i.State.Height, newRound)
 
 	return nil
 }

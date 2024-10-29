@@ -73,8 +73,8 @@ var (
 	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
 	ErrEarlySlotMessage                        = Error{text: "message was sent before slot starts"}
 	ErrLateSlotMessage                         = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
-	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
-	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
+	ErrSlotAlreadyAdvanced                     = Error{text: "operator has already advanced to a later slot"}
+	ErrRoundAlreadyAdvanced                    = Error{text: "operator has already advanced to a later round"}
 	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers"}
 	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big"}
 	ErrIncorrectTopic                          = Error{text: "incorrect topic"}

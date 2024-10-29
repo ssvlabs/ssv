@@ -147,7 +147,7 @@ func (i *Instance) ProcessMsg(
 			decided, decidedValue, aggregatedCommit, err = i.uponCommit(logger, msg, i.State.CommitContainer)
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(logger, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}

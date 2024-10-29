@@ -18,7 +18,6 @@ import (
 // Assumes round change message is valid!
 func (i *Instance) uponRoundChange(
 	logger *zap.Logger,
-	instanceStartValue []byte,
 	msg *specqbft.ProcessingMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
 	valCheck specqbft.ProposedValueCheckF,
@@ -38,8 +37,8 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger = logger.With(
-		fields.Round(i.State.Round),
 		fields.Height(i.State.Height),
+		fields.Round(i.State.Round),
 		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
 	)
 
@@ -53,7 +52,7 @@ func (i *Instance) uponRoundChange(
 	if partialQuorum && newRound > i.State.Round {
 		// this code executes exactly once per round - when partial round quorum has
 		// been achieved (because Instance events are processed sequentially)
-		err = i.uponPartialQuorumAboveOwnRound(logger, newRound, instanceStartValue)
+		err = i.uponPartialQuorumAboveOwnRound(logger, newRound)
 		if err != nil {
 			return fmt.Errorf("could not process round change with partial quorum above own round: %w", err)
 		}
@@ -81,7 +80,6 @@ func (i *Instance) uponRoundChange(
 
 	justifiedRoundChangeMsg, valueToPropose, err := i.buildJustifiedProposalToLeadRound(
 		i.config,
-		instanceStartValue,
 		roundChangesWrapped,
 		msg.QBFTMessage.Round,
 		valCheck,
@@ -124,10 +122,11 @@ func (i *Instance) uponRoundChange(
 		return fmt.Errorf("couldn't calculate data root hash: %w", err)
 	}
 
-	logger.Debug("🔄 got justified round change, broadcasting proposal message",
-		fields.Round(i.State.Round),
+	logger.Debug(
+		"🔄 got justified round change, broadcasting proposal message",
 		zap.Any("round_change_signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
-		fields.Root(r))
+		fields.Root(r),
+	)
 
 	if err := i.Broadcast(logger, proposal); err != nil {
 		return errors.Wrap(err, "failed to broadcast proposal message")
@@ -158,27 +157,24 @@ func (i *Instance) gotPartialQuorumAboveOwnRound(roundChangeMsgContainer *specqb
 func (i *Instance) uponPartialQuorumAboveOwnRound(
 	logger *zap.Logger,
 	newRound specqbft.Round,
-	instanceStartValue []byte,
 ) error {
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 
 	i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 
-	roundChange, err := i.CreateRoundChange(i.signer, newRound, instanceStartValue)
+	roundChange, err := i.CreateRoundChange(i.signer, newRound)
 	if err != nil {
 		return errors.Wrap(err, "failed to create round change message")
 	}
 
-	root, err := specqbft.HashDataRoot(instanceStartValue)
+	root, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
 		return errors.Wrap(err, "failed to hash instance start value")
 	}
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
-		fields.Round(i.State.Round),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.Height(i.State.Height),
 		zap.String("reason", "partial-quorum"))
 
 	if err := i.Broadcast(logger, roundChange); err != nil {
@@ -199,7 +195,6 @@ func (i *Instance) uponPartialQuorumAboveOwnRound(
 // specified round can't be built.
 func (i *Instance) buildJustifiedProposalToLeadRound(
 	config qbft.IConfig,
-	instanceStartValue []byte,
 	roundChangesWrapped []*specqbft.ProcessingMessage,
 	round specqbft.Round,
 	valCheck specqbft.ProposedValueCheckF,
@@ -211,7 +206,7 @@ func (i *Instance) buildJustifiedProposalToLeadRound(
 		// chose proposal value:
 		// - if justifiedRoundChangeMsg has no prepare justification chose Instance start value
 		// - if justifiedRoundChangeMsg has prepare justification chose prepared value
-		valueToPropose := instanceStartValue
+		valueToPropose := i.StartValue
 		if roundChangeMsgWrapped.QBFTMessage.RoundChangePrepared() {
 			valueToPropose = roundChangeMsgWrapped.SignedMessage.FullData
 		}
@@ -483,7 +478,7 @@ RoundChange(
            getRoundChangeJustification(current)
        )
 */
-func (i *Instance) CreateRoundChange(signer ssvtypes.OperatorSigner, newRound specqbft.Round, instanceStartValue []byte) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreateRoundChange(signer ssvtypes.OperatorSigner, newRound specqbft.Round) (*spectypes.SignedSSVMessage, error) {
 	lastPreparedRound, root, lastPreparedValue, justifications, err := i.getRoundChangeData()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")

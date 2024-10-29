@@ -20,10 +20,7 @@ func (i *Instance) uponCommit(
 	msg *specqbft.ProcessingMessage,
 	commitMsgContainer *specqbft.MsgContainer,
 ) (bool, []byte, *spectypes.SignedSSVMessage, error) {
-	logger.Debug("📬 got commit message",
-		fields.Round(i.State.Round),
-		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
-		fields.Root(msg.QBFTMessage.Root))
+	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, commitMsgContainer.MessagesForRound(i.State.Round))
 
 	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
@@ -33,34 +30,45 @@ func (i *Instance) uponCommit(
 		return false, nil, nil, nil // uponCommit was already called
 	}
 
-	// calculate commit quorum and act upon it
+	logger = logger.With(
+		fields.Height(i.State.Height),
+		fields.Round(i.State.Round),
+		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
+	)
+
+	logger.Debug("📬 got commit message",
+		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
+		fields.Root(msg.QBFTMessage.Root))
+
+	if hasQuorumBefore {
+		return false, nil, nil, nil // already moved to commit stage
+	}
+
 	quorum, commitMsgs, err := i.commitQuorumForRoundRoot(commitMsgContainer, msg.QBFTMessage.Root, msg.QBFTMessage.Round)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not calculate commit quorum")
 	}
-
-	if quorum {
-		fullData := i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData /* must have value there, checked on validateCommit */
-
-		agg, err := aggregateCommitMsgs(commitMsgs, fullData)
-		if err != nil {
-			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
-		}
-
-		logger.Debug("🎯 got commit quorum",
-			fields.Round(i.State.Round),
-			zap.Any("agg_signers", agg.OperatorIDs),
-			fields.Root(msg.QBFTMessage.Root))
-
-		i.metrics.EndStageCommit()
-
-		i.State.Decided = true
-		i.State.DecidedValue = fullData
-
-		return true, fullData, agg, nil
+	if !quorum {
+		return false, nil, nil, nil
 	}
 
-	return false, nil, nil, nil
+	fullData := i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData /* must have value there, checked on validateCommit */
+
+	agg, err := aggregateCommitMsgs(commitMsgs, fullData)
+	if err != nil {
+		return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
+	}
+
+	logger.Debug("🎯 got commit quorum",
+		zap.Any("agg_signers", agg.OperatorIDs),
+		fields.Root(msg.QBFTMessage.Root))
+
+	i.metrics.EndStageCommit()
+
+	i.State.Decided = true
+	i.State.DecidedValue = fullData
+
+	return true, fullData, agg, nil
 }
 
 // returns true if there is a quorum for the current round for this provided value
