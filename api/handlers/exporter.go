@@ -11,6 +11,7 @@ import (
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -57,18 +58,28 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	response.Data = []*ParticipantResponse{}
+
+	qbftStores := make(map[convert.RunnerRole]qbftstorage.QBFTStore, len(request.Roles))
 	for _, role := range request.Roles {
 		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
-		roleStorage := e.QBFTStores.Get(runnerRole)
-		if roleStorage == nil {
-			return fmt.Errorf("role storage doesn't exist: %v", role)
+		storage := e.QBFTStores.Get(runnerRole)
+		if storage == nil {
+			return api.Error(fmt.Errorf("role storage doesn't exist: %v", role))
 		}
+
+		qbftStores[runnerRole] = storage
+	}
+
+	for _, role := range request.Roles {
+		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
+		qbftStore := qbftStores[runnerRole]
+
 		for _, pubKey := range request.PubKeys {
 			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
 			from := phase0.Slot(request.From)
 			to := phase0.Slot(request.To)
 
-			participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
+			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
 			if err != nil {
 				return fmt.Errorf("error getting participants: %w", err)
 			}
