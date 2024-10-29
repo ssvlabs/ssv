@@ -76,9 +76,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.metrics.StartStage()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
-		logger = logger.With(
-			fields.Round(i.State.Round),
-			fields.Height(i.State.Height))
+		logger = logger.With(fields.Round(i.State.Round), fields.Height(i.State.Height))
 
 		proposerID := i.proposer(i.GetConfig(), specqbft.FirstRound)
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))

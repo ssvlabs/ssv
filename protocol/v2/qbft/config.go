@@ -28,7 +28,7 @@ type IConfig interface {
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
-	// GetRoundCutOff returns the round cut off
+	// GetCutOffRound returns the round number that QBFT instance stops working at
 	GetCutOffRound() specqbft.Round
 }
 

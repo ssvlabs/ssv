@@ -22,7 +22,7 @@ const (
 	SlowTimeout           = 2 * time.Minute
 )
 
-var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
+var CutOffRound = specqbft.Round(specqbft.CutoffRound)
 
 // Timer is an interface for a round timer, calling the UponRoundTimeout when times out
 type Timer interface {
