@@ -96,7 +96,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Debug("🧩 got partial RANDAO signatures",
 		zap.Uint64("signer", signedMsg.Messages[0].Signer)) // TODO: more than one? check index arr boundries
 
-	// quorum returns true only once (first time quorum achieved)
+	// quorum is true only once (first time quorum achieved)
 	if !quorum {
 		return nil
 	}
