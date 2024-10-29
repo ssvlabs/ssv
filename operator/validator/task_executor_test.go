@@ -245,7 +245,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	case <-indiciesUpdate:
 		break
 	case <-time.After(1 * time.Second):
-		require.Fail(t, "didn't get indicies update")
+		require.Fail(t, "didn't get indices update")
 	}
 
 }
