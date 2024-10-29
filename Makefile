@@ -18,7 +18,7 @@ ifneq ($(SHARE_CONFIG),)
   NODE_COMMAND_ARGS+= --share-config=${SHARE_CONFIG}
 endif
 
-BOOTNODE_COMMAND_ARGS_ARGS=--config=${CONFIG_PATH}
+BOOTNODE_COMMAND_ARGS=--config=${CONFIG_PATH}
 
 COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
@@ -152,7 +152,7 @@ stop:
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
-	${BUILD_PATH} start-boot-node ${BOOTNODE_COMMAND_ARGS_ARGS}
+	${BUILD_PATH} start-boot-node ${BOOTNODE_COMMAND_ARGS}
 
 MONITOR_NODES=prometheus grafana
 .PHONY: docker-monitor
