@@ -3,6 +3,7 @@ package kv
 import (
 	"bytes"
 	"context"
+	"github.com/dgraph-io/ristretto/z"
 	"sync"
 	"time"
 
@@ -90,6 +91,11 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 		badgerDB.wg.Add(1)
 		go badgerDB.periodicallyCollectGarbage(logger, options.GCInterval)
 	}
+
+	out := z.CallocNoRef(1, "jemalloc check")
+	defer z.Free(out)
+	jemallocEnabled := len(out) > 0
+	logger.Debug("jemalloc allocator will be used", zap.Bool("jemalloc_enabled", jemallocEnabled))
 
 	return &badgerDB, nil
 }
