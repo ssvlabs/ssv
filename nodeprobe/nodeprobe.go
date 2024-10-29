@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	EvenSyncerNode      = "Ethereum event syncer"
+	EventSyncerNode     = "Ethereum event syncer"
 	ConsensusClientNode = "Ethereum consensus client"
 	ExecutionClientNode = "Ethereum execution client"
 
@@ -110,7 +110,12 @@ func (p *Prober) probe(ctx context.Context) {
 	p.healthy.Store(healthy.Load())
 
 	if !p.healthy.Load() {
-		p.logger.Error("not all Ethereum nodes are healthy")
+		p.logger.Error(fmt.Sprintf(
+			"not all nodes (%s, %s, %s), are healthy",
+			EventSyncerNode,
+			ConsensusClientNode,
+			ExecutionClientNode,
+		))
 		if h := p.unhealthyHandler; h != nil {
 			h()
 		}
@@ -159,9 +164,9 @@ func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
 	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
-	es, ok := p.nodes[EvenSyncerNode]
+	es, ok := p.nodes[EventSyncerNode]
 	if !ok {
-		return fmt.Errorf("%s not found", EvenSyncerNode)
+		return fmt.Errorf("%s not found", EventSyncerNode)
 	}
 	return es.Healthy(ctx)
 }
