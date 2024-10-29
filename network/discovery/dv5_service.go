@@ -230,7 +230,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		return errors.Wrap(err, "could not create discV5 listener")
 	}
 
-	logger.Debug("started discv5 post-fork listener (UDP)",
+	logger.Debug("started discv5 listener (UDP)",
 		fields.BindIP(bindIP),
 		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
