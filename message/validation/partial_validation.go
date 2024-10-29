@@ -111,8 +111,8 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 		// Rule: Partial signature signer must be consistent
 		if message.Signer != signer {
 			err := ErrInconsistentSigners
-			err.got = signer
-			err.want = message.Signer
+			err.got = message.Signer
+			err.want = signer
 			return err
 		}
 
