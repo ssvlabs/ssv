@@ -3,18 +3,16 @@ package kv
 import (
 	"bytes"
 	"context"
-	"github.com/dgraph-io/ristretto/z"
 	"sync"
 	"time"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-
 	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/ristretto/z"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 // BadgerDB struct
@@ -95,7 +93,7 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 	out := z.CallocNoRef(1, "jemalloc check")
 	defer z.Free(out)
 	jemallocEnabled := len(out) > 0
-	logger.Debug("jemalloc allocator will be used", zap.Bool("jemalloc_enabled", jemallocEnabled))
+	logger.Debug("checking if jemalloc allocator will be used", zap.Bool("jemalloc_enabled", jemallocEnabled))
 
 	return &badgerDB, nil
 }
