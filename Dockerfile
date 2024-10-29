@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   COMMIT=$(git rev-parse HEAD) && \
   VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
   CGO_ENABLED=1 GOOS=linux go install \
-  -tags="blst_enabled,jemalloc,allocator" \
+  -tags="blst_enabled,jemalloc" \
   -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
   ./cmd/ssvnode
 
