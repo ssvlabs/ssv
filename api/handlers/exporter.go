@@ -81,7 +81,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 
 			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
 			if err != nil {
-				return fmt.Errorf("error getting participants: %w", err)
+				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
 
 			if len(participantsList) == 0 {
@@ -90,12 +90,12 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 
 			data, err := exporterapi.ParticipantsAPIData(participantsList...)
 			if err != nil {
-				return fmt.Errorf("error getting participants API data: %w", err)
+				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
 			}
 
 			apiData, ok := data.([]*exporterapi.ParticipantsAPI)
 			if !ok {
-				return fmt.Errorf("invalid type for participants API data")
+				return api.Error(fmt.Errorf("invalid type for participants API data"))
 			}
 
 			for _, apiMsg := range apiData {
