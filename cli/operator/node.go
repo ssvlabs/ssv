@@ -341,7 +341,7 @@ var StartNodeCmd = &cobra.Command{
 				operatorPrivKey,
 				keyManager,
 			)
-			nodeProber.AddNode(nodeprobe.EvenSyncerNode, eventSyncer)
+			nodeProber.AddNode(nodeprobe.EventSyncerNode, eventSyncer)
 		}
 
 		nodeProber.Start(cmd.Context())
