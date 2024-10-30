@@ -18,6 +18,8 @@ type Fetcher struct {
 	beaconNode beacon.BeaconNode
 }
 
+type Validators = map[spectypes.ValidatorPK]*beacon.ValidatorMetadata
+
 func NewFetcher(logger *zap.Logger, beaconNode beacon.BeaconNode) *Fetcher {
 	return &Fetcher{
 		logger:     logger,
@@ -25,7 +27,7 @@ func NewFetcher(logger *zap.Logger, beaconNode beacon.BeaconNode) *Fetcher {
 	}
 }
 
-func (mf *Fetcher) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+func (mf *Fetcher) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}

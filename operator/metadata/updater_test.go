@@ -5,25 +5,32 @@ import (
 	"crypto/rand"
 	"fmt"
 	"testing"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+const (
+	testUpdateInterval    = 2 * time.Millisecond
+	testStreamInterval    = 1 * time.Millisecond
+	testUpdateSendTimeout = 3 * time.Millisecond
+)
+
 // This test is copied from validator controller (TestUpdateValidatorMetadata) and may require further refactoring.
-func TestUpdater(t *testing.T) {
+func TestUpdateValidatorMetadata(t *testing.T) {
 	const (
 		sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
 		sk2Str = "3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
@@ -35,8 +42,6 @@ func TestUpdater(t *testing.T) {
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
 	passedEpoch := phase0.Epoch(1)
-	validatorKey, err := generatePubKey()
-	require.NoError(t, err)
 
 	operatorIDs := []uint64{1, 2, 3, 4}
 	committee := make([]*spectypes.ShareMember, len(operatorIDs))
@@ -46,36 +51,19 @@ func TestUpdater(t *testing.T) {
 		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
-	shareWithMetaData := &ssvtypes.SSVShare{
-		Share: spectypes.Share{
-			Committee:       committee,
-			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
-		},
-		Metadata: ssvtypes.Metadata{
-			OwnerAddress: common.BytesToAddress([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			BeaconMetadata: &beacon.ValidatorMetadata{
-				Balance:         0,
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
-				Index:           1,
-				ActivationEpoch: passedEpoch,
-			},
-		},
-	}
-
 	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
 
 	testCases := []struct {
 		name             string
 		metadata         *beacon.ValidatorMetadata
 		sharesStorageErr error
-		getShareError    bool
 		testPublicKey    spectypes.ValidatorPK
 	}{
-		{"Empty metadata", nil, nil, false, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Valid metadata", validatorMetadata, nil, false, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Share wasn't found", validatorMetadata, nil, true, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Share not belong to operator", validatorMetadata, nil, false, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Metadata with error", validatorMetadata, fmt.Errorf("error"), false, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
+		{"Empty metadata", nil, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
+		{"Valid metadata", validatorMetadata, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
+		{"Share wasn't found", validatorMetadata, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
+		{"Share not belong to operator", validatorMetadata, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
+		{"Metadata with error", validatorMetadata, fmt.Errorf("error"), spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
 	}
 
 	for _, tc := range testCases {
@@ -85,13 +73,7 @@ func TestUpdater(t *testing.T) {
 
 			logger := logging.TestLogger(t)
 
-			sharesStorage := mocks.NewMockSharesStorage(ctrl)
-			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool) {
-				if tc.getShareError {
-					return nil, false
-				}
-				return shareWithMetaData, true
-			}).AnyTimes()
+			sharesStorage := NewMockshareStorage(ctrl)
 			sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(tc.sharesStorageErr).AnyTimes()
 			sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
@@ -129,6 +111,623 @@ func TestUpdater(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdater_Update(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	logger := zap.NewNop()
+
+	// Subtest: Successful update
+	t.Run("Success", func(t *testing.T) {
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			fetcher:      mockFetcher,
+		}
+
+		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
+		metadata := Validators{
+			pubKeys[0]: &beacon.ValidatorMetadata{},
+			pubKeys[1]: &beacon.ValidatorMetadata{},
+		}
+
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
+
+		result, err := updater.Update(context.Background(), pubKeys)
+
+		require.NoError(t, err)
+		require.Equal(t, metadata, result)
+	})
+
+	// Subtest: Fetch error
+	t.Run("FetchError", func(t *testing.T) {
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			fetcher:      mockFetcher,
+		}
+
+		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
+
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error"))
+		// UpdateValidatorsMetadata should not be called in this case
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Times(0)
+
+		result, err := updater.Update(context.Background(), pubKeys)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	// Subtest: UpdateValidatorsMetadata error
+	t.Run("UpdateValidatorsMetadataError", func(t *testing.T) {
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			fetcher:      mockFetcher,
+		}
+
+		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
+		metadata := Validators{
+			pubKeys[0]: &beacon.ValidatorMetadata{},
+			pubKeys[1]: &beacon.ValidatorMetadata{},
+		}
+
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(fmt.Errorf("update error"))
+
+		result, err := updater.Update(context.Background(), pubKeys)
+
+		assert.Error(t, err)
+		assert.Equal(t, metadata, result)
+	})
+
+	// Subtest: Empty pubKeys
+	t.Run("EmptyPubKeys", func(t *testing.T) {
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			fetcher:      mockFetcher,
+		}
+
+		pubKeys := []spectypes.ValidatorPK{}
+		metadata := Validators{}
+
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
+
+		result, err := updater.Update(context.Background(), pubKeys)
+
+		assert.NoError(t, err)
+		assert.Equal(t, metadata, result)
+	})
+}
+
+func TestUpdater_RetrieveInitialMetadata(t *testing.T) {
+	logger := zap.NewNop()
+
+	// Subtest: No shares returned by shareStorage.List
+	t.Run("NoShares", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+		}
+
+		// Set expectations
+		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return([]*ssvtypes.SSVShare{})
+
+		// Call method
+		result, err := updater.RetrieveInitialMetadata(context.Background())
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	// Subtest: All shares are non-liquidated and have BeaconMetadata
+	t.Run("AllSharesHaveMetadata", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+		}
+
+		// Create shares that are non-liquidated and have BeaconMetadata
+		share1 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beacon.ValidatorMetadata{},
+				Liquidated:     false,
+			},
+		}
+		share2 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x2},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beacon.ValidatorMetadata{},
+				Liquidated:     false,
+			},
+		}
+
+		shares := []*ssvtypes.SSVShare{share1, share2}
+
+		// Set expectations
+		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
+
+		// Call method
+		result, err := updater.RetrieveInitialMetadata(context.Background())
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	// Subtest: At least one share lacks BeaconMetadata
+	t.Run("ShareLacksBeaconMetadata", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			fetcher:      mockFetcher,
+		}
+
+		// Create shares
+		share1 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beacon.ValidatorMetadata{},
+				Liquidated:     false,
+			},
+		}
+		share2 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x2},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: nil, // Lacks BeaconMetadata
+				Liquidated:     false,
+			},
+		}
+
+		shares := []*ssvtypes.SSVShare{share1, share2}
+
+		// Set expectations
+		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
+
+		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
+
+		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
+		metadata := Validators{
+			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+		}
+
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
+
+		// Call method
+		result, err := updater.RetrieveInitialMetadata(context.Background())
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Equal(t, metadata, result)
+	})
+
+	// Subtest: At least one share lacks BeaconMetadata
+	t.Run("ShareLacksBeaconMetadata", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			fetcher:      mockFetcher,
+		}
+
+		// Create shares
+		share1 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beacon.ValidatorMetadata{},
+				Liquidated:     false,
+			},
+		}
+		share2 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x2},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: nil, // Lacks BeaconMetadata
+				Liquidated:     false,
+			},
+		}
+
+		shares := []*ssvtypes.SSVShare{share1, share2}
+
+		// Set expectations
+		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
+
+		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
+
+		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
+		metadata := Validators{
+			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+		}
+
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
+
+		// Call method
+		result, err := updater.RetrieveInitialMetadata(context.Background())
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Equal(t, metadata, result)
+	})
+
+	// Subtest: Update returns error
+	t.Run("UpdateError", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		updater := &Updater{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			fetcher:      mockFetcher,
+		}
+
+		// Create shares
+		share1 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: nil, // Lacks BeaconMetadata
+				Liquidated:     false,
+			},
+		}
+		share2 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x2},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beacon.ValidatorMetadata{},
+				Liquidated:     false,
+			},
+		}
+
+		shares := []*ssvtypes.SSVShare{share1, share2}
+
+		// Set expectations
+		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
+
+		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
+
+		// Mock fetcher.Fetch to return an error
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error"))
+
+		// Call method
+		result, err := updater.RetrieveInitialMetadata(context.Background())
+
+		// Assert
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+}
+func TestUpdater_Stream(t *testing.T) {
+	logger := zap.NewNop()
+
+	// Subtest: Stream sends updates and stops when context is canceled
+	t.Run("SendsUpdatesAndStopsOnContextCancel", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		// Mocks
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		// Updater instance
+		updater := &Updater{
+			logger:            logger,
+			shareStorage:      mockShareStorage,
+			fetcher:           mockFetcher,
+			beaconNetwork:     networkconfig.TestNetwork.Beacon,
+			updateInterval:    testUpdateInterval,
+			streamInterval:    testStreamInterval,
+			updateSendTimeout: testUpdateSendTimeout,
+		}
+
+		// Context with cancel
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Share to be returned
+		share1 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beacon.ValidatorMetadata{
+					Index:           1,
+					Status:          eth2apiv1.ValidatorStateActiveOngoing,
+					ActivationEpoch: 0,
+				},
+				Liquidated: false,
+			},
+		}
+
+		// Use a channel to signal when the update is sent
+		updateSent := make(chan struct{})
+
+		// Mock shareStorage.Range
+		mockShareStorage.EXPECT().Range(nil, gomock.Any()).DoAndReturn(func(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool) {
+			fn(share1)
+			return
+		}).AnyTimes()
+
+		// Mock fetcher.Fetch
+		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey}
+		metadata := Validators{
+			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{
+				Index:           1,
+				Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				ActivationEpoch: 0,
+			},
+		}
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil).AnyTimes()
+
+		// Mock shareStorage.UpdateValidatorsMetadata
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil).AnyTimes()
+
+		// Start Stream
+		updates := updater.Stream(ctx)
+
+		// Read from updates channel using a goroutine
+		go func() {
+			update, ok := <-updates
+			if !ok {
+				t.Error("Updates channel was closed unexpectedly")
+				return
+			}
+			// Verify the update
+			assert.Equal(t, []phase0.ValidatorIndex{1}, update.IndicesBefore)
+			assert.Equal(t, []phase0.ValidatorIndex{1}, update.IndicesAfter)
+			assert.Equal(t, metadata, update.Validators)
+			// Signal that the update was received
+			close(updateSent)
+		}()
+
+		// Wait for the update to be received or timeout
+		select {
+		case <-updateSent:
+			// Update received, proceed to cancel the context
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Did not receive update in time")
+		}
+
+		// Cancel the context to stop the stream
+		cancel()
+
+		// Ensure the updates channel is closed
+		_, ok := <-updates
+		if ok {
+			t.Fatal("Updates channel should be closed after context cancellation")
+		}
+	})
+
+	// Subtest: Stream handles errors from sendUpdate
+	t.Run("HandlesSendUpdateError", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		// Mocks
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		// Updater instance
+		updater := &Updater{
+			logger:            logger,
+			shareStorage:      mockShareStorage,
+			fetcher:           mockFetcher,
+			beaconNetwork:     networkconfig.TestNetwork.Beacon,
+			updateInterval:    testUpdateInterval,
+			streamInterval:    testStreamInterval,
+			updateSendTimeout: testUpdateSendTimeout,
+		}
+
+		// Context with cancel
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Share to be returned
+		share1 := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+			},
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beacon.ValidatorMetadata{
+					Index:           1,
+					Status:          eth2apiv1.ValidatorStateActiveOngoing,
+					ActivationEpoch: 0,
+				},
+				Liquidated: false,
+			},
+		}
+
+		// Mock shareStorage.Range
+		mockShareStorage.EXPECT().Range(nil, gomock.Any()).DoAndReturn(func(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool) {
+			fn(share1)
+			return
+		}).AnyTimes()
+
+		// Mock fetcher.Fetch to return an error
+		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey}
+		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error")).AnyTimes()
+
+		// Start Stream
+		updates := updater.Stream(ctx)
+
+		// Use a channel to signal when the stream has attempted to send an update
+		updateAttempted := make(chan struct{})
+
+		// Read from updates channel using a goroutine
+		go func() {
+			select {
+			case update := <-updates:
+				t.Errorf("Did not expect an update, but received one: %+v", update)
+			case <-time.After(50 * time.Millisecond):
+				// No update received, as expected
+			}
+			close(updateAttempted)
+		}()
+
+		// Wait for the update attempt to complete or timeout
+		select {
+		case <-updateAttempted:
+			// Update attempt completed, proceed to cancel the context
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Timeout waiting for update attempt")
+		}
+
+		// Cancel the context to stop the stream
+		cancel()
+
+		// Ensure the updates channel is closed
+		_, ok := <-updates
+		if ok {
+			t.Fatal("Updates channel should be closed after context cancellation")
+		}
+	})
+
+	// Subtest: Stream handles empty sharesForUpdate
+	t.Run("HandlesEmptySharesForUpdate", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		// Mocks
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockFetcher := NewMockfetcher(ctrl)
+
+		// Updater instance
+		updater := &Updater{
+			logger:            logger,
+			shareStorage:      mockShareStorage,
+			fetcher:           mockFetcher,
+			beaconNetwork:     networkconfig.TestNetwork.Beacon,
+			updateInterval:    testUpdateInterval,
+			streamInterval:    testStreamInterval,
+			updateSendTimeout: testUpdateSendTimeout,
+		}
+
+		// Context with cancel
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Mock shareStorage.Range to not call the callback (no shares)
+		mockShareStorage.EXPECT().Range(nil, gomock.Any()).AnyTimes()
+
+		// Start Stream
+		updates := updater.Stream(ctx)
+
+		// Use a channel to signal when the stream has attempted to send an update
+		updateAttempted := make(chan struct{})
+
+		// Read from updates channel using a goroutine
+		go func() {
+			select {
+			case update := <-updates:
+				t.Errorf("Did not expect an update, but received one: %+v", update)
+			case <-time.After(50 * time.Millisecond):
+				// No update received, as expected
+			}
+			close(updateAttempted)
+		}()
+
+		// Wait for the update attempt to complete or timeout
+		select {
+		case <-updateAttempted:
+			// Update attempt completed, proceed to cancel the context
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Timeout waiting for update attempt")
+		}
+
+		// Cancel the context to stop the stream
+		cancel()
+
+		// Ensure the updates channel is closed
+		_, ok := <-updates
+		if ok {
+			t.Fatal("Updates channel should be closed after context cancellation")
+		}
+	})
+}
+
+func TestWithUpdateInterval(t *testing.T) {
+	// Create mock dependencies
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockShareStorage := NewMockshareStorage(ctrl)
+	mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+
+	// Create a logger
+	logger := zap.NewNop()
+
+	// Define the interval we want to set
+	interval := testUpdateInterval * 2
+
+	// Create an Updater with the WithUpdateInterval option
+	updater := NewUpdater(
+		logger,
+		mockShareStorage,
+		networkconfig.TestNetwork.Beacon,
+		mockBeaconNode,
+		WithUpdateInterval(interval),
+	)
+
+	// Check that the updateInterval field is set correctly
+	assert.Equal(t, interval, updater.updateInterval, "updateInterval should be set by WithUpdateInterval option")
 }
 
 func generatePubKey() ([]byte, error) {

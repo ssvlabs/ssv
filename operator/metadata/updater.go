@@ -16,28 +16,34 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/mock_storage.go -source=./updater.go
+//go:generate mockgen -package=metadata -destination=./mocks.go -source=./updater.go
 
 const (
-	defaultUpdateInterval = 12 * time.Minute
-	streamInterval        = 2 * time.Second
-	updateSendTimeout     = 30 * time.Second
-	batchSize             = 512
-	streamChanSize        = 1024
+	defaultUpdateInterval    = 12 * time.Minute
+	defaultStreamInterval    = 2 * time.Second
+	defaultUpdateSendTimeout = 30 * time.Second
+	batchSize                = 512
+	streamChanSize           = 1024
 )
 
 type Updater struct {
-	logger         *zap.Logger
-	shareStorage   shareStorage
-	beaconNetwork  beacon.BeaconNetwork
-	fetcher        *Fetcher
-	updateInterval time.Duration
+	logger            *zap.Logger
+	shareStorage      shareStorage
+	beaconNetwork     beacon.BeaconNetwork
+	fetcher           fetcher
+	updateInterval    time.Duration
+	streamInterval    time.Duration
+	updateSendTimeout time.Duration
 }
 
 type shareStorage interface {
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error
+}
+
+type fetcher interface {
+	Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error)
 }
 
 func NewUpdater(
@@ -48,11 +54,13 @@ func NewUpdater(
 	opts ...Option,
 ) *Updater {
 	u := &Updater{
-		logger:         logger,
-		shareStorage:   shareStorage,
-		beaconNetwork:  beaconNetwork,
-		fetcher:        NewFetcher(logger, beaconNode),
-		updateInterval: defaultUpdateInterval,
+		logger:            logger,
+		shareStorage:      shareStorage,
+		beaconNetwork:     beaconNetwork,
+		fetcher:           NewFetcher(logger, beaconNode),
+		updateInterval:    defaultUpdateInterval,
+		streamInterval:    defaultStreamInterval,
+		updateSendTimeout: defaultUpdateSendTimeout,
 	}
 
 	for _, opt := range opts {
@@ -78,24 +86,21 @@ func (u *Updater) RetrieveInitialMetadata(ctx context.Context) (map[spectypes.Va
 		return nil, nil
 	}
 
-	var hasMetadata bool
+	needToUpdate := false
 	allPubKeys := make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
 		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
-		if !share.Liquidated && share.HasBeaconMetadata() {
-			hasMetadata = true // TODO: the behavior is preserved; should it be true if all shares have metadata?
-			break
+		if !share.HasBeaconMetadata() {
+			needToUpdate = true
 		}
 	}
 
-	if hasMetadata {
+	if !needToUpdate {
 		return nil, nil
 	}
 
 	return u.Update(ctx, allPubKeys)
 }
-
-type Validators = map[spectypes.ValidatorPK]*beacon.ValidatorMetadata
 
 func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error) {
 	fetchStart := time.Now()
@@ -105,7 +110,7 @@ func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (
 			zap.Int("shares", len(pubKeys)),
 			fields.Took(time.Since(fetchStart)),
 			zap.Error(err),
-		) // TODO: is returning error enough?
+		)
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
 
@@ -122,7 +127,7 @@ func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (
 			zap.Int("shares", len(pubKeys)),
 			fields.Took(time.Since(updateStart)),
 			zap.Error(err),
-		) // TODO: is returning error enough?
+		)
 		return metadata, fmt.Errorf("update metadata: %w", err)
 	}
 
@@ -162,7 +167,7 @@ func (u *Updater) Stream(ctx context.Context) <-chan Update {
 
 				// Only sleep if there aren't more validators to fetch metadata for.
 				if len(shares) < batchSize {
-					time.Sleep(streamInterval)
+					time.Sleep(u.streamInterval)
 				}
 			}
 		}
@@ -197,7 +202,7 @@ func (u *Updater) sendUpdate(ctx context.Context, updates chan<- Update) ([]*ssv
 		Validators:    updatedMetadata,
 	}
 
-	timer := time.NewTimer(updateSendTimeout)
+	timer := time.NewTimer(u.updateSendTimeout)
 	defer timer.Stop()
 
 	select {
