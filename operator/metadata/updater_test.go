@@ -503,7 +503,6 @@ func TestUpdater_Stream(t *testing.T) {
 		// Mock shareStorage.Range
 		mockShareStorage.EXPECT().Range(nil, gomock.Any()).DoAndReturn(func(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool) {
 			fn(share1)
-			return
 		}).AnyTimes()
 
 		// Mock fetcher.Fetch
@@ -598,7 +597,6 @@ func TestUpdater_Stream(t *testing.T) {
 		// Mock shareStorage.Range
 		mockShareStorage.EXPECT().Range(nil, gomock.Any()).DoAndReturn(func(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool) {
 			fn(share1)
-			return
 		}).AnyTimes()
 
 		// Mock fetcher.Fetch to return an error
