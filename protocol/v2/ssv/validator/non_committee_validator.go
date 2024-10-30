@@ -362,7 +362,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		return err
 	}
 
-	if err := ncv.saveSyncCommRoots(epoch, beaconVote); err != nil {
+	if err := ncv.saveSyncCommRoots(epoch, beaconVote, qbftMsg); err != nil {
 		return err
 	}
 
@@ -391,13 +391,14 @@ func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *
 			zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
 			zap.String("attester_root", hex.EncodeToString(attesterRoot[:])),
 			zap.String("committee_index", strconv.Itoa(int(committeeIndex))),
+			fields.Slot(phase0.Slot(qbftMsg.Height)),
 		)
 	}
 
 	return nil
 }
 
-func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote) error {
+func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
 	syncCommDomain, err := ncv.domainCache.Get(epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return err
@@ -413,7 +414,8 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *
 
 	ncv.logger.Debug("✅ On proposal msg: saveSyncCommRoots",
 		zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
-		zap.String("attester_root", hex.EncodeToString(syncCommitteeRoot[:])),
+		zap.String("sync_comm_root", hex.EncodeToString(syncCommitteeRoot[:])),
+		fields.Slot(phase0.Slot(qbftMsg.Height)),
 	)
 
 	return nil
