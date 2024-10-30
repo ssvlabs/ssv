@@ -386,6 +386,12 @@ func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *
 		}
 
 		ncv.attesterRoots.Set(attesterRoot, struct{}{}, ttlcache.DefaultTTL)
+
+		ncv.logger.Debug("✅ On proposal msg: saveAttesterRoot",
+			zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
+			zap.String("attester_root", hex.EncodeToString(attesterRoot[:])),
+			zap.String("committee_index", strconv.Itoa(int(committeeIndex))),
+		)
 	}
 
 	return nil
@@ -404,6 +410,11 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *
 	}
 
 	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
+
+	ncv.logger.Debug("✅ On proposal msg: saveSyncCommRoots",
+		zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
+		zap.String("attester_root", hex.EncodeToString(syncCommitteeRoot[:])),
+	)
 
 	return nil
 }
