@@ -38,7 +38,6 @@ type CommitteeObserver struct {
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	beaconVoteHashRoots    *ttlcache.Cache[phase0.Root, struct{}]
 	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache            *DomainCache
@@ -46,19 +45,18 @@ type CommitteeObserver struct {
 }
 
 type CommitteeObserverOptions struct {
-	FullNode            bool
-	Logger              *zap.Logger
-	NetworkConfig       networkconfig.NetworkConfig
-	Network             specqbft.Network
-	Storage             *storage.QBFTStores
-	Operator            *spectypes.CommitteeMember
-	OperatorSigner      ssvtypes.OperatorSigner
-	NewDecidedHandler   qbftctrl.NewDecidedHandler
-	ValidatorStore      registrystorage.ValidatorStore
-	BeaconVoteHashRoots *ttlcache.Cache[phase0.Root, struct{}]
-	AttesterRoots       *ttlcache.Cache[phase0.Root, struct{}]
-	SyncCommRoots       *ttlcache.Cache[phase0.Root, struct{}]
-	DomainCache         *DomainCache
+	FullNode          bool
+	Logger            *zap.Logger
+	NetworkConfig     networkconfig.NetworkConfig
+	Network           specqbft.Network
+	Storage           *storage.QBFTStores
+	Operator          *spectypes.CommitteeMember
+	OperatorSigner    ssvtypes.OperatorSigner
+	NewDecidedHandler qbftctrl.NewDecidedHandler
+	ValidatorStore    registrystorage.ValidatorStore
+	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	DomainCache       *DomainCache
 }
 
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
@@ -85,7 +83,6 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		beaconNetwork:          opts.NetworkConfig.Beacon,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
-		beaconVoteHashRoots:    opts.BeaconVoteHashRoots,
 		attesterRoots:          opts.AttesterRoots,
 		syncCommRoots:          opts.SyncCommRoots,
 		domainCache:            opts.DomainCache,
@@ -346,16 +343,6 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
-	beaconVoteRoot, err := beaconVote.HashTreeRoot()
-	if err != nil {
-		return err
-	}
-
-	// skip computation if the beacon vote root is already cached
-	if ncv.beaconVoteHashRoots.Get(beaconVoteRoot) != nil {
-		return nil
-	}
-
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
 	if err := ncv.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
@@ -365,9 +352,6 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	if err := ncv.saveSyncCommRoots(epoch, beaconVote); err != nil {
 		return err
 	}
-
-	// cache the beacon vote hash tree root to avoid redundant computations
-	ncv.beaconVoteHashRoots.Set(beaconVoteRoot, struct{}{}, ttlcache.DefaultTTL)
 
 	return nil
 }
