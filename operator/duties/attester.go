@@ -9,10 +9,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"go.uber.org/zap"
 )
 
 type AttesterHandler struct {
@@ -175,8 +174,12 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
 		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
 		for _, d := range duties {
-			if h.shouldExecute(d) {
+			if h.isFresh(d) {
 				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
+				// For every attestation duty we also have to try to perform aggregation duty even if it
+				// isn't necessarily needed - we won't know if it's needed or not until we rebuild
+				// validator signature (done during pre-consensus step) and perform some computation on
+				// it - hence scheduling it for execution here.
 				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
 			}
 		}
@@ -187,7 +190,11 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
-		if h.shouldExecute(d) {
+		if h.isFresh(d) {
+			// For every attestation duty we also have to try to perform aggregation duty even if it
+			// isn't necessarily needed - we won't know if it's needed or not until we rebuild
+			// validator signature (done during pre-consensus step) and perform some computation on
+			// it - hence scheduling it for execution here.
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
@@ -274,9 +281,9 @@ func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role g
 	}
 }
 
-func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
+func (h *AttesterHandler) isFresh(duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
-	// execute task if slot already began and not pass 1 epoch
+	// if a whole epoch of slots has passed since the slot duty is for there is no point executing it
 	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
 		return true

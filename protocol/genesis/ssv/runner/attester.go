@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,11 +14,11 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
-
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner/metrics"
+	"go.uber.org/zap"
 )
 
 type AttesterRunner struct {
@@ -231,19 +230,18 @@ func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.
 	r.started = time.Now()
 
 	r.metrics.StartDutyFullFlow()
-	r.metrics.StartConsensus()
 
 	attDataByts, err := attData.MarshalSSZ()
 	if err != nil {
 		return errors.Wrap(err, "could not marshal attestation data")
 	}
-
 	input := &genesisspectypes.ConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: attDataByts,
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

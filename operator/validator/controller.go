@@ -19,8 +19,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -59,6 +57,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -702,8 +701,9 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validators.Val
 }
 
 func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty) {
-	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer,
-	// so we need to copy the pubkey to avoid pointer.
+	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is
+	// an error in bls.Deserialize func for cgo pointer to pointer, so we need to copy the pubkey
+	// to avoid pointer.
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 

@@ -6,17 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -111,12 +109,9 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.Sig
 		return c.UponDecided(logger, msg)
 	}
 
-	isFuture, err := c.isFutureMessage(msg)
+	err = c.validateMsgHeight(msg)
 	if err != nil {
-		return nil, err
-	}
-	if isFuture {
-		return nil, fmt.Errorf("future msg from height, could not process")
+		return nil, fmt.Errorf("could not process future msg: %w", err)
 	}
 
 	return c.UponExistingInstanceMsg(logger, msg)
@@ -194,14 +189,17 @@ func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
 }
 
-// isFutureMessage returns true if message height is from a future instance.
-// It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
-func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) (bool, error) {
+// validateMsgHeight returns error if provided message height is from a future instance.
+// It takes into consideration a special case where FirstHeight instance didn't start yet
+// but c.Height == FirstHeight.
+func (c *Controller) validateMsgHeight(msg *specqbft.ProcessingMessage) error {
 	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
-		return true, nil
+		return fmt.Errorf("qbft instance at height: %d hasn't started yet", specqbft.FirstHeight)
 	}
-
-	return msg.QBFTMessage.Height > c.Height, nil
+	if msg.QBFTMessage.Height > c.Height {
+		return fmt.Errorf("message height: %d > current qbft height: %d", msg.QBFTMessage.Height, c.Height)
+	}
+	return nil
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
