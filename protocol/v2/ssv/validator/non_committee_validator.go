@@ -158,18 +158,13 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
 			}
 
-			existingQuorum, err := roleStorage.GetParticipants(msgID, slot)
+			updated, err := roleStorage.UpdateParticipants(msgID, slot, quorum)
 			if err != nil {
-				return fmt.Errorf("could not get participants %w", err)
-			}
-
-			mergedQuorum := mergeQuorums(existingQuorum, quorum)
-			if slices.Equal(existingQuorum, existingQuorum) {
-				continue
-			}
-
-			if err := roleStorage.SaveParticipants(msgID, slot, mergedQuorum); err != nil {
 				return fmt.Errorf("could not save participants: %w", err)
+			}
+
+			if !updated {
+				continue
 			}
 
 			logger.Info("✅ saved participants",
