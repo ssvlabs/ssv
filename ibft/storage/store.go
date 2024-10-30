@@ -162,7 +162,7 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 
 	existingParticipants, err := i.getParticipants(txn, identifier, slot)
 	if err != nil {
-		return false, fmt.Errorf("could not get participants %w", err)
+		return false, fmt.Errorf("get participants %w", err)
 	}
 
 	mergedParticipants := mergeParticipants(existingParticipants, newParticipants)
@@ -171,7 +171,7 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 	}
 
 	if err := i.saveParticipants(txn, identifier, slot, mergedParticipants); err != nil {
-		return false, fmt.Errorf("could not save participants: %w", err)
+		return false, fmt.Errorf("save participants: %w", err)
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -224,10 +224,10 @@ func (i *ibftStorage) getParticipants(txn basedb.ReadWriter, identifier convert.
 func (i *ibftStorage) saveParticipants(txn basedb.ReadWriter, identifier convert.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
 	bytes, err := encodeOperators(operators)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode operators: %w", err)
 	}
 	if err := i.save(txn, bytes, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
-		return fmt.Errorf("could not save participants: %w", err)
+		return fmt.Errorf("save to DB: %w", err)
 	}
 
 	return nil

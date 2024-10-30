@@ -157,7 +157,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 
 			updated, err := roleStorage.UpdateParticipants(msgID, slot, quorum)
 			if err != nil {
-				return fmt.Errorf("could not save participants: %w", err)
+				return fmt.Errorf("update participants: %w", err)
 			}
 
 			if !updated {
@@ -184,27 +184,6 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	return nil
-}
-
-func mergeQuorums(quorum1, quorum2 []spectypes.OperatorID) []spectypes.OperatorID {
-	seen := make(map[spectypes.OperatorID]struct{})
-
-	for _, operatorID := range quorum1 {
-		seen[operatorID] = struct{}{}
-	}
-
-	for _, operatorID := range quorum2 {
-		seen[operatorID] = struct{}{}
-	}
-
-	result := make([]spectypes.OperatorID, 0, len(seen))
-	for operatorID := range seen {
-		result = append(result, operatorID)
-	}
-
-	slices.Sort(result)
-
-	return result
 }
 
 func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []convert.RunnerRole {
