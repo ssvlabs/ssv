@@ -213,7 +213,6 @@ type controller struct {
 	// nonCommittees is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
-	beaconVoteHashRoots      *ttlcache.Cache[phase0.Root, struct{}]
 	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
@@ -328,9 +327,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		committeesObservers: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](cacheTTL),
 		),
-		beaconVoteHashRoots: ttlcache.New(
-			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
-		),
 		attesterRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
@@ -350,7 +346,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
 	// Delete old root and domain entries.
-	go ctrl.beaconVoteHashRoots.Start()
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
 	go ctrl.domainCache.Start()
@@ -467,19 +462,18 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	item := c.getNonCommitteeValidators(ssvMsg.GetID())
 	if item == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
-			Logger:              c.logger,
-			NetworkConfig:       c.networkConfig,
-			ValidatorStore:      c.validatorStore,
-			Network:             c.validatorOptions.Network,
-			Storage:             c.validatorOptions.Storage,
-			FullNode:            c.validatorOptions.FullNode,
-			Operator:            c.validatorOptions.Operator,
-			OperatorSigner:      c.validatorOptions.OperatorSigner,
-			NewDecidedHandler:   c.validatorOptions.NewDecidedHandler,
-			BeaconVoteHashRoots: c.beaconVoteHashRoots,
-			AttesterRoots:       c.attesterRoots,
-			SyncCommRoots:       c.syncCommRoots,
-			DomainCache:         c.domainCache,
+			Logger:            c.logger,
+			NetworkConfig:     c.networkConfig,
+			ValidatorStore:    c.validatorStore,
+			Network:           c.validatorOptions.Network,
+			Storage:           c.validatorOptions.Storage,
+			FullNode:          c.validatorOptions.FullNode,
+			Operator:          c.validatorOptions.Operator,
+			OperatorSigner:    c.validatorOptions.OperatorSigner,
+			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+			AttesterRoots:     c.attesterRoots,
+			SyncCommRoots:     c.syncCommRoots,
+			DomainCache:       c.domainCache,
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
