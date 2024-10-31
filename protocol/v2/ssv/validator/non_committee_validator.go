@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jellydator/ttlcache/v3"
