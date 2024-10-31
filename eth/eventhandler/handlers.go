@@ -89,6 +89,9 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	var modifiedShares []*ssvtypes.SSVShare
 	for _, share := range eh.nodeStorage.Shares().List(txn, registrystorage.ByOperatorID(event.OperatorId)) {
 		if !share.Liquidated {
+			// Skip non-liquidated shares since they are already active.
+			// A share may become liquidated on OperatorRemoved or ClusterLiquidated events.
+			// On ValidatorRemoved the share is removed from the storage, so it won't be reactivated on OperatorAdded.
 			continue
 		}
 
