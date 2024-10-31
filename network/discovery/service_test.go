@@ -7,17 +7,14 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig networkconfig.NetworkConfig) {
-
 	require.Len(t, dvs.bootnodes, len(netConfig.Bootnodes))
 
 	for _, bootnode := range netConfig.Bootnodes {
@@ -140,7 +137,6 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
-	logger := zap.NewNop()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -161,14 +157,13 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	// Change network config
 	dvs.networkConfig = networkconfig.HoleskyStage
 	// Test PublishENR method
-	dvs.PublishENR(logger)
+	dvs.PublishENR(testLogger)
 
 	// Check LocalNode has been updated
 	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.HoleskyStage)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
-	logger := zap.NewNop()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -194,7 +189,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 
 	// Run bootstrap
 	go func() {
-		err := dvs.Bootstrap(logger, handler)
+		err := dvs.Bootstrap(testLogger, handler)
 		assert.NoError(t, err)
 	}()
 
