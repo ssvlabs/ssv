@@ -162,7 +162,7 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 	i.participantsMu.Lock()
 	defer i.participantsMu.Unlock()
 
-	existingParticipants, err := i.getParticipants(identifier, slot)
+	existingParticipants, err := i.GetParticipants(identifier, slot)
 	if err != nil {
 		return false, fmt.Errorf("get participants %w", err)
 	}
@@ -203,10 +203,6 @@ func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from,
 }
 
 func (i *ibftStorage) GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	return i.getParticipants(identifier, slot)
-}
-
-func (i *ibftStorage) getParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err
