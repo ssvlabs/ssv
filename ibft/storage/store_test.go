@@ -220,7 +220,7 @@ func Test_mergeQuorums(t *testing.T) {
 			name:          "Both participants empty",
 			participants1: []spectypes.OperatorID{},
 			participants2: []spectypes.OperatorID{},
-			expected:      []spectypes.OperatorID{},
+			expected:      nil,
 		},
 		{
 			name:          "First participants empty",
