@@ -79,6 +79,7 @@ func TestNewController(t *testing.T) {
 	require.NoError(t, err)
 
 	controllerOptions := ControllerOptions{
+		NetworkConfig:     networkconfig.TestNetwork,
 		Beacon:            bc,
 		Metrics:           nil,
 		FullNode:          true,
