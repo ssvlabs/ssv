@@ -993,7 +993,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 
 					// Perform BLS verification with public key and computed signing root.
 					if !sig.VerifyByte(validator.pk, root[:]) {
-						err = fmt.Errorf("BLS verification failed for signature %x", sigBytes)
+						require.Truef(t, sig.VerifyByte(validator.pk, root[:]), "BLS verification failed for signature %x", sigBytes)
 					}
 					result.signs++
 				}
@@ -1075,7 +1075,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 
 					// Perform BLS verification with public key and computed signing root.
 					if !sig.VerifyByte(validator.pk, root[:]) {
-						err = fmt.Errorf("BLS verification failed for signature %x", sigBytes)
+						require.Truef(t, sig.VerifyByte(validator.pk, root[:]), "BLS verification failed for signature %x", sigBytes)
 					}
 					result.signs++
 				}
