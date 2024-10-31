@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -42,8 +43,9 @@ func init() {
 // ibftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
-	prefix []byte
-	db     basedb.Database
+	prefix         []byte
+	db             basedb.Database
+	participantsMu sync.Mutex
 }
 
 // New create new ibft storage
@@ -157,6 +159,9 @@ func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 }
 
 func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+	i.participantsMu.Lock()
+	defer i.participantsMu.Unlock()
+
 	txn := i.db.Begin()
 	defer txn.Discard()
 
