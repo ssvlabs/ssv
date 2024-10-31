@@ -94,10 +94,6 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 
 		var existingOperatorsCount int
 		for _, shareMember := range share.Committee {
-			if shareMember.Signer == event.OperatorId {
-				existingOperatorsCount++
-			}
-
 			_, ok, err := eh.nodeStorage.GetOperatorData(txn, shareMember.Signer)
 			if err != nil {
 				return fmt.Errorf("get operator data: %w", err)
