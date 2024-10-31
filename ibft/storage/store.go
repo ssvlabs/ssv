@@ -234,24 +234,9 @@ func (i *ibftStorage) saveParticipants(txn basedb.ReadWriter, identifier convert
 }
 
 func mergeParticipants(existingParticipants, newParticipants []spectypes.OperatorID) []spectypes.OperatorID {
-	seen := make(map[spectypes.OperatorID]struct{})
-
-	for _, operatorID := range existingParticipants {
-		seen[operatorID] = struct{}{}
-	}
-
-	for _, operatorID := range newParticipants {
-		seen[operatorID] = struct{}{}
-	}
-
-	result := make([]spectypes.OperatorID, 0, len(seen))
-	for operatorID := range seen {
-		result = append(result, operatorID)
-	}
-
-	slices.Sort(result)
-
-	return result
+	allParticipants := slices.Concat(existingParticipants, newParticipants)
+	slices.Sort(allParticipants)
+	return slices.Compact(allParticipants)
 }
 
 func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, id string, pk []byte, keyParams ...[]byte) error {
