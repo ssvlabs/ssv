@@ -148,9 +148,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	v, c, lastErr := test.runPreTesting(ctx, logger)
 
 	if len(test.ExpectedError) != 0 {
-		// Don't want to compare error messages exactly because it's an implementation detail that
-		// might differ from the spec.
-		require.Error(t, lastErr)
+		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}

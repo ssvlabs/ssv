@@ -44,9 +44,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	lastErr := test.runPreTesting(logger)
 
 	if len(test.ExpectedError) != 0 {
-		// Don't want to compare error messages exactly because it's an implementation detail that
-		// might differ from the spec.
-		require.Error(t, lastErr)
+		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
