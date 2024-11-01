@@ -25,6 +25,7 @@ import (
 
 type CommitteeSpecTest struct {
 	Name                   string
+	ParentName             string
 	Committee              *validator.Committee
 	Input                  []interface{} // Can be a types.Duty or a *types.SignedSSVMessage
 	PostDutyCommitteeRoot  string
@@ -38,16 +39,15 @@ func (test *CommitteeSpecTest) TestName() string {
 	return test.Name
 }
 
+func (test *CommitteeSpecTest) FullName() string {
+	return strings.Replace(test.ParentName+"_"+test.Name, " ", "_", -1)
+}
+
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	logger := logging.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-
-	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	validateError(t, lastErr, test.FullName(), test.ExpectedError)
 
 	broadcastedMsgs := make([]*types.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
@@ -139,6 +139,7 @@ func (tests *MultiCommitteeSpecTest) Run(t *testing.T) {
 
 	for _, test := range tests.Tests {
 		t.Run(test.TestName(), func(t *testing.T) {
+			test.ParentName = tests.Name
 			test.RunAsPartOfMultiTest(t)
 		})
 	}
