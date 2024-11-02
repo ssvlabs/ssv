@@ -798,7 +798,9 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
 		}
-		c.validatorsMap.PutValidator(share.ValidatorPubKey, validator.NewValidator(validatorCtx, validatorCancel, opts))
+
+		v = validator.NewValidator(validatorCtx, validatorCancel, opts)
+		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
 	} else {
