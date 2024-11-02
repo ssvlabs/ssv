@@ -115,18 +115,6 @@ func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex, ownValidator)
 }
 
-// ForkListener mocks base method.
-func (m *MockController) ForkListener(logger *zap.Logger) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ForkListener", logger)
-}
-
-// ForkListener indicates an expected call of ForkListener.
-func (mr *MockControllerMockRecorder) ForkListener(logger any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkListener", reflect.TypeOf((*MockController)(nil).ForkListener), logger)
-}
-
 // GetOperatorShares mocks base method.
 func (m *MockController) GetOperatorShares() []*types1.SSVShare {
 	m.ctrl.T.Helper()

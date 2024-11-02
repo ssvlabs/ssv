@@ -351,7 +351,7 @@ func (c *controller) handleRouterMessages() {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
-					if !c.messageWorker.TryEnqueue(m) { // start to save non committee decided messages only post fork
+					if !c.messageWorker.TryEnqueue(m) {
 						c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 					}
 				}
