@@ -15,9 +15,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -27,10 +24,13 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type MsgProcessingSpecTest struct {
 	Name                    string
+	ParentName              string
 	Runner                  runner.Runner
 	Duty                    spectypes.Duty
 	Messages                []*spectypes.SignedSSVMessage
@@ -46,6 +46,10 @@ type MsgProcessingSpecTest struct {
 
 func (test *MsgProcessingSpecTest) TestName() string {
 	return test.Name
+}
+
+func (test *MsgProcessingSpecTest) FullName() string {
+	return strings.Replace(test.ParentName+"_"+test.Name, " ", "_", -1)
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
@@ -147,12 +151,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-
-	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	validateError(t, lastErr, test.FullName(), test.ExpectedError)
 
 	network := &spectestingutils.TestingNetwork{}
 	var beaconNetwork *tests.TestingBeaconNodeWrapped

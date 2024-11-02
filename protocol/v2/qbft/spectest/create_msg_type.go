@@ -5,15 +5,13 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-
 	"github.com/ssvlabs/ssv-spec/qbft"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/stretchr/testify/require"
 )
 
 type CreateMsgSpecTest struct {
@@ -49,19 +47,10 @@ func (test *CreateMsgSpecTest) RunCreateMsg(t *testing.T) {
 	default:
 		t.Fail()
 	}
+	validateError(t, err, test.Name, test.ExpectedError)
 
-	if err != nil && len(test.ExpectedError) != 0 {
-		require.EqualError(t, err, test.ExpectedError)
-		return
-	}
+	r, err := msg.GetRoot()
 	require.NoError(t, err)
-
-	r, err2 := msg.GetRoot()
-	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, err2, test.ExpectedError)
-		return
-	}
-	require.NoError(t, err2)
 	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r[:]))
 }
 
