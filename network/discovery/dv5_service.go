@@ -11,13 +11,14 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"go.uber.org/zap"
 )
 
 var (
@@ -170,14 +171,8 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if err != nil {
 		return errors.Wrap(err, "could not read domain type")
 	}
-	nodeNextDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyNextDomainType)
-	if err != nil && !errors.Is(err, records.ErrEntryNotFound) {
-		return errors.Wrap(err, "could not read domain type")
-	}
-	if dvs.networkConfig.DomainType != nodeDomainType &&
-		dvs.networkConfig.DomainType != nodeNextDomainType {
-		return fmt.Errorf("mismatched domain type: neither %x nor %x match %x",
-			nodeDomainType, nodeNextDomainType, dvs.networkConfig.DomainType)
+	if dvs.networkConfig.DomainType != nodeDomainType {
+		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.networkConfig.DomainType)
 	}
 
 	// Get the peer's subnets, skipping if it has none.
@@ -345,12 +340,6 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 		logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
-	// TODO: do we need to set it?
-	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.networkConfig.DomainType)
-	if err != nil {
-		logger.Error("could not set next domain type", zap.Error(err))
-		return
-	}
 
 	// Acquire publish lock to prevent parallel publishing.
 	// If there's an ongoing goroutine, it would now start publishing the record updated above,
@@ -414,7 +403,6 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 
 		// Satisfy decorations of forks supported by this node.
 		DecorateWithDomainType(records.KeyDomainType, dvs.networkConfig.DomainType),
-		DecorateWithDomainType(records.KeyNextDomainType, dvs.networkConfig.DomainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {

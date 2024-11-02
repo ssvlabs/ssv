@@ -128,15 +128,6 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	err := localNode.Node().Record().Load(&domainEntry)
 	require.NoError(t, err)
 	require.Equal(t, netConfig.DomainType, domainEntry.DomainType)
-
-	// Check next domain entry
-	nextDomainEntry := records.DomainTypeEntry{
-		Key:        records.KeyNextDomainType,
-		DomainType: spectypes.DomainType{},
-	}
-	err = localNode.Node().Record().Load(&nextDomainEntry)
-	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType, nextDomainEntry.DomainType)
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
@@ -250,21 +241,13 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithoutDomain(t)))
 	require.ErrorContains(t, err, "could not read domain type: not found")
 
-	// No next domain. No error since it's not enforced
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithoutNextDomain(t)))
-	require.NoError(t, err)
-
 	// Matching main domain
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
-	require.NoError(t, err)
-
-	// Matching next domain
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
+	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomain(t, testNetConfig.DomainType)))
 	require.NoError(t, err)
 
 	// Mismatching domains
-	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
-	require.ErrorContains(t, err, "mismatched domain type: neither 00000000 nor 00000000 match 00000302")
+	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithCustomDomain(t, spectypes.DomainType{})))
+	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// No subnets
 	err = dvs.checkPeer(testLogger, ToPeerEvent(NodeWithoutSubnets(t)))
