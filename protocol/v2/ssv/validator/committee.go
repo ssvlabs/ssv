@@ -245,7 +245,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				return fmt.Errorf("no runner found for post consensus sig message's slot %d", pSigMessages.Slot)
+				return fmt.Errorf("no runner found for post consensus partial-sig message's slot %d", pSigMessages.Slot)
 			}
 			return r.ProcessPostConsensus(logger, pSigMessages)
 		}
