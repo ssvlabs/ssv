@@ -11,13 +11,13 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/eth2-key-manager/encryptor"
-	"github.com/bloxapp/eth2-key-manager/wallets"
-	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/eth2-key-manager/core"
+	"github.com/ssvlabs/eth2-key-manager/encryptor"
+	"github.com/ssvlabs/eth2-key-manager/wallets"
+	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
