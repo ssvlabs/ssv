@@ -97,6 +97,8 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := cmd.Context()
+
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
 		err := globalcfg.Prepare(&cfg, &globalArgs)
@@ -140,7 +142,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
-		cfg.DBOptions.Ctx = cmd.Context()
+		cfg.DBOptions.Ctx = ctx
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -184,7 +186,8 @@ var StartNodeCmd = &cobra.Command{
 		operatorDataStore := operatordatastore.New(operatorData)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
-		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
+
+		if err := checkCfgCompatibility(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
@@ -198,7 +201,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
-		cfg.P2pNetworkConfig.Ctx = cmd.Context()
+		cfg.P2pNetworkConfig.Ctx = ctx
 
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
@@ -207,14 +210,14 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		cfg.ConsensusClient.Context = cmd.Context()
+		cfg.ConsensusClient.Context = ctx
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
-			cmd.Context(),
+			ctx,
 			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
@@ -234,7 +237,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		validatorsMap := validators.New(cmd.Context())
+		validatorsMap := validators.New(ctx)
 
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
@@ -254,14 +257,14 @@ var StartNodeCmd = &cobra.Command{
 
 		p2pNetwork := setupP2P(logger, db)
 
-		cfg.SSVOptions.Context = cmd.Context()
+		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
-		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
+		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
@@ -275,7 +278,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
-			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
+			ws := exporterapi.NewWsServer(ctx, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
@@ -329,22 +332,55 @@ var StartNodeCmd = &cobra.Command{
 				nodeprobe.ConsensusClientNode: consensusClient,
 			},
 		)
-		if len(cfg.LocalEventsPath) == 0 {
-			eventSyncer := setupEventHandling(
+
+		eventFilterer, err := executionClient.Filterer()
+		if err != nil {
+			logger.Fatal("failed to set up event filterer", zap.Error(err))
+		}
+		eventHandler, err := eventhandler.New(
+			nodeStorage,
+			eventparser.New(eventFilterer),
+			validatorCtrl,
+			networkConfig,
+			operatorDataStore,
+			operatorPrivKey,
+			keyManager,
+			cfg.SSVOptions.ValidatorOptions.Beacon,
+			eventhandler.WithFullNode(),
+			eventhandler.WithLogger(logger),
+		)
+		if err != nil {
+			logger.Fatal("failed to setup event data handler", zap.Error(err))
+		}
+
+		// load & parse local events yaml if exists, otherwise sync from contract
+		if usingLocalEvents {
+			localEvents, err := localevents.Load(cfg.LocalEventsPath)
+			if err != nil {
+				logger.Fatal("failed to load local events", zap.Error(err))
+			}
+			if err := eventHandler.HandleLocalEvents(localEvents); err != nil {
+				logger.Fatal("error occurred while running event data handler", zap.Error(err))
+			}
+		} else {
+			eventSyncer := eventsyncer.New(
+				nodeStorage,
+				executionClient,
+				eventHandler,
+				eventsyncer.WithLogger(logger),
+			)
+			startEventSyncer(
 				cmd.Context(),
 				logger,
-				executionClient,
-				validatorCtrl,
+				eventSyncer,
 				networkConfig,
 				nodeStorage,
 				operatorDataStore,
-				operatorPrivKey,
-				keyManager,
 			)
 			nodeProber.AddNode(nodeprobe.EventSyncerNode, eventSyncer)
 		}
 
-		nodeProber.Start(cmd.Context())
+		nodeProber.Start(ctx)
 		nodeProber.Wait()
 
 		logger.Info("Ethereum nodes are healthy")
@@ -423,12 +459,11 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
-func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) error {
+func checkCfgCompatibility(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) error {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
 		return fmt.Errorf("failed to get stored config: %w", err)
 	}
-
 	currentConfig := &operatorstorage.ConfigLock{
 		NetworkName:      networkName,
 		UsingLocalEvents: usingLocalEvents,
@@ -439,7 +474,6 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
-
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
 			return fmt.Errorf("failed to store config: %w", err)
 		}
@@ -636,124 +670,77 @@ func setupConsensusClient(
 	return cl
 }
 
-func setupEventHandling(
+func startEventSyncer(
 	ctx context.Context,
 	logger *zap.Logger,
-	executionClient *executionclient.ExecutionClient,
-	validatorCtrl validator.Controller,
+	eventSyncer *eventsyncer.EventSyncer,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
-	operatorDecrypter keys.OperatorDecrypter,
-	keyManager ekm.KeyManager,
-) *eventsyncer.EventSyncer {
-	eventFilterer, err := executionClient.Filterer()
-	if err != nil {
-		logger.Fatal("failed to set up event filterer", zap.Error(err))
-	}
-
-	eventParser := eventparser.New(eventFilterer)
-
-	eventHandler, err := eventhandler.New(
-		nodeStorage,
-		eventParser,
-		validatorCtrl,
-		networkConfig,
-		operatorDataStore,
-		operatorDecrypter,
-		keyManager,
-		cfg.SSVOptions.ValidatorOptions.Beacon,
-		eventhandler.WithFullNode(),
-		eventhandler.WithLogger(logger),
-	)
-	if err != nil {
-		logger.Fatal("failed to setup event data handler", zap.Error(err))
-	}
-
-	eventSyncer := eventsyncer.New(
-		nodeStorage,
-		executionClient,
-		eventHandler,
-		eventsyncer.WithLogger(logger),
-	)
-
+) {
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
 		logger.Fatal("syncing registry contract events failed, could not get last processed block", zap.Error(err))
 	}
 	if !found {
 		fromBlock = networkConfig.RegistrySyncOffset
-	} else if fromBlock == nil {
+	}
+	if fromBlock == nil {
 		logger.Fatal("syncing registry contract events failed, last processed block is nil")
-	} else {
-		// Start syncing from the next block.
-		fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
+	}
+	// Start syncing from the next block.
+	fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
+
+	logger.Debug("syncing historical registry events", zap.Uint64("fromBlock", fromBlock.Uint64()))
+
+	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, fromBlock.Uint64())
+	switch {
+	case errors.Is(err, executionclient.ErrNothingToSync):
+		// Nothing was synced, keep fromBlock as is.
+	case err == nil:
+		// Advance fromBlock to the block after lastProcessedBlock.
+		fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
+	default:
+		logger.Fatal("failed to sync historical registry events", zap.Error(err))
 	}
 
-	// load & parse local events yaml if exists, otherwise sync from contract
-	if len(cfg.LocalEventsPath) != 0 {
-		localEvents, err := localevents.Load(cfg.LocalEventsPath)
-		if err != nil {
-			logger.Fatal("failed to load local events", zap.Error(err))
-		}
+	// Print registry stats.
+	shares := nodeStorage.Shares().List(nil)
+	operators, err := nodeStorage.ListOperators(nil, 0, 0)
+	if err != nil {
+		logger.Error("failed to get operators", zap.Error(err))
+	}
 
-		if err := eventHandler.HandleLocalEvents(localEvents); err != nil {
-			logger.Fatal("error occurred while running event data handler", zap.Error(err))
-		}
-	} else {
-		// Sync historical registry events.
-		logger.Debug("syncing historical registry events", zap.Uint64("fromBlock", fromBlock.Uint64()))
-		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, fromBlock.Uint64())
-		switch {
-		case errors.Is(err, executionclient.ErrNothingToSync):
-			// Nothing was synced, keep fromBlock as is.
-		case err == nil:
-			// Advance fromBlock to the block after lastProcessedBlock.
-			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
-		default:
-			logger.Fatal("failed to sync historical registry events", zap.Error(err))
-		}
-
-		// Print registry stats.
-		shares := nodeStorage.Shares().List(nil)
-		operators, err := nodeStorage.ListOperators(nil, 0, 0)
-		if err != nil {
-			logger.Error("failed to get operators", zap.Error(err))
-		}
-
-		operatorValidators := 0
-		liquidatedValidators := 0
-		operatorID := operatorDataStore.GetOperatorID()
-		if operatorDataStore.OperatorIDReady() {
-			for _, share := range shares {
-				if share.BelongsToOperator(operatorID) {
-					operatorValidators++
-				}
-				if share.Liquidated {
-					liquidatedValidators++
-				}
+	operatorValidators := 0
+	liquidatedValidators := 0
+	operatorID := operatorDataStore.GetOperatorID()
+	if operatorDataStore.OperatorIDReady() {
+		for _, share := range shares {
+			if share.BelongsToOperator(operatorID) {
+				operatorValidators++
+			}
+			if share.Liquidated {
+				liquidatedValidators++
 			}
 		}
-		logger.Info("historical registry sync stats",
-			zap.Uint64("my_operator_id", operatorID),
-			zap.Int("operators", len(operators)),
-			zap.Int("validators", len(shares)),
-			zap.Int("liquidated_validators", liquidatedValidators),
-			zap.Int("my_validators", operatorValidators),
-		)
-
-		// Sync ongoing registry events in the background.
-		go func() {
-			err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
-
-			// Crash if ongoing sync has stopped, regardless of the reason.
-			logger.Fatal("failed syncing ongoing registry events",
-				zap.Uint64("last_processed_block", lastProcessedBlock),
-				zap.Error(err))
-		}()
 	}
+	logger.Info("historical registry sync stats",
+		zap.Uint64("my_operator_id", operatorID),
+		zap.Int("operators", len(operators)),
+		zap.Int("validators", len(shares)),
+		zap.Int("liquidated_validators", liquidatedValidators),
+		zap.Int("my_validators", operatorValidators),
+	)
 
-	return eventSyncer
+	// Sync ongoing registry events in the background.
+	go func() {
+		err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+
+		// Crash if ongoing sync has stopped, regardless of the reason.
+		logger.Fatal("failed syncing ongoing registry events",
+			zap.Uint64("last_processed_block", lastProcessedBlock),
+			zap.Error(err))
+	}()
 }
 
 func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
