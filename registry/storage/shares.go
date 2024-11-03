@@ -2,24 +2,29 @@ package storage
 
 import (
 	"bytes"
-	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
-
 	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 )
 
-var sharesPrefix = []byte("shares")
+//go:generate sszgen -path ./shares.go --objs storageShare
+
+// sharesPrefix specifies the prefix used for storing Share(s) in DB.
+// Note, previously gob-encoded Share(s) were stored with `shares` prefix, this has been
+// changed in migration_5_change_share_format_from_gob_to_ssz.
+var sharesPrefix = []byte("shares_ssz")
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -66,49 +71,56 @@ type sharesStorage struct {
 	memoryMtx sync.RWMutex
 }
 
-type storageOperator struct {
-	OperatorID spectypes.OperatorID
-	PubKey     []byte `ssz-size:"48"`
-}
+const addressLength = 20
 
-// Share represents a storage share.
-// The better name of the struct is storageShare,
-// but we keep the name Share to avoid conflicts with gob encoding.
-type Share struct {
-	OperatorID            spectypes.OperatorID
-	ValidatorPubKey       []byte             `ssz-size:"48"`
-	SharePubKey           []byte             `ssz-size:"48"`
+// storageShare represents a Share stored in DB. SSZ encoding generator has some limitations
+// in terms of what types it supports, hence we define a bunch of types here to satisfy it.
+type storageShare struct {
+	ValidatorPubKey       []byte             `ssz-max:"48"`
+	SharePubKey           []byte             `ssz-max:"48"`
 	Committee             []*storageOperator `ssz-max:"13"`
 	Quorum, PartialQuorum uint64
-	DomainType            spectypes.DomainType `ssz-size:"4"`
-	FeeRecipientAddress   [20]byte             `ssz-size:"20"`
-	Graffiti              []byte               `ssz-size:"32"`
+	DomainType            [4]byte `ssz-size:"4"`
+	FeeRecipientAddress   [addressLength]byte
+	Graffiti              []byte `ssz-max:"32"`
+	storageShareMetadata
 }
 
-type storageShare struct {
-	Share
-	types.Metadata
+type storageOperator struct {
+	OperatorID uint64
+	PubKey     []byte `ssz-max:"48"`
 }
 
-// Encode encodes Share using gob.
+type storageShareMetadata struct {
+	BeaconMetadata storageShareValidatorMetadata
+	OwnerAddress   [addressLength]byte
+	Liquidated     bool
+	// lastUpdated is an internal field that can be used to track the last time the metadata was updated.
+	lastUpdated time.Time
+}
+
+type storageShareValidatorMetadata struct {
+	Balance         uint64
+	Status          uint64
+	Index           uint64
+	ActivationEpoch uint64
+}
+
+// Encode encodes Share using ssz.
 func (s *storageShare) Encode() ([]byte, error) {
-	var b bytes.Buffer
-	e := gob.NewEncoder(&b)
-	if err := e.Encode(s); err != nil {
-		return nil, fmt.Errorf("encode storageShare: %w", err)
+	result, err := s.MarshalSSZ()
+	if err != nil {
+		return nil, fmt.Errorf("marshal ssz: %w", err)
 	}
-
-	return b.Bytes(), nil
+	return result, nil
 }
 
-// Decode decodes Share using gob.
+// Decode decodes Share using ssz.
 func (s *storageShare) Decode(data []byte) error {
 	if len(data) > types.MaxAllowedShareSize {
 		return fmt.Errorf("share size is too big, got %v, max allowed %v", len(data), types.MaxAllowedShareSize)
 	}
-
-	d := gob.NewDecoder(bytes.NewReader(data))
-	if err := d.Decode(s); err != nil {
+	if err := s.UnmarshalSSZ(data); err != nil {
 		return fmt.Errorf("decode storageShare: %w", err)
 	}
 	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
@@ -123,7 +135,7 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 		prefix: prefix,
 	}
 
-	if err := storage.load(); err != nil {
+	if err := storage.loadFromDB(); err != nil {
 		return nil, nil, err
 	}
 	storage.validatorStore = newValidatorStore(
@@ -136,8 +148,8 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 	return storage, storage.validatorStore, nil
 }
 
-// load reads all shares from db.
-func (s *sharesStorage) load() error {
+// loadFromDB reads all shares from db.
+func (s *sharesStorage) loadFromDB() error {
 	// not locking since at this point nobody has the reference to this object
 	return s.db.GetAll(append(s.prefix, sharesPrefix...), func(i int, obj basedb.Obj) error {
 		val := &storageShare{}
@@ -271,53 +283,73 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 	}
 	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	stShare := &storageShare{
-		Share: Share{
-			ValidatorPubKey:     share.ValidatorPubKey[:],
-			SharePubKey:         share.SharePubKey,
-			Committee:           committee,
-			Quorum:              quorum,
-			PartialQuorum:       partialQuorum,
-			DomainType:          share.DomainType,
-			FeeRecipientAddress: share.FeeRecipientAddress,
-			Graffiti:            share.Graffiti,
+		ValidatorPubKey:     share.ValidatorPubKey[:],
+		SharePubKey:         share.SharePubKey,
+		Committee:           committee,
+		Quorum:              quorum,
+		PartialQuorum:       partialQuorum,
+		DomainType:          share.DomainType,
+		FeeRecipientAddress: share.FeeRecipientAddress,
+		Graffiti:            share.Graffiti,
+		storageShareMetadata: storageShareMetadata{
+			OwnerAddress: share.Metadata.OwnerAddress,
+			Liquidated:   share.Metadata.Liquidated,
+			lastUpdated:  share.Metadata.MetadataLastUpdated(),
 		},
-		Metadata: share.Metadata,
+	}
+
+	if share.Metadata.BeaconMetadata != nil {
+		stShare.storageShareMetadata.BeaconMetadata = storageShareValidatorMetadata{
+			Balance:         uint64(share.Metadata.BeaconMetadata.Balance),
+			Status:          uint64(share.Metadata.BeaconMetadata.Status), // nolint: gosec
+			Index:           uint64(share.Metadata.BeaconMetadata.Index),
+			ActivationEpoch: uint64(share.Metadata.BeaconMetadata.ActivationEpoch),
+		}
 	}
 
 	return stShare
 }
 
-func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSVShare, error) {
-	committee := make([]*spectypes.ShareMember, len(share.Committee))
-	for i, c := range share.Committee {
+func (s *sharesStorage) storageShareToSpecShare(stShare *storageShare) (*types.SSVShare, error) {
+	committee := make([]*spectypes.ShareMember, len(stShare.Committee))
+	for i, c := range stShare.Committee {
 		committee[i] = &spectypes.ShareMember{
 			Signer:      c.OperatorID,
 			SharePubKey: c.PubKey,
 		}
 	}
 
-	if len(share.ValidatorPubKey) != phase0.PublicKeyLength {
-		return nil, fmt.Errorf("invalid ValidatorPubKey length: got %v, expected 48", len(share.ValidatorPubKey))
+	if len(stShare.ValidatorPubKey) != phase0.PublicKeyLength {
+		return nil, fmt.Errorf("invalid ValidatorPubKey length: got %v, expected 48", len(stShare.ValidatorPubKey))
 	}
 
 	var validatorPubKey spectypes.ValidatorPK
-	copy(validatorPubKey[:], share.ValidatorPubKey)
+	copy(validatorPubKey[:], stShare.ValidatorPubKey)
 
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorPubKey:     validatorPubKey,
-			SharePubKey:         share.SharePubKey,
+			SharePubKey:         stShare.SharePubKey,
 			Committee:           committee,
-			DomainType:          share.DomainType,
-			FeeRecipientAddress: share.FeeRecipientAddress,
-			Graffiti:            share.Graffiti,
+			DomainType:          stShare.DomainType,
+			FeeRecipientAddress: stShare.FeeRecipientAddress,
+			Graffiti:            stShare.Graffiti,
 		},
-		Metadata: share.Metadata,
+		Metadata: types.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Balance:         phase0.Gwei(stShare.BeaconMetadata.Balance),
+				Status:          eth2apiv1.ValidatorState(stShare.BeaconMetadata.Status), // nolint: gosec
+				Index:           phase0.ValidatorIndex(stShare.BeaconMetadata.Index),
+				ActivationEpoch: phase0.Epoch(stShare.BeaconMetadata.ActivationEpoch),
+			},
+			OwnerAddress: stShare.OwnerAddress,
+			Liquidated:   stShare.Liquidated,
+		},
 	}
-
-	if share.BeaconMetadata != nil && share.BeaconMetadata.Index != 0 {
-		specShare.Share.ValidatorIndex = share.Metadata.BeaconMetadata.Index
+	if stShare.BeaconMetadata.Index != 0 {
+		specShare.Share.ValidatorIndex = phase0.ValidatorIndex(stShare.BeaconMetadata.Index)
 	}
+	specShare.SetMetadataLastUpdated(stShare.lastUpdated)
 
 	return specShare, nil
 }
@@ -411,7 +443,7 @@ func (s *sharesStorage) Drop() error {
 	))
 }
 
-// storageKey builds share key using sharesPrefix & validator public key, e.g. "shares/0x00..01"
+// storageKey builds share key using sharesPrefix & validator public key, e.g. "shares_ssz/0x00..01"
 func (s *sharesStorage) storageKey(pk []byte) []byte {
 	return bytes.Join([][]byte{sharesPrefix, pk}, []byte("/"))
 }

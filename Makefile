@@ -167,9 +167,13 @@ docker-monitor:
 	@echo $(MONITOR_NODES)
 	@docker-compose up --build $(MONITOR_NODES)
 
+.PHONY: generate
+generate:
+	go generate ./...
+
 .PHONY: mock
 mock:
-	go generate ./...
+	make generate
 
 .PHONY: mockgen-install
 mockgen-install:
