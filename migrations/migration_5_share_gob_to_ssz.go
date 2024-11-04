@@ -48,10 +48,14 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("get all gob shares: %w", err)
 		}
 
-		// Must complete txn before commit (complete func makes sure migration executes once).
-		if err := completed(txn); err != nil {
-			return fmt.Errorf("complete transaction: %w", err)
-		}
+		// TODO - do not complete migration just yet, we will complete it after testing on stage
+		// has been done and when we are ready to merge: https://github.com/ssvlabs/ssv/pull/1837
+		// or we'll complete this even later if we go for 100% rollback-supporting approach
+		// described in https://github.com/ssvlabs/ssv/pull/1837
+		//// Must complete txn before commit (complete func makes sure migration executes once).
+		//if err := completed(txn); err != nil {
+		//	return fmt.Errorf("complete transaction: %w", err)
+		//}
 		if err := txn.Commit(); err != nil {
 			return fmt.Errorf("commit transaction: %w", err)
 		}
