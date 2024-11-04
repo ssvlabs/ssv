@@ -128,14 +128,14 @@ func BenchmarkEncryptRSA(b *testing.B) {
 
 func BenchmarkVerifyRSA(b *testing.B) {
 	privKey, pubKey := genKeypair(b)
-	signature, err := SignRSA(privKey, msgHash)
+	sig, err := SignRSA(privKey, msgHash)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := VerifyRSA(pubKey, msg, signature)
+		err := VerifyRSA(pubKey, msg, sig)
 		if err != nil {
 			b.Fatal(err)
 		}
