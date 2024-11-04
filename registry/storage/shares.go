@@ -73,8 +73,9 @@ type sharesStorage struct {
 
 const addressLength = 20
 
-// storageShare represents a Share stored in DB. SSZ encoding generator has some limitations
-// in terms of what types it supports, hence we define a bunch of types here to satisfy it.
+// storageShare represents a Share stored in DB. SSZ encodings generator has some limitations
+// in terms of what types it supports, hence we define a bunch of own types here to satisfy it,
+// see more on this here: https://github.com/ferranbt/fastssz/issues/179#issuecomment-2454371820
 type storageShare struct {
 	ValidatorPubKey       []byte             `ssz-max:"48"`
 	SharePubKey           []byte             `ssz-max:"48"`
