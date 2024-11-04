@@ -28,7 +28,6 @@ ifeq ($(COVERAGE),true)
 endif
 UNFORMATTED=$(shell gofmt -l .)
 
-#Lint
 .PHONY: lint-prepare
 lint-prepare:
 	@echo "Preparing Linter"
@@ -84,14 +83,17 @@ spec-test-raceless:
 	@echo "Running spec tests without race flag"
 	@go test -tags blst_enabled -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
 
-#Test
+.PHONY: benchmark
+benchmark:
+	@echo "Running benchmark for specified directory"
+	@go test -run=^# -bench . -benchmem -v TARGET_DIR_PATH -count 3
+
 .PHONY: docker-spec-test
 docker-spec-test:
 	@echo "Running spec tests in docker"
 	@docker build -t ssv_tests -f tests.Dockerfile .
 	@docker run --rm ssv_tests make spec-test
 
-#Test
 .PHONY: docker-unit-test
 docker-unit-test:
 	@echo "Running unit tests in docker"
@@ -104,7 +106,12 @@ docker-integration-test:
 	@docker build -t ssv_tests -f tests.Dockerfile .
 	@docker run --rm ssv_tests make integration-test
 
-#Build
+.PHONY: docker-benchmark
+docker-benchmark:
+	@echo "Running benchmark in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make benchmark
+
 .PHONY: build
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
