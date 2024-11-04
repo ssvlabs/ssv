@@ -264,35 +264,29 @@ func TestHashMap_parallel(t *testing.T) {
 		t.Helper()
 		done := make(chan error)
 		var times int64
-		// This goroutines will terminate test in case if closure hangs.
 		go func() {
-			for {
-				select {
-				case <-time.After(d + 500*time.Millisecond):
-					if atomic.LoadInt64(&times) == 0 {
-						done <- fmt.Errorf("closure was not executed even once, something blocks it")
-					}
-					close(done)
-				case <-done:
-				}
+			// This will let us signal to the caller that do() function timed out.
+			select {
+			case <-time.After(d + 500*time.Millisecond):
+				done <- fmt.Errorf("do() func timed out, closure fn has been executed %d times", atomic.LoadInt64(&times))
+			case <-done:
 			}
 		}()
 		go func() {
 			timer := time.NewTimer(d)
 			defer timer.Stop()
-		InfLoop:
 			for {
 				for i := 0; i < max; i++ {
 					select {
 					case <-timer.C:
-						break InfLoop
+						close(done)
+						return
 					default:
 					}
 					fn(t, i)
 					atomic.AddInt64(&times, 1)
 				}
 			}
-			close(done)
 		}()
 		return done
 	}
@@ -465,11 +459,9 @@ func TestIssue1682(t *testing.T) {
 						defer wg.Done()
 						time.Sleep(time.Duration(randSeed().Intn(2000)) * time.Millisecond)
 						_, found := m.GetOrSet(cmtID, validatorStatusSubscribing)
+						time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 						if !found {
-							time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 							m.Set(cmtID, validatorStatusSubscribed)
-						} else {
-							time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 						}
 					}()
 				}
@@ -482,23 +474,23 @@ func TestIssue1682(t *testing.T) {
 			}()
 
 			ticker := time.NewTicker(1 * time.Millisecond)
-			var keys []string
 			defer ticker.Stop()
 		Loop:
 			for {
-				keys = []string{}
-				m.Range(func(key string, value validatorStatus) bool {
-					keys = append(keys, key)
+				// This simply imitates a workload that relies on Map.Range func.
+				var keysTmp []string
+				m.Range(func(key string, _ validatorStatus) bool {
+					keysTmp = append(keysTmp, key)
 					return true
 				})
 				select {
 				case <-done:
-					keys = []string{}
-					m.Range(func(key string, value validatorStatus) bool {
+					var keys []string
+					m.Range(func(key string, _ validatorStatus) bool {
 						keys = append(keys, key)
 						return true
 					})
-					keysHex := []string{}
+					var keysHex []string
 					for _, key := range keys {
 						keysHex = append(keysHex, hex.EncodeToString([]byte(key)))
 					}
