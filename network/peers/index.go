@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -92,8 +93,8 @@ type PeerInfoIndex interface {
 // SubnetsStats holds a snapshot of subnets stats
 type SubnetsStats struct {
 	AvgConnected int
-	PeersCount   []int
-	Connected    []int
+	PeersCount   [commons.SubnetsCount]int
+	Connected    [commons.SubnetsCount]int
 }
 
 // SubnetsIndex stores information on subnets.

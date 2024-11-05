@@ -185,7 +185,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute, peers.NewGossipScoreIndex())
+	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, peers.NewGossipScoreIndex())
 	logger.Debug("peers index is ready")
 
 	var ids identify.IDService

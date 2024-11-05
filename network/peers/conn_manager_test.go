@@ -20,7 +20,7 @@ func TestTagBestPeers(t *testing.T) {
 	logger := logging.TestLogger(t)
 	connMgrMock := newConnMgr()
 
-	si := NewSubnetsIndex(commons.Subnets())
+	si := NewSubnetsIndex()
 
 	cm := NewConnManager(zap.NewNop(), connMgrMock, si, nil).(*connManager)
 

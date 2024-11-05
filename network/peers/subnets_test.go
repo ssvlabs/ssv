@@ -35,7 +35,7 @@ func TestSubnetsIndex(t *testing.T) {
 	sPartial, err := records.Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
-	subnetsIdx := NewSubnetsIndex(128)
+	subnetsIdx := NewSubnetsIndex()
 
 	initialMapping := map[peer.ID]records.Subnets{
 		pids[0]: sAll,
@@ -83,10 +83,7 @@ func TestSubnetsDistributionScores(t *testing.T) {
 
 	t.Logf("my subnets: %v", mySubnets.String())
 
-	stats := &SubnetsStats{
-		PeersCount: make([]int, len(mySubnets)),
-		Connected:  make([]int, len(mySubnets)),
-	}
+	stats := &SubnetsStats{}
 	for sub := range mySubnets {
 		stats.Connected[sub] = 1 + rand.Intn(20)
 		stats.PeersCount[sub] = stats.Connected[sub] + rand.Intn(10)
@@ -209,7 +206,7 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			subnetsIdx := NewSubnetsIndex(128)
+			subnetsIdx := NewSubnetsIndex()
 			pids := generateTestPeers(t, tt.numPeers)
 			subnetID := 0
 			sInitial := getSubnet(t, tt.initialSubnets)

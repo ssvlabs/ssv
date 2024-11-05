@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -60,7 +59,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	subnetsIndex := peers.NewSubnetsIndex(commons.Subnets())
+	subnetsIndex := peers.NewSubnetsIndex()
 	connectionIndex := NewMockConnection()
 
 	return &Options{

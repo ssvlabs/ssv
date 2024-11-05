@@ -5,20 +5,20 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
 // subnetsIndex implements SubnetsIndex
 type subnetsIndex struct {
-	subnets     [][]peer.ID
+	subnets     [commons.SubnetsCount][]peer.ID
 	peerSubnets map[peer.ID]records.Subnets
 
 	lock *sync.RWMutex
 }
 
-func NewSubnetsIndex(count int) SubnetsIndex {
+func NewSubnetsIndex() SubnetsIndex {
 	return &subnetsIndex{
-		subnets:     make([][]peer.ID, count),
 		peerSubnets: map[peer.ID]records.Subnets{},
 		lock:        &sync.RWMutex{},
 	}
@@ -96,9 +96,7 @@ func (si *subnetsIndex) GetSubnetsStats() *SubnetsStats {
 	si.lock.RLock()
 	defer si.lock.RUnlock()
 
-	stats := &SubnetsStats{
-		PeersCount: make([]int, len(si.subnets)),
-	}
+	stats := &SubnetsStats{}
 	for subnet, peers := range si.subnets {
 		stats.PeersCount[subnet] = len(peers)
 	}

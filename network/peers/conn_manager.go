@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -145,7 +146,7 @@ type peerLog struct {
 	SharedSubnets int
 }
 
-func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets, subnetConnections []int) {
+func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets, subnetConnections [commons.SubnetsCount]int) {
 	sort.Slice(peerLogs, func(i, j int) bool {
 		return peerLogs[i].Score < peerLogs[j].Score
 	})

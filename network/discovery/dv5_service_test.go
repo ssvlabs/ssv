@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
@@ -149,7 +148,7 @@ func TestCheckPeer(t *testing.T) {
 	}
 
 	// Run the tests.
-	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
+	subnetIndex := peers.NewSubnetsIndex()
 	dvs := &DiscV5Service{
 		ctx:           ctx,
 		conns:         &mock.MockConnectionIndex{LimitValue: false},
