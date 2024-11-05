@@ -100,10 +100,10 @@ type SubnetsStats struct {
 // it keeps track of subnets but doesn't mind regards actual connections that we have.
 type SubnetsIndex interface {
 	// UpdatePeerSubnets updates the given peer's subnets
-	UpdatePeerSubnets(id peer.ID, s records.Subnets) bool
+	UpdatePeerSubnets(id peer.ID, subnets records.Subnets) bool
 
 	// GetSubnetPeers returns peers that are interested in the given subnet
-	GetSubnetPeers(s int) []peer.ID
+	GetSubnetPeers(subnet int) []peer.ID
 
 	// GetPeerSubnets returns subnets of the given peer and whether it was found
 	GetPeerSubnets(id peer.ID) (subnets records.Subnets, ok bool)
