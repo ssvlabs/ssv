@@ -72,7 +72,7 @@ func TestCleanInstances(t *testing.T) {
 	require.Equal(t, specqbft.Height(msgsCount), last.State.Height)
 
 	// remove all instances
-	require.NoError(t, storage.CleanAllInstances(logger, msgID[:]))
+	require.NoError(t, storage.CleanAllInstances(msgID[:]))
 	res, err = storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(res))
@@ -205,6 +205,71 @@ func TestEncodeDecodeOperators(t *testing.T) {
 
 			decoded := decodeOperators(encoded)
 			require.Equal(t, tc.input, decoded)
+		})
+	}
+}
+
+func Test_mergeQuorums(t *testing.T) {
+	tests := []struct {
+		name          string
+		participants1 []spectypes.OperatorID
+		participants2 []spectypes.OperatorID
+		expected      []spectypes.OperatorID
+	}{
+		{
+			name:          "Both participants empty",
+			participants1: []spectypes.OperatorID{},
+			participants2: []spectypes.OperatorID{},
+			expected:      nil,
+		},
+		{
+			name:          "First participants empty",
+			participants1: []spectypes.OperatorID{},
+			participants2: []spectypes.OperatorID{1, 2, 3},
+			expected:      []spectypes.OperatorID{1, 2, 3},
+		},
+		{
+			name:          "Second participants empty",
+			participants1: []spectypes.OperatorID{1, 2, 3},
+			participants2: []spectypes.OperatorID{},
+			expected:      []spectypes.OperatorID{1, 2, 3},
+		},
+		{
+			name:          "No duplicates",
+			participants1: []spectypes.OperatorID{1, 3, 5},
+			participants2: []spectypes.OperatorID{2, 4, 6},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			name:          "With duplicates",
+			participants1: []spectypes.OperatorID{1, 2, 3, 5},
+			participants2: []spectypes.OperatorID{3, 4, 5, 6},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			name:          "All duplicates",
+			participants1: []spectypes.OperatorID{1, 2, 3},
+			participants2: []spectypes.OperatorID{1, 2, 3},
+			expected:      []spectypes.OperatorID{1, 2, 3},
+		},
+		{
+			name:          "Unsorted input participants",
+			participants1: []spectypes.OperatorID{5, 1, 3},
+			participants2: []spectypes.OperatorID{4, 2, 6},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			name:          "Large participants size",
+			participants1: []spectypes.OperatorID{1, 3, 5, 7, 9, 11, 13},
+			participants2: []spectypes.OperatorID{2, 4, 6, 8, 10, 12, 14},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeParticipants(tt.participants1, tt.participants2)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }

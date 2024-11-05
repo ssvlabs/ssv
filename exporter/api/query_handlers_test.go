@@ -92,7 +92,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		convert.RoleCommittee,
 		convert.RoleProposer,
 		convert.RoleAggregator,
-		convert.RoleSyncCommitteeContribution,
+		convert.RoleSyncCommittee,
 		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)
@@ -120,13 +120,15 @@ func TestHandleDecidedQuery(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// save decided
+		// save participants
 		for _, d := range decided250Seq {
 			require.NoError(t, ibftStorage.Get(role).SaveInstance(d))
-			require.NoError(t, ibftStorage.Get(role).SaveParticipants(convert.MessageID(d.DecidedMessage.SSVMessage.MsgID),
+			_, err := ibftStorage.Get(role).UpdateParticipants(
+				convert.MessageID(d.DecidedMessage.SSVMessage.MsgID),
 				phase0.Slot(d.State.Height),
-				d.DecidedMessage.OperatorIDs),
+				d.DecidedMessage.OperatorIDs,
 			)
+			require.NoError(t, err)
 		}
 
 		t.Run("valid range", func(t *testing.T) {

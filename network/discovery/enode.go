@@ -38,7 +38,7 @@ func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
 	if len(hostAddr) > 0 {
 		hostIP := net.ParseIP(hostAddr)
 		if hostIP.To4() == nil && hostIP.To16() == nil {
-			return fmt.Errorf("invalid host address given: %s", hostIP.String())
+			return fmt.Errorf("invalid host address given: %v", hostAddr)
 		}
 		localNode.SetFallbackIP(hostIP)
 		localNode.SetStaticIP(hostIP)

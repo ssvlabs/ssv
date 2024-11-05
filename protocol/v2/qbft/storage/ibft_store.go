@@ -2,12 +2,12 @@ package qbftstorage
 
 import (
 	"encoding/json"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
-	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/exporter/convert"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
@@ -53,10 +53,10 @@ type InstanceStore interface {
 	GetInstance(identifier []byte, height specqbft.Height) (*StoredInstance, error)
 
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
-	CleanAllInstances(logger *zap.Logger, msgID []byte) error
+	CleanAllInstances(msgID []byte) error
 
-	// SaveParticipants save participants in quorum.
-	SaveParticipants(identifier convert.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error
+	// UpdateParticipants updates participants in quorum.
+	UpdateParticipants(identifier convert.MessageID, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
 	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)

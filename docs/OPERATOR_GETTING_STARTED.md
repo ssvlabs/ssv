@@ -141,7 +141,7 @@ See [setup monitoring](#8-setup-monitoring) for more details.
 
 #### 5.3 Profiling Configuration
 
-In order to enable go profiling tools, turn on the corresponding flga:
+In order to enable go profiling tools, turn on the corresponding flag:
 
 ```
 $ yq w -i config.yaml EnableProfile "true"
@@ -211,4 +211,4 @@ $ docker network connect --alias grafana ssv-net grafana
 **Notes:**
 
 - change the values of `instance` variable in Grafana (`Settings > Variables`) to `ssv-node-1`
-- `Process Health` panels are showing K8S metrics which is not used in this setup, and therefore won't be available
+- `Process Health` panels are showing K8S metrics which are not used in this setup, and therefore won't be available

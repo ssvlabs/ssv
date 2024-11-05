@@ -59,6 +59,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -212,6 +213,9 @@ type controller struct {
 	// nonCommittees is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
+	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache              *validator.DomainCache
 
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
@@ -256,10 +260,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		},
 	}
 
-	//TODO
+	beaconNetwork := options.NetworkConfig.Beacon
+
 	genesisValidatorOptions := genesisvalidator.Options{
 		Network:       options.GenesisControllerOptions.Network,
-		BeaconNetwork: options.NetworkConfig.Beacon,
+		BeaconNetwork: beaconNetwork,
 		Storage:       options.GenesisControllerOptions.StorageMap,
 		// SSVShare:   nil,  // set per validator
 		Signer:            options.GenesisControllerOptions.KeyManager,
@@ -288,6 +293,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	if options.Metrics != nil {
 		metrics = options.Metrics
 	}
+
+	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -318,8 +325,16 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
 		committeesObservers: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
+			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](cacheTTL),
 		),
+		attesterRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
+		syncCommRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
+		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
+
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -330,6 +345,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
+	// Delete old root and domain entries.
+	go ctrl.attesterRoots.Start()
+	go ctrl.syncCommRoots.Start()
+	go ctrl.domainCache.Start()
 
 	return &ctrl
 }
@@ -452,6 +471,9 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			Operator:          c.validatorOptions.Operator,
 			OperatorSigner:    c.validatorOptions.OperatorSigner,
 			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+			AttesterRoots:     c.attesterRoots,
+			SyncCommRoots:     c.syncCommRoots,
+			DomainCache:       c.domainCache,
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
@@ -1239,7 +1261,7 @@ func SetupCommitteeRunners(
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Storage:     options.Storage.Get(convert.RunnerRole(role)),
+			Storage:     options.Storage.Get(casts.RunnerRoleToConvertRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
@@ -1303,7 +1325,7 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:     options.Storage.Get(convert.RunnerRole(role)),
+			Storage:     options.Storage.Get(casts.RunnerRoleToConvertRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,

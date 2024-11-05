@@ -176,7 +176,7 @@ More details can be found in the [QBFT spec](https://github.com/ssvlabs/ssv-spec
   syntax = "proto3";
   import "gogo.proto";
   
-  // SignedMessage holds a message and it's corresponding signature
+  // SignedMessage holds a message and its corresponding signature
   message SignedMessage {
     // message is the QBFT message
     Message message            = 1 [(gogoproto.nullable) = false];
@@ -455,7 +455,7 @@ Thresholds values **TBD**, this section will be updated once that work is comple
 - `opportunisticGraftThreshold`: 5
 
 Pubsub runs a `Score Function` periodically to determine the score of peers.
-During heartbeat, the score it checked and bad peers are handled accordingly. see
+During heartbeat, the score is checked and bad peers are handled accordingly. see
 [gossipsub v1.1 spec](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function)
 for more information.
 
