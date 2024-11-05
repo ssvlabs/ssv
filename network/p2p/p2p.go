@@ -95,7 +95,8 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
-	// persistentSubnets holds subnets on node startup
+	// persistentSubnets holds subnets on node startup,
+	// these subnets should not be unsubscribed from even if all validators associated with them are removed
 	persistentSubnets records.Subnets
 	// currentSubnets holds current subnets which depend on current active validators and committees
 	currentSubnets records.Subnets
