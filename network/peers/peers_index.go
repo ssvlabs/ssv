@@ -67,7 +67,7 @@ func NewPeersIndex(
 // - bad gossip score
 // - pruned (that was not expired)
 // - bad score
-func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (pi *peersIndex) IsBad(id peer.ID) bool {
 	if isBad, _ := pi.HasBadGossipScore(id); isBad {
 		return true
 	}
@@ -82,7 +82,7 @@ func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 
 	for _, score := range scores {
 		if score.Value < threshold {
-			logger.Debug("bad peer (low score)")
+			pi.logger.Debug("bad peer (low score)")
 			return true
 		}
 	}

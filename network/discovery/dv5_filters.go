@@ -32,7 +32,7 @@ func (dvs *DiscV5Service) badNodeFilter(logger *zap.Logger) func(node *enode.Nod
 			logger.Warn("could not get peer ID from node record", zap.Error(err))
 			return false
 		}
-		return !dvs.conns.IsBad(logger, pid)
+		return !dvs.conns.IsBad(pid)
 	}
 }
 

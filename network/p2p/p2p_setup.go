@@ -110,7 +110,7 @@ func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
 	if n.idx == nil {
 		return false
 	}
-	return n.idx.IsBad(logger, peerID)
+	return n.idx.IsBad(peerID)
 }
 
 // SetupHost configures a libp2p host and backoff connector utility
