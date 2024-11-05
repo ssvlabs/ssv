@@ -95,8 +95,8 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
-	// initialSubnets holds subnets on node startup
-	initialSubnets records.Subnets
+	// persistentSubnets holds subnets on node startup
+	persistentSubnets records.Subnets
 	// currentSubnets holds current subnets which depend on current active validators and committees
 	currentSubnets records.Subnets
 
@@ -357,7 +357,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		updatedSubnets := n.initialSubnets
+		updatedSubnets := n.persistentSubnets
 
 		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
