@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
 	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
