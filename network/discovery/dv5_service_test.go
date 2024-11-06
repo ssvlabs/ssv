@@ -3,17 +3,11 @@ package discovery
 import (
 	"context"
 	"math"
-	"math/rand"
 	"net"
 	"os"
-	"runtime"
-	"runtime/pprof"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/jellydator/ttlcache/v3"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -193,97 +187,4 @@ func mockSubnets(active ...int) []byte {
 		subnets[subnet] = 1
 	}
 	return subnets
-}
-
-// Function to generate a random peer.ID of length 32
-func generateRandomPeerID() peer.ID {
-	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-	b := make([]rune, 32)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return peer.ID(b)
-}
-
-func BenchmarkTTLCacheMemoryUsage(b *testing.B) {
-	rand.Seed(42) // Set seed for reproducibility
-
-	ttl := time.Millisecond * 100
-	numEntries := 10_000
-
-	// Initialize the cache with the low TTL
-	cache := ttlcache.New[peer.ID, struct{}](
-		ttlcache.WithTTL[peer.ID, struct{}](ttl),
-	)
-
-	// Pre-generate all peer IDs
-	peerIDs := make([]peer.ID, numEntries)
-	for i := 0; i < numEntries; i++ {
-		peerIDs[i] = generateRandomPeerID()
-	}
-
-	// Measure memory before insertion
-	var memStatsBefore runtime.MemStats
-	runtime.ReadMemStats(&memStatsBefore)
-
-	b.Logf("before: %+v", memStatsBefore)
-
-	// Insert entries into the cache
-	for _, id := range peerIDs {
-		cache.Set(id, struct{}{}, ttlcache.DefaultTTL)
-	}
-
-	// After insertion
-	if err := writeMemoryProfile("mem_profile_after.prof"); err != nil {
-		b.Fatalf("could not write memory profile: %v", err)
-	}
-
-	// Measure memory after insertion
-	var memStatsAfter runtime.MemStats
-	runtime.ReadMemStats(&memStatsAfter)
-	b.Logf("after: %+v", memStatsAfter)
-
-	b.Logf("size before delete %v", cache.Len())
-
-	started := time.Now()
-	cache.DeleteExpired()
-	b.Logf("no deleting took %v", time.Since(started))
-
-	b.Logf("size after no delete %v", cache.Len())
-
-	// Wait for entries to expire
-	time.Sleep(ttl + time.Millisecond*200)
-
-	started = time.Now()
-	cache.DeleteExpired()
-	b.Logf("deleting took %v", time.Since(started))
-
-	started = time.Now()
-	l := cache.Len()
-	b.Logf("size after delete %v, size took %v", l, time.Since(started))
-
-	// Measure memory after expiration
-	var memStatsFinal runtime.MemStats
-	runtime.ReadMemStats(&memStatsFinal)
-	b.Logf("final: %+v", memStatsFinal)
-}
-
-func warmUpGC() {
-	for i := 0; i < 5; i++ {
-		runtime.GC()
-		time.Sleep(50 * time.Millisecond) // Give GC time to complete
-	}
-}
-
-func writeMemoryProfile(filename string) error {
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	runtime.GC() // get up-to-date statistics
-	if err := pprof.WriteHeapProfile(f); err != nil {
-		return err
-	}
-	return nil
 }
