@@ -12,8 +12,8 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/utils/casts"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
@@ -98,14 +98,14 @@ var ConstructBaseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySet, casts.RunnerRoleToConvertRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
 	}
 	config.Network = net
 	config.BeaconSigner = km
-	config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
+	config.Storage = testing.TestingStores(logger).Get(casts.RunnerRoleToConvertRole(role))
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
@@ -352,13 +352,13 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = nil
 		}
 
-		config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
+		config := testing.TestingConfig(logger, keySetInstance, casts.RunnerRoleToConvertRole(identifier.GetRoleType()))
 		config.ValueCheckF = valCheck
 		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		}
 		config.Network = net
-		config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
+		config.Storage = testing.TestingStores(logger).Get(casts.RunnerRoleToConvertRole(role))
 
 		contr = testing.NewTestingQBFTController(
 			spectestingutils.Testing4SharesSet(),

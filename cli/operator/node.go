@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -408,6 +409,10 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
+				&handlers.Exporter{
+					DomainType: networkConfig.AlanDomainType,
+					QBFTStores: storageMap,
+				},
 			)
 			go func() {
 				err := apiServer.Run()
@@ -608,12 +613,18 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		if len(byts) != 4 {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
+
+		// Assign domain type as-is for Genesis.
 		networkConfig.GenesisDomainType = spectypes.DomainType(byts)
-		if networkConfig.PastAlanFork() {
-			logger.Info("custom domain type is ineffective now after Alan fork", fields.Domain(networkConfig.GenesisDomainType))
-		} else {
-			logger.Info("running with custom domain type", fields.Domain(networkConfig.GenesisDomainType))
-		}
+
+		// Assign domain type incremented by 1 for Alan.
+		alanDomainType := binary.BigEndian.Uint32(byts) + 1
+		binary.BigEndian.PutUint32(networkConfig.AlanDomainType[:], alanDomainType)
+
+		logger.Info("running with custom domain type",
+			zap.Stringer("genesis", format.DomainType(networkConfig.GenesisDomainType)),
+			zap.Stringer("alan", format.DomainType(networkConfig.AlanDomainType)),
+		)
 	}
 
 	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
@@ -621,6 +632,10 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
 		nodeType = "full"
+	}
+
+	if !networkConfig.PastAlanFork() {
+		logger = logger.With(zap.Stringer("alan_domain", format.DomainType(networkConfig.AlanDomainType)))
 	}
 
 	logger.Info("setting ssv network",

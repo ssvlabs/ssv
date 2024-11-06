@@ -166,6 +166,7 @@ func setupEventHandler(
 	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
+		NetworkConfig:     testNetworkConfig,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,

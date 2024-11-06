@@ -12,14 +12,13 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
 )
 
 var (
@@ -68,20 +67,25 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:           ctx,
 		cancel:        cancel,
-		conns:         discOpts.ConnIndex,
-		subnetsIdx:    discOpts.SubnetsIdx,
-		networkConfig: discOpts.NetworkConfig,
-		subnets:       discOpts.DiscV5Opts.Subnets,
+		conns:         opts.ConnIndex,
+		subnetsIdx:    opts.SubnetsIdx,
+		networkConfig: opts.NetworkConfig,
+		subnets:       opts.DiscV5Opts.Subnets,
 		publishLock:   make(chan struct{}, 1),
 	}
 
-	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
-	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
+	logger.Debug(
+		"configuring discv5 discovery",
+		zap.Any("discV5Opts", opts.DiscV5Opts),
+		zap.Any("hostAddress", opts.HostAddress),
+		zap.Any("hostDNS", opts.HostDNS),
+	)
+	if err := dvs.initDiscV5Listener(logger, opts); err != nil {
 		return nil, err
 	}
 	return &dvs, nil
