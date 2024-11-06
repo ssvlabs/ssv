@@ -42,14 +42,14 @@ func (mf *Fetcher) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Va
 	validatorsIndexMap, err := mf.beaconNode.GetValidatorData(blsPubKeys)
 	if err != nil {
 		mf.logger.Error("failed to fetch initial validators metadata",
-			zap.Int("shares", len(pubKeys)),
+			zap.Int("shares_cnt", len(pubKeys)),
 			fields.Took(time.Since(start)),
 			zap.Error(err),
 		)
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
 	}
 
-	results := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata)
+	results := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, len(validatorsIndexMap))
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
 			Balance:         v.Balance,
@@ -61,9 +61,9 @@ func (mf *Fetcher) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Va
 	}
 
 	mf.logger.Debug("⏱️ fetched validators metadata",
-		zap.Duration("elapsed", time.Since(start)),
-		zap.Int("requested", len(pubKeys)),
-		zap.Int("received", len(results)),
+		fields.Took(time.Since(start)),
+		zap.Int("requested_cnt", len(pubKeys)),
+		zap.Int("received_cnt", len(results)),
 	)
 
 	return results, nil

@@ -107,7 +107,7 @@ func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (
 	metadata, err := u.fetcher.Fetch(ctx, pubKeys)
 	if err != nil {
 		u.logger.Error("failed to fetch initial validators metadata",
-			zap.Int("shares", len(pubKeys)),
+			zap.Int("shares_cnt", len(pubKeys)),
 			fields.Took(time.Since(fetchStart)),
 			zap.Error(err),
 		)
@@ -116,15 +116,15 @@ func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (
 
 	u.logger.Debug("🆕 fetched metadata",
 		fields.Took(time.Since(fetchStart)),
-		zap.Int("count", len(metadata)),
-		zap.Int("shares", len(pubKeys)),
+		zap.Int("metadata_count", len(metadata)),
+		zap.Int("shares_cnt", len(pubKeys)),
 	)
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
 	if err := u.shareStorage.UpdateValidatorsMetadata(metadata); err != nil {
 		u.logger.Error("failed to update validators metadata after setup",
-			zap.Int("shares", len(pubKeys)),
+			zap.Int("shares_cnt", len(pubKeys)),
 			fields.Took(time.Since(updateStart)),
 			zap.Error(err),
 		)
@@ -133,8 +133,8 @@ func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (
 
 	u.logger.Debug("🆕 updated validators metadata in storage",
 		fields.Took(time.Since(updateStart)),
-		zap.Int("count", len(metadata)),
-		zap.Int("shares", len(pubKeys)),
+		zap.Int("metadata_count", len(metadata)),
+		zap.Int("shares_cnt", len(pubKeys)),
 	)
 	return metadata, nil
 }
@@ -179,7 +179,7 @@ func (u *Updater) Stream(ctx context.Context) <-chan Update {
 func (u *Updater) sendUpdate(ctx context.Context, updates chan<- Update) ([]*ssvtypes.SSVShare, error) {
 	shares := u.sharesForUpdate()
 	if len(shares) == 0 {
-		return shares, nil
+		return nil, nil
 	}
 
 	pubKeys := make([]spectypes.ValidatorPK, len(shares))
