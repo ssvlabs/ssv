@@ -560,16 +560,17 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
 		}
-		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
+		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
 			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
 		}
-		if len(byts) != 4 {
+		if len(domainBytes) != 4 {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
 
-		domainType := binary.BigEndian.Uint32(byts)
-		binary.BigEndian.PutUint32(networkConfig.DomainType[:], domainType)
+		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
+		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
+		binary.BigEndian.PutUint32(networkConfig.DomainType[:], postForkDomain)
 
 		logger.Info("running with custom domain type",
 			fields.Domain(networkConfig.DomainType),
