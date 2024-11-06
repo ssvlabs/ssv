@@ -45,10 +45,10 @@ type messageValidator struct {
 
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
 	// same ID apply any state modifications (during message validation - which is not
-	// stateless) in isolated manner with respect to each other.
+	// stateless) in isolated synchronised manner with respect to each other.
 	validationLockCache *ttlcache.Cache[spectypes.MessageID, *sync.Mutex]
 	// validationLocksInflight helps us prevent generating 2 different validation locks
-	// for messages that must lock on the same mutex (messages with same ID) when undergoing
+	// for messages that must lock on the same lock (messages with same ID) when undergoing
 	// validation (that validation is not stateless - it often requires messageValidator to
 	// update some state).
 	validationLocksInflight singleflight.Group[spectypes.MessageID, *sync.Mutex]
