@@ -216,7 +216,7 @@ func TestUpdater_Update(t *testing.T) {
 	})
 }
 
-func TestUpdater_RetrieveInitialMetadata(t *testing.T) {
+func TestUpdater_UpdateOnStartup(t *testing.T) {
 	logger := zap.NewNop()
 
 	// Subtest: No shares returned by shareStorage.List
@@ -235,7 +235,7 @@ func TestUpdater_RetrieveInitialMetadata(t *testing.T) {
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return([]*ssvtypes.SSVShare{})
 
 		// Call method
-		result, err := updater.RetrieveInitialMetadata(context.Background())
+		result, err := updater.UpdateOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
@@ -280,7 +280,7 @@ func TestUpdater_RetrieveInitialMetadata(t *testing.T) {
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
 
 		// Call method
-		result, err := updater.RetrieveInitialMetadata(context.Background())
+		result, err := updater.UpdateOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
@@ -338,7 +338,7 @@ func TestUpdater_RetrieveInitialMetadata(t *testing.T) {
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
 
 		// Call method
-		result, err := updater.RetrieveInitialMetadata(context.Background())
+		result, err := updater.UpdateOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
@@ -396,7 +396,7 @@ func TestUpdater_RetrieveInitialMetadata(t *testing.T) {
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
 
 		// Call method
-		result, err := updater.RetrieveInitialMetadata(context.Background())
+		result, err := updater.UpdateOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
@@ -448,13 +448,14 @@ func TestUpdater_RetrieveInitialMetadata(t *testing.T) {
 		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error"))
 
 		// Call method
-		result, err := updater.RetrieveInitialMetadata(context.Background())
+		result, err := updater.UpdateOnStartup(context.Background())
 
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, result)
 	})
 }
+
 func TestUpdater_Stream(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -555,7 +556,7 @@ func TestUpdater_Stream(t *testing.T) {
 		}
 	})
 
-	// Subtest: Stream handles errors from sendUpdate
+	// Subtest: Stream handles errors from prepareUpdate
 	t.Run("HandlesSendUpdateError", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()

@@ -391,8 +391,8 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
-		if _, err := metadataUpdater.RetrieveInitialMetadata(cmd.Context()); err != nil {
-			logger.Fatal("failed to retrieve initial metadata", zap.Error(err))
+		if _, err := metadataUpdater.UpdateOnStartup(cmd.Context()); err != nil {
+			logger.Fatal("failed to update metadata on startup", zap.Error(err))
 		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
