@@ -154,26 +154,27 @@ func (u *Updater) Stream(ctx context.Context) <-chan Update {
 				continue
 			}
 
-			if len(update.Validators) > 0 {
-				timer := time.NewTimer(u.updateSendTimeout)
-				select {
-				case metadataUpdates <- update:
+			if len(update.Validators) == 0 {
+				continue
+			}
 
-				case <-ctx.Done():
-					timer.Stop()
-					return
-				case <-timer.C:
-					u.logger.Warn("timed out waiting for sending update")
+			timer := time.NewTimer(u.updateSendTimeout)
+			select {
+			case metadataUpdates <- update:
+				// Only sleep for the last batch.
+				if done {
+					if slept := u.sleep(ctx, u.streamInterval); !slept {
+						timer.Stop()
+						return
+					}
 				}
+			case <-ctx.Done():
 				timer.Stop()
+				return
+			case <-timer.C:
+				u.logger.Warn("timed out waiting for sending update")
 			}
-
-			// Only sleep for the last batch.
-			if done {
-				if slept := u.sleep(ctx, u.streamInterval); !slept {
-					return
-				}
-			}
+			timer.Stop()
 		}
 	}()
 

@@ -734,3 +734,114 @@ func generatePubKey() ([]byte, error) {
 	_, err := rand.Read(pubKey)
 	return pubKey, err
 }
+
+func TestUpdater_sleep(t *testing.T) {
+	// Initialize a no-operation logger to avoid actual logging during tests.
+	logger := zap.NewNop()
+
+	// Instantiate the Updater with the no-op logger.
+	updater := &Updater{
+		logger: logger,
+	}
+
+	t.Run("SleptSuccessfully", func(t *testing.T) {
+		// Create a background context that won't be canceled.
+		ctx := context.Background()
+
+		// Define the sleep duration.
+		duration := 50 * time.Millisecond
+
+		// Record the start time.
+		start := time.Now()
+
+		// Call the sleep method.
+		slept := updater.sleep(ctx, duration)
+
+		// Calculate the elapsed time.
+		elapsed := time.Since(start)
+
+		// Assert that the method returned true.
+		assert.True(t, slept, "Expected sleep to return true when context is not canceled")
+
+		// Assert that the elapsed time is at least the duration.
+		assert.GreaterOrEqual(t, elapsed, duration, "Sleep did not last for the expected duration")
+	})
+
+	t.Run("ContextCanceledBeforeSleep", func(t *testing.T) {
+		// Create a context that is already canceled.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		// Define the sleep duration.
+		duration := 50 * time.Millisecond
+
+		// Record the start time.
+		start := time.Now()
+
+		// Call the sleep method.
+		slept := updater.sleep(ctx, duration)
+
+		// Calculate the elapsed time.
+		elapsed := time.Since(start)
+
+		// Assert that the method returned false.
+		assert.False(t, slept, "Expected sleep to return false when context is canceled before sleeping")
+
+		// Assert that the elapsed time is minimal.
+		assert.Less(t, elapsed, duration, "Sleep should return immediately when context is already canceled")
+	})
+
+	t.Run("ContextCanceledDuringSleep", func(t *testing.T) {
+		// Create a cancellable context.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Define the sleep duration.
+		duration := 100 * time.Millisecond
+
+		// Use a channel to signal when the sleep method returns.
+		done := make(chan bool)
+
+		// Start the sleep method in a separate goroutine.
+		go func() {
+			slept := updater.sleep(ctx, duration)
+			done <- slept
+		}()
+
+		// Wait for a shorter duration before canceling the context.
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+
+		// Wait for the sleep method to return or timeout the test.
+		select {
+		case slept := <-done:
+			// Assert that the method returned false.
+			assert.False(t, slept, "Expected sleep to return false when context is canceled during sleep")
+		case <-time.After(200 * time.Millisecond):
+			t.Fatal("Sleep method did not return in expected time after context cancellation")
+		}
+	})
+
+	t.Run("ZeroDurationSleep", func(t *testing.T) {
+		// Create a background context that won't be canceled.
+		ctx := context.Background()
+
+		// Define a zero duration.
+		duration := 0 * time.Millisecond
+
+		// Record the start time.
+		start := time.Now()
+
+		// Call the sleep method.
+		slept := updater.sleep(ctx, duration)
+
+		// Calculate the elapsed time.
+		elapsed := time.Since(start)
+
+		// Assert that the method returned true.
+		assert.True(t, slept, "Expected sleep to return true for zero duration")
+
+		// Assert that the elapsed time is minimal.
+		assert.Less(t, elapsed, 10*time.Millisecond, "Sleep with zero duration should return immediately")
+	})
+}
