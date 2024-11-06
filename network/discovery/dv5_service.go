@@ -142,19 +142,23 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
-	logInterval := 2 * time.Duration(dvs.networkConfig.SlotsPerEpoch()) * dvs.networkConfig.SlotDurationSec() // #nosec G115
+
+	epochDuration := time.Duration(dvs.networkConfig.SlotsPerEpoch()) * dvs.networkConfig.SlotDurationSec() // #nosec G115
+	logTTL := 2 * epochDuration
 	logCache := ttlcache.New[peer.ID, struct{}](
-		ttlcache.WithTTL[peer.ID, struct{}](logInterval),
+		ttlcache.WithTTL[peer.ID, struct{}](logTTL),
 	)
+	go logCache.Start()
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
 			if v := logCache.Get(e.AddrInfo.ID); v == nil {
+				// This log is triggered very often, however, we need it, so it's shown once per peer ID per 2 epochs.
 				logger.Debug("skipped discovered peer",
 					fields.ENR(e.Node),
 					fields.PeerID(e.AddrInfo.ID),
-					zap.Duration("rate_limit", logInterval),
+					zap.Duration("rate_limit", logTTL),
 					zap.Error(err),
 				)
 				logCache.Set(e.AddrInfo.ID, struct{}{}, ttlcache.DefaultTTL)
