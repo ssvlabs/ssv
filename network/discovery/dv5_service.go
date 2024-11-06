@@ -12,13 +12,14 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"go.uber.org/zap"
 )
 
 var (
@@ -141,30 +142,22 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
-	type logCacheKey struct {
-		enr    string
-		peerID peer.ID
-	}
 	logInterval := 2 * time.Duration(dvs.networkConfig.SlotsPerEpoch()) * dvs.networkConfig.SlotDurationSec() // #nosec G115
-	logCache := ttlcache.New[logCacheKey, struct{}](
-		ttlcache.WithTTL[logCacheKey, struct{}](logInterval),
+	logCache := ttlcache.New[peer.ID, struct{}](
+		ttlcache.WithTTL[peer.ID, struct{}](logInterval),
 	)
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			key := logCacheKey{
-				enr:    e.Node.String(),
-				peerID: e.AddrInfo.ID,
-			}
-			if v := logCache.Get(key); v == nil {
+			if v := logCache.Get(e.AddrInfo.ID); v == nil {
 				logger.Debug("skipped discovered peer",
 					fields.ENR(e.Node),
 					fields.PeerID(e.AddrInfo.ID),
 					zap.Duration("rate_limit", logInterval),
 					zap.Error(err),
 				)
-				logCache.Set(key, struct{}{}, ttlcache.DefaultTTL)
+				logCache.Set(e.AddrInfo.ID, struct{}{}, ttlcache.DefaultTTL)
 			}
 
 			return
