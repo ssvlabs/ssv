@@ -132,7 +132,6 @@ func TestSubnetScore(t *testing.T) {
 }
 
 func TestUpdatePeerSubnets_Removal(t *testing.T) {
-	// Utility functions
 	generateTestPeers := func(t *testing.T, count int) []peer.ID {
 		nks, err := nettesting.CreateKeys(count)
 		require.NoError(t, err)
@@ -149,9 +148,7 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 	}
 
 	getSubnet := func(t *testing.T, subnetHex string) records.Subnets {
-		if len(subnetHex) != 32 {
-			t.Fatalf("subnetHex must be 32 characters long, got %d", len(subnetHex))
-		}
+		require.Len(t, subnetHex, 32, "subnetHex must be 32 characters long, got %d", len(subnetHex))
 		s, err := records.Subnets{}.FromString(subnetHex)
 		require.NoError(t, err)
 		return s
@@ -206,7 +203,7 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			subnetsIdx := NewSubnetsIndex()
+			subnetsIdx := NewSubnetsIndex(128)
 			pids := generateTestPeers(t, tt.numPeers)
 			subnetID := 0
 			sInitial := getSubnet(t, tt.initialSubnets)
