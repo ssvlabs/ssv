@@ -203,7 +203,7 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			subnetsIdx := NewSubnetsIndex(128)
+			subnetsIdx := NewSubnetsIndex()
 			pids := generateTestPeers(t, tt.numPeers)
 			subnetID := 0
 			sInitial := getSubnet(t, tt.initialSubnets)
