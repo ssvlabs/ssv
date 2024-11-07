@@ -99,6 +99,7 @@ func (u *ValidatorSyncer) SyncOnStartup(ctx context.Context) (map[spectypes.Vali
 		return nil, nil
 	}
 
+	// Sync all pubkeys. We don't need to batch them because we need to wait here until all of them are synced.
 	return u.Sync(ctx, allPubKeys)
 }
 
@@ -181,6 +182,10 @@ func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorUpdate {
 	return metadataUpdates
 }
 
+// prepareUpdate prepares the next batch for update.
+// It is used only by Stream method.
+// The maximal size is batchSize as we want to reduce the load while streaming.
+// Therefore, prepareUpdate should be called in a loop, so the rest will be prepared by next calls.
 func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorUpdate, bool, error) {
 	// TODO: Methods called here don't handle context, so this is a workaround to handle done context. It should be removed once ctx is handled gracefully.
 	select {
@@ -189,7 +194,7 @@ func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorUpdate, b
 	default:
 	}
 
-	shares := u.sharesForUpdate(ctx)
+	shares := u.sharesBatchForUpdate(ctx)
 	if len(shares) == 0 {
 		return ValidatorUpdate{}, false, nil
 	}
@@ -217,8 +222,8 @@ func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorUpdate, b
 	return update, len(shares) < batchSize, nil
 }
 
-// sharesForUpdate returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (u *ValidatorSyncer) sharesForUpdate(_ context.Context) []*ssvtypes.SSVShare {
+// sharesBatchForUpdate returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
+func (u *ValidatorSyncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SSVShare {
 	// TODO: use context, return if it's done
 	var staleShares, newShares []*ssvtypes.SSVShare
 	u.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {

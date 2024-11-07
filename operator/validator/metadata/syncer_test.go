@@ -639,7 +639,7 @@ func TestSyncer_Stream(t *testing.T) {
 		}
 	})
 
-	// Subtest: Stream handles empty sharesForUpdate
+	// Subtest: Stream handles empty sharesBatchForUpdate
 	t.Run("HandlesEmptySharesForUpdate", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
