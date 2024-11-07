@@ -16,21 +16,21 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=metadata -destination=./mocks.go -source=./updater.go
+//go:generate mockgen -package=metadata -destination=./mocks.go -source=./syncer.go
 
 const (
-	defaultUpdateInterval    = 12 * time.Minute
+	defaultSyncInterval      = 12 * time.Minute
 	defaultStreamInterval    = 2 * time.Second
 	defaultUpdateSendTimeout = 30 * time.Second
 	batchSize                = 512
 )
 
-type Updater struct {
+type ValidatorSyncer struct {
 	logger            *zap.Logger
 	shareStorage      shareStorage
 	beaconNetwork     beacon.BeaconNetwork
 	fetcher           fetcher
-	updateInterval    time.Duration
+	syncInterval      time.Duration
 	streamInterval    time.Duration
 	updateSendTimeout time.Duration
 }
@@ -45,19 +45,19 @@ type fetcher interface {
 	Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error)
 }
 
-func NewUpdater(
+func NewValidatorSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	beaconNetwork beacon.BeaconNetwork,
 	beaconNode beacon.BeaconNode,
 	opts ...Option,
-) *Updater {
-	u := &Updater{
+) *ValidatorSyncer {
+	u := &ValidatorSyncer{
 		logger:            logger,
 		shareStorage:      shareStorage,
 		beaconNetwork:     beaconNetwork,
 		fetcher:           NewFetcher(logger, beaconNode),
-		updateInterval:    defaultUpdateInterval,
+		syncInterval:      defaultSyncInterval,
 		streamInterval:    defaultStreamInterval,
 		updateSendTimeout: defaultUpdateSendTimeout,
 	}
@@ -69,15 +69,15 @@ func NewUpdater(
 	return u
 }
 
-type Option func(*Updater)
+type Option func(*ValidatorSyncer)
 
-func WithUpdateInterval(interval time.Duration) Option {
-	return func(u *Updater) {
-		u.updateInterval = interval
+func WithSyncInterval(interval time.Duration) Option {
+	return func(u *ValidatorSyncer) {
+		u.syncInterval = interval
 	}
 }
 
-func (u *Updater) UpdateOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+func (u *ValidatorSyncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
 	// Load non-liquidated shares.
 	shares := u.shareStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
@@ -85,24 +85,24 @@ func (u *Updater) UpdateOnStartup(ctx context.Context) (map[spectypes.ValidatorP
 		return nil, nil
 	}
 
-	needToUpdate := false
+	needToSync := false
 	allPubKeys := make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
 		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
 		if !share.HasBeaconMetadata() {
-			needToUpdate = true
+			needToSync = true
 		}
 	}
 
-	if !needToUpdate {
+	if !needToSync {
 		// No need to fetch metadata if all shares have it. It's going to be updated by Stream method afterwards.
 		return nil, nil
 	}
 
-	return u.Update(ctx, allPubKeys)
+	return u.Sync(ctx, allPubKeys)
 }
 
-func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error) {
+func (u *ValidatorSyncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error) {
 	fetchStart := time.Now()
 	metadata, err := u.fetcher.Fetch(ctx, pubKeys)
 	if err != nil {
@@ -130,14 +130,14 @@ func (u *Updater) Update(ctx context.Context, pubKeys []spectypes.ValidatorPK) (
 	return metadata, nil
 }
 
-type Update struct {
+type ValidatorUpdate struct {
 	IndicesBefore []phase0.ValidatorIndex
 	IndicesAfter  []phase0.ValidatorIndex
 	Validators    Validators
 }
 
-func (u *Updater) Stream(ctx context.Context) <-chan Update {
-	metadataUpdates := make(chan Update)
+func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorUpdate {
+	metadataUpdates := make(chan ValidatorUpdate)
 
 	go func() {
 		defer close(metadataUpdates)
@@ -181,17 +181,17 @@ func (u *Updater) Stream(ctx context.Context) <-chan Update {
 	return metadataUpdates
 }
 
-func (u *Updater) prepareUpdate(ctx context.Context) (Update, bool, error) {
+func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorUpdate, bool, error) {
 	// TODO: Methods called here don't handle context, so this is a workaround to handle done context. It should be removed once ctx is handled gracefully.
 	select {
 	case <-ctx.Done():
-		return Update{}, false, ctx.Err()
+		return ValidatorUpdate{}, false, ctx.Err()
 	default:
 	}
 
 	shares := u.sharesForUpdate(ctx)
 	if len(shares) == 0 {
-		return Update{}, false, nil
+		return ValidatorUpdate{}, false, nil
 	}
 
 	pubKeys := make([]spectypes.ValidatorPK, len(shares))
@@ -201,24 +201,24 @@ func (u *Updater) prepareUpdate(ctx context.Context) (Update, bool, error) {
 
 	indicesBefore := u.allActiveIndices(ctx, u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
 
-	updatedMetadata, err := u.Update(ctx, pubKeys)
+	validators, err := u.Sync(ctx, pubKeys)
 	if err != nil {
-		return Update{}, false, fmt.Errorf("update metadata: %w", err)
+		return ValidatorUpdate{}, false, fmt.Errorf("update metadata: %w", err)
 	}
 
 	indicesAfter := u.allActiveIndices(ctx, u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
 
-	update := Update{
+	update := ValidatorUpdate{
 		IndicesBefore: indicesBefore,
 		IndicesAfter:  indicesAfter,
-		Validators:    updatedMetadata,
+		Validators:    validators,
 	}
 
 	return update, len(shares) < batchSize, nil
 }
 
 // sharesForUpdate returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (u *Updater) sharesForUpdate(_ context.Context) []*ssvtypes.SSVShare {
+func (u *ValidatorSyncer) sharesForUpdate(_ context.Context) []*ssvtypes.SSVShare {
 	// TODO: use context, return if it's done
 	var staleShares, newShares []*ssvtypes.SSVShare
 	u.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
@@ -226,9 +226,10 @@ func (u *Updater) sharesForUpdate(_ context.Context) []*ssvtypes.SSVShare {
 			return true
 		}
 
+		shareMetadataStaleAfter := u.syncInterval
 		if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
 			newShares = append(newShares, share)
-		} else if time.Since(share.MetadataLastUpdated()) > u.updateInterval {
+		} else if time.Since(share.MetadataLastUpdated()) > shareMetadataStaleAfter {
 			staleShares = append(staleShares, share)
 		}
 		return len(newShares) < batchSize
@@ -251,7 +252,7 @@ func (u *Updater) sharesForUpdate(_ context.Context) []*ssvtypes.SSVShare {
 }
 
 // TODO: Create a wrapper for share storage that contains all common methods like AllActiveIndices and use the wrapper.
-func (u *Updater) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase0.ValidatorIndex {
+func (u *ValidatorSyncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase0.ValidatorIndex {
 	var indices []phase0.ValidatorIndex
 
 	// TODO: use context, return if it's done
@@ -265,7 +266,7 @@ func (u *Updater) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phas
 	return indices
 }
 
-func (u *Updater) sleep(ctx context.Context, d time.Duration) (slept bool) {
+func (u *ValidatorSyncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 

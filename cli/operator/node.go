@@ -335,14 +335,14 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
 
-		metadataUpdater := metadata.NewUpdater(
+		validatorSyncer := metadata.NewValidatorSyncer(
 			logger,
 			nodeStorage.Shares(),
 			networkConfig.Beacon,
 			consensusClient,
-			metadata.WithUpdateInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
+			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 		)
-		cfg.SSVOptions.ValidatorOptions.MetadataUpdater = metadataUpdater
+		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = validatorSyncer
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
@@ -391,7 +391,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
-		if _, err := metadataUpdater.UpdateOnStartup(cmd.Context()); err != nil {
+		if _, err := validatorSyncer.SyncOnStartup(cmd.Context()); err != nil {
 			logger.Fatal("failed to update metadata on startup", zap.Error(err))
 		}
 

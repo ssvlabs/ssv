@@ -99,7 +99,7 @@ type ControllerOptions struct {
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
-	MetadataUpdater            *metadata.Updater
+	ValidatorSyncer            *metadata.ValidatorSyncer
 	Graffiti                   []byte
 
 	// worker flags
@@ -198,7 +198,7 @@ type controller struct {
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
 
-	metadataUpdater *metadata.Updater
+	metadataUpdater *metadata.ValidatorSyncer
 
 	operatorsIDs         *sync.Map
 	network              P2PNetwork
@@ -307,7 +307,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		validatorOptions:        validatorOptions,
 		genesisValidatorOptions: genesisValidatorOptions,
 
-		metadataUpdater: options.MetadataUpdater,
+		metadataUpdater: options.ValidatorSyncer,
 
 		operatorsIDs: operatorsIDs,
 
@@ -1093,7 +1093,7 @@ func (c *controller) HandleMetadataUpdates(ctx context.Context) {
 	}
 }
 
-func (c *controller) handleMetadataUpdate(ctx context.Context, update metadata.Update) error {
+func (c *controller) handleMetadataUpdate(ctx context.Context, update metadata.ValidatorUpdate) error {
 	startedValidators := 0
 	if c.operatorDataStore.GetOperatorID() != 0 {
 		startedValidators = c.startValidatorsForMetadata(ctx, update.Validators)

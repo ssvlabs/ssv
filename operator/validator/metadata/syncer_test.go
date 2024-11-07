@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	testUpdateInterval    = 2 * time.Millisecond
+	testSyncInterval      = 2 * time.Millisecond
 	testStreamInterval    = 1 * time.Millisecond
 	testUpdateSendTimeout = 3 * time.Millisecond
 )
@@ -101,9 +101,9 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			metadataUpdater := NewUpdater(logger, sharesStorage, networkconfig.TestNetwork.Beacon, beaconNode)
+			validatorSyncer := NewValidatorSyncer(logger, sharesStorage, networkconfig.TestNetwork.Beacon, beaconNode)
 
-			_, err := metadataUpdater.Update(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
+			_, err := validatorSyncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
 			} else {
@@ -113,7 +113,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 	}
 }
 
-func TestUpdater_Update(t *testing.T) {
+func TestSyncer_Sync(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	logger := zap.NewNop()
 
@@ -122,7 +122,7 @@ func TestUpdater_Update(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -137,7 +137,7 @@ func TestUpdater_Update(t *testing.T) {
 		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
 
-		result, err := updater.Update(context.Background(), pubKeys)
+		result, err := syncer.Sync(context.Background(), pubKeys)
 
 		require.NoError(t, err)
 		require.Equal(t, metadata, result)
@@ -148,7 +148,7 @@ func TestUpdater_Update(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -160,7 +160,7 @@ func TestUpdater_Update(t *testing.T) {
 		// UpdateValidatorsMetadata should not be called in this case
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Times(0)
 
-		result, err := updater.Update(context.Background(), pubKeys)
+		result, err := syncer.Sync(context.Background(), pubKeys)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -171,7 +171,7 @@ func TestUpdater_Update(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -186,7 +186,7 @@ func TestUpdater_Update(t *testing.T) {
 		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(fmt.Errorf("update error"))
 
-		result, err := updater.Update(context.Background(), pubKeys)
+		result, err := syncer.Sync(context.Background(), pubKeys)
 
 		assert.Error(t, err)
 		assert.Equal(t, metadata, result)
@@ -197,7 +197,7 @@ func TestUpdater_Update(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -209,14 +209,14 @@ func TestUpdater_Update(t *testing.T) {
 		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
 
-		result, err := updater.Update(context.Background(), pubKeys)
+		result, err := syncer.Sync(context.Background(), pubKeys)
 
 		assert.NoError(t, err)
 		assert.Equal(t, metadata, result)
 	})
 }
 
-func TestUpdater_UpdateOnStartup(t *testing.T) {
+func TestSyncer_UpdateOnStartup(t *testing.T) {
 	logger := zap.NewNop()
 
 	// Subtest: No shares returned by shareStorage.List
@@ -226,7 +226,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 
 		mockShareStorage := NewMockshareStorage(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 		}
@@ -235,7 +235,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return([]*ssvtypes.SSVShare{})
 
 		// Call method
-		result, err := updater.UpdateOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
@@ -249,7 +249,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 
 		mockShareStorage := NewMockshareStorage(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 		}
@@ -280,7 +280,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
 
 		// Call method
-		result, err := updater.UpdateOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
@@ -295,7 +295,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -338,7 +338,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
 
 		// Call method
-		result, err := updater.UpdateOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
@@ -353,7 +353,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -396,14 +396,14 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
 
 		// Call method
-		result, err := updater.UpdateOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(context.Background())
 
 		// Assert
 		assert.NoError(t, err)
 		assert.Equal(t, metadata, result)
 	})
 
-	// Subtest: Update returns error
+	// Subtest: ValidatorUpdate returns error
 	t.Run("UpdateError", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -411,7 +411,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		updater := &Updater{
+		syncer := &ValidatorSyncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -448,7 +448,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error"))
 
 		// Call method
-		result, err := updater.UpdateOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(context.Background())
 
 		// Assert
 		assert.Error(t, err)
@@ -456,7 +456,7 @@ func TestUpdater_UpdateOnStartup(t *testing.T) {
 	})
 }
 
-func TestUpdater_Stream(t *testing.T) {
+func TestSyncer_Stream(t *testing.T) {
 	logger := zap.NewNop()
 
 	// Subtest: Stream sends updates and stops when context is canceled
@@ -468,13 +468,13 @@ func TestUpdater_Stream(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		// Updater instance
-		updater := &Updater{
+		// ValidatorSyncer instance
+		syncer := &ValidatorSyncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
 			fetcher:           mockFetcher,
 			beaconNetwork:     networkconfig.TestNetwork.Beacon,
-			updateInterval:    testUpdateInterval,
+			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
 		}
@@ -521,7 +521,7 @@ func TestUpdater_Stream(t *testing.T) {
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil).AnyTimes()
 
 		// Start Stream
-		updates := updater.Stream(ctx)
+		updates := syncer.Stream(ctx)
 
 		// Read from updates channel using a goroutine
 		go func() {
@@ -541,7 +541,7 @@ func TestUpdater_Stream(t *testing.T) {
 		// Wait for the update to be received or timeout
 		select {
 		case <-updateSent:
-			// Update received, proceed to cancel the context
+			// ValidatorUpdate received, proceed to cancel the context
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("Did not receive update in time")
 		}
@@ -565,13 +565,13 @@ func TestUpdater_Stream(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		// Updater instance
-		updater := &Updater{
+		// ValidatorSyncer instance
+		syncer := &ValidatorSyncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
 			fetcher:           mockFetcher,
 			beaconNetwork:     networkconfig.TestNetwork.Beacon,
-			updateInterval:    testUpdateInterval,
+			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
 		}
@@ -605,7 +605,7 @@ func TestUpdater_Stream(t *testing.T) {
 		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error")).AnyTimes()
 
 		// Start Stream
-		updates := updater.Stream(ctx)
+		updates := syncer.Stream(ctx)
 
 		// Use a channel to signal when the stream has attempted to send an update
 		updateAttempted := make(chan struct{})
@@ -624,7 +624,7 @@ func TestUpdater_Stream(t *testing.T) {
 		// Wait for the update attempt to complete or timeout
 		select {
 		case <-updateAttempted:
-			// Update attempt completed, proceed to cancel the context
+			// ValidatorUpdate attempt completed, proceed to cancel the context
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("Timeout waiting for update attempt")
 		}
@@ -648,13 +648,13 @@ func TestUpdater_Stream(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		// Updater instance
-		updater := &Updater{
+		// ValidatorSyncer instance
+		syncer := &ValidatorSyncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
 			fetcher:           mockFetcher,
 			beaconNetwork:     networkconfig.TestNetwork.Beacon,
-			updateInterval:    testUpdateInterval,
+			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
 		}
@@ -667,7 +667,7 @@ func TestUpdater_Stream(t *testing.T) {
 		mockShareStorage.EXPECT().Range(nil, gomock.Any()).AnyTimes()
 
 		// Start Stream
-		updates := updater.Stream(ctx)
+		updates := syncer.Stream(ctx)
 
 		// Use a channel to signal when the stream has attempted to send an update
 		updateAttempted := make(chan struct{})
@@ -686,7 +686,7 @@ func TestUpdater_Stream(t *testing.T) {
 		// Wait for the update attempt to complete or timeout
 		select {
 		case <-updateAttempted:
-			// Update attempt completed, proceed to cancel the context
+			// ValidatorUpdate attempt completed, proceed to cancel the context
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("Timeout waiting for update attempt")
 		}
@@ -714,19 +714,19 @@ func TestWithUpdateInterval(t *testing.T) {
 	logger := zap.NewNop()
 
 	// Define the interval we want to set
-	interval := testUpdateInterval * 2
+	interval := testSyncInterval * 2
 
-	// Create an Updater with the WithUpdateInterval option
-	updater := NewUpdater(
+	// Create an ValidatorSyncer with the WithSyncInterval option
+	syncer := NewValidatorSyncer(
 		logger,
 		mockShareStorage,
 		networkconfig.TestNetwork.Beacon,
 		mockBeaconNode,
-		WithUpdateInterval(interval),
+		WithSyncInterval(interval),
 	)
 
-	// Check that the updateInterval field is set correctly
-	assert.Equal(t, interval, updater.updateInterval, "updateInterval should be set by WithUpdateInterval option")
+	// Check that the syncInterval field is set correctly
+	assert.Equal(t, interval, syncer.syncInterval, "syncInterval should be set by WithSyncInterval option")
 }
 
 func generatePubKey() ([]byte, error) {
@@ -735,12 +735,12 @@ func generatePubKey() ([]byte, error) {
 	return pubKey, err
 }
 
-func TestUpdater_sleep(t *testing.T) {
+func TestSyncer_sleep(t *testing.T) {
 	// Initialize a no-operation logger to avoid actual logging during tests.
 	logger := zap.NewNop()
 
-	// Instantiate the Updater with the no-op logger.
-	updater := &Updater{
+	// Instantiate the ValidatorSyncer with the no-op logger.
+	syncer := &ValidatorSyncer{
 		logger: logger,
 	}
 
@@ -755,7 +755,7 @@ func TestUpdater_sleep(t *testing.T) {
 		start := time.Now()
 
 		// Call the sleep method.
-		slept := updater.sleep(ctx, duration)
+		slept := syncer.sleep(ctx, duration)
 
 		// Calculate the elapsed time.
 		elapsed := time.Since(start)
@@ -779,7 +779,7 @@ func TestUpdater_sleep(t *testing.T) {
 		start := time.Now()
 
 		// Call the sleep method.
-		slept := updater.sleep(ctx, duration)
+		slept := syncer.sleep(ctx, duration)
 
 		// Calculate the elapsed time.
 		elapsed := time.Since(start)
@@ -804,7 +804,7 @@ func TestUpdater_sleep(t *testing.T) {
 
 		// Start the sleep method in a separate goroutine.
 		go func() {
-			slept := updater.sleep(ctx, duration)
+			slept := syncer.sleep(ctx, duration)
 			done <- slept
 		}()
 
@@ -833,7 +833,7 @@ func TestUpdater_sleep(t *testing.T) {
 		start := time.Now()
 
 		// Call the sleep method.
-		slept := updater.sleep(ctx, duration)
+		slept := syncer.sleep(ctx, duration)
 
 		// Calculate the elapsed time.
 		elapsed := time.Since(start)
