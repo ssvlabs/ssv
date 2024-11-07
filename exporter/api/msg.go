@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
@@ -32,7 +31,7 @@ type ParticipantsAPI struct {
 }
 
 // NewParticipantsAPIMsg creates a new message in a new format from the given message.
-func NewParticipantsAPIMsg(msg qbftstorage.ParticipantsRangeEntry) Message {
+func NewParticipantsAPIMsg(msg qbftstorage.Participation) Message {
 	data, err := ParticipantsAPIData(msg)
 	if err != nil {
 		return Message{
@@ -40,43 +39,40 @@ func NewParticipantsAPIMsg(msg qbftstorage.ParticipantsRangeEntry) Message {
 			Data: []string{},
 		}
 	}
-	identifier := specqbft.ControllerIdToMessageID(msg.Identifier[:])
-	pkv := identifier.GetDutyExecutorID()
 
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
-			PublicKey: hex.EncodeToString(pkv),
+			PublicKey: hex.EncodeToString(msg.PK[:]),
 			From:      uint64(msg.Slot),
 			To:        uint64(msg.Slot),
-			Role:      msg.Identifier.GetRoleType().String(),
+			Role:      msg.Role.String(),
 		},
 		Data: data,
 	}
 }
 
 // ParticipantsAPIData creates a new message from the given message in a new format.
-func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
+func ParticipantsAPIData(msgs ...qbftstorage.Participation) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
 
 	apiMsgs := make([]*ParticipantsAPI, 0)
 	for _, msg := range msgs {
-		dutyExecutorID := msg.Identifier.GetDutyExecutorID()
+		var msgID = msg.MsgID()
 		blsPubKey := phase0.BLSPubKey{}
-		copy(blsPubKey[:], dutyExecutorID)
-
+		copy(blsPubKey[:], msg.PK[:])
 		apiMsg := &ParticipantsAPI{
 			Signers:     msg.Signers,
 			Slot:        msg.Slot,
-			Identifier:  msg.Identifier[:],
-			ValidatorPK: hex.EncodeToString(dutyExecutorID),
-			Role:        msg.Identifier.GetRoleType().String(),
+			Identifier:  msgID[:],
+			ValidatorPK: hex.EncodeToString(msg.PK[:]),
+			Role:        msg.Role.String(),
 			Message: specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.Height(msg.Slot),
-				Identifier: msg.Identifier[:],
+				Identifier: msgID[:],
 				Round:      specqbft.FirstRound,
 			},
 			FullData: &spectypes.ValidatorConsensusData{

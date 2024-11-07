@@ -7,8 +7,19 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
 )
+
+type Participation struct {
+	ParticipantsRangeEntry
+
+	DomainType spectypes.DomainType
+	Role       spectypes.BeaconRole
+	PK         spectypes.ValidatorPK
+}
+
+func (p *Participation) MsgID() spectypes.MessageID {
+	return spectypes.NewMsgID(p.DomainType, p.PK[:], spectypes.RunnerRole(p.Role))
+}
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
@@ -27,22 +38,21 @@ func (si *StoredInstance) Decode(data []byte) error {
 }
 
 type ParticipantsRangeEntry struct {
-	Slot       phase0.Slot
-	Signers    []spectypes.OperatorID
-	Identifier convert.MessageID
+	Slot    phase0.Slot
+	Signers []spectypes.OperatorID
 }
 
-// QBFTStore is the store used by QBFT components
-type QBFTStore interface {
+// ParticipantStore is the store used by QBFT components
+type ParticipantStore interface {
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(msgID []byte) error
 
 	// UpdateParticipants updates participants in quorum.
-	UpdateParticipants(identifier convert.MessageID, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
+	UpdateParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
-	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
+	GetParticipantsInRange(role spectypes.BeaconRole, pk spectypes.ValidatorPK, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipants returns participants in quorum for the given slot.
-	GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
+	GetParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
 }

@@ -6,13 +6,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 const (
@@ -48,7 +47,7 @@ func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 }
 
 // HandleParticipantsQuery handles TypeParticipants queries.
-func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage, domain spectypes.DomainType) {
+func HandleParticipantsQuery(logger *zap.Logger, store *storage.ParticipantStores, nm *NetworkMessage, domain spectypes.DomainType) {
 	logger.Debug("handles query request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -66,30 +65,29 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		return
 	}
 
-	beaconRole, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
+	role, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
 	if err != nil {
 		logger.Warn("failed to parse role", zap.Error(err))
 		res.Data = []string{"role doesn't exist"}
 		nm.Msg = res
 		return
 	}
-	runnerRole := casts.BeaconRoleToConvertRole(beaconRole)
-	roleStorage := qbftStorage.Get(runnerRole)
+	roleStorage := store.Get(role)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))
-		res.Data = []string{"internal error - role storage doesn't exist", beaconRole.String()}
+		logger.Warn("role storage doesn't exist", fields.ExporterRole(role))
+		res.Data = []string{"internal error - role storage doesn't exist", role.String()}
 		nm.Msg = res
 		return
 	}
 
-	msgID := convert.NewMsgID(domain, pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
-	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
+	participantsList, err := roleStorage.GetParticipantsInRange(role, spectypes.ValidatorPK(pkRaw), from, to)
 	if err != nil {
 		logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}
 	} else {
+		participantsList := toParticipations(domain, role, spectypes.ValidatorPK(pkRaw), participantsList)
 		data, err := ParticipantsAPIData(participantsList...)
 		if err != nil {
 			res.Data = []string{err.Error()}
@@ -98,4 +96,18 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 		}
 	}
 	nm.Msg = res
+}
+
+func toParticipations(domain spectypes.DomainType, role spectypes.BeaconRole, pk spectypes.ValidatorPK, ee []qbftstorage.ParticipantsRangeEntry) (out []qbftstorage.Participation) {
+	for _, e := range ee {
+		p := qbftstorage.Participation{
+			ParticipantsRangeEntry: e,
+			DomainType:             domain,
+			Role:                   role,
+			PK:                     pk,
+		}
+		out = append(out, p)
+	}
+
+	return
 }

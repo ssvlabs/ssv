@@ -21,7 +21,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -93,7 +92,7 @@ type ControllerOptions struct {
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
-	StorageMap                 *storage.QBFTStores
+	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
@@ -185,7 +184,7 @@ type controller struct {
 	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage Recipients
-	ibftStorageMap    *storage.QBFTStores
+	ibftStorageMap    *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   spectypes.BeaconSigner
@@ -477,7 +476,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			DomainCache:       c.domainCache,
 		}
 		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
+			CommitteeObserver: validator.NewCommitteeObserver(committeeObserverOptions),
 		}
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
 		c.committeesObservers.Set(

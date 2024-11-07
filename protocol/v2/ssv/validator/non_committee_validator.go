@@ -14,27 +14,24 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type CommitteeObserver struct {
 	logger                 *zap.Logger
-	Storage                *storage.QBFTStores
+	Storage                *storage.ParticipantStores
 	beaconNetwork          beacon.BeaconNetwork
+	networkConfig          networkconfig.NetworkConfig
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
@@ -49,7 +46,7 @@ type CommitteeObserverOptions struct {
 	Logger            *zap.Logger
 	NetworkConfig     networkconfig.NetworkConfig
 	Network           specqbft.Network
-	Storage           *storage.QBFTStores
+	Storage           *storage.ParticipantStores
 	Operator          *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner
 	NewDecidedHandler qbftctrl.NewDecidedHandler
@@ -59,24 +56,14 @@ type CommitteeObserverOptions struct {
 	DomainCache       *DomainCache
 }
 
-func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
-	// currently, only need domain & storage
-	config := &qbft.Config{
-		Domain:      opts.NetworkConfig.DomainType(),
-		Network:     opts.Network,
-		CutOffRound: roundtimer.CutOffRound,
-	}
-
+func NewCommitteeObserver(opts CommitteeObserverOptions) *CommitteeObserver {
 	// TODO: does the specific operator matters?
 
-	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
-	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
-
 	return &CommitteeObserver{
-		qbftController:         ctrl,
 		logger:                 opts.Logger,
 		Storage:                opts.Storage,
 		beaconNetwork:          opts.NetworkConfig.Beacon,
+		networkConfig:          opts.NetworkConfig,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
 		attesterRoots:          opts.AttesterRoots,
@@ -145,13 +132,12 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		}
 
 		for _, beaconRole := range beaconRoles {
-			msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], beaconRole)
-			roleStorage := ncv.Storage.Get(msgID.GetRoleType())
+			roleStorage := ncv.Storage.Get(beaconRole)
 			if roleStorage == nil {
 				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
 			}
 
-			updated, err := roleStorage.UpdateParticipants(msgID, slot, quorum)
+			updated, err := roleStorage.UpdateParticipants(beaconRole, validator.ValidatorPubKey, slot, quorum)
 			if err != nil {
 				return fmt.Errorf("update participants: %w", err)
 			}
@@ -161,20 +147,26 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			}
 
 			logger.Info("✅ saved participants",
-				zap.String("converted_role", beaconRole.ToBeaconRole()),
+				zap.String("role", beaconRole.String()),
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
-				zap.String("msg_id", hex.EncodeToString(msgID[:])),
+				// zap.String("msg_id", hex.EncodeToString(msgID[:])), TODO replace with?
 				fields.BlockRoot(key.Root),
 			)
 
 			if ncv.newDecidedHandler != nil {
-				ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
-					Slot:       slot,
-					Signers:    quorum,
-					Identifier: msgID,
-				})
+				p := qbftstorage.Participation{
+					ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
+						Slot:    slot,
+						Signers: quorum,
+					},
+					DomainType: spectypes.DomainType(msg.MsgID.GetDomain()),
+					Role:       beaconRole,
+					PK:         validator.ValidatorPubKey,
+				}
+
+				ncv.newDecidedHandler(p)
 			}
 		}
 	}
@@ -182,23 +174,20 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []convert.RunnerRole {
+func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []spectypes.BeaconRole {
 	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		attester := ncv.attesterRoots.Get(root)
 		syncCommittee := ncv.syncCommRoots.Get(root)
 
 		switch {
 		case attester != nil && syncCommittee != nil:
-			return []convert.RunnerRole{convert.RoleAttester, convert.RoleSyncCommittee}
 		case attester != nil:
-			return []convert.RunnerRole{convert.RoleAttester}
 		case syncCommittee != nil:
-			return []convert.RunnerRole{convert.RoleSyncCommittee}
 		default:
 			return nil
 		}
 	}
-	return []convert.RunnerRole{casts.RunnerRoleToConvertRole(msg.MsgID.GetRoleType())}
+	return []spectypes.BeaconRole{spectypes.BeaconRole(msg.MsgID.GetRoleType())}
 }
 
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators

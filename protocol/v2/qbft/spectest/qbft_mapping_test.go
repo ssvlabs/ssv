@@ -7,17 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -102,7 +100,7 @@ func TestQBFTMapping(t *testing.T) {
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), convert.RoleCommittee),
+				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), spectypes.BNRoleSyncCommittee),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

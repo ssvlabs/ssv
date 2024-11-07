@@ -34,7 +34,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
@@ -294,15 +293,14 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []convert.RunnerRole{
-			convert.RoleCommittee,
-			convert.RoleAttester,
-			convert.RoleProposer,
-			convert.RoleSyncCommittee,
-			convert.RoleAggregator,
-			convert.RoleSyncCommitteeContribution,
-			convert.RoleValidatorRegistration,
-			convert.RoleVoluntaryExit,
+		storageRoles := []spectypes.BeaconRole{
+			spectypes.BNRoleAttester,
+			spectypes.BNRoleProposer,
+			spectypes.BNRoleSyncCommittee,
+			spectypes.BNRoleAggregator,
+			spectypes.BNRoleSyncCommitteeContribution,
+			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -410,8 +408,8 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					DomainType: networkConfig.AlanDomainType,
-					QBFTStores: storageMap,
+					DomainType:        networkConfig.AlanDomainType,
+					ParticipantStores: storageMap,
 				},
 			)
 			go func() {

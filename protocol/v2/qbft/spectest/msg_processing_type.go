@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -34,7 +33,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, ks, casts.RunnerRoleToConvertRole(msgId.GetRoleType())), // #nosec G104
+		qbfttesting.TestingConfig(logger, ks, spectypes.BeaconRole(msgId.GetRoleType())), // #nosec G104
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,

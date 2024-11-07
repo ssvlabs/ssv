@@ -13,7 +13,6 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -87,12 +86,11 @@ func TestHandleDecidedQuery(t *testing.T) {
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()
 
-	roles := []convert.RunnerRole{
-		convert.RoleAttester,
-		convert.RoleCommittee,
-		convert.RoleProposer,
-		convert.RoleAggregator,
-		convert.RoleSyncCommittee,
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
 		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)
@@ -109,12 +107,11 @@ func TestHandleDecidedQuery(t *testing.T) {
 		networkConfig, err := networkconfig.GetNetworkConfigByName(networkconfig.HoleskyStage.Name)
 		require.NoError(t, err)
 		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-			id := convert.NewMsgID(networkConfig.DomainType(), pk.Serialize(), role)
 			return oids, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     height,
 				Round:      1,
-				Identifier: id[:],
+				Identifier: pk.Serialize(),
 				Root:       [32]byte{0x1, 0x2, 0x3},
 			}
 		})
@@ -123,7 +120,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		// save participants
 		for _, d := range decided250Seq {
 			_, err := ibftStorage.Get(role).UpdateParticipants(
-				convert.MessageID(d.DecidedMessage.SSVMessage.MsgID),
+				role, spectypes.ValidatorPK(pk.Serialize()),
 				phase0.Slot(d.State.Height),
 				d.DecidedMessage.OperatorIDs,
 			)
@@ -204,7 +201,7 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, fu
 	}
 }
 
-func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...convert.RunnerRole) (storage.Storage, *qbftstorage.QBFTStores) {
+func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.ParticipantStores) {
 	sExporter, err := storage.NewNodeStorage(logger, db)
 	if err != nil {
 		panic(err)
