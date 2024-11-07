@@ -232,7 +232,8 @@ func (u *ValidatorSyncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SS
 		}
 
 		shareMetadataStaleAfter := u.syncInterval
-		if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
+		// also check last metadata update to differentiate new shares from stale ones
+		if !share.HasBeaconMetadata() && share.MetadataLastUpdated().IsZero() {
 			newShares = append(newShares, share)
 		} else if time.Since(share.MetadataLastUpdated()) > shareMetadataStaleAfter {
 			staleShares = append(staleShares, share)
