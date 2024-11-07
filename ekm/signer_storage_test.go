@@ -7,12 +7,12 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/eth2-key-manager/encryptor"
-	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
-	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	"github.com/google/uuid"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/ssvlabs/eth2-key-manager/core"
+	"github.com/ssvlabs/eth2-key-manager/encryptor"
+	"github.com/ssvlabs/eth2-key-manager/encryptor/keystorev4"
+	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 

@@ -54,5 +54,7 @@ const (
 const (
 	maxPayloadDataSize = max(maxEncodedConsensusMsgSize, maxEncodedPartialSignatureSize)
 	maxSignedMsgSize   = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + maxFullDataSize
-	maxEncodedMsgSize  = maxSignedMsgSize + maxSignedMsgSize/encodingOverheadDivisor + 4
 )
+
+// MaxEncodedMsgSize defines max pubsub message size
+const MaxEncodedMsgSize = maxSignedMsgSize + maxSignedMsgSize/encodingOverheadDivisor + 4

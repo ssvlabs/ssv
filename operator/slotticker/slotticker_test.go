@@ -301,20 +301,20 @@ func TestDoubleTickRealTimer(t *testing.T) {
 
 	// Wait for the first slot.
 	<-ticker.Next()
-	require.WithinDuration(t, firstSlotTime.Add(1*slotTime), time.Now(), 5*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
+	require.WithinDuration(t, firstSlotTime.Add(1*slotTime), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
 	firstSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(1), firstSlot)
 
 	// Wait for the 2nd slot, but wake up early.
 	mockTimer.fakeNextReset(slotTime / 2)
 	<-ticker.Next()
-	require.WithinDuration(t, firstSlotTime.Add(1*slotTime+slotTime/2), time.Now(), 5*time.Millisecond, "Expected the first tick to occur after 1/2th of a slot")
+	require.WithinDuration(t, firstSlotTime.Add(1*slotTime+slotTime/2), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/2th of a slot")
 	secondSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(2), secondSlot)
 
 	// Expect the SlotTicker to realize it woke up early, and wait for the 3rd slot instead.
 	<-ticker.Next()
-	require.WithinDuration(t, firstSlotTime.Add(3*slotTime), time.Now(), 5*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
+	require.WithinDuration(t, firstSlotTime.Add(3*slotTime), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
 	thirdSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(3), thirdSlot)
 

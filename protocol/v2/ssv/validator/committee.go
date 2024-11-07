@@ -12,14 +12,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 var (
@@ -57,6 +56,7 @@ func NewCommittee(
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
+	dutyGuard *CommitteeDutyGuard,
 ) *Committee {
 	if shares == nil {
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
@@ -71,7 +71,7 @@ func NewCommittee(
 		Shares:          shares,
 		CommitteeMember: committeeMember,
 		CreateRunnerFn:  createRunnerFn,
-		dutyGuard:       NewCommitteeDutyGuard(),
+		dutyGuard:       dutyGuard,
 	}
 }
 

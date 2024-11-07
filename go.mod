@@ -5,7 +5,6 @@ go 1.22
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.21.7
-	github.com/bloxapp/eth2-key-manager v1.4.1-0.20240829091006-b5848884a7a5
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -36,6 +35,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
+	github.com/ssvlabs/eth2-key-manager v1.4.2
 	github.com/ssvlabs/ssv-spec v0.3.11-0.20240820113812-496d839e9614
 	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240725052506-c48532da6a63
 	github.com/status-im/keycard-go v0.2.0
