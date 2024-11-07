@@ -58,6 +58,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -268,7 +269,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
-		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
@@ -276,7 +276,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GenesisBeacon = genesisgoclient.NewAdapter(consensusClient)
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
-		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
@@ -337,6 +336,15 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
 
+		validatorSyncer := metadata.NewValidatorSyncer(
+			logger,
+			nodeStorage.Shares(),
+			networkConfig.Beacon,
+			consensusClient,
+			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
+		)
+		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = validatorSyncer
+
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
@@ -368,7 +376,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metricsReporter.SSVNodeHealthy()
 
-		eventSyncer := setupEventHandling(
+		eventSyncer := syncContractEvents(
 			cmd.Context(),
 			logger,
 			executionClient,
@@ -384,13 +392,17 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
+		if _, err := validatorSyncer.SyncOnStartup(cmd.Context()); err != nil {
+			logger.Fatal("failed to update metadata on startup", zap.Error(err))
+		}
+
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
-		if err := p2pNetwork.Setup(logger); err != nil {
+		if err := p2pNetwork.Setup(); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
 		}
-		if err := p2pNetwork.Start(logger); err != nil {
+		if err := p2pNetwork.Start(); err != nil {
 			logger.Fatal("failed to start network", zap.Error(err))
 		}
 
@@ -421,7 +433,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		if err := operatorNode.Start(logger); err != nil {
+		if err := operatorNode.Start(); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
@@ -679,7 +691,8 @@ func setupConsensusClient(
 	return cl
 }
 
-func setupEventHandling(
+// syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
+func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,

@@ -26,7 +26,7 @@ import (
 
 // Node represents the behavior of SSV node
 type Node interface {
-	Start(logger *zap.Logger) error
+	Start() error
 }
 
 // Options contains options to create the node
@@ -51,6 +51,7 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
+	logger           *zap.Logger
 	network          networkconfig.NetworkConfig
 	context          context.Context
 	validatorsCtrl   validator.Controller
@@ -72,6 +73,7 @@ type operatorNode struct {
 // New is the constructor of operatorNode
 func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
 	node := &operatorNode{
+		logger:           logger.Named(logging.NameOperator),
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
@@ -118,14 +120,12 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 	return node
 }
 
-// Start starts to stream duties and run IBFT instances
-func (n *operatorNode) Start(logger *zap.Logger) error {
-	logger.Named(logging.NameOperator)
-
-	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+func (n *operatorNode) Start() error {
+	// Start starts to stream duties and run IBFT instances
+	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
-		err := n.startWSServer(logger)
+		err := n.startWSServer(n.logger)
 		if err != nil {
 			// TODO: think if we need to panic
 			return
@@ -134,7 +134,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	// Start the duty scheduler, and a background goroutine to crash the node
 	// in case there were any errors.
-	if err := n.dutyScheduler.Start(n.context, logger); err != nil {
+	if err := n.dutyScheduler.Start(n.context, n.logger); err != nil {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
 
@@ -142,22 +142,22 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	if n.validatorOptions.Exporter {
 		// Subscribe to all subnets.
-		err := n.net.SubscribeAll(logger)
+		err := n.net.SubscribeAll(n.logger)
 		if err != nil {
-			logger.Error("failed to subscribe to all subnets", zap.Error(err))
+			n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
 		}
 	}
-	go n.net.UpdateSubnets(logger)
-	go n.net.UpdateScoreParams(logger)
-	n.validatorsCtrl.ForkListener(logger)
-	n.validatorsCtrl.StartValidators()
-	go n.reportOperators(logger)
+	go n.net.UpdateSubnets(n.logger)
+	go n.net.UpdateScoreParams(n.logger)
+	n.validatorsCtrl.ForkListener(n.logger)
+	n.validatorsCtrl.StartValidators(n.context)
+	go n.reportOperators()
 
-	go n.feeRecipientCtrl.Start(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+	go n.feeRecipientCtrl.Start(n.logger)
+	go n.validatorsCtrl.HandleMetadataUpdates(n.context)
 
 	if err := n.dutyScheduler.Wait(); err != nil {
-		logger.Fatal("duty scheduler exited with error", zap.Error(err))
+		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
 	}
 
 	return nil
@@ -202,16 +202,16 @@ func (n *operatorNode) startWSServer(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *operatorNode) reportOperators(logger *zap.Logger) {
+func (n *operatorNode) reportOperators() {
 	operators, err := n.storage.ListOperators(nil, 0, 1000) // TODO more than 1000?
 	if err != nil {
-		logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		return
 	}
-	logger.Debug("reporting operators", zap.Int("count", len(operators)))
+	n.logger.Debug("reporting operators", zap.Int("count", len(operators)))
 	for i := range operators {
 		n.metrics.OperatorPublicKey(operators[i].ID, operators[i].PublicKey)
-		logger.Debug("report operator public key",
+		n.logger.Debug("report operator public key",
 			fields.OperatorID(operators[i].ID),
 			fields.PubKey(operators[i].PublicKey))
 	}

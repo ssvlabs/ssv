@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -61,9 +62,8 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	if startedValidators > 0 {
 		// Notify DutyScheduler about the changes in validator indices without blocking.
 		go func() {
-			select {
-			case c.indicesChange <- struct{}{}:
-			case <-time.After(12 * time.Second):
+			ctx := context.Background() // TODO: pass context
+			if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
 				logger.Error("failed to notify indices change")
 			}
 		}()
