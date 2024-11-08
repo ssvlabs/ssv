@@ -226,7 +226,7 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 	mySubnets := ch.subnetsProvider()
 	logger = logger.With(zap.String("my_subnets", mySubnets.String()))
 
-	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets
+	if mySubnets == records.ZeroSubnets { // this node has no subnets
 		return true
 	}
 	shared := mySubnets.SharedSubnetsN(subnets, 1)

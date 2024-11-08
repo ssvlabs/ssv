@@ -185,7 +185,7 @@ type checkPeerTest struct {
 func mockSubnets(active ...int) records.Subnets {
 	subnets := records.Subnets{}
 	for _, subnet := range active {
-		subnets[subnet] = 1
+		subnets.Set(subnet)
 	}
 	return subnets
 }

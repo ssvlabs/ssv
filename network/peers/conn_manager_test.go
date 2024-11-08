@@ -41,14 +41,13 @@ func TestTagBestPeers(t *testing.T) {
 }
 
 func createRandomSubnets(n int) records.Subnets {
-	subnets, _ := records.Subnets{}.FromString(records.ZeroSubnets)
-	size := len(subnets)
+	subnets := records.ZeroSubnets
 	for n > 0 {
-		i := rand.Intn(size)
-		for subnets[i] == byte(1) {
-			i = rand.Intn(size)
+		i := rand.Intn(commons.Subnets())
+		for subnets.IsSet(i) {
+			i = rand.Intn(commons.Subnets())
 		}
-		subnets[i] = byte(1)
+		subnets.Set(i)
 		n--
 	}
 	return subnets

@@ -10,13 +10,14 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"go.uber.org/zap"
 )
 
 var (
@@ -164,8 +165,6 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	return nil
 }
 
-var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
-
 func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
 	// TODO: uncomment errors once there are sufficient nodes with domain type.
@@ -188,7 +187,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if zeroSubnets == nodeSubnets {
+	if records.ZeroSubnets == nodeSubnets {
 		return errors.New("zero subnets")
 	}
 

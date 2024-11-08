@@ -152,10 +152,10 @@ func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets
 	})
 
 	// Calculate min & max of the active subnet connections.
-	activeSubnetConnections := make([]int, 0, mySubnets.Active())
+	activeSubnetConnections := make([]int, 0, mySubnets.ActiveCount())
 	var min, max = math.MaxInt32, math.MinInt32
 	for subnet, n := range subnetConnections {
-		if mySubnets[subnet] <= 0 {
+		if !mySubnets.IsSet(subnet) {
 			continue
 		}
 		activeSubnetConnections = append(activeSubnetConnections, n)
@@ -196,10 +196,10 @@ func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets
 	)
 }
 
-func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
+func scorePeer(peerSubnets records.Subnets, subnetsScores [commons.SubnetsCount]float64) PeerScore {
 	var score float64
 	for subnet, subnetScore := range subnetsScores {
-		connected := peerSubnets[subnet] > 0
+		connected := peerSubnets.IsSet(subnet)
 		if connected {
 			score += subnetScore
 		} else {

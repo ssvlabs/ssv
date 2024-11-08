@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -76,7 +77,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.persistentSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
+	n.persistentSubnets = records.AllSubnets
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
@@ -108,7 +109,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	}
 
 	for _, subnet := range randomSubnets {
-		n.persistentSubnets[subnet] = byte(1)
+		n.persistentSubnets.Set(subnet)
 	}
 
 	return nil
@@ -245,18 +246,13 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
-	if len(n.persistentSubnets) == 0 {
-		return nil
-	}
 	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.persistentSubnets))
-	for i, val := range n.persistentSubnets {
-		if val > 0 {
-			subnet := fmt.Sprintf("%d", i)
-			if err := n.topicsCtrl.Subscribe(logger, subnet); err != nil {
-				logger.Warn("could not subscribe to subnet",
-					zap.String("subnet", subnet), zap.Error(err))
-				// TODO: handle error
-			}
+	subnetList := n.persistentSubnets.SubnetList()
+	for _, subnet := range subnetList {
+		if err := n.topicsCtrl.Subscribe(logger, strconv.Itoa(subnet)); err != nil {
+			logger.Warn("could not subscribe to subnet",
+				zap.Int("subnet", subnet), zap.Error(err))
+			// TODO: handle error
 		}
 	}
 	return nil

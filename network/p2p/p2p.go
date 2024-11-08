@@ -362,14 +362,14 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 
 		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
-			updatedSubnets[subnet] = byte(1)
+			updatedSubnets.Set(int(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			return true
 		})
 
 		if !n.cfg.Network.PastAlanFork() {
 			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 				subnet := commons.ValidatorSubnet(pkHex)
-				updatedSubnets[subnet] = byte(1)
+				updatedSubnets.Set(int(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 				return true
 			})
 		}
@@ -377,16 +377,18 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]uint64, 0)
-		for subnet, active := range updatedSubnets {
-			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
+		subnetList := updatedSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !registeredSubnets.IsSet(subnet) {
 				addedSubnets = append(addedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]uint64, 0)
-		for subnet, active := range registeredSubnets {
-			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
+		subnetList = registeredSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !updatedSubnets.IsSet(subnet) {
 				removedSubnets = append(removedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
@@ -435,8 +437,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
 		}
 
-		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		subnetsList := allSubs.SharedSubnets(n.currentSubnets)
+		subnetsList := records.AllSubnets.SharedSubnets(n.currentSubnets)
 		logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),

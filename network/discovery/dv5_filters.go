@@ -57,7 +57,8 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 			return false
 		}
 		for _, subnet := range subnets {
-			if fromEntry[subnet] > 0 {
+			// #nosec G115 -- subnets has a constant max len of 128
+			if fromEntry.IsSet(int(subnet)) {
 				return true
 			}
 		}

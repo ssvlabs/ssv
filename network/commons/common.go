@@ -25,7 +25,7 @@ const (
 
 	peersForSync = 10
 
-	// SubnetsCount returns the subnet count for genesis
+	// SubnetsCount returns the subnet count for genesis. It must be power of 2.
 	SubnetsCount uint64 = 128
 
 	UnknownSubnetId = math.MaxUint64

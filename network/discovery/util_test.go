@@ -168,7 +168,7 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, records.ZeroSubnets)
 }
 
 func NodeWithCustomSubnets(t *testing.T, subnets records.Subnets) *enode.Node {
@@ -210,8 +210,9 @@ func CustomNode(t *testing.T,
 	}
 	if setSubnets {
 		subnetsVec := bitfield.NewBitvector128()
-		for i, subnet := range subnets {
-			subnetsVec.SetBitAt(uint64(i), subnet > 0)
+
+		for i := 0; i < records.SubnetsCount; i++ {
+			subnetsVec.SetBitAt(uint64(i), subnets.IsSet(i))
 		}
 		record.Set(enr.WithEntry("subnets", &subnetsVec))
 	}
