@@ -21,10 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -46,6 +42,9 @@ import (
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 var (
@@ -831,7 +830,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests. This one has to be in the state
+		// using validator 2 because we've removed validator 1 in ValidatorRemoved tests. This one has to be in the state
 		valPubKey := validatorData2.masterPubKey.Serialize()
 
 		share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
@@ -849,7 +848,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NotNil(t, share)
 		require.True(t, share.Liquidated)
 		// check that slashing data was not deleted
-		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
+		sharePubKey := validatorData2.operatorsShares[0].sec.GetPublicKey().Serialize()
 		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
 		require.NoError(t, err)
 		require.True(t, found)
@@ -976,7 +975,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests
+		// using validator 2 because we've removed validator 1 in ValidatorRemoved tests
 		valPubKey := validatorData2.masterPubKey.Serialize()
 
 		share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
@@ -1176,13 +1175,186 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, currentNonce+1, nonce)
 		})
 
-		t.Run("test ClusterLiquidated + ClusterReactivated events handling", func(t *testing.T) {
-			// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests
+		t.Run("own operator de-register -> re-register results in valid share state", func(t *testing.T) {
+			// using validator 2 because we've removed validator 1 in ValidatorRemoved tests
 			valPubKey := validatorData2.masterPubKey.Serialize()
+			// using own operator in this test (we are operator 0)
+			op := ops[0]
+
+			// 0) validate test assumptions to fail fast
+
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, 4, len(ops))
+			require.Equal(t, len(ops), len(operators))
+
 			share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
 			require.NotNil(t, share)
 			require.False(t, share.Liquidated)
+
+			// 1) remove 1 operator who manages validator
+
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, op.id)
+			require.NoError(t, err)
+			sim.Commit()
+
+			// receive & process & check if the operator was removed successfully
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops)-1, len(operators))
+
+			// 2) add back 1 operator who managed validator
+
+			// Call the contract method
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+			require.NoError(t, err)
+			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			require.NoError(t, err)
+			sim.Commit()
+
+			// receive & process & check if the operator was added successfully
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			// 3) check validator is fully functional after 1 of its managing operators went
+			//    through de-register -> re-register cycle
+
+			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+			// TODO - add additional checks (besides liquidation true/false) to verify
+			// OWN validator's share has truly become fully functional
+		})
+
+		t.Run("non-own operator de-register -> re-register results in valid share state", func(t *testing.T) {
+			// using validator 2 because we've removed validator 1 in ValidatorRemoved tests
+			valPubKey := validatorData2.masterPubKey.Serialize()
+			// using non-own operator in this test (we are operator 0)
+			op := ops[2]
+
+			// 0) validate test assumptions to fail fast
+
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, 4, len(ops))
+			require.Equal(t, len(ops), len(operators))
+
+			share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+
+			// 1) remove 1 operator who manages validator
+
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, op.id)
+			require.NoError(t, err)
+			sim.Commit()
+
+			// receive & process & check if the operator was removed successfully
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops)-1, len(operators))
+
+			// 2) add back 1 operator who managed validator
+
+			// Call the contract method
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+			require.NoError(t, err)
+			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			require.NoError(t, err)
+			sim.Commit()
+
+			// receive & process & check if the operator was added successfully
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			// 3) check validator is fully functional after 1 of its managing operators went
+			//    through de-register -> re-register cycle
+
+			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+			// TODO - I guess nothing more to check here because we don't do anything else with
+			//  other operators' shares ? maybe check
+		})
+
+		t.Run("own + non-own operators de-register -> re-register results in valid share state", func(t *testing.T) {
+			// TODO - same as test above, only 2 (own and non-own) operators de-register, and
+			//  then re-register ^ expectations are exactly the same way as test above
+		})
+
+		t.Run("test ClusterLiquidated + ClusterReactivated events handling", func(t *testing.T) {
+			// using validator 2 because we've removed validator 1 in ValidatorRemoved tests
+			valPubKey := validatorData2.masterPubKey.Serialize()
+
+			// 0) validate test assumptions to fail fast
+			share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+
+			// 1) liquidate validator cluster
+
+			// Call the contract method
 			_, err = boundContract.SimcontractTransactor.Liquidate(
 				auth,
 				testAddr,
@@ -1195,7 +1367,29 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
+			sim.Commit()
 
+			// receive & process & check if the operator was removed successfully
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.True(t, share.Liquidated)
+
+			// 2) reactivate liquidated validator cluster
+
+			// Call the contract method
 			_, err = boundContract.SimcontractTransactor.Reactivate(
 				auth,
 				[]uint64{1, 2, 3, 4},
@@ -1208,29 +1402,178 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-
 			sim.Commit()
 
+			// receive & process & check if the operator was removed successfully
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+		})
+
+		t.Run("no accidental liquidated cluster revival should ever happen", func(t *testing.T) {
+			// using validator 2 because we've removed validator 1 in ValidatorRemoved tests
+			valPubKey := validatorData2.masterPubKey.Serialize()
+
+			// 0) validate test assumptions to fail fast
+
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, 4, len(ops))
+			require.Equal(t, len(ops), len(operators))
+
+			share, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+
+			// 1) liquidate validator cluster
+
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.Liquidate(
+				auth,
+				testAddr,
+				[]uint64{1, 2, 3, 4},
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           1,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
+
+			// receive & process & check if the share was liquidated successfully
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
-			require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[1].Topics[0])
-
 			eventsCh := make(chan executionclient.BlockLogs)
 			go func() {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
-
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
+			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
+			require.True(t, share.Liquidated)
+
+			// 2) remove all 4 operators who managed liquidated validator (cluster)
+
+			for i, op := range ops {
+				// Call the contract method
+				_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, op.id)
+				require.NoError(t, err)
+				sim.Commit()
+
+				// receive & process & check if the operator was removed successfully
+				block := <-logs
+				require.NotEmpty(t, block.Logs)
+				require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
+				eventsCh := make(chan executionclient.BlockLogs)
+				go func() {
+					defer close(eventsCh)
+					eventsCh <- block
+				}()
+				lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+				require.Equal(t, blockNum+1, lastProcessedBlock)
+				require.NoError(t, err)
+				blockNum++
+				operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+				require.NoError(t, err)
+				require.Equal(t, len(ops)-(i+1), len(operators))
+			}
+
+			// 3) add back all 4 operators who managed liquidated validator (cluster)
+
+			for i, op := range ops {
+				// Call the contract method
+				encodedPubKey, err := op.privateKey.Public().Base64()
+				require.NoError(t, err)
+				packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+				require.NoError(t, err)
+				_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+				require.NoError(t, err)
+				sim.Commit()
+
+				// receive & process & check if the operator was added successfully
+				block := <-logs
+				require.NotEmpty(t, block.Logs)
+				require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
+				eventsCh := make(chan executionclient.BlockLogs)
+				go func() {
+					defer close(eventsCh)
+					eventsCh <- block
+				}()
+				lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+				require.Equal(t, blockNum+1, lastProcessedBlock)
+				require.NoError(t, err)
+				blockNum++
+				operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+				require.NoError(t, err)
+				require.Equal(t, i+1, len(operators))
+			}
+
+			// 4) check liquidated validator revival (his share) didn't happen just because
+			//    operators went through de-register -> re-register cycle
 
 			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
 			require.NotNil(t, share)
+			require.True(t, share.Liquidated)
+
+			// 5) reactivate liquidated validator
+
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.Reactivate(
+				auth,
+				[]uint64{1, 2, 3, 4},
+				big.NewInt(100_000_000),
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           1,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
+
+			// receive & process & check if the operator was added successfully
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.True(t, exists)
+			require.NotNil(t, share)
 			require.False(t, share.Liquidated)
+			// TODO - maybe add some additional checks (besides liquidation true/false) to verify
+			// validator has truly become fully functional
 		})
 	})
 
@@ -1315,7 +1658,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Now start the OperatorRemoved event handling
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 4)
+			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, op[0].id)
 			require.NoError(t, err)
 			sim.Commit()
 
