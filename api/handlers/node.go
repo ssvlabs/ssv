@@ -170,15 +170,15 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) peers(peers []peer.ID) []peerJSON {
 	resp := make([]peerJSON, len(peers))
 	for i, id := range peers {
+		subnets, ok := h.PeersIndex.GetPeerSubnets(id)
+		if !ok {
+			subnets = records.ZeroSubnets
+		}
+
 		resp[i] = peerJSON{
 			ID:            id,
 			Connectedness: h.Network.Connectedness(id).String(),
-		}
-		subnets, ok := h.PeersIndex.GetPeerSubnets(id)
-		if ok {
-			resp[i].Subnets = subnets.String()
-		} else {
-			resp[i].Subnets = records.ZeroSubnets.String()
+			Subnets:       subnets.String(),
 		}
 
 		for _, addr := range h.Network.Peerstore().Addrs(id) {
