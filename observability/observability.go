@@ -18,6 +18,7 @@ var (
 )
 
 func Initialize(appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
+	var initError error
 	once.Do(func() {
 		for _, option := range options {
 			option(&config)
@@ -29,14 +30,14 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 			semconv.ServiceVersion(appVersion),
 		))
 		if err != nil {
-			err = errors.Join(errors.New("failed to instantiate observability resources"), err)
+			initError = errors.Join(errors.New("failed to instantiate observability resources"), err)
 			return
 		}
 
 		if config.metricsEnabled {
 			promExporter, err := prometheus.New(prometheus.WithNamespace("ssv"))
 			if err != nil {
-				err = errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
+				initError = errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
 				return
 			}
 			meterProvider := metric.NewMeterProvider(
@@ -48,5 +49,5 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 		}
 	})
 
-	return shutdown, err
+	return shutdown, initError
 }
