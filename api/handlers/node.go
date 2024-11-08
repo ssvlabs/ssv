@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	networkpeers "github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
@@ -176,6 +177,8 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		subnets, ok := h.PeersIndex.GetPeerSubnets(id)
 		if ok {
 			resp[i].Subnets = subnets.String()
+		} else {
+			resp[i].Subnets = records.ZeroSubnets.String()
 		}
 
 		for _, addr := range h.Network.Peerstore().Addrs(id) {
