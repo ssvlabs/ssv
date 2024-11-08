@@ -188,7 +188,7 @@ var StartNodeCmd = &cobra.Command{
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
 		if err := checkCfgCompatibility(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
-			logger.Fatal("failed to validate config", zap.Error(err))
+			logger.Fatal("failed to check config compatibility", zap.Error(err))
 		}
 
 		ekmHashedKey, err := operatorPrivKey.EKMHash()

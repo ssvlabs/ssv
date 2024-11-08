@@ -7,19 +7,17 @@ import (
 	"fmt"
 	"math/big"
 	"time"
-
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/utils/tasks"
+	"go.uber.org/zap"
 )
 
 var (
@@ -390,7 +388,7 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 			}
 			// continue until reaching to limit, and then panic as Ethereum execution client connection is required
 			if lastTick >= ec.reconnectionMaxInterval {
-				logger.Panic("failed to reconnect", zap.Error(err))
+				logger.Fatal("failed to reconnect", zap.Error(err))
 			} else {
 				logger.Warn("could not reconnect, still trying", zap.Error(err))
 			}
