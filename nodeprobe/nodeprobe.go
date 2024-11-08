@@ -110,12 +110,10 @@ func (p *Prober) probe(ctx context.Context) {
 	p.healthy.Store(healthy.Load())
 
 	if !p.healthy.Load() {
-		p.logger.Error(fmt.Sprintf(
-			"not all nodes (%s, %s, %s), are healthy",
-			EventSyncerNode,
-			ConsensusClientNode,
-			ExecutionClientNode,
-		))
+		p.logger.Error(
+			"not all nodes are healthy",
+			zap.Strings("nodes", []string{EventSyncerNode, ConsensusClientNode, ExecutionClientNode}),
+		)
 		if h := p.unhealthyHandler; h != nil {
 			h()
 		}

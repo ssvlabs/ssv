@@ -184,7 +184,7 @@ var StartNodeCmd = &cobra.Command{
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
 		if err := checkCfgCompatibility(nodeStorage, networkConfig.AlanForkNetworkName(), usingLocalEvents); err != nil {
-			logger.Fatal("failed to validate config", zap.Error(err))
+			logger.Fatal("failed to check config compatibility", zap.Error(err))
 		}
 
 		ekmHashedKey, err := operatorPrivKey.EKMHash()
@@ -702,7 +702,7 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Data
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
-		logger.Panic("failed to serve metrics", zap.Error(err))
+		logger.Fatal("failed to serve metrics", zap.Error(err))
 	}
 }
 
