@@ -5,6 +5,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -16,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/utils/casts"
-	"go.uber.org/zap"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -103,7 +104,6 @@ var ConstructBaseRunner = func(
 	}
 	config.Network = net
 	config.BeaconSigner = km
-	config.Storage = testing.TestingStores(logger).Get(casts.RunnerRoleToConvertRole(role))
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
@@ -358,7 +358,6 @@ var ConstructBaseRunnerWithShareMap = func(
 			return 1
 		}
 		config.Network = net
-		config.Storage = testing.TestingStores(logger).Get(casts.RunnerRoleToConvertRole(role))
 
 		contr = testing.NewTestingQBFTController(
 			spectestingutils.Testing4SharesSet(),
