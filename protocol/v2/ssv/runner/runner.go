@@ -7,10 +7,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -196,24 +196,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		return false, nil, err
 	}
 
-	decDecided, err := specqbft.DecodeMessage(decidedMsg.SSVMessage.Data)
-	if err != nil {
-		return false, nil, err
-	}
-
-	if inst := b.QBFTController.StoredInstances.FindInstance(decDecided.Height); inst != nil {
-		logger := logger.With(
-			zap.Uint64("msg_height", uint64(decDecided.Height)),
-			zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
-			zap.Any("signers", msg.OperatorIDs),
-		)
-		if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-			logger.Debug("❗ failed to save instance", zap.Error(err))
-		} else {
-			logger.Debug("💾 saved instance")
-		}
-	}
-
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
 	}
@@ -324,7 +306,7 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot,
 	); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
-	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, runner.GetBaseRunner().QBFTController.Height)
+	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
 		return errors.New("could not find newly created QBFT instance")
 	}

@@ -7,13 +7,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
-	"github.com/ssvlabs/ssv/ibft/storage"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -21,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -40,8 +38,7 @@ type Validator struct {
 	Signer         spectypes.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Storage *storage.QBFTStores
-	Queues  map[spectypes.RunnerRole]queueContainer
+	Queues map[spectypes.RunnerRole]queueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
@@ -66,7 +63,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		NetworkConfig:    options.NetworkConfig,
 		DutyRunners:      options.DutyRunners,
 		Network:          options.Network,
-		Storage:          options.Storage,
 		Operator:         options.Operator,
 		Share:            options.SSVShare,
 		Signer:           options.Signer,

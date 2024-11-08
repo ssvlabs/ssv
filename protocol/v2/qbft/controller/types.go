@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
@@ -63,11 +62,6 @@ func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 			(*i)[indexToInsert] = instance
 		}
 	}
-}
-
-// reset will remove all instances from the container, perserving the underlying slice's capacity.
-func (i *InstanceContainer) reset() {
-	*i = (*i)[:0]
 }
 
 // String returns a human-readable representation of the instances. Useful for debugging.

@@ -9,11 +9,11 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/zap"
+
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -63,7 +63,6 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:      opts.NetworkConfig.DomainType(),
-		Storage:     opts.Storage.Get(identifier.GetRoleType()),
 		Network:     opts.Network,
 		CutOffRound: roundtimer.CutOffRound,
 	}
@@ -72,9 +71,6 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 
 	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
-	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
-		opts.Logger.Debug("❗ failed to load highest instance", zap.Error(err))
-	}
 
 	return &CommitteeObserver{
 		qbftController:         ctrl,

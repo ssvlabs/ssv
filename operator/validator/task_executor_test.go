@@ -9,11 +9,11 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -34,7 +34,6 @@ func TestController_LiquidateCluster(t *testing.T) {
 	firstValidator, err := validators.NewValidatorContainer(
 		&validator.Validator{
 			DutyRunners: runner.ValidatorDutyRunners{},
-			Storage:     ibftstorage.NewStores(),
 			Share: &types.SSVShare{
 				Share: spectypes.Share{
 					ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
@@ -99,7 +98,6 @@ func TestController_StopValidator(t *testing.T) {
 	firstValidator, err := validators.NewValidatorContainer(
 		&validator.Validator{
 			DutyRunners: runner.ValidatorDutyRunners{},
-			Storage:     ibftstorage.NewStores(),
 			Share: &types.SSVShare{
 				Share: spectypes.Share{
 					ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
