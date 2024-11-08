@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -10,13 +11,12 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 type AggregatorRunner struct {
@@ -54,7 +54,7 @@ func NewAggregatorRunner(
 			RunnerRoleType:     spectypes.RoleAggregator,
 			DomainType:         domainType,
 			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			Shares:             share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -91,14 +91,14 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
 	// reconstruct selection proof sig
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
 
 	logger.Debug("🧩 got partial signature quorum",
 		zap.Any("signer", signedMsg.Messages[0].Signer), // TODO: always 1?
@@ -107,7 +107,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 
 	r.metrics.PauseDutyFullFlow()
 	// get block data
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty = r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
@@ -132,20 +132,18 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 }
 
 func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
+	decidedValue := spectypes.ValidatorConsensusData{}
+	decided, err := r.BaseRunner.processConsensusMsg(logger, r, signedMsg, &decidedValue)
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
-
-	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		// We haven't decided yet, or have decided and processed decision exactly once already.
 		return nil
 	}
 
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
-
-	decidedValue := encDecidedValue.(*spectypes.ValidatorConsensusData)
 
 	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
 	if err != nil {
@@ -206,19 +204,23 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 	r.metrics.EndPostConsensus()
 
 	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+		sig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+				r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
 			return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
+		decided, decidedValue := r.BaseRunner.State.DecidedValue()
+		if !decided {
+			return fmt.Errorf("runner has no decided value")
+		}
 		cd := &spectypes.ValidatorConsensusData{}
-		err = cd.Decode(r.GetState().DecidedValue)
+		err = cd.Decode(decidedValue)
 		if err != nil {
 			return errors.Wrap(err, "could not create consensus data")
 		}
@@ -242,26 +244,30 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
+		r.metrics.EndDutyFullFlow(r.BaseRunner.State.QBFTInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successful submitted aggregate",
 			fields.SubmissionTime(time.Since(start)),
 		)
 	}
-	r.GetState().Finished = true
+	r.BaseRunner.State.Finished = true
 
 	return nil
 }
 
 func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{spectypes.SSZUint64(r.GetState().StartingDuty.DutySlot())}, spectypes.DomainSelectionProof, nil
+	return []ssz.HashRoot{spectypes.SSZUint64(r.BaseRunner.State.StartingDuty.DutySlot())}, spectypes.DomainSelectionProof, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	decided, decidedValue := r.BaseRunner.State.DecidedValue()
+	if !decided {
+		return nil, phase0.DomainType{}, fmt.Errorf("runner has no decided value")
+	}
 	cd := &spectypes.ValidatorConsensusData{}
-	err := cd.Decode(r.GetState().DecidedValue)
+	err := cd.Decode(decidedValue)
 	if err != nil {
 		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
 	}
@@ -337,14 +343,10 @@ func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 
 func (r *AggregatorRunner) GetShare() *spectypes.Share {
 	// TODO better solution for this
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.Shares {
 		return share
 	}
 	return nil
-}
-
-func (r *AggregatorRunner) GetState() *State {
-	return r.BaseRunner.State
 }
 
 func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {

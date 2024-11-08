@@ -17,11 +17,11 @@ type ValidatorMetadataStorage interface {
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*ValidatorMetadata) error
 }
 
-// ValidatorMetadata represents validator metdata from beacon
+// ValidatorMetadata represents validator metdata from Ethereum Beacon node
 type ValidatorMetadata struct {
 	Balance         phase0.Gwei              `json:"balance"`
 	Status          eth2apiv1.ValidatorState `json:"status"`
-	Index           phase0.ValidatorIndex    `json:"index"` // pointer in order to support nil
+	Index           phase0.ValidatorIndex    `json:"index"`
 	ActivationEpoch phase0.Epoch             `json:"activation_epoch"`
 }
 

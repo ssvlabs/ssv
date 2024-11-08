@@ -7,13 +7,12 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 // MessageHandler process the msg. return error if exist
@@ -96,7 +95,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 		var runningInstance *instance.Instance
 		if runner.HasRunningDuty() {
-			runningInstance = runner.GetBaseRunner().State.RunningInstance
+			runningInstance = runner.GetBaseRunner().State.QBFTInstance
 			if runningInstance != nil {
 				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
@@ -202,7 +201,7 @@ func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round 
 		return specqbft.Round(1)
 	}
 	if r != nil && r.HasRunningDuty() {
-		inst := r.GetBaseRunner().State.RunningInstance
+		inst := r.GetBaseRunner().State.QBFTInstance
 		if inst != nil {
 			return inst.State.Round
 		}

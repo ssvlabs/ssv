@@ -56,15 +56,15 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
 	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
-	if len(test.Runner.GetBaseRunner().Share) == 0 {
+	if len(test.Runner.GetBaseRunner().Shares) == 0 {
 		panic("No share in base runner for tests")
 	}
-	for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for _, validatorShare := range test.Runner.GetBaseRunner().Shares {
 		share = validatorShare
 		break
 	}
 
-	for valIdx, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for valIdx, validatorShare := range test.Runner.GetBaseRunner().Shares {
 		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
@@ -113,7 +113,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
-				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+				for _, validatorShare := range test.Runner.GetBaseRunner().Shares {
 					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}

@@ -45,15 +45,10 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, psigMsgs *spectypes
 		return errors.New("no running duty")
 	}
 
-	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
-	if len(b.State.DecidedValue) == 0 {
-		return errors.New("no decided value")
-	}
-
-	if b.State.RunningInstance == nil {
+	if !b.hasRunningInstance() {
 		return errors.New("no running consensus instance")
 	}
-	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
+	decided, decidedValueBytes := b.State.QBFTInstance.IsDecided()
 	if !decided {
 		return errors.New("consensus instance not decided")
 	}
@@ -98,7 +93,6 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.E
 	if err := runner.GetValCheckF()(byts); err != nil {
 		return errors.Wrap(err, "decided value is invalid")
 	}
-
 	return nil
 }
 

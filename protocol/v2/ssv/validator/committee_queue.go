@@ -7,13 +7,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"go.uber.org/zap"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.
@@ -91,7 +90,7 @@ func (c *Committee) ConsumeQueue(
 		// Construct a representation of the current state.
 		var runningInstance *instance.Instance
 		if rnr.HasRunningDuty() {
-			runningInstance = rnr.GetBaseRunner().State.RunningInstance
+			runningInstance = rnr.GetBaseRunner().State.QBFTInstance
 			if runningInstance != nil {
 				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
@@ -196,9 +195,9 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 //		return specqbft.Round(1)
 //	}
 //	if r != nil && r.HasRunningDuty() {
-//		inst := r.GetBaseRunner().State.RunningInstance
+//		inst := r.GetBaseRunner().DutyState.QBFTInstance
 //		if inst != nil {
-//			return inst.State.Round
+//			return inst.DutyState.Round
 //		}
 //	}
 //	return specqbft.Round(1)

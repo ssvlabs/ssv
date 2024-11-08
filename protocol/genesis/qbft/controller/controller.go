@@ -10,11 +10,10 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
+	"go.uber.org/zap"
 )
 
 // NewDecidedHandler handles newly saved decided messages.

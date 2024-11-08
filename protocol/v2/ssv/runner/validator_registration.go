@@ -11,12 +11,11 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -49,7 +48,7 @@ func NewValidatorRegistrationRunner(
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
 			DomainType:     domainType,
 			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			Shares:         share,
 		},
 
 		beacon:         beacon,
@@ -88,10 +87,10 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	specSig := phase0.BLSSignature{}
@@ -111,7 +110,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		fields.FeeRecipient(share.FeeRecipientAddress[:]),
 		zap.String("signature", hex.EncodeToString(specSig[:])))
 
-	r.GetState().Finished = true
+	r.BaseRunner.State.Finished = true
 	return nil
 }
 
@@ -223,14 +222,10 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 }
 
 func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.Shares {
 		return share
 	}
 	return nil
-}
-
-func (r *ValidatorRegistrationRunner) GetState() *State {
-	return r.BaseRunner.State
 }
 
 func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheckF {

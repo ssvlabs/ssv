@@ -8,7 +8,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -25,10 +24,10 @@ func (b *BaseRunner) signBeaconObject(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get beacon domain")
 	}
-	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
+	if _, ok := runner.GetBaseRunner().Shares[duty.ValidatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
 	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey, domainType)
+	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Shares[duty.ValidatorIndex].SharePubKey, domainType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}
@@ -72,7 +71,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 
 	// Get committee (unique for runner)
 	var shareSample *spectypes.Share
-	for _, share := range b.Share {
+	for _, share := range b.Shares {
 		shareSample = share
 		break
 	}
@@ -102,7 +101,7 @@ func (b *BaseRunner) validateValidatorIndexInPartialSigMsg(
 ) error {
 	for _, msg := range psigMsgs.Messages {
 		// Check if it has the validator index share
-		_, ok := b.Share[msg.ValidatorIndex]
+		_, ok := b.Shares[msg.ValidatorIndex]
 		if !ok {
 			return errors.New("unknown validator index")
 		}
@@ -142,7 +141,7 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
 		err = b.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot,
-			b.Share[msg.ValidatorIndex].Committee)
+			b.Shares[msg.ValidatorIndex].Committee)
 		if err == nil {
 			// Keep the previous sigature since it's correct
 			return
@@ -154,7 +153,7 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 
 	// Hold the new signature, if correct
 	err = b.verifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot,
-		b.Share[msg.ValidatorIndex].Committee)
+		b.Shares[msg.ValidatorIndex].Committee)
 	if err == nil {
 		container.AddSignature(msg)
 	}

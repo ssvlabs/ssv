@@ -3,15 +3,14 @@ package decided
 import (
 	"encoding/hex"
 	"fmt"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"time"
 
 	"github.com/patrickmn/go-cache"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"go.uber.org/zap"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.

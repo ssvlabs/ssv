@@ -14,8 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -59,6 +57,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -985,7 +984,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
 		}...)
 
-		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
+		committeeRunnerFactory := newCommitteeRunnerFactory(ctx, opts)
 
 		vc = validator.NewCommittee(
 			ctx,
@@ -993,15 +992,13 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 			logger,
 			c.beacon.GetBeaconNetwork(),
 			operator,
-			committeeRunnerFunc,
+			committeeRunnerFactory,
 			nil,
 			c.dutyGuard,
 		)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
-
-		c.printShare(share, "setup committee done")
-
+		c.printShare(share, "set up new committee, added share to committee")
 	} else {
 		vc.AddShare(&share.Share)
 		c.printShare(share, "added share to committee")
@@ -1258,7 +1255,7 @@ func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIn
 	return false
 }
 
-func SetupCommitteeRunners(
+func newCommitteeRunnerFactory(
 	ctx context.Context,
 	options validator.Options,
 ) validator.CommitteeRunnerFunc {

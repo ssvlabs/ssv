@@ -2,19 +2,18 @@ package runner
 
 import (
 	"encoding/json"
-	"sync"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 type Getters interface {
@@ -51,10 +50,22 @@ type Runner interface {
 
 var _ Runner = new(CommitteeRunner)
 
+// BaseRunner contains base functionality for running duties.
+// BaseRunner is not thread-safe and is meant to process each duty it is responsible for in
+// sequential manner (one duty after another, and for any particular duty - one duty-related
+// operation/event/message after another), this is mostly because it expects to apply DutyState
+// updates sequentially (verifying the order of these updates makes sense, rejecting invalid
+// state transitions).
 type BaseRunner struct {
-	mtx            sync.RWMutex
-	State          *State
-	Share          map[phase0.ValidatorIndex]*spectypes.Share
+	// State represents runner state for the current duty. Every duty is expected to undergo
+	// full duty processing cycle (pre-consensus, consensus and post-consensus phases), and
+	// runner will modify & read State in serialized thread-safe manner - both when handling
+	// events modifying State of currently running duty and events kicking off the start of
+	// next duty to execute (in which case State if fully replaced by new State object) -
+	// hence no mutex to protect State modifications is required.
+	State *DutyState
+
+	Shares         map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	DomainType     spectypes.DomainType
 	BeaconNetwork  spectypes.BeaconNetwork
@@ -78,7 +89,7 @@ func (b *BaseRunner) Decode(data []byte) error {
 
 func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	type BaseRunnerAlias struct {
-		State              *State
+		State              *DutyState
 		Share              map[phase0.ValidatorIndex]*spectypes.Share
 		QBFTController     *controller.Controller
 		BeaconNetwork      spectypes.BeaconNetwork
@@ -89,7 +100,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	// Create object and marshal
 	alias := &BaseRunnerAlias{
 		State:              b.State,
-		Share:              b.Share,
+		Share:              b.Shares,
 		QBFTController:     b.QBFTController,
 		BeaconNetwork:      b.BeaconNetwork,
 		RunnerRoleType:     b.RunnerRoleType,
@@ -106,48 +117,12 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
 	b.highestDecidedSlot = slot
 }
 
-// setupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
-	// start new state
-	// start new state
-	// TODO nicer way to get quorum
-	state := NewRunnerState(quorum, duty)
-
-	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
-	// b.State but currently does not write to it
-	b.mtx.Lock() // writes to b.State
-	b.State = state
-	b.mtx.Unlock()
-}
-
-func NewBaseRunner(
-	state *State,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	controller *controller.Controller,
-	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
-	runnerRoleType spectypes.RunnerRole,
-	highestDecidedSlot phase0.Slot,
-) *BaseRunner {
-	return &BaseRunner{
-		State:              state,
-		Share:              share,
-		QBFTController:     controller,
-		BeaconNetwork:      beaconNetwork,
-		DomainType:         domainType,
-		RunnerRoleType:     runnerRoleType,
-		highestDecidedSlot: highestDecidedSlot,
-	}
-}
-
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start duty")
 	}
-
-	b.baseSetupForNewDuty(duty, quorum)
-
+	b.State = NewDutyState(quorum, duty)
 	return runner.executeDuty(logger, duty)
 }
 
@@ -156,7 +131,7 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start non-beacon duty")
 	}
-	b.baseSetupForNewDuty(duty, quorum)
+	b.State = NewDutyState(quorum, duty)
 	return runner.executeDuty(logger, duty)
 }
 
@@ -170,49 +145,77 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 	return hasQuorum, roots, nil
 }
 
-// baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
-func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
-	prevDecided := false
-	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
-		prevDecided, _ = b.State.RunningInstance.IsDecided()
+// processConsensusMsg is a base func that all runner implementation can call for processing
+// a QBFT consensus msg, it returns true only the very first time we've received and
+// successfully processed deciding QBFT consensus message (in which case it's value will be
+// written to decidedValueDecoder that defines the type of decided message as well as encoder
+// to use when reconstructing decided value from msg payload).
+func (b *BaseRunner) processConsensusMsg(
+	logger *zap.Logger,
+	runner Runner,
+	msg *spectypes.SignedSSVMessage,
+	decidedValueDecoder spectypes.Encoder,
+) (decided bool, err error) {
+	// TODO - these "strict" checks will not work super well in practice until the following
+	// issue is resolved: https://github.com/ssvlabs/ssv/issues/1827
+	if !b.hasRunningDuty() {
+		return false, fmt.Errorf("can't process consensus message, no running duty")
 	}
-	if prevDecided {
-		return true, nil, errors.New("not processing consensus message since consensus has already finished")
+	if !b.hasRunningInstance() {
+		return false, fmt.Errorf("can't process consensus message, no running QBFT instance")
 	}
+	alreadyDecided, _ := b.State.QBFTInstance.IsDecided()
+	if alreadyDecided {
+		return false, fmt.Errorf("consensus has already finished")
+	}
+	// TODO ^ instead, we probably want to handle different possibilities here in different ways:
+	// - return error signaling Duty is not running yet (the caller needs to handle this error by
+	//   "buffering" this msg, re-trying processConsensusMsg for this msg again later on)
+	// - return error signaling Duty is done already (the caller needs to handle this error by
+	//   simply dropping this msg - no need to log it, it's expected situation to be in)
+	// - return error signaling QBFT Instance is not running yet (the caller needs to handle
+	//   this error by "buffering" this msg, re-trying processConsensusMsg for this msg again
+	//   later on)
+	// - return error signaling QBFT Instance is done already (the caller needs to handle this
+	//   error by simply dropping this msg - no need to log it, it's expected situation to be in)
+	// To implement these ^ properly we'll need to compare message height against QBFTInstance
+	// to understand what QBFTInstance this msg is targeting - it might not exist yet, be
+	// currently running or has already finished. Note however, QBFTController.ProcessMsg also
+	// does check for future messages - perhaps we want to move that check here, it also claims
+	// "all future messages will be saved into message container ..." - see how it plays into
+	// what we are trying to implement here.
+	//
+	// Also, similar handling is needed for pre/post QBFT consensus phase.
+	// Also, check/see how it fits into solution proposed & implemented in
+	// https://github.com/ssvlabs/ssv/issues/1827
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
 	if err != nil {
-		return false, nil, err
+		return false, fmt.Errorf("process consensus message: %w", err)
+	}
+	if decidedMsg == nil {
+		// this isn't a decided message yet, or we have already acted on decided message
+		// some time in the past once - won't be acting on it again
+		return false, nil
 	}
 
-	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
-	// do not return error if no running duty
-	if !b.hasRunningDuty() {
-		logger.Debug("no running duty")
-		return false, nil, nil
+	// got decided message for the very first time then, lets process it
+
+	if err := b.checkDecidedMsg(decidedMsg); err != nil {
+		return true, fmt.Errorf("bad decided message: %w", err)
 	}
 
-	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
-		return false, nil, err
+	if err := decidedValueDecoder.Decode(decidedMsg.FullData); err != nil {
+		return true, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
 	}
-
-	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
-		return true, nil, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
-	}
-
-	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
-		return true, nil, errors.Wrap(err, "decided ValidatorConsensusData invalid")
-	}
-
-	runner.GetBaseRunner().State.DecidedValue, err = decidedValue.Encode()
-	if err != nil {
-		return true, nil, errors.Wrap(err, "could not encode decided value")
+	if err := b.validateDecidedConsensusData(runner, decidedValueDecoder); err != nil {
+		return true, errors.Wrap(err, "decided ValidatorConsensusData invalid")
 	}
 
 	// update the highest decided slot
 	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
-	return true, decidedValue, nil
+	return true, nil
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
@@ -255,39 +258,33 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 	return anyQuorum, roots
 }
 
-// didDecideCorrectly returns true if the expected consensus instance decided correctly
-func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectypes.SignedSSVMessage) (bool, error) {
+// checkDecidedMsg returns error if the consensus message is not a valid decided message or
+// if it is a deciding message that's inconsistent with currently running QBFT instance
+// state.
+func (b *BaseRunner) checkDecidedMsg(signedMessage *spectypes.SignedSSVMessage) error {
 	if signedMessage == nil {
-		return false, nil
+		return fmt.Errorf("SignedSSVMessage message is nil")
 	}
-
 	if signedMessage.SSVMessage == nil {
-		return false, errors.New("ssv message is nil")
+		return fmt.Errorf("SSVMessage message is nil")
 	}
 
 	decidedMessage, err := specqbft.DecodeMessage(signedMessage.SSVMessage.Data)
 	if err != nil {
-		return false, err
+		return fmt.Errorf("decode SSVMessage message: %w", err)
 	}
-
 	if decidedMessage == nil {
-		return false, nil
+		return fmt.Errorf("decoded SSVMessage message is nil")
+	}
+	if decidedMessage.Height != b.State.QBFTInstance.GetHeight() {
+		return fmt.Errorf(
+			"wrong instance, decided message height: %d, running instance height: %d",
+			decidedMessage.Height,
+			b.State.QBFTInstance.GetHeight(),
+		)
 	}
 
-	if b.State.RunningInstance == nil {
-		return false, errors.New("decided wrong instance")
-	}
-
-	if decidedMessage.Height != b.State.RunningInstance.GetHeight() {
-		return false, errors.New("decided wrong instance")
-	}
-
-	// verify we decided running instance only, if not we do not proceed
-	if prevDecided {
-		return false, nil
-	}
-
-	return true, nil
+	return nil
 }
 
 func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
@@ -311,22 +308,19 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot,
 		return errors.New("could not find newly created QBFT instance")
 	}
 
-	runner.GetBaseRunner().State.RunningInstance = newInstance
+	runner.GetBaseRunner().State.QBFTInstance = newInstance
 
 	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }
 
-// hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
+	return b.State != nil && !b.State.Finished
+}
 
-	if b.State == nil {
-		return false
-	}
-	return !b.State.Finished
+func (b *BaseRunner) hasRunningInstance() bool {
+	return b.State != nil && b.State.QBFTInstance != nil
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {

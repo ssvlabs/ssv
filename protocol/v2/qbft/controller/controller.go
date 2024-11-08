@@ -6,15 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -56,15 +54,15 @@ func NewController(
 func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return errors.Wrap(err, "value invalid")
+		return fmt.Errorf("value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		return errors.New("attempting to start an instance with a past height")
+		return fmt.Errorf("attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return errors.New("instance already running")
+		return fmt.Errorf("instance already running")
 	}
 
 	c.Height = height
@@ -83,22 +81,23 @@ func (c *Controller) forceStopAllInstanceExceptCurrent() {
 	}
 }
 
-// ProcessMsg processes a new msg, returns decided message or error
+// ProcessMsg processes consensus msg, returns decided message only the very first time
+// it's identified, returns nil otherwise.
 func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
 	msg, err := specqbft.NewProcessingMessage(signedMessage)
 	if err != nil {
-		return nil, errors.New("could not create ProcessingMessage from signed message")
+		return nil, fmt.Errorf("could not create ProcessingMessage from signed message")
 	}
 
 	if err := c.BaseMsgValidation(msg); err != nil {
-		return nil, errors.Wrap(err, "invalid msg")
+		return nil, fmt.Errorf("invalid msg: %w", err)
 	}
 
 	/**
 	Main controller processing flow
 	_______________________________
 	All decided msgs are processed the same, out of instance
-	All valid future msgs are saved in a container and can trigger highest decided futuremsg
+	All valid future msgs are saved in a container and will be processed elsewhere later on
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
 	isDecided, err := IsDecidedMsg(c.CommitteeMember, msg)
@@ -109,12 +108,9 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.Sig
 		return c.UponDecided(logger, msg)
 	}
 
-	isFuture, err := c.isFutureMessage(msg)
-	if err != nil {
-		return nil, err
-	}
+	isFuture := c.isFutureMessage(msg)
 	if isFuture {
-		return nil, fmt.Errorf("future msg from height, could not process")
+		return nil, fmt.Errorf("future msg with height: %d, current height: %d", msg.QBFTMessage.Height, c.Height)
 	}
 
 	return c.UponExistingInstanceMsg(logger, msg)
@@ -123,29 +119,28 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.Sig
 func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
-		return nil, errors.New("instance not found")
+		return nil, fmt.Errorf("QBFT instance not found for height %d", msg.QBFTMessage.Height)
 	}
 
+	// if previously decided - there is no reason to process messages after that
 	prevDecided, _ := inst.IsDecided()
-
-	// if previously decided, we don't process more messages
 	if prevDecided {
-		return nil, errors.New("not processing consensus message since instance is already decided")
+		return nil, fmt.Errorf("QBFT instance is already decided")
 	}
 
 	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not process msg")
+		return nil, fmt.Errorf("could not process QBFT msg: %w", err)
 	}
-
-	// save the highest Decided
 	if !decided {
 		return nil, nil
 	}
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
-		// no need to fail processing instance deciding if failed to save/ broadcast
-		logger.Debug("❌ failed to broadcast decided message", zap.Error(err))
+		// Broadcasting decided message is a "best effort" thing that's helpful to speed up
+		// finishing QBFT but not strictly necessary - hence don't stop local processing for
+		// this message if we can't broadcast decided message, just log an error
+		logger.Warn("❌ failed to broadcast decided message", zap.Error(err))
 	}
 
 	return decidedMsg, nil
@@ -155,7 +150,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	// verify msg belongs to controller
 	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
-		return errors.New("message doesn't belong to Identifier")
+		return fmt.Errorf("message doesn't belong to Identifier")
 	}
 
 	return nil
@@ -168,12 +163,12 @@ func (c *Controller) GetIdentifier() []byte {
 
 // isFutureMessage returns true if message height is from a future instance.
 // It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
-func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) (bool, error) {
+func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
 	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
-		return true, nil
+		return true
 	}
 
-	return msg.QBFTMessage.Height > c.Height, nil
+	return msg.QBFTMessage.Height > c.Height
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
@@ -187,7 +182,7 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode controller")
+		return [32]byte{}, fmt.Errorf("could not encode controller: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
@@ -202,7 +197,7 @@ func (c *Controller) Encode() ([]byte, error) {
 func (c *Controller) Decode(data []byte) error {
 	err := json.Unmarshal(data, &c)
 	if err != nil {
-		return errors.Wrap(err, "could not decode controller")
+		return fmt.Errorf("could not decode controller: %w", err)
 	}
 
 	config := c.GetConfig()
@@ -216,11 +211,7 @@ func (c *Controller) Decode(data []byte) error {
 }
 
 func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage) error {
-	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit); err != nil {
-		// We do not return error here, just Log broadcasting error.
-		return errors.Wrap(err, "could not broadcast decided")
-	}
-	return nil
+	return c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit)
 }
 
 func (c *Controller) GetConfig() qbft.IConfig {

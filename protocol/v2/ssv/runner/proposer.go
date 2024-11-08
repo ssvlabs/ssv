@@ -17,13 +17,12 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 type ProposerRunner struct {
@@ -60,7 +59,7 @@ func NewProposerRunner(
 			RunnerRoleType:     spectypes.RoleProposer,
 			DomainType:         domainType,
 			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			Shares:             share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -90,7 +89,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
 
 	logger = logger.With(fields.Slot(duty.DutySlot()))
 	logger.Debug("🧩 got partial RANDAO signatures",
@@ -104,18 +103,18 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	// randao is relevant only for block proposals, no need to check type
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		zap.Uint64s("signers", getPreConsensusSigners(r.BaseRunner.State, root)),
 		fields.PreConsensusTime(r.metrics.GetPreConsensusTime()))
 
 	start := time.Now()
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty = r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get blinded beacon block",
@@ -155,12 +154,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 }
 
 func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
+	decidedValue := spectypes.ValidatorConsensusData{}
+	decided, err := r.BaseRunner.processConsensusMsg(logger, r, signedMsg, &decidedValue)
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
-	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		// We haven't decided yet, or have decided and processed decision exactly once already.
 		return nil
 	}
 
@@ -169,16 +169,13 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 
 	// specific duty sig
 	var blkToSign ssz.HashRoot
-
-	cd := decidedValue.(*spectypes.ValidatorConsensusData)
-
 	if r.decidedBlindedBlock() {
-		_, blkToSign, err = cd.GetBlindedBlockData()
+		_, blkToSign, err = decidedValue.GetBlindedBlockData()
 		if err != nil {
 			return errors.Wrap(err, "could not get blinded block data")
 		}
 	} else {
-		_, blkToSign, err = cd.GetBlockData()
+		_, blkToSign, err = decidedValue.GetBlockData()
 		if err != nil {
 			return errors.Wrap(err, "could not get block data")
 		}
@@ -188,7 +185,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 		r,
 		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
 		blkToSign,
-		cd.Duty.Slot,
+		decidedValue.Duty.Slot,
 		spectypes.DomainProposer,
 	)
 	if err != nil {
@@ -196,7 +193,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 	}
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     cd.Duty.Slot,
+		Slot:     decidedValue.Duty.Slot,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
@@ -239,11 +236,11 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	}
 
 	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+		sig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+				r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
 			return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
 		}
@@ -251,13 +248,17 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
 		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
-			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
+			zap.Uint64s("signers", getPostConsensusProposerSigners(r.BaseRunner.State, root)),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
-			fields.Round(r.GetState().RunningInstance.State.Round))
+			fields.Round(r.BaseRunner.State.QBFTInstance.State.Round))
 		endSubmission := r.metrics.StartBeaconSubmission()
 
+		decided, decidedValue := r.BaseRunner.State.DecidedValue()
+		if !decided {
+			return fmt.Errorf("runner has no decided value")
+		}
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
-		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
+		err = validatorConsensusData.Decode(decidedValue)
 		if err != nil {
 			return errors.Wrap(err, "could not create consensus data")
 		}
@@ -270,7 +271,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			fields.ConsensusTime(r.metrics.GetConsensusTime()),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round),
+			fields.Round(r.BaseRunner.State.QBFTInstance.State.Round),
 			zap.Bool("blinded", r.decidedBlindedBlock()),
 		)
 		var (
@@ -316,27 +317,28 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 
 		endSubmission()
-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
+		r.metrics.EndDutyFullFlow(r.BaseRunner.State.QBFTInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(validatorConsensusData.Duty.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round),
+			fields.Round(r.BaseRunner.State.QBFTInstance.State.Round),
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
 			zap.NamedError("summarize_err", summarizeErr))
 	}
-	r.GetState().Finished = true
+	r.BaseRunner.State.Finished = true
 	return nil
 }
 
 // decidedBlindedBlock returns true if decided value has a blinded block, false if regular block
 // WARNING!! should be called after decided only
 func (r *ProposerRunner) decidedBlindedBlock() bool {
+	_, decidedValue := r.BaseRunner.State.DecidedValue()
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
+	err := validatorConsensusData.Decode(decidedValue)
 	if err != nil {
 		return false
 	}
@@ -345,14 +347,18 @@ func (r *ProposerRunner) decidedBlindedBlock() bool {
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	decided, decidedValue := r.BaseRunner.State.DecidedValue()
+	if !decided {
+		return nil, phase0.DomainType{}, fmt.Errorf("runner has no decided value")
+	}
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
+	err := validatorConsensusData.Decode(decidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not create consensus data")
 	}
@@ -440,14 +446,10 @@ func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 
 func (r *ProposerRunner) GetShare() *spectypes.Share {
 	// TODO better solution for this
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.Shares {
 		return share
 	}
 	return nil
-}
-
-func (r *ProposerRunner) GetState() *State {
-	return r.BaseRunner.State
 }
 
 func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {

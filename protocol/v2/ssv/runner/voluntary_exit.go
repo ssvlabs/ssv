@@ -10,12 +10,11 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 // ValidatorDuty runner for validator voluntary exit duty
@@ -52,7 +51,7 @@ func NewVoluntaryExitRunner(
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
 			DomainType:     domainType,
 			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			Shares:         share,
 		},
 
 		beacon:         beacon,
@@ -88,10 +87,10 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	specSig := phase0.BLSSignature{}
@@ -112,7 +111,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.GetState().Finished = true
+	r.BaseRunner.State.Finished = true
 	return nil
 }
 
@@ -140,7 +139,6 @@ func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // Validator voluntary exit duty doesn't need consensus nor post-consensus.
 // It just performs pre-consensus with VoluntaryExitPartialSig over
 // a VoluntaryExit object to create a SignedVoluntaryExit
-
 func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	voluntaryExit, err := r.calculateVoluntaryExit()
 	if err != nil {
@@ -195,7 +193,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Dut
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
-	validatorIndex := r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+	validatorIndex := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
 		ValidatorIndex: validatorIndex,
@@ -215,13 +213,10 @@ func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 }
 
 func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.Shares {
 		return share
 	}
 	return nil
-}
-func (r *VoluntaryExitRunner) GetState() *State {
-	return r.BaseRunner.State
 }
 
 func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {

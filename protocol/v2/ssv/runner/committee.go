@@ -14,14 +14,13 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 var (
@@ -42,6 +41,10 @@ type CommitteeRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 	DutyGuard      CommitteeDutyGuard
 
+	// submittedDuties keeps track of already submitted duties to avoid submitting those
+	// again (although it's safe to do - it's unnecessary overhead). Since CommitteeRunner
+	// is meant to process events on the same go-routine there is no need to worry about
+	// concurrent reads/writes to submittedDuties.
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 
 	started time.Time
@@ -50,7 +53,7 @@ type CommitteeRunner struct {
 
 func NewCommitteeRunner(
 	networkConfig networkconfig.NetworkConfig,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
+	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
@@ -59,7 +62,7 @@ func NewCommitteeRunner(
 	valCheck specqbft.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
 ) (Runner, error) {
-	if len(share) == 0 {
+	if len(shares) == 0 {
 		return nil, errors.New("no shares")
 	}
 	return &CommitteeRunner{
@@ -67,7 +70,7 @@ func NewCommitteeRunner(
 			RunnerRoleType: spectypes.RoleCommittee,
 			DomainType:     networkConfig.AlanDomainType,
 			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
-			Share:          share,
+			Shares:         shares,
 			QBFTController: qbftController,
 		},
 		beacon:          beacon,
@@ -93,13 +96,7 @@ func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty,
 				validatorDuty.Type, d.DutySlot(), validatorDuty.PubKey, err)
 		}
 	}
-	err := cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
-	if err != nil {
-		return err
-	}
-	cr.submittedDuties[spectypes.BNRoleAttester] = make(map[phase0.ValidatorIndex]struct{})
-	cr.submittedDuties[spectypes.BNRoleSyncCommittee] = make(map[phase0.ValidatorIndex]struct{})
-	return nil
+	return cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
 }
 
 func (cr *CommitteeRunner) Encode() ([]byte, error) {
@@ -199,13 +196,13 @@ func (cr *CommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 }
 
 func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
-	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(logger, cr, msg, &spectypes.BeaconVote{})
+	decidedValue := spectypes.BeaconVote{}
+	decided, err := cr.BaseRunner.processConsensusMsg(logger, cr, msg, &decidedValue)
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
-
-	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		// We haven't decided yet, or have decided and processed decision exactly once already.
 		return nil
 	}
 
@@ -220,7 +217,6 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	beaconVote := decidedValue.(*spectypes.BeaconVote)
 	validDuties := 0
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
@@ -230,7 +226,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 		switch duty.Type {
 		case spectypes.BNRoleAttester:
 			validDuties++
-			attestationData := constructAttestationData(beaconVote, duty)
+			attestationData := constructAttestationData(&decidedValue, duty)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				spectypes.DomainAttester)
 			if err != nil {
@@ -253,7 +249,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 			)
 		case spectypes.BNRoleSyncCommittee:
 			validDuties++
-			blockRoot := beaconVote.BlockRoot
+			blockRoot := decidedValue.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
@@ -377,7 +373,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			}
 
 			// Reconstruct signature
-			share := cr.BaseRunner.Share[validator]
+			share := cr.BaseRunner.Shares[validator]
 			pubKey := share.ValidatorPubKey
 			vlogger := logger.With(zap.Uint64("validator_index", uint64(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
 
@@ -450,7 +446,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 
 		logger.Info("✅ successfully submitted attestations",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
-			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+			fields.Round(cr.BaseRunner.State.QBFTInstance.State.Round),
 			fields.BlockRoot(attestations[0].Data.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(time.Since(cr.started)))
@@ -475,7 +471,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		}
 		logger.Info("✅ successfully submitted sync committee",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
-			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+			fields.Round(cr.BaseRunner.State.QBFTInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(time.Since(cr.started)))
@@ -564,29 +560,32 @@ func findValidators(
 }
 
 // Unneeded since no preconsensus phase
-func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (cr *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no pre consensus root for committee runner")
 }
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
 }
 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *zap.Logger) (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot, error error,
+	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot,
+	err error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot)
 	duty := cr.BaseRunner.State.StartingDuty
-	// TODO DecidedValue should be interface??
-	beaconVoteData := cr.BaseRunner.State.DecidedValue
+	decided, decidedValue := cr.BaseRunner.State.DecidedValue()
+	if !decided {
+		logger.Error("runner has no decided value")
+	}
 	beaconVote := &spectypes.BeaconVote{}
-	if err := beaconVote.Decode(beaconVoteData); err != nil {
+	if err := beaconVote.Decode(decidedValue); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
 

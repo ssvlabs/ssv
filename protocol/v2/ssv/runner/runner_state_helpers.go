@@ -7,7 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
+func getPreConsensusSigners(state *DutyState, root [32]byte) []spectypes.OperatorID {
 	sigs := state.PreConsensusContainer.Signatures[state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 	var signers []spectypes.OperatorID
 	for op := range sigs {
@@ -16,7 +16,7 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 	return signers
 }
 
-func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
+func getPostConsensusCommitteeSigners(state *DutyState, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
 
 	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties {
@@ -38,7 +38,7 @@ func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.O
 	return signersUnique
 }
 
-func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
+func getPostConsensusProposerSigners(state *DutyState, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
 	valIdx := state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	sigs := state.PostConsensusContainer.Signatures[valIdx][ssv.SigningRoot(hex.EncodeToString(root[:]))]

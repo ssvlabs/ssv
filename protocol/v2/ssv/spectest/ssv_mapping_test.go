@@ -376,9 +376,9 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	if ret.GetBaseRunner().QBFTController != nil {
 		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
 		if ret.GetBaseRunner().State != nil {
-			if ret.GetBaseRunner().State.RunningInstance != nil {
+			if ret.GetBaseRunner().State.QBFTInstance != nil {
 				operator := spectestingutils.TestingCommitteeMember(ks)
-				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ks, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
+				ret.GetBaseRunner().State.QBFTInstance = fixInstanceForRun(t, ks, ret.GetBaseRunner().State.QBFTInstance, ret.GetBaseRunner().QBFTController, operator)
 			}
 		}
 	}
@@ -573,7 +573,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 	for slot := range c.Runners {
 
 		var shareInstance *spectypes.Share
-		for _, share := range c.Runners[slot].BaseRunner.Share {
+		for _, share := range c.Runners[slot].BaseRunner.Shares {
 			shareInstance = share
 			break
 		}

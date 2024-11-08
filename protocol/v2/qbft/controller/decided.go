@@ -4,15 +4,14 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"go.uber.org/zap"
 )
 
-// UponDecided returns decided msg if decided, nil otherwise
+// UponDecided returns decided msg if decided for the first time, nil otherwise
 func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	if err := ValidateDecided(
 		c.config,

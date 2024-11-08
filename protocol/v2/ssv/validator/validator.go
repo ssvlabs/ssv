@@ -7,8 +7,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -19,15 +17,20 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
+	"go.uber.org/zap"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
-	mtx    *sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// mtx synchronises access to state, Queues
+	mtx    *sync.RWMutex
+	state  uint32
+	Queues map[spectypes.RunnerRole]queueContainer
 
 	NetworkConfig networkconfig.NetworkConfig
 	DutyRunners   runner.ValidatorDutyRunners
@@ -38,12 +41,8 @@ type Validator struct {
 	Signer         spectypes.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Queues map[spectypes.RunnerRole]queueContainer
-
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
-
-	state uint32
 
 	messageValidator validation.MessageValidator
 }
@@ -147,6 +146,17 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
+	// Below we handle all kinds of events (external p2p messages, local events) that might
+	// result into duty runner state transitions, these state transitions can be of 2 types:
+	// - process state transition for the duty that's already in progress (runner is working on it)
+	// - kicking off the execution of new duty (runner needs to switch to this new duty)
+	// we do it this way because duty runner (namely BaseRunner) is not thread-safe and must
+	// undergo state transitions in sequential manner for it to function properly.
+	// Important to note, for this ^ to work ProcessMessage func MUST be called sequentially for
+	// messages targeting the same duty runner (we achieve this by distributing p2p messages and
+	// local events that all trigger concurrently into thread-safe queues - messages targeting
+	// same runner end up in the same queue, and in order to process all of that sequentially we
+	// pop each message from a queue and call ProcessMessage blocking until it finishes execution).
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())

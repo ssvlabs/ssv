@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -148,7 +147,7 @@ func (m *Metadata) SetMetadataLastUpdated(t time.Time) {
 	m.lastUpdated = t
 }
 
-// Return a 32 bytes ID for the committee of operators
+// ComputeCommitteeID returns a 32 bytes ID for the committee of operators
 func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID {
 	// sort
 	sort.Slice(committee, func(i, j int) bool {
