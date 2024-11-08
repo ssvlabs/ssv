@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -51,7 +50,6 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -144,39 +142,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
 
-		var operatorPrivKey keys.OperatorPrivateKey
-		var operatorPrivKeyText string
-		if cfg.KeyStore.PrivateKeyFile != "" {
-			// nolint: gosec
-			encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
-			if err != nil {
-				logger.Fatal("could not read PEM file", zap.Error(err))
-			}
-
-			// nolint: gosec
-			keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
-			if err != nil {
-				logger.Fatal("could not read password file", zap.Error(err))
-			}
-
-			decryptedKeystore, err := keystore.DecryptKeystore(encryptedJSON, string(keyStorePassword))
-			if err != nil {
-				logger.Fatal("could not decrypt operator private key keystore", zap.Error(err))
-			}
-			operatorPrivKey, err = keys.PrivateKeyFromBytes(decryptedKeystore)
-			if err != nil {
-				logger.Fatal("could not extract operator private key from file", zap.Error(err))
-			}
-
-			operatorPrivKeyText = base64.StdEncoding.EncodeToString(decryptedKeystore)
-		} else {
-			operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
-			if err != nil {
-				logger.Fatal("could not decode operator private key", zap.Error(err))
-			}
-			operatorPrivKeyText = cfg.OperatorPrivateKey
-		}
-		cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
+		operatorPrivKey, operatorPrivKeyText := operatorPrivateKey(logger)
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
@@ -197,7 +163,9 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
-		cfg.P2pNetworkConfig.Ctx = ctx
+		cfg.ConsensusClient.Context = ctx
+		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
+		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
@@ -205,10 +173,6 @@ var StartNodeCmd = &cobra.Command{
 				GenesisTime:  networkConfig.GetGenesisTime(),
 			})
 		}
-
-		cfg.ConsensusClient.Context = ctx
-		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
-		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
@@ -227,13 +191,13 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
+		cfg.P2pNetworkConfig.Ctx = ctx
+		cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
-
-		validatorsMap := validators.New(ctx)
 
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
@@ -271,7 +235,6 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db, metricsReporter)
 
@@ -281,6 +244,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
@@ -289,7 +253,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.GenesisBeacon = genesisgoclient.NewAdapter(consensusClient)
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
-		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
+		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validators.New(ctx)
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
