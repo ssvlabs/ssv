@@ -18,6 +18,7 @@ type Participation struct {
 }
 
 func (p *Participation) MsgID() spectypes.MessageID {
+	// nolint: gosec
 	return spectypes.NewMsgID(p.DomainType, p.PK[:], spectypes.RunnerRole(p.Role))
 }
 

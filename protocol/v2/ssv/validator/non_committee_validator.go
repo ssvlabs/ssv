@@ -181,22 +181,17 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 
 		switch {
 		case attester != nil && syncCommittee != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee}
 		case attester != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleAttester}
 		case syncCommittee != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleSyncCommittee}
 		default:
 			return nil
 		}
 	}
+	// nolint: gosec
 	return []spectypes.BeaconRole{spectypes.BeaconRole(msg.MsgID.GetRoleType())}
-}
-
-// nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
-func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
-	if fullNode {
-		// Helps full nodes reduce
-		return 2
-	}
-	return 1
 }
 
 type validatorIndexAndRoot struct {
