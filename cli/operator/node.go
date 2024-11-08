@@ -50,6 +50,7 @@ import (
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -119,6 +120,15 @@ var StartNodeCmd = &cobra.Command{
 		metricsReporter := metricsreporter.New(
 			metricsreporter.WithLogger(logger),
 		)
+
+		observabilityShutdown, err := observability.Initialize(
+			cmd.Parent().Short,
+			cmd.Parent().Version,
+			observability.WithMetrics())
+		if err != nil {
+			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+		}
+		defer observabilityShutdown(cmd.Context())
 
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
