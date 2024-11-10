@@ -11,18 +11,17 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
 )
 
 var (
-	defaultDiscoveryInterval = time.Millisecond * 100
+	defaultDiscoveryInterval = time.Millisecond * 1
 	publishENRTimeout        = time.Minute
 )
 
@@ -67,20 +66,25 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:           ctx,
 		cancel:        cancel,
-		conns:         discOpts.ConnIndex,
-		subnetsIdx:    discOpts.SubnetsIdx,
-		networkConfig: discOpts.NetworkConfig,
-		subnets:       discOpts.DiscV5Opts.Subnets,
+		conns:         opts.ConnIndex,
+		subnetsIdx:    opts.SubnetsIdx,
+		networkConfig: opts.NetworkConfig,
+		subnets:       opts.DiscV5Opts.Subnets,
 		publishLock:   make(chan struct{}, 1),
 	}
 
-	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
-	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
+	logger.Debug(
+		"configuring discv5 discovery",
+		zap.Any("discV5Opts", opts.DiscV5Opts),
+		zap.Any("hostAddress", opts.HostAddress),
+		zap.Any("hostDNS", opts.HostDNS),
+	)
+	if err := dvs.initDiscV5Listener(logger, opts); err != nil {
 		return nil, err
 	}
 	return &dvs, nil
@@ -137,6 +141,11 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
 
+	// Log every 10th skipped peer.
+	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
+	const logFrequency = 10
+	var skippedPeers uint64 = 0
+
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		logger := logger.With(
 			fields.ENR(e.Node),
@@ -144,7 +153,10 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		)
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			logger.Debug("skipped discovered peer", zap.Error(err))
+			if skippedPeers%logFrequency == 0 {
+				logger.Debug("skipped discovered peer", zap.Error(err))
+			}
+			skippedPeers++
 			return
 		}
 		handler(e)
@@ -222,30 +234,6 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	emptyProtocolID := [6]byte{}
 	if protocolID == emptyProtocolID {
 		protocolID = DefaultSSVProtocolID
-	}
-
-	// After the Alan fork, on a restart, we only use the discovery with the ProtocolID restriction
-	if dvs.networkConfig.PastAlanFork() {
-		dv5Cfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID))
-		if err != nil {
-			return err
-		}
-		dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
-		if err != nil {
-			return errors.Wrap(err, "could not create discV5 listener")
-		}
-		dvs.dv5Listener = dv5Listener
-		dvs.bootnodes = dv5Cfg.Bootnodes
-
-		logger.Debug("started discv5 listener (UDP)",
-			fields.BindIP(bindIP),
-			zap.Uint16("UdpPort", opts.Port),
-			fields.ENRLocalNode(localNode),
-			fields.Domain(discOpts.NetworkConfig.DomainType()),
-			fields.ProtocolID(discOpts.NetworkConfig.DiscoveryProtocolID),
-		)
-
-		return nil
 	}
 
 	// New discovery, with ProtocolID restriction, to be kept post-fork

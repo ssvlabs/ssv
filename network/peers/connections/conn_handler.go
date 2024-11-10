@@ -83,7 +83,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 	}
 
 	var ignoredConnection = errors.New("ignored connection")
-	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
+	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = errors.Errorf("panic: %v", r)
+			}
+		}()
+
 		pid := conn.RemotePeer()
 
 		if !beginHandshake(pid) {
@@ -144,8 +150,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		// Connection is outbound -> Initiate handshake.
 		logger.Debug("initiating handshake")
 		ch.peerInfos.SetState(pid, peers.StateConnecting)
-		err := ch.handshaker.Handshake(logger, conn)
-		if err != nil {
+		if err := ch.handshaker.Handshake(logger, conn); err != nil {
 			return errors.Wrap(err, "could not handshake")
 		}
 		return nil

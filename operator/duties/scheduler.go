@@ -50,7 +50,7 @@ func init() {
 const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
-	blockPropagationDelay = 200 * time.Millisecond
+	blockPropagationDelay = 300 * time.Millisecond
 )
 
 // DutiesExecutor is an interface for executing duties.

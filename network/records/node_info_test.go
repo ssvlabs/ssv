@@ -18,6 +18,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
+			Subnets:       AllSubnets,
 		},
 	}
 
@@ -31,7 +32,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 }
 
 func TestNodeInfo_Marshal_Unmarshal(t *testing.T) {
-	oldSerializedData := []byte(`{"Entries":["", "testnet", "{\"NodeVersion\":\"v0.1.12\",\"ExecutionNode\":\"geth/x\",\"ConsensusNode\":\"prysm/x\",\"OperatorsID\":\"xxx\"}"]}`)
+	oldSerializedData := []byte(`{"Entries":["", "testnet", "{\"NodeVersion\":\"v0.1.12\",\"ExecutionNode\":\"geth/x\",\"ConsensusNode\":\"prysm/x\",\"Subnets\":\"ffffffffffffffffffffffffffffffff\"}"]}`)
 
 	currentSerializedData := &NodeInfo{
 		NetworkID: "testnet",
@@ -39,6 +40,7 @@ func TestNodeInfo_Marshal_Unmarshal(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
+			Subnets:       AllSubnets,
 		},
 	}
 

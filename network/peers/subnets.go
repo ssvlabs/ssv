@@ -65,7 +65,7 @@ diffLoop:
 					}
 					continue diffLoop
 				}
-				si.subnets[subnet] = append(peers[:i], peers[i:]...)
+				si.subnets[subnet] = append(peers[:i], peers[i+1:]...)
 				continue diffLoop
 			}
 		}

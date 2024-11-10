@@ -243,7 +243,8 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 			if err != nil {
 				return errors.Wrap(err, "failed to hash attestation data")
 			}
-			logger.Debug("signed attestation data", zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
+			logger.Debug("signed attestation data",
+				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
 				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
 				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
@@ -617,6 +618,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 				logger.Debug("failed to get attester domain", zap.Error(err))
 				continue
 			}
+
 			root, err := spectypes.ComputeETHSigningRoot(attestationData, domain)
 			if err != nil {
 				logger.Debug("failed to compute attester root", zap.Error(err))
