@@ -43,6 +43,7 @@ type DomainTypeProvider interface {
 type NetworkConfig struct {
 	Name                 string               `yaml:"Name,omitempty"`
 	Beacon               beacon.BeaconNetwork `yaml:"Beacon,omitempty"`
+	BeaconConfig         BeaconConfig         `yaml:"BeaconConfig,omitempty"`
 	GenesisDomainType    spectypes.DomainType `yaml:"GenesisDomainType,omitempty"`
 	AlanDomainType       spectypes.DomainType `yaml:"AlanDomainType,omitempty"`
 	GenesisEpoch         phase0.Epoch         `yaml:"GenesisEpoch,omitempty"`

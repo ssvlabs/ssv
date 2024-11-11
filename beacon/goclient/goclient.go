@@ -10,6 +10,7 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -20,6 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -154,6 +156,8 @@ type GoClient struct {
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 	commonTimeout        time.Duration
 	longTimeout          time.Duration
+	beaconConfig         *networkconfig.BeaconConfig // using pointer to make sure it's fetched
+	genesis              *v1.Genesis
 }
 
 // New init new client and go-client instance
@@ -208,11 +212,25 @@ func New(
 	client.nodeVersion = nodeVersionResp.Data
 	client.nodeClient = ParseNodeClient(nodeVersionResp.Data)
 
+	beaconConfig, err := client.fetchBeaconConfig()
+	if err != nil {
+		logger.Fatal("Failed to fetch spec config", zap.Error(err))
+	}
+	client.beaconConfig = beaconConfig
+
+	genesis, err := client.fetchGenesis()
+	if err != nil {
+		logger.Fatal("Failed to fetch spec config", zap.Error(err))
+	}
+	client.genesis = genesis
+
 	logger.Info("consensus client connected",
 		fields.Name(httpClient.Name()),
 		fields.Address(httpClient.Address()),
 		zap.String("client", string(client.nodeClient)),
 		zap.String("version", client.nodeVersion),
+		zap.String("config", beaconConfig.String()),
+		zap.String("genesis", genesis.String()),
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)

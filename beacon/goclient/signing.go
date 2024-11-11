@@ -1,58 +1,22 @@
 package goclient
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"hash"
 	"sync"
 
-	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
-	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
-	}
-	if specResponse == nil {
-		return phase0.Domain{}, fmt.Errorf("spec response is nil")
-	}
-	if specResponse.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
-	}
-
-	// TODO: consider storing fork version and genesis validators root in goClient
-	//		instead of fetching it every time
-
-	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
-	}
-	forkVersion, ok := forkVersionRaw.(phase0.Version)
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("failed to decode capella fork version")
-	}
-
+func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
 	forkData := &phase0.ForkData{
-		CurrentVersion: forkVersion,
+		CurrentVersion:        gc.BeaconConfig().CapellaForkVersionVal,
+		GenesisValidatorsRoot: gc.Genesis().GenesisValidatorsRoot,
 	}
-
-	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
-	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
-	}
-	if genesisResponse == nil {
-		return phase0.Domain{}, fmt.Errorf("genesis response is nil")
-	}
-	if genesisResponse.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
-	}
-	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {
@@ -81,7 +45,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
 	} else if domain == spectypes.DomainVoluntaryExit {
-		return gc.computeVoluntaryExitDomain(gc.ctx)
+		return gc.computeVoluntaryExitDomain()
 	}
 
 	data, err := gc.client.Domain(gc.ctx, domain, epoch)

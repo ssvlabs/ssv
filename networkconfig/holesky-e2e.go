@@ -12,6 +12,7 @@ import (
 var HoleskyE2E = NetworkConfig{
 	Name:                 "holesky-e2e",
 	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
+	BeaconConfig:         HoleskyBeaconConfig,
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, 0xee, 0x0},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, 0xee, 0x1},
 	GenesisEpoch:         1,

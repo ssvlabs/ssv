@@ -2,7 +2,9 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -12,6 +14,7 @@ import (
 var Mainnet = NetworkConfig{
 	Name:                 "mainnet",
 	Beacon:               beacon.NewNetwork(spectypes.MainNetwork),
+	BeaconConfig:         MainnetBeaconConfig,
 	GenesisDomainType:    spectypes.GenesisMainnet,
 	AlanDomainType:       spectypes.AlanMainnet,
 	GenesisEpoch:         218450,
@@ -31,4 +34,13 @@ var Mainnet = NetworkConfig{
 		// CryptoManufaktur
 		"enr:-Li4QH7FwJcL8gJj0zHAITXqghMkG-A5bfWh2-3Q7vosy9D1BS8HZk-1ITuhK_rfzG3v_UtBDI6uNJZWpdcWfrQFCxKGAYnQ1DRCh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQKeSDcZWSaY9FC723E9yYX1Li18bswhLNlxBZdLfgOKp4N0Y3CCE4mDdWRwgg-h",
 	},
+}
+
+var MainnetBeaconConfig = BeaconConfig{
+	GenesisForkVersionVal:           phase0.Version{0, 0, 0, 0},
+	MinGenesisTimeVal:               time.Unix(1606824023, 0),
+	SlotDurationVal:                 12 * time.Second,
+	SlotsPerEpochVal:                32,
+	EpochsPerSyncCommitteePeriodVal: 256,
+	CapellaForkVersionVal:           phase0.Version{0x03, 0x00, 0x00, 0x00},
 }
