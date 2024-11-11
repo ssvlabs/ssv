@@ -151,7 +151,6 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
-				// zap.String("msg_id", hex.EncodeToString(msgID[:])), TODO replace with?
 				fields.BlockRoot(key.Root),
 			)
 

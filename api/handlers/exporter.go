@@ -6,6 +6,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/networkconfig"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 
 	"github.com/ssvlabs/ssv/api"
@@ -15,6 +16,7 @@ import (
 
 type Exporter struct {
 	DomainType        spectypes.DomainType
+	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
 }
 
@@ -58,13 +60,13 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	response.Data = []*ParticipantResponse{}
 
 	for _, role := range request.Roles {
-		participanStore := e.ParticipantStores.Get(spectypes.BeaconRole(role))
+		store := e.ParticipantStores.Get(spectypes.BeaconRole(role))
 
 		for _, pubKey := range request.PubKeys {
 			from := phase0.Slot(request.From)
 			to := phase0.Slot(request.To)
 
-			participantsRange, err := participanStore.GetParticipantsInRange(spectypes.BeaconRole(role), spectypes.ValidatorPK(pubKey), from, to)
+			participantsRange, err := store.GetParticipantsInRange(spectypes.BeaconRole(role), spectypes.ValidatorPK(pubKey), from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
@@ -73,19 +75,19 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 				continue
 			}
 
-			participantsList := make([]qbftstorage.Participation, 0, len(participantsRange))
+			participationList := make([]qbftstorage.Participation, 0, len(participantsRange))
 
 			for _, p := range participantsRange {
-				participantsList = append(participantsList, qbftstorage.Participation{
+				participationList = append(participationList, qbftstorage.Participation{
 					ParticipantsRangeEntry: p,
 
-					DomainType: e.DomainType,
+					DomainType: e.NetworkConfig.DomainType(),
 					Role:       spectypes.BeaconRole(role),
 					PK:         spectypes.ValidatorPK(pubKey),
 				})
 			}
 
-			data, err := exporterapi.ParticipantsAPIData(participantsList...)
+			data, err := exporterapi.ParticipantsAPIData(participationList...)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
 			}

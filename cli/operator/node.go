@@ -409,6 +409,7 @@ var StartNodeCmd = &cobra.Command{
 				},
 				&handlers.Exporter{
 					DomainType:        networkConfig.AlanDomainType,
+					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
 				},
 			)
