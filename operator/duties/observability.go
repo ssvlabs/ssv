@@ -20,24 +20,26 @@ func init() {
 
 	logger := zap.L().With(zap.String("component", observabilityComponentName))
 
+	const slotDelayMetricName = "ssv.scheduler.slot_ticker.delay.duration"
 	slotDelayHistogram, err = meter.Float64Histogram(
-		"scheduler.slot_ticker.delay.duration",
+		slotDelayMetricName,
 		metric.WithUnit("s"),
 		metric.WithDescription("The delay of the slot ticker"),
 		metric.WithExplicitBucketBoundaries([]float64{5, 10, 20, 100, 500, 5000}...))
 	if err != nil {
 		logger.Error("failed to instantiate metric",
-			zap.String("metric_name", "scheduler.slot_ticker.delay.duration"),
+			zap.String("metric_name", slotDelayMetricName),
 			zap.Error(err))
 	}
 
+	const dutyExecutedCounterMetricName = "ssv.scheduler.duty.execution.count"
 	dutiesExecutedCounter, err = meter.Int64Counter(
-		"scheduler.duty.execution.count",
+		dutyExecutedCounterMetricName,
 		metric.WithUnit("{duty}"),
 		metric.WithDescription("Total number of duties executed by scheduler"))
 	if err != nil {
 		logger.Error("failed to instantiate metric",
-			zap.String("metric_name", "scheduler.duty.execution.count"),
+			zap.String("metric_name", dutyExecutedCounterMetricName),
 			zap.Error(err))
 	}
 }
