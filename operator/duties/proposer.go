@@ -113,7 +113,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDuration()/2)
 	defer cancel()
 
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()

@@ -53,7 +53,7 @@ func setupMockBeaconNetwork(t *testing.T) *mocks.MockBeaconNetwork {
 	ctrl := gomock.NewController(t)
 	mockBeaconNetwork := mocks.NewMockBeaconNetwork(ctrl)
 
-	mockBeaconNetwork.EXPECT().SlotDurationSec().Return(120 * time.Millisecond).AnyTimes()
+	mockBeaconNetwork.EXPECT().SlotDuration().Return(120 * time.Millisecond).AnyTimes()
 	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
 			return time.Now()
@@ -123,7 +123,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 	}
 
 	timeNow := time.Now()
-	mockBeaconNetwork.EXPECT().SlotDurationSec().Return(100 * time.Millisecond).AnyTimes()
+	mockBeaconNetwork.EXPECT().SlotDuration().Return(100 * time.Millisecond).AnyTimes()
 	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
 			return timeNow

@@ -1,12 +1,15 @@
 package networkconfig
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -38,26 +41,118 @@ type DomainTypeProvider interface {
 }
 
 type NetworkConfig struct {
-	Name                 string
-	Beacon               beacon.BeaconNetwork
-	GenesisDomainType    spectypes.DomainType
-	AlanDomainType       spectypes.DomainType
-	GenesisEpoch         phase0.Epoch
-	RegistrySyncOffset   *big.Int
-	RegistryContractAddr string // TODO: ethcommon.Address
-	Bootnodes            []string
-	DiscoveryProtocolID  [6]byte
+	Name                 string               `yaml:"Name,omitempty"`
+	Beacon               beacon.BeaconNetwork `yaml:"Beacon,omitempty"`
+	GenesisDomainType    spectypes.DomainType `yaml:"GenesisDomainType,omitempty"`
+	AlanDomainType       spectypes.DomainType `yaml:"AlanDomainType,omitempty"`
+	GenesisEpoch         phase0.Epoch         `yaml:"GenesisEpoch,omitempty"`
+	RegistrySyncOffset   *big.Int             `yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr ethcommon.Address    `yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes            []string             `yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID  [6]byte              `yaml:"DiscoveryProtocolID,omitempty"`
 
-	AlanForkEpoch phase0.Epoch
+	AlanForkEpoch phase0.Epoch `yaml:"AlanForkEpoch,omitempty"`
 }
 
-func (n NetworkConfig) String() string {
+func (n *NetworkConfig) String() string {
 	b, err := json.MarshalIndent(n, "", "\t")
 	if err != nil {
 		return "<malformed>"
 	}
 
 	return string(b)
+}
+
+func (n NetworkConfig) MarshalYAML() (interface{}, error) {
+	aux := &struct {
+		Name                 string               `yaml:"Name,omitempty"`
+		Beacon               beacon.BeaconNetwork `yaml:"Beacon,omitempty"`
+		GenesisDomainType    string               `yaml:"GenesisDomainType,omitempty"`
+		AlanDomainType       string               `yaml:"AlanDomainType,omitempty"`
+		GenesisEpoch         phase0.Epoch         `yaml:"GenesisEpoch,omitempty"`
+		RegistrySyncOffset   *big.Int             `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr string               `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes            []string             `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID  string               `yaml:"DiscoveryProtocolID,omitempty"`
+		AlanForkEpoch        phase0.Epoch         `yaml:"AlanForkEpoch,omitempty"`
+	}{
+		Name:                 n.Name,
+		Beacon:               n.Beacon,
+		GenesisDomainType:    "0x" + hex.EncodeToString(n.GenesisDomainType[:]),
+		AlanDomainType:       "0x" + hex.EncodeToString(n.AlanDomainType[:]),
+		GenesisEpoch:         n.GenesisEpoch,
+		RegistrySyncOffset:   n.RegistrySyncOffset,
+		RegistryContractAddr: n.RegistryContractAddr.String(),
+		Bootnodes:            n.Bootnodes,
+		DiscoveryProtocolID:  "0x" + hex.EncodeToString(n.DiscoveryProtocolID[:]),
+		AlanForkEpoch:        n.AlanForkEpoch,
+	}
+
+	return aux, nil
+}
+
+func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	aux := &struct {
+		Name                 string          `yaml:"Name,omitempty"`
+		Beacon               *beacon.Network `yaml:"Beacon,omitempty"`
+		GenesisDomainType    string          `yaml:"GenesisDomainType,omitempty"`
+		AlanDomainType       string          `yaml:"AlanDomainType,omitempty"`
+		GenesisEpoch         phase0.Epoch    `yaml:"GenesisEpoch,omitempty"`
+		RegistrySyncOffset   *big.Int        `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr string          `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes            []string        `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID  string          `yaml:"DiscoveryProtocolID,omitempty"`
+		AlanForkEpoch        phase0.Epoch    `yaml:"AlanForkEpoch,omitempty"`
+	}{}
+
+	if err := unmarshal(aux); err != nil {
+		return err
+	}
+
+	genesisDomain, err := hex.DecodeString(strings.TrimPrefix(aux.GenesisDomainType, "0x"))
+	if err != nil {
+		return fmt.Errorf("decode genesis domain: %w", err)
+	}
+
+	var genesisDomainArr spectypes.DomainType
+	if len(genesisDomain) != 0 {
+		genesisDomainArr = spectypes.DomainType(genesisDomain)
+	}
+
+	alanDomain, err := hex.DecodeString(strings.TrimPrefix(aux.AlanDomainType, "0x"))
+	if err != nil {
+		return fmt.Errorf("decode alan domain: %w", err)
+	}
+
+	var alanDomainArr spectypes.DomainType
+	if len(alanDomain) != 0 {
+		alanDomainArr = spectypes.DomainType(alanDomain)
+	}
+
+	discoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(aux.DiscoveryProtocolID, "0x"))
+	if err != nil {
+		return fmt.Errorf("decode discovery protocol ID: %w", err)
+	}
+
+	var discoveryProtocolIDArr [6]byte
+	if len(discoveryProtocolID) != 0 {
+		discoveryProtocolIDArr = [6]byte(discoveryProtocolID)
+	}
+
+	*n = NetworkConfig{
+		Name:                 aux.Name,
+		Beacon:               aux.Beacon,
+		GenesisDomainType:    genesisDomainArr,
+		AlanDomainType:       alanDomainArr,
+		GenesisEpoch:         aux.GenesisEpoch,
+		RegistrySyncOffset:   aux.RegistrySyncOffset,
+		RegistryContractAddr: ethcommon.HexToAddress(aux.RegistryContractAddr),
+		Bootnodes:            aux.Bootnodes,
+		DiscoveryProtocolID:  discoveryProtocolIDArr,
+		AlanForkEpoch:        aux.AlanForkEpoch,
+	}
+
+	return nil
 }
 
 func (n NetworkConfig) AlanForkNetworkName() string {
@@ -77,9 +172,9 @@ func (n NetworkConfig) ForkVersion() [4]byte {
 	return n.Beacon.ForkVersion()
 }
 
-// SlotDurationSec returns slot duration
-func (n NetworkConfig) SlotDurationSec() time.Duration {
-	return n.Beacon.SlotDurationSec()
+// SlotDuration returns slot duration
+func (n NetworkConfig) SlotDuration() time.Duration {
+	return n.Beacon.SlotDuration()
 }
 
 // SlotsPerEpoch returns number of slots per one epoch
@@ -89,7 +184,7 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
-	return time.Unix(n.Beacon.MinGenesisTime(), 0)
+	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0) // #nosec G115
 }
 
 // DomainType returns current domain type based on the current fork.

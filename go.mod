@@ -35,7 +35,7 @@ require (
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
-	github.com/ssvlabs/eth2-key-manager v1.4.2
+	github.com/ssvlabs/eth2-key-manager v1.4.3-0.20241108223911-c274dd0e200c
 	github.com/ssvlabs/ssv-spec v0.3.11-0.20240820113812-496d839e9614
 	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240725052506-c48532da6a63
 	github.com/status-im/keycard-go v0.2.0
@@ -51,6 +51,7 @@ require (
 	golang.org/x/sync v0.7.0
 	golang.org/x/text v0.16.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -235,7 +236,6 @@ require (
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect

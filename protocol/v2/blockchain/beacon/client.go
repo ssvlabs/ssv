@@ -61,7 +61,7 @@ type BeaconNode interface {
 // Options for controller struct creation
 type Options struct {
 	Context        context.Context
-	Network        Network
+	Network        BeaconNetwork
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	GasLimit       uint64
 	CommonTimeout  time.Duration // Optional.

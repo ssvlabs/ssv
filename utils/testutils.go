@@ -61,7 +61,7 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 		},
 	).AnyTimes()
 
-	mockBeaconNetwork.EXPECT().SlotDurationSec().DoAndReturn(
+	mockBeaconNetwork.EXPECT().SlotDuration().DoAndReturn(
 		func() time.Duration {
 			return 12 * time.Second
 		},
@@ -72,6 +72,14 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 			return 32
 		},
 	).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(
+		func(time int64) phase0.Slot {
+			return spectypes.PraterNetwork.EstimatedSlotAtTime(time)
+		},
+	).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().String().Return(string(spectypes.PraterNetwork)).AnyTimes()
 
 	return mockBeaconNetwork
 }

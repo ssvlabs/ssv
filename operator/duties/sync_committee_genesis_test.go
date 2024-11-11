@@ -666,7 +666,7 @@ func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

@@ -32,8 +32,9 @@ type Node interface {
 // Options contains options to create the node
 type Options struct {
 	// NetworkName is the network name of this node
-	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
-	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override the SSV domain type. This is used to isolate the node from the rest of the network. Do not set unless you know what you are doing. This would be incremented by 1 for Alan, for example: 0x01020304 becomes 0x01020305 post-fork."`
+	NetworkName         string                       `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
+	CustomNetwork       *networkconfig.NetworkConfig `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom network parameters"`
+	CustomDomainType    string                       `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override the SSV domain type. This is used to isolate the node from the rest of the network. Do not set unless you know what you are doing. This would be incremented by 1 for Alan, for example: 0x01020304 becomes 0x01020305 post-fork."` // TODO: deprecate it
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     *executionclient.ExecutionClient

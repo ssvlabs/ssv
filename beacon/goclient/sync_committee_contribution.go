@@ -108,7 +108,7 @@ func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.Signed
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
-	delay := gc.network.SlotDurationSec() / 3 /* a third of the slot duration */
+	delay := gc.network.SlotDuration() / 3 /* a third of the slot duration */
 	finalTime := gc.slotStartTime(slot).Add(delay)
 	wait := time.Until(finalTime)
 	if wait <= 0 {

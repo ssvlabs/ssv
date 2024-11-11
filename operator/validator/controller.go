@@ -21,6 +21,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -294,7 +295,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		metrics = options.Metrics
 	}
 
-	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
+	cacheTTL := beaconNetwork.SlotDuration() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -1129,7 +1130,7 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 
 	go func() {
 		slotTicker := slotticker.New(c.logger, slotticker.Config{
-			SlotDuration: c.networkConfig.SlotDurationSec(),
+			SlotDuration: c.networkConfig.SlotDuration(),
 			GenesisTime:  c.networkConfig.GetGenesisTime(),
 		})
 

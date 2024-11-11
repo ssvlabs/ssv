@@ -102,7 +102,7 @@ func TestScheduler_Attester_Genesis_Same_Slot(t *testing.T) {
 	ticker.Send(currentSlot.Get())
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
-	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -875,7 +875,7 @@ func TestScheduler_Attester_Genesis_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"math/big"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -15,7 +16,7 @@ var HoleskyStage = NetworkConfig{
 	AlanDomainType:       [4]byte{0x00, 0x00, 0x31, 0x13},
 	GenesisEpoch:         1,
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
-	RegistryContractAddr: "0x0d33801785340072C452b994496B19f196b7eE15",
+	RegistryContractAddr: ethcommon.HexToAddress("0x0d33801785340072C452b994496B19f196b7eE15"),
 	AlanForkEpoch:        999999999,
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	Bootnodes: []string{

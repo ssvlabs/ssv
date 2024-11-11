@@ -89,7 +89,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(string(s.network.GetBeaconNetwork()) + obj)
+	return []byte(s.network.String() + obj)
 }
 
 // Name returns storage name.
@@ -99,7 +99,9 @@ func (s *storage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *storage) Network() core.Network {
-	return core.Network(s.network.GetBeaconNetwork())
+	// This method is used only in tests,
+	// so s.network is always a network supported by core.Network.
+	return core.Network(s.network.String())
 }
 
 // SaveWallet stores the given wallet.
