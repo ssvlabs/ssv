@@ -35,7 +35,7 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 		}
 
 		if config.metricsEnabled {
-			promExporter, err := prometheus.New(prometheus.WithNamespace("ssv"))
+			promExporter, err := prometheus.New()
 			if err != nil {
 				initError = errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
 				return

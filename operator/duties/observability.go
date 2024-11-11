@@ -1,12 +1,17 @@
 package duties
 
 import (
+	"fmt"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
-const observabilityComponentName = "github.com/ssvlabs/ssv/operator/duties"
+const (
+	observabilityComponentName      = "github.com/ssvlabs/ssv/operator/duties"
+	observabilityComponentNamespace = "ssv.operator.duty"
+)
 
 var (
 	meter = otel.Meter(observabilityComponentName)
@@ -20,7 +25,7 @@ func init() {
 
 	logger := zap.L().With(zap.String("component", observabilityComponentName))
 
-	const slotDelayMetricName = "ssv.scheduler.slot_ticker.delay.duration"
+	slotDelayMetricName := fmt.Sprintf("%s.scheduler.slot_ticker.delay.duration", observabilityComponentNamespace)
 	slotDelayHistogram, err = meter.Float64Histogram(
 		slotDelayMetricName,
 		metric.WithUnit("s"),
@@ -32,7 +37,7 @@ func init() {
 			zap.Error(err))
 	}
 
-	const dutyExecutedCounterMetricName = "ssv.scheduler.duty.execution.count"
+	dutyExecutedCounterMetricName := fmt.Sprintf("%s.scheduler.executions", observabilityComponentNamespace)
 	dutiesExecutedCounter, err = meter.Int64Counter(
 		dutyExecutedCounterMetricName,
 		metric.WithUnit("{duty}"),
