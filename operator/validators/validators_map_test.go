@@ -38,7 +38,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			&new(specssv.Committee).CommitteeMember, nil,
 			map[phase0.ValidatorIndex]*spectypes.Share{
 				0: new(spectypes.Share),
-			})
+			}, validator.NewCommitteeDutyGuard())
 
 		var cmtID spectypes.CommitteeID
 		vm.PutCommittee(cmtID, cmt)
@@ -69,7 +69,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			map[phase0.ValidatorIndex]*spectypes.Share{
 				0: new(spectypes.Share),
 				1: new(spectypes.Share),
-			},
+			}, validator.NewCommitteeDutyGuard(),
 		)
 
 		var cmtID spectypes.CommitteeID

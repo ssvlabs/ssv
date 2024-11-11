@@ -11,13 +11,13 @@ import (
 func TestStopCommittee(t *testing.T) {
 	t.Run("initial state is running", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		cmt := NewCommittee(ctx, cancel, zap.NewNop(), "BeaconNetwork", nil, nil, nil)
+		cmt := NewCommittee(ctx, cancel, zap.NewNop(), "BeaconNetwork", nil, nil, nil, NewCommitteeDutyGuard())
 		assert.False(t, cmt.Stopped())
 	})
 
 	t.Run("stop changes state and cancels context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		cmt := NewCommittee(ctx, cancel, zap.NewNop(), "BeaconNetwork", nil, nil, nil)
+		cmt := NewCommittee(ctx, cancel, zap.NewNop(), "BeaconNetwork", nil, nil, nil, NewCommitteeDutyGuard())
 
 		cmt.stop()
 
