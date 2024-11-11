@@ -34,7 +34,7 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - unstable
+    - deploy/prod-exporter-holesky
 
 Deploy nodes to prod:
   stage: deploy
