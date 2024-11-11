@@ -73,7 +73,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 				continue
 			}
 
-			var participantsList []qbftstorage.Participation
+			participantsList := make([]qbftstorage.Participation, 0, len(participantsRange))
 
 			for _, p := range participantsRange {
 				participantsList = append(participantsList, qbftstorage.Participation{
