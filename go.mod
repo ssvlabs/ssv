@@ -2,8 +2,6 @@ module github.com/ssvlabs/ssv
 
 go 1.22.0
 
-toolchain go1.23.1
-
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.21.7
