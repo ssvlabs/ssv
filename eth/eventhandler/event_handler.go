@@ -25,7 +25,6 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -64,7 +63,6 @@ type EventHandler struct {
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorDecrypter keys.OperatorDecrypter
 	keyManager        ekm.KeyManager
-	beacon            beaconprotocol.BeaconNode
 
 	fullNode bool
 	logger   *zap.Logger
@@ -79,7 +77,6 @@ func New(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
-	beacon beaconprotocol.BeaconNode,
 	opts ...Option,
 ) (*EventHandler, error) {
 	eh := &EventHandler{
@@ -90,7 +87,6 @@ func New(
 		operatorDataStore: operatorDataStore,
 		operatorDecrypter: operatorDecrypter,
 		keyManager:        keyManager,
-		beacon:            beacon,
 		logger:            zap.NewNop(),
 		metrics:           nopMetrics{},
 	}

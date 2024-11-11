@@ -27,7 +27,6 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -170,7 +169,6 @@ func setupEventHandler(
 	}
 
 	ctrl := gomock.NewController(t)
-	bc := beacon.NewMockBeaconNode(ctrl)
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
@@ -190,7 +188,6 @@ func setupEventHandler(
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
-			bc,
 			eventhandler.WithFullNode(),
 			eventhandler.WithLogger(logger),
 		)
@@ -221,7 +218,6 @@ func setupEventHandler(
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
-		bc,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)

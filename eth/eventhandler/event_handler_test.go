@@ -1374,7 +1374,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		bc := beacon.NewMockBeaconNode(ctrl)
 		validatorCtrl := mocks.NewMockController(ctrl)
 
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -1390,7 +1389,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
-			bc,
 			WithFullNode(),
 			WithLogger(logger),
 			WithMetrics(nopMetrics{}),
@@ -1404,7 +1402,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
 		NetworkConfig:     *network,
@@ -1429,7 +1426,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
-		bc,
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {

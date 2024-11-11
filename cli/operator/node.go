@@ -723,7 +723,6 @@ func setupEventHandling(
 		operatorDataStore,
 		operatorDecrypter,
 		keyManager,
-		cfg.SSVOptions.ValidatorOptions.Beacon,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 		eventhandler.WithMetrics(metricsReporter),
