@@ -60,7 +60,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.Participation) (interface{}, error)
 
 	apiMsgs := make([]*ParticipantsAPI, 0)
 	for _, msg := range msgs {
-		var msgID = msg.MsgID()
+		var msgID = msg.LegacyMsgID()
 		blsPubKey := phase0.BLSPubKey{}
 		copy(blsPubKey[:], msg.PK[:])
 		apiMsg := &ParticipantsAPI{

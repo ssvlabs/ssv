@@ -189,8 +189,23 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 			return nil
 		}
 	}
-	// nolint: gosec
-	return []spectypes.BeaconRole{spectypes.BeaconRole(msg.MsgID.GetRoleType())}
+
+	switch msg.MsgID.GetRoleType() {
+	case spectypes.RoleCommittee:
+		// taken care above
+	case spectypes.RoleAggregator:
+		return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
+	case spectypes.RoleProposer:
+		return []spectypes.BeaconRole{spectypes.BNRoleProposer}
+	case spectypes.RoleSyncCommitteeContribution:
+		return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
+	case spectypes.RoleValidatorRegistration:
+		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
+	case spectypes.RoleVoluntaryExit:
+		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
+	}
+
+	return nil
 }
 
 type validatorIndexAndRoot struct {
