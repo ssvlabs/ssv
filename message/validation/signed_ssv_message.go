@@ -20,7 +20,7 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 		e.innerErr = err
 
 		// Ignore genesis messages in the first slot of the fork epoch
-		if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
+		if mv.netCfg.BeaconConfig.EstimatedCurrentSlot() == mv.netCfg.BeaconConfig.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
 			e.reject = false
 		}
 

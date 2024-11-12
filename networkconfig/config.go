@@ -55,7 +55,7 @@ type NetworkConfig struct {
 	AlanForkEpoch phase0.Epoch `yaml:"AlanForkEpoch,omitempty"`
 }
 
-func (n *NetworkConfig) String() string {
+func (n NetworkConfig) String() string {
 	b, err := json.MarshalIndent(n, "", "\t")
 	if err != nil {
 		return "<malformed>"

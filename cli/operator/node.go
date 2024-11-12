@@ -650,17 +650,9 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		nodeType = "full"
 	}
 
-	if !networkConfig.PastAlanFork() {
-		logger = logger.With(zap.Stringer("alan_domain", format.DomainType(networkConfig.AlanDomainType)))
-	}
-
 	logger.Info("setting ssv network",
-		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.DomainType()),
-		zap.String("nodeType", nodeType),
-		zap.Any("beaconNetwork", networkConfig.Beacon.String()),
-		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
-		zap.String("registryContract", networkConfig.RegistryContractAddr.String()),
+		fields.Config(networkConfig),
+		zap.String("node_type", nodeType),
 	)
 
 	return networkConfig, nil

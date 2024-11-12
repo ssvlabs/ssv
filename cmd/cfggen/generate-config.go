@@ -15,7 +15,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -52,14 +51,12 @@ func main() {
 	networkDiscoveryProtocolID := flag.String("network-discovery-protocol-id", "0x"+hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:]), "Network discovery protocol ID")
 	networkAlanForkEpoch := flag.Uint64("network-alan-fork-epoch", uint64(defaultNetwork.AlanForkEpoch), "Network Alan fork epoch")
 
-	beaconNetworkParent := flag.String("beacon-network-parent", string(defaultNetwork.Beacon.(*beacon.Network).Parent), "Beacon network parent")
-	beaconNetworkName := flag.String("beacon-network-name", defaultNetwork.Beacon.(*beacon.Network).Name, "Beacon network name")
-
-	beaconNetworkForkVersion := flag.String("beacon-network-fork-version", "0x"+hex.EncodeToString(defaultNetwork.Beacon.(*beacon.Network).ForkVersionVal[:]), "Beacon network fork version")
-	beaconNetworkMinGenesisTime := flag.Uint64("beacon-network-min-genesis-time", defaultNetwork.Beacon.(*beacon.Network).MinGenesisTimeVal, "Beacon network min genesis time")
-	beaconNetworkSlotDuration := flag.Int64("beacon-network-slot-duration", int64(defaultNetwork.Beacon.(*beacon.Network).SlotDurationVal), "Beacon network slot duration")
-	beaconNetworkSlotsPerEpoch := flag.Uint64("beacon-network-slots-per-epoch", defaultNetwork.Beacon.(*beacon.Network).SlotsPerEpochVal, "Beacon network slots per epoch")
-	beaconNetworkEpochsPerSyncCommitteePeriod := flag.Uint64("beacon-network-epochs-per-sync-committee-period", defaultNetwork.Beacon.(*beacon.Network).EpochsPerSyncCommitteePeriodVal, "Beacon network epochs per sync committee period")
+	beaconNetworkGenesisForkVersion := flag.String("beacon-network-genesis-fork-version", "0x"+hex.EncodeToString(defaultNetwork.BeaconConfig.GenesisForkVersionVal[:]), "Beacon network genesis fork version")
+	beaconNetworkCapellaForkVersion := flag.String("beacon-network-capella-fork-version", "0x"+hex.EncodeToString(defaultNetwork.BeaconConfig.CapellaForkVersionVal[:]), "Beacon network capella fork version")
+	beaconNetworkMinGenesisTime := flag.Int64("beacon-network-min-genesis-time", defaultNetwork.BeaconConfig.MinGenesisTimeVal.Unix(), "Beacon network min genesis time")
+	beaconNetworkSlotDuration := flag.Int64("beacon-network-slot-duration", int64(defaultNetwork.BeaconConfig.SlotDurationVal), "Beacon network slot duration")
+	beaconNetworkSlotsPerEpoch := flag.Uint64("beacon-network-slots-per-epoch", uint64(defaultNetwork.BeaconConfig.SlotsPerEpochVal), "Beacon network slots per epoch")
+	beaconNetworkEpochsPerSyncCommitteePeriod := flag.Uint64("beacon-network-epochs-per-sync-committee-period", uint64(defaultNetwork.BeaconConfig.EpochsPerSyncCommitteePeriodVal), "Beacon network epochs per sync committee period")
 
 	flag.Parse()
 
@@ -91,14 +88,24 @@ func main() {
 		parsedDiscoveryProtocolIDArr = [6]byte(parsedDiscoveryProtocolID)
 	}
 
-	parsedBeaconNetworkForkVersion, err := hex.DecodeString(strings.TrimPrefix(*beaconNetworkForkVersion, "0x"))
+	parsedBeaconNetworkGenesisForkVersion, err := hex.DecodeString(strings.TrimPrefix(*beaconNetworkGenesisForkVersion, "0x"))
 	if err != nil {
-		log.Fatalf("Failed to decode beacon network fork version: %v", err)
+		log.Fatalf("Failed to decode beacon network genesis fork version: %v", err)
 	}
 
-	var parsedBeaconNetworkForkVersionArr [4]byte
-	if len(parsedBeaconNetworkForkVersion) != 0 {
-		parsedBeaconNetworkForkVersionArr = [4]byte(parsedBeaconNetworkForkVersion)
+	var parsedBeaconNetworkGenesisForkVersionArr [4]byte
+	if len(parsedBeaconNetworkGenesisForkVersion) != 0 {
+		parsedBeaconNetworkGenesisForkVersionArr = [4]byte(parsedBeaconNetworkGenesisForkVersion)
+	}
+
+	parsedBeaconNetworkCapellaForkVersion, err := hex.DecodeString(strings.TrimPrefix(*beaconNetworkCapellaForkVersion, "0x"))
+	if err != nil {
+		log.Fatalf("Failed to decode beacon network capella fork version: %v", err)
+	}
+
+	var parsedBeaconNetworkCapellaForkVersionArr [4]byte
+	if len(parsedBeaconNetworkCapellaForkVersion) != 0 {
+		parsedBeaconNetworkCapellaForkVersionArr = [4]byte(parsedBeaconNetworkCapellaForkVersion)
 	}
 
 	var bootnodes []string
@@ -116,14 +123,13 @@ func main() {
 	config.MetricsAPIPort = *metricsAPIPort
 	config.SSV.CustomNetwork = &networkconfig.NetworkConfig{
 		Name: *networkName,
-		Beacon: &beacon.Network{
-			Parent:                          spectypes.BeaconNetwork(*beaconNetworkParent),
-			Name:                            *beaconNetworkName,
-			ForkVersionVal:                  parsedBeaconNetworkForkVersionArr,
-			MinGenesisTimeVal:               *beaconNetworkMinGenesisTime,
+		BeaconConfig: networkconfig.BeaconConfig{
+			GenesisForkVersionVal:           parsedBeaconNetworkGenesisForkVersionArr,
+			CapellaForkVersionVal:           parsedBeaconNetworkCapellaForkVersionArr,
+			MinGenesisTimeVal:               time.Unix(*beaconNetworkMinGenesisTime, 0),
 			SlotDurationVal:                 time.Duration(*beaconNetworkSlotDuration),
-			SlotsPerEpochVal:                *beaconNetworkSlotsPerEpoch,
-			EpochsPerSyncCommitteePeriodVal: *beaconNetworkEpochsPerSyncCommitteePeriod,
+			SlotsPerEpochVal:                phase0.Slot(*beaconNetworkSlotsPerEpoch),
+			EpochsPerSyncCommitteePeriodVal: phase0.Epoch(*beaconNetworkEpochsPerSyncCommitteePeriod),
 		},
 		GenesisDomainType:    spectypes.DomainType(parsedGenesisDomain),
 		AlanDomainType:       spectypes.DomainType(parsedAlanDomain),
