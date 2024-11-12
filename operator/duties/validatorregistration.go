@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const validatorRegistrationEpochInterval = uint64(10)
+const validatorRegistrationEpochInterval = phase0.Epoch(10)
 
 type ValidatorRegistrationHandler struct {
 	baseHandler
@@ -35,7 +35,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	defer h.logger.Info("duty handler exited")
 
 	// should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
-	registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
+	registrationSlotInterval := h.network.SlotsPerEpoch() * phase0.Slot(validatorRegistrationEpochInterval)
 
 	next := h.ticker.Next()
 	for {
@@ -47,11 +47,11 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(validatorRegistrationEpochInterval))
+			shares := h.validatorProvider.SelfParticipatingValidators(epoch + validatorRegistrationEpochInterval)
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
+				if phase0.Slot(share.BeaconMetadata.Index)%registrationSlotInterval != (slot)%registrationSlotInterval {
 					continue
 				}
 

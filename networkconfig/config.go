@@ -78,7 +78,6 @@ func (n NetworkConfig) MarshalYAML() (interface{}, error) {
 		AlanForkEpoch        phase0.Epoch         `yaml:"AlanForkEpoch,omitempty"`
 	}{
 		Name:                 n.Name,
-		Beacon:               n.Beacon,
 		GenesisDomainType:    "0x" + hex.EncodeToString(n.GenesisDomainType[:]),
 		AlanDomainType:       "0x" + hex.EncodeToString(n.AlanDomainType[:]),
 		GenesisEpoch:         n.GenesisEpoch,
@@ -94,16 +93,15 @@ func (n NetworkConfig) MarshalYAML() (interface{}, error) {
 
 func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	aux := &struct {
-		Name                 string          `yaml:"Name,omitempty"`
-		Beacon               *beacon.Network `yaml:"Beacon,omitempty"`
-		GenesisDomainType    string          `yaml:"GenesisDomainType,omitempty"`
-		AlanDomainType       string          `yaml:"AlanDomainType,omitempty"`
-		GenesisEpoch         phase0.Epoch    `yaml:"GenesisEpoch,omitempty"`
-		RegistrySyncOffset   *big.Int        `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr string          `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes            []string        `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID  string          `yaml:"DiscoveryProtocolID,omitempty"`
-		AlanForkEpoch        phase0.Epoch    `yaml:"AlanForkEpoch,omitempty"`
+		Name                 string       `yaml:"Name,omitempty"`
+		GenesisDomainType    string       `yaml:"GenesisDomainType,omitempty"`
+		AlanDomainType       string       `yaml:"AlanDomainType,omitempty"`
+		GenesisEpoch         phase0.Epoch `yaml:"GenesisEpoch,omitempty"`
+		RegistrySyncOffset   *big.Int     `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr string       `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes            []string     `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID  string       `yaml:"DiscoveryProtocolID,omitempty"`
+		AlanForkEpoch        phase0.Epoch `yaml:"AlanForkEpoch,omitempty"`
 	}{}
 
 	if err := unmarshal(aux); err != nil {
@@ -142,7 +140,6 @@ func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	*n = NetworkConfig{
 		Name:                 aux.Name,
-		Beacon:               aux.Beacon,
 		GenesisDomainType:    genesisDomainArr,
 		AlanDomainType:       alanDomainArr,
 		GenesisEpoch:         aux.GenesisEpoch,
@@ -161,36 +158,36 @@ func (n NetworkConfig) AlanForkNetworkName() string {
 }
 
 func (n NetworkConfig) PastAlanFork() bool {
-	return n.Beacon.EstimatedCurrentEpoch() >= n.AlanForkEpoch
+	return n.BeaconConfig.EstimatedCurrentEpoch() >= n.AlanForkEpoch
 }
 
 func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
 	return epoch >= n.AlanForkEpoch
 }
 
-// ForkVersion returns the fork version of the network.
-func (n NetworkConfig) ForkVersion() [4]byte {
-	return n.Beacon.ForkVersion()
+// GenesisForkVersion returns the genesis fork version of the network.
+func (n NetworkConfig) GenesisForkVersion() [4]byte {
+	return n.BeaconConfig.GenesisForkVersion()
 }
 
 // SlotDuration returns slot duration
 func (n NetworkConfig) SlotDuration() time.Duration {
-	return n.Beacon.SlotDuration()
+	return n.BeaconConfig.SlotDuration()
 }
 
 // SlotsPerEpoch returns number of slots per one epoch
-func (n NetworkConfig) SlotsPerEpoch() uint64 {
-	return n.Beacon.SlotsPerEpoch()
+func (n NetworkConfig) SlotsPerEpoch() phase0.Slot {
+	return n.BeaconConfig.SlotsPerEpoch()
 }
 
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
-	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0) // #nosec G115
+	return n.BeaconConfig.MinGenesisTime()
 }
 
 // DomainType returns current domain type based on the current fork.
 func (n NetworkConfig) DomainType() spectypes.DomainType {
-	return n.DomainTypeAtEpoch(n.Beacon.EstimatedCurrentEpoch())
+	return n.DomainTypeAtEpoch(n.BeaconConfig.EstimatedCurrentEpoch())
 }
 
 // DomainTypeAtEpoch returns domain type based on the fork at the given epoch.

@@ -248,7 +248,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is not active
-	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !validator.IsAttesting(mv.netCfg.BeaconConfig.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = validator.BeaconMetadata.Status.String()
 		return CommitteeInfo{}, e
@@ -278,7 +278,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.BeaconConfig.SlotsPerEpoch() * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

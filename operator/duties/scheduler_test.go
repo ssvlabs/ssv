@@ -132,7 +132,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	).AnyTimes()
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
-			return phase0.Epoch(uint64(slot) / s.network.SlotsPerEpoch())
+			return phase0.Epoch(slot / s.network.SlotsPerEpoch())
 		},
 	).AnyTimes()
 
@@ -144,7 +144,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
-			return phase0.Epoch(uint64(currentSlot.Get()) / s.network.SlotsPerEpoch())
+			return phase0.Epoch(currentSlot.Get() / s.network.SlotsPerEpoch())
 		},
 	).AnyTimes()
 

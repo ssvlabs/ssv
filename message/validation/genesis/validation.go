@@ -431,7 +431,7 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			return nil, descriptor, ErrNoShareMetadata
 		}
 
-		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+		if !share.IsAttesting(mv.netCfg.BeaconConfig.EstimatedCurrentEpoch()) {
 			err := ErrValidatorNotAttesting
 			err.got = share.BeaconMetadata.Status.String()
 			return nil, descriptor, err
@@ -541,8 +541,8 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 }
 
 func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
-	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
+	return mv.netCfg.BeaconConfig.GetSlotEndTime(mv.netCfg.BeaconConfig.EstimatedSlotAtTime(receivedAt)).
+		Add(-clockErrorTolerance).Before(mv.netCfg.BeaconConfig.GetSlotStartTime(slot))
 }
 
 func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) time.Duration {
@@ -556,11 +556,10 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		return 0
 	}
 
-	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
+	deadline := mv.netCfg.BeaconConfig.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin).Add(clockErrorTolerance)
 
-	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Sub(deadline)
+	return mv.netCfg.BeaconConfig.GetSlotStartTime(mv.netCfg.BeaconConfig.EstimatedSlotAtTime(receivedAt)).Sub(deadline)
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {

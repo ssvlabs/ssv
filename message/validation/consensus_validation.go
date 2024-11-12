@@ -296,7 +296,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 
 func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, consensusState *consensusState) error {
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
+	msgEpoch := mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(msgSlot)
 
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		stateBySlot := consensusState.GetOrCreate(signer)
@@ -412,7 +412,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	consensusMessage *specqbft.Message,
 	receivedAt time.Time,
 ) error {
-	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
+	slotStartTime := mv.netCfg.BeaconConfig.GetSlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
 	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
 
 	sinceSlotStart := time.Duration(0)
