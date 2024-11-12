@@ -267,7 +267,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
-		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork

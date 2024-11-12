@@ -2,8 +2,8 @@ package flags
 
 import (
 	"github.com/spf13/cobra"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/cliflag"
 )
 
@@ -36,7 +36,7 @@ func GetKeyIndexFlagValue(c *cobra.Command) (uint64, error) {
 
 // AddNetworkFlag adds the network key flag to the command
 func AddNetworkFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, networkFlag, networkconfig.Mainnet.Beacon.String(), "network", false)
+	cliflag.AddPersistentStringFlag(c, networkFlag, string(spectypes.MainNetwork), "network", false)
 }
 
 // GetNetworkFlag gets the network key flag from the command

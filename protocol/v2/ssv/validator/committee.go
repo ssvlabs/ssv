@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -108,7 +107,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.networkConfig.Beacon.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.BeaconConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 
 	go func() {
 		defer cancelF()
