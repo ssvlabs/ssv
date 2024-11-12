@@ -14,7 +14,9 @@ import (
 
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -35,6 +37,7 @@ type Committee struct {
 
 	mtx           sync.RWMutex
 	BeaconNetwork spectypes.BeaconNetwork
+	networkConfig networkconfig.NetworkConfig
 
 	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
@@ -51,7 +54,7 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
@@ -62,7 +65,7 @@ func NewCommittee(
 	}
 	return &Committee{
 		logger:          logger,
-		BeaconNetwork:   beaconNetwork,
+		networkConfig:   networkConfig,
 		ctx:             ctx,
 		cancel:          cancel,
 		Queues:          make(map[phase0.Slot]queueContainer),
@@ -105,7 +108,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.networkConfig.Beacon.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
 
 	go func() {
 		defer cancelF()
@@ -279,7 +282,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
+			epoch := c.networkConfig.Beacon.EstimatedEpochAtSlot(slot)
 			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))

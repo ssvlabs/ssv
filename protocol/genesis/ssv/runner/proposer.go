@@ -4,8 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"time"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
@@ -337,7 +338,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *genesisspectypes.
 	r.metrics.StartPreConsensus()
 
 	// sign partial randao
-	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
+	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot)
 	msg, err := r.BaseRunner.signBeaconObject(r, genesisspectypes.SSZUint64(epoch), duty.Slot, genesisspectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")

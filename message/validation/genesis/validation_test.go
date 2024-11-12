@@ -303,7 +303,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Send exact allowed data size amount but with invalid data (fails to decode)
 	t.Run("data size borderline / malformed message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,

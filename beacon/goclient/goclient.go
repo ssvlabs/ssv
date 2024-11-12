@@ -24,8 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 const (
@@ -145,7 +143,6 @@ var _ NodeClientProvider = (*GoClient)(nil)
 type GoClient struct {
 	log                  *zap.Logger
 	ctx                  context.Context
-	network              beaconprotocol.BeaconNetwork
 	client               Client
 	nodeVersion          string
 	nodeClient           NodeClient
@@ -163,11 +160,11 @@ type GoClient struct {
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
+	opt Options,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network.String()))
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
 
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
@@ -193,7 +190,6 @@ func New(
 	client := &GoClient{
 		log:               logger,
 		ctx:               opt.Context,
-		network:           opt.Network,
 		client:            httpClient.(*eth2clienthttp.Service),
 		gasLimit:          opt.GasLimit,
 		operatorDataStore: operatorDataStore,
@@ -275,16 +271,17 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 }
 
 // GetBeaconNetwork returns the beacon network the node is on
+// TODO: Remove this. This is a deprecated workaround for spec interface
+// DEPRECATED
 func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return gc.network.GetBeaconNetwork()
-}
-
-// SlotStartTime returns the start time in terms of its unix epoch
-// value.
-func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * casts.DurationFromUint64(uint64(slot)*uint64(gc.network.SlotDuration().Seconds())) // #nosec G115
-	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)                                  // #nosec G115
-	return startTime
+	switch gc.BeaconConfig().GenesisForkVersionVal {
+	case networkconfig.MainnetBeaconConfig.GenesisForkVersionVal:
+		return spectypes.MainNetwork
+	case networkconfig.HoleskyBeaconConfig.GenesisForkVersionVal:
+		return spectypes.HoleskyNetwork
+	default:
+		return spectypes.BeaconTestNetwork
+	}
 }
 
 func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {

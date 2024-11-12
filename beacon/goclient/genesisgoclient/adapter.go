@@ -6,7 +6,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/networkconfig"
 	genesisbeacon "github.com/ssvlabs/ssv/protocol/genesis/blockchain/beacon"
 )
 
@@ -25,7 +28,14 @@ func (a *adapter) GetAttestationData(slot phase0.Slot, committeeIndex phase0.Com
 }
 
 func (a *adapter) GetBeaconNetwork() genesisspectypes.BeaconNetwork {
-	return genesisspectypes.BeaconNetwork(a.GoClient.GetBeaconNetwork())
+	switch a.GoClient.BeaconConfig().GenesisForkVersionVal {
+	case networkconfig.MainnetBeaconConfig.GenesisForkVersionVal:
+		return genesisspectypes.BeaconNetwork(spectypes.MainNetwork)
+	case networkconfig.HoleskyBeaconConfig.GenesisForkVersionVal:
+		return genesisspectypes.BeaconNetwork(spectypes.HoleskyNetwork)
+	default:
+		return genesisspectypes.BeaconNetwork(spectypes.BeaconTestNetwork)
+	}
 }
 
 func (a *adapter) GetBlindedBeaconBlock(slot phase0.Slot, graffiti []byte, sig []byte) (ssz.Marshaler, spec.DataVersion, error) {

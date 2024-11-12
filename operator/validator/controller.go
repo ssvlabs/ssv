@@ -379,7 +379,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+		if s.IsParticipating(c.networkConfig.Beacon.EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
@@ -484,7 +484,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		c.committeesObservers.Set(
 			ssvMsg.GetID(),
 			ncv,
-			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+			time.Duration(ttlSlots)*c.networkConfig.Beacon.SlotDuration(),
 		)
 	} else {
 		ncv = item
@@ -992,7 +992,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 			ctx,
 			cancel,
 			logger,
-			c.beacon.GetBeaconNetwork(),
+			c.networkConfig,
 			operator,
 			committeeRunnerFunc,
 			nil,
@@ -1222,7 +1222,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks [][]byte, beacon beaconprotocol.BeaconNode) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
-	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
+	beforeUpdate := c.AllActiveIndices(c.networkConfig.Beacon.EstimatedCurrentEpoch(), false)
 
 	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, beacon, c.UpdateValidatorsMetadata)
 	if err != nil {
@@ -1230,7 +1230,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 	}
 
 	// Refresh duties if there are any new active validators.
-	afterUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
+	afterUpdate := c.AllActiveIndices(c.networkConfig.BeaconConfig.EstimatedCurrentEpoch(), false)
 	if c.recentlyStartedValidators > 0 || hasNewValidators(beforeUpdate, afterUpdate) {
 		c.logger.Debug("new validators found after metadata update",
 			zap.Int("before", len(beforeUpdate)),
@@ -1239,7 +1239,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 		)
 		select {
 		case c.indicesChange <- struct{}{}:
-		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration()):
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
 	}

@@ -131,3 +131,7 @@ func (bc BeaconConfig) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 	// as it will never be included, hence -1.
 	return bc.GetEpochFirstSlot(lastEpoch+1) - 2
 }
+
+func (bc BeaconConfig) EstimatedCurrentEpochStartTime() time.Time {
+	return bc.GetSlotStartTime(bc.GetEpochFirstSlot(bc.EstimatedCurrentEpoch()))
+}

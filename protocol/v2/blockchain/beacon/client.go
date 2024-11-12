@@ -2,7 +2,6 @@ package beacon
 
 import (
 	"context"
-	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -56,14 +55,4 @@ type BeaconNode interface {
 	beaconValidator
 	signer // TODO need to handle differently
 	proposer
-}
-
-// Options for controller struct creation
-type Options struct {
-	Context        context.Context
-	Network        BeaconNetwork
-	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	GasLimit       uint64
-	CommonTimeout  time.Duration // Optional.
-	LongTimeout    time.Duration // Optional.
 }

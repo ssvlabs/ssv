@@ -253,7 +253,7 @@ func (gc *GoClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 			Message: &eth2apiv1.ValidatorRegistration{
 				FeeRecipient: feeRecipient,
 				GasLimit:     gc.gasLimit,
-				Timestamp:    gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
+				Timestamp:    gc.BeaconConfig().EstimatedCurrentEpochStartTime(),
 				Pubkey:       pk,
 			},
 			Signature: sig,
@@ -277,7 +277,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 }
 
 func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operatorID spectypes.OperatorID) {
-	slotsPerEpoch := gc.network.SlotsPerEpoch()
+	slotsPerEpoch := gc.BeaconConfig().SlotsPerEpoch()
 
 	// Lock:
 	// - getting and updating last slot to avoid multiple submission (both should be an atomic action but cannot be done with CAS)
@@ -285,12 +285,12 @@ func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operat
 	gc.registrationMu.Lock()
 
 	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := operatorID % slotsPerEpoch
+	operatorSubmissionSlotModulo := phase0.Slot(operatorID) % (slotsPerEpoch)
 
 	hasRegistrations := len(gc.registrationCache) != 0
-	operatorSubmissionSlot := uint64(currentSlot)%slotsPerEpoch == operatorSubmissionSlotModulo
-	oneEpochPassed := slotsSinceLastRegistration >= phase0.Slot(slotsPerEpoch)
-	twoEpochsAndOperatorDelayPassed := uint64(slotsSinceLastRegistration) >= slotsPerEpoch*2+operatorSubmissionSlotModulo
+	operatorSubmissionSlot := currentSlot%slotsPerEpoch == operatorSubmissionSlotModulo
+	oneEpochPassed := slotsSinceLastRegistration >= slotsPerEpoch
+	twoEpochsAndOperatorDelayPassed := slotsSinceLastRegistration >= slotsPerEpoch*2+operatorSubmissionSlotModulo
 
 	if hasRegistrations && (oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed) {
 		gc.registrationLastSlot = currentSlot
