@@ -23,6 +23,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/ekm"
 	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -231,7 +232,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				}).AnyTimes()
 				if tc.expectMetadataFetch {
 					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
+					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.BeaconConfig.GetSpecBeaconNetwork()).AnyTimes()
 				}
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
@@ -684,7 +685,7 @@ func TestSetupValidators(t *testing.T) {
 			committeMap := make(map[spectypes.CommitteeID]*validator.Committee)
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeMap))
 
-			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
+			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.BeaconConfig.GetSpecBeaconNetwork()).AnyTimes()
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
@@ -761,7 +762,7 @@ func TestGetValidatorStats(t *testing.T) {
 	passedEpoch := phase0.Epoch(1)
 
 	netCfg := networkconfig.TestNetwork
-	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
+	bc.EXPECT().GetBeaconNetwork().Return(netCfg.BeaconConfig.GetSpecBeaconNetwork()).AnyTimes()
 
 	t.Run("Test with multiple operators", func(t *testing.T) {
 		// Setup for this subtest

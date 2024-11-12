@@ -17,7 +17,6 @@ import (
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -30,39 +29,12 @@ func setupSyncCommitteeGenesisDutiesMock(
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*genesisspectypes.Duty)
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch) uint64 {
-			return uint64(epoch) / s.network.Beacon.EpochsPerSyncCommitteePeriod()
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
-		func(period uint64) phase0.Epoch {
-			return phase0.Epoch(period * s.network.Beacon.EpochsPerSyncCommitteePeriod())
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
-		func(period uint64) phase0.Slot {
-			lastEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
-			// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
-			// as it will never be included, hence -1.
-			return s.network.Beacon.GetEpochFirstSlot(lastEpoch+1) - 2
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch) phase0.Slot {
-			return phase0.Slot(uint64(epoch) * s.network.Beacon.SlotsPerEpoch())
-		},
-	).AnyTimes()
-
 	s.beaconNode.(*MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
 			}
-			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			period := s.network.BeaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
 		}).AnyTimes()
@@ -136,7 +108,7 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
-	currentSlot.Set(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
+	currentSlot.Set(scheduler.network.BeaconConfig.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -145,7 +117,7 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.network.Beacon.GetEpochFirstSlot(scheduler.network.Beacon.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.network.BeaconConfig.GetEpochFirstSlot(scheduler.network.BeaconConfig.FirstEpochOfSyncPeriod(1))
 	currentSlot.Set(firstSlotOfNextPeriod)
 	ticker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -666,7 +638,7 @@ func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.BeaconConfig.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

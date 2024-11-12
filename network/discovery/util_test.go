@@ -19,11 +19,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 var (
@@ -93,7 +94,6 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 	n := networkconfig.HoleskyStage
 	return networkconfig.NetworkConfig{
 		Name:                 n.Name,
-		Beacon:               n.Beacon,
 		GenesisDomainType:    n.GenesisDomainType,
 		AlanDomainType:       n.AlanDomainType,
 		GenesisEpoch:         n.GenesisEpoch,
@@ -107,13 +107,13 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 
 // NetworkConfig for staying in pre-fork
 func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
+	forkEpoch := networkconfig.HoleskyStage.BeaconConfig.EstimatedCurrentEpoch() + 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
 // NetworkConfig for staying in post-fork
 func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
+	forkEpoch := networkconfig.HoleskyStage.BeaconConfig.EstimatedCurrentEpoch() - 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 

@@ -70,7 +70,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	currentSlot := &utils.SlotValue{}
 	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
 	mockNetworkConfig := &networkconfig.NetworkConfig{
-		Beacon: mockBeaconNetwork,
+		BeaconConfig: networkconfig.TestBeaconConfig,
 	}
 
 	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
@@ -1361,7 +1361,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
+			BeaconConfig: networkconfig.TestBeaconConfig,
 		}
 	}
 

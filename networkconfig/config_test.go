@@ -6,19 +6,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
-
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestNetworkConfig(t *testing.T) {
 	yamlConfig := `
 Name: test
-Beacon:
-    Parent: prater
-    Name: test
+BeaconConfig:
     ForkVersion: "0x12345678"
     MinGenesisTime: 1634025600
     SlotDuration: 12s
@@ -37,11 +34,10 @@ AlanForkEpoch: 123123123
 `
 	expectedConfig := NetworkConfig{
 		Name: "test",
-		Beacon: &beaconprotocol.Network{
-			Parent:                          "prater",
-			Name:                            "test",
-			ForkVersionVal:                  [4]byte{0x12, 0x34, 0x56, 0x78},
-			MinGenesisTimeVal:               1634025600,
+		BeaconConfig: BeaconConfig{
+			GenesisForkVersionVal:           phase0.Version{0x12, 0x34, 0x56, 0x78},
+			CapellaForkVersionVal:           phase0.Version{0x21, 0x43, 0x65, 0x87},
+			MinGenesisTimeVal:               time.Unix(1634025600, 0),
 			SlotDurationVal:                 12 * time.Second,
 			SlotsPerEpochVal:                32,
 			EpochsPerSyncCommitteePeriodVal: 256,

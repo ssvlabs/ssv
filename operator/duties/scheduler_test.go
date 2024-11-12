@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
-	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 type MockSlotTicker interface {
@@ -131,34 +130,6 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	s.handlers = handlers
 
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().MinGenesisTime().Return(uint64(0)).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotDuration().Return(150 * time.Millisecond).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotsPerEpoch().Return(uint64(32)).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
-			return time.Now()
-		},
-	).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) phase0.Epoch {
-			return phase0.Epoch(slot / s.network.SlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentSlot().DoAndReturn(
-		func() phase0.Slot {
-			return currentSlot.Get()
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
-		func() phase0.Epoch {
-			return phase0.Epoch(currentSlot.Get() / s.network.SlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
 
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
