@@ -4,14 +4,10 @@ import (
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var HoleskyStage = NetworkConfig{
 	Name:                 "holesky-stage",
-	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
 	BeaconConfig:         HoleskyBeaconConfig,
 	GenesisDomainType:    [4]byte{0x00, 0x00, 0x31, 0x12},
 	AlanDomainType:       [4]byte{0x00, 0x00, 0x31, 0x13},

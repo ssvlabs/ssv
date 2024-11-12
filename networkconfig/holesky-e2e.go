@@ -5,13 +5,10 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var HoleskyE2E = NetworkConfig{
 	Name:                 "holesky-e2e",
-	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
 	BeaconConfig:         HoleskyBeaconConfig,
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, 0xee, 0x0},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, 0xee, 0x1},

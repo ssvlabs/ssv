@@ -5,6 +5,8 @@ import (
 	"context"
 	"time"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 
 	"github.com/pkg/errors"
@@ -12,7 +14,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ekm"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -55,7 +56,7 @@ type Options struct {
 	Db          basedb.Database
 	NodeStorage operatorstorage.Storage
 	DbPath      string
-	Network     beacon.Network
+	Network     spectypes.BeaconNetwork
 }
 
 // nolint

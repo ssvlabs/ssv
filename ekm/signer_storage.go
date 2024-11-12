@@ -18,10 +18,10 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/encryptor"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -47,19 +47,17 @@ type Storage interface {
 	SetEncryptionKey(newKey string) error
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
-
-	BeaconNetwork() beacon.BeaconNetwork
 }
 
 type storage struct {
 	db            basedb.Database
-	network       beacon.BeaconNetwork
+	network       spectypes.BeaconNetwork
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, network spectypes.BeaconNetwork, logger *zap.Logger) Storage {
 	return &storage{
 		db:      db,
 		network: network,
@@ -89,7 +87,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(s.network.String() + obj)
+	return []byte(string(s.network) + obj)
 }
 
 // Name returns storage name.
@@ -101,7 +99,7 @@ func (s *storage) Name() string {
 func (s *storage) Network() core.Network {
 	// This method is used only in tests,
 	// so s.network is always a network supported by core.Network.
-	return core.Network(s.network.String())
+	return core.Network(s.network)
 }
 
 // SaveWallet stores the given wallet.
@@ -410,8 +408,4 @@ func (s *storage) decrypt(data []byte) ([]byte, error) {
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
 	// #nosec G407 false positive: https://github.com/securego/gosec/issues/1211
 	return gcm.Open(nil, nonce, ciphertext, nil)
-}
-
-func (s *storage) BeaconNetwork() beacon.BeaconNetwork {
-	return s.network
 }

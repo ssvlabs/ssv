@@ -7,13 +7,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var Mainnet = NetworkConfig{
 	Name:                 "mainnet",
-	Beacon:               beacon.NewNetwork(spectypes.MainNetwork),
 	BeaconConfig:         MainnetBeaconConfig,
 	GenesisDomainType:    spectypes.GenesisMainnet,
 	AlanDomainType:       spectypes.AlanMainnet,

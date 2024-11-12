@@ -59,7 +59,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -125,7 +124,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
+		db, err := setupDB(logger, networkConfig.BeaconConfig.GetSpecBeaconNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -483,7 +482,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+func setupDB(logger *zap.Logger, eth2Network spectypes.BeaconNetwork) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")

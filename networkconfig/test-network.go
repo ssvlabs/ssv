@@ -5,13 +5,10 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var TestNetwork = NetworkConfig{
 	Name:                 "testnet",
-	Beacon:               beacon.NewNetwork(spectypes.BeaconTestNetwork),
 	BeaconConfig:         TestBeaconConfig,
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x1},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},
