@@ -95,8 +95,18 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockValidatorController := NewMockValidatorController(ctrl)
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
+
+	beaconCfg := networkconfig.BeaconConfig{
+		GenesisForkVersionVal:           networkconfig.TestNetwork.BeaconConfig.GenesisForkVersionVal,
+		CapellaForkVersionVal:           networkconfig.TestNetwork.BeaconConfig.CapellaForkVersionVal,
+		MinGenesisTimeVal:               time.Unix(0, 0),
+		SlotDurationVal:                 150 * time.Millisecond,
+		SlotsPerEpochVal:                32,
+		EpochsPerSyncCommitteePeriodVal: networkconfig.TestNetwork.BeaconConfig.EpochsPerSyncCommitteePeriodVal,
+	}
+
 	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon:        mocknetwork.NewMockBeaconNetwork(ctrl),
+		BeaconConfig:  beaconCfg,
 		AlanForkEpoch: alanForkEpoch,
 	}
 

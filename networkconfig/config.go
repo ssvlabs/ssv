@@ -166,8 +166,13 @@ func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
 }
 
 // GenesisForkVersion returns the genesis fork version of the network.
-func (n NetworkConfig) GenesisForkVersion() [4]byte {
+func (n NetworkConfig) GenesisForkVersion() phase0.Version {
 	return n.BeaconConfig.GenesisForkVersion()
+}
+
+// CapellaForkVersion returns the capella fork version of the network.
+func (n NetworkConfig) CapellaForkVersion() phase0.Version {
+	return n.BeaconConfig.CapellaForkVersion()
 }
 
 // SlotDuration returns slot duration

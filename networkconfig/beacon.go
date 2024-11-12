@@ -31,6 +31,10 @@ func (bc BeaconConfig) GenesisForkVersion() phase0.Version {
 	return bc.GenesisForkVersionVal
 }
 
+func (bc BeaconConfig) CapellaForkVersion() phase0.Version {
+	return bc.CapellaForkVersionVal
+}
+
 func (bc BeaconConfig) MinGenesisTime() time.Time {
 	return bc.MinGenesisTimeVal
 }
