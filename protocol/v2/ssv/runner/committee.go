@@ -66,7 +66,7 @@ func NewCommitteeRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
 			DomainType:     networkConfig.AlanDomainType,
-			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
+			NetworkConfig:  networkConfig,
 			Share:          share,
 			QBFTController: qbftController,
 		},
@@ -600,7 +600,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
 		slot := validatorDuty.DutySlot()
-		epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+		epoch := cr.GetBaseRunner().NetworkConfig.BeaconConfig.EstimatedEpochAtSlot(slot)
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type BeaconConfig struct {
@@ -138,4 +139,17 @@ func (bc BeaconConfig) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 
 func (bc BeaconConfig) EstimatedCurrentEpochStartTime() time.Time {
 	return bc.GetSlotStartTime(bc.GetEpochFirstSlot(bc.EstimatedCurrentEpoch()))
+}
+
+// TODO: Remove this. This is a deprecated workaround for spec interface
+// DEPRECATED
+func (bc BeaconConfig) GetSpecBeaconNetwork() spectypes.BeaconNetwork {
+	switch bc.GenesisForkVersionVal {
+	case MainnetBeaconConfig.GenesisForkVersionVal:
+		return spectypes.MainNetwork
+	case HoleskyBeaconConfig.GenesisForkVersionVal:
+		return spectypes.HoleskyNetwork
+	default:
+		return spectypes.BeaconTestNetwork
+	}
 }

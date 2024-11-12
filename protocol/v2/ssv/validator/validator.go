@@ -11,6 +11,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -108,7 +109,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty spectypes.Duty) error {
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.NetworkConfig.BeaconConfig.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
 	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.

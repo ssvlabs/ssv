@@ -8,6 +8,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
 
@@ -109,7 +110,7 @@ func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *spectypes.Part
 
 	// convert expected roots to map and mark unique roots when verified
 	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
-		epoch := b.BeaconNetwork.EstimatedEpochAtSlot(b.State.StartingDuty.DutySlot())
+		epoch := b.NetworkConfig.BeaconConfig.EstimatedEpochAtSlot(b.State.StartingDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(epoch, domain)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get pre consensus root domain")
