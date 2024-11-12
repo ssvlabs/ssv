@@ -261,12 +261,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		},
 	}
 
-	beaconNetwork := options.NetworkConfig.Beacon
-
 	genesisValidatorOptions := genesisvalidator.Options{
-		Network:       options.GenesisControllerOptions.Network,
-		BeaconNetwork: beaconNetwork,
-		Storage:       options.GenesisControllerOptions.StorageMap,
+		Network: options.GenesisControllerOptions.Network,
+		Storage: options.GenesisControllerOptions.StorageMap,
 		// SSVShare:   nil,  // set per validator
 		Signer:            options.GenesisControllerOptions.KeyManager,
 		DutyRunners:       nil, // set per validator
@@ -295,7 +292,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		metrics = options.Metrics
 	}
 
-	cacheTTL := beaconNetwork.SlotDuration() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
+	cacheTTL := options.NetworkConfig.SlotDuration() * time.Duration(options.NetworkConfig.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -379,7 +376,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.IsParticipating(c.networkConfig.Beacon.EstimatedCurrentEpoch()) {
+		if s.IsParticipating(c.networkConfig.BeaconConfig.EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
@@ -484,7 +481,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		c.committeesObservers.Set(
 			ssvMsg.GetID(),
 			ncv,
-			time.Duration(ttlSlots)*c.networkConfig.Beacon.SlotDuration(),
+			time.Duration(ttlSlots)*c.networkConfig.BeaconConfig.SlotDuration(),
 		)
 	} else {
 		ncv = item
@@ -1222,7 +1219,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks [][]byte, beacon beaconprotocol.BeaconNode) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
-	beforeUpdate := c.AllActiveIndices(c.networkConfig.Beacon.EstimatedCurrentEpoch(), false)
+	beforeUpdate := c.AllActiveIndices(c.networkConfig.BeaconConfig.EstimatedCurrentEpoch(), false)
 
 	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, beacon, c.UpdateValidatorsMetadata)
 	if err != nil {
@@ -1239,7 +1236,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 		)
 		select {
 		case c.indicesChange <- struct{}{}:
-		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration()):
+		case <-time.After(2 * c.networkConfig.BeaconConfig.SlotDuration()):
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
 	}
@@ -1273,7 +1270,7 @@ func SetupCommitteeRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.BeaconConfig, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
@@ -1336,7 +1333,7 @@ func SetupRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.BeaconConfig, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 		config.ValueCheckF = valueCheckF
@@ -1410,7 +1407,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			},
 			Storage: options.GenesisOptions.Storage.Get(role),
 			Network: options.GenesisOptions.Network,
-			Timer:   genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			Timer:   genesisroundtimer.New(ctx, options.NetworkConfig.BeaconConfig, role, nil),
 		}
 		config.ValueCheckF = valueCheckF
 		identifier := genesisspectypes.NewMsgID(genesisssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)

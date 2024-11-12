@@ -7,7 +7,6 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
@@ -20,8 +19,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 		ctx,
 		cancel,
 		validator.Options{
-			Network:       spectestingutils.NewTestingNetwork(),
-			BeaconNetwork: networkconfig.TestNetwork.Beacon,
+			Network: spectestingutils.NewTestingNetwork(),
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet),
 			},
