@@ -11,8 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
@@ -65,18 +63,19 @@ func (n NetworkConfig) String() string {
 
 func (n NetworkConfig) MarshalYAML() (interface{}, error) {
 	aux := &struct {
-		Name                 string               `yaml:"Name,omitempty"`
-		Beacon               beacon.BeaconNetwork `yaml:"Beacon,omitempty"`
-		GenesisDomainType    string               `yaml:"GenesisDomainType,omitempty"`
-		AlanDomainType       string               `yaml:"AlanDomainType,omitempty"`
-		GenesisEpoch         phase0.Epoch         `yaml:"GenesisEpoch,omitempty"`
-		RegistrySyncOffset   *big.Int             `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr string               `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes            []string             `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID  string               `yaml:"DiscoveryProtocolID,omitempty"`
-		AlanForkEpoch        phase0.Epoch         `yaml:"AlanForkEpoch,omitempty"`
+		Name                 string       `yaml:"Name,omitempty"`
+		BeaconConfig         BeaconConfig `yaml:"BeaconConfig,omitempty"`
+		GenesisDomainType    string       `yaml:"GenesisDomainType,omitempty"`
+		AlanDomainType       string       `yaml:"AlanDomainType,omitempty"`
+		GenesisEpoch         phase0.Epoch `yaml:"GenesisEpoch,omitempty"`
+		RegistrySyncOffset   *big.Int     `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr string       `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes            []string     `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID  string       `yaml:"DiscoveryProtocolID,omitempty"`
+		AlanForkEpoch        phase0.Epoch `yaml:"AlanForkEpoch,omitempty"`
 	}{
 		Name:                 n.Name,
+		BeaconConfig:         n.BeaconConfig,
 		GenesisDomainType:    "0x" + hex.EncodeToString(n.GenesisDomainType[:]),
 		AlanDomainType:       "0x" + hex.EncodeToString(n.AlanDomainType[:]),
 		GenesisEpoch:         n.GenesisEpoch,
@@ -93,6 +92,7 @@ func (n NetworkConfig) MarshalYAML() (interface{}, error) {
 func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	aux := &struct {
 		Name                 string       `yaml:"Name,omitempty"`
+		BeaconConfig         BeaconConfig `yaml:"BeaconConfig,omitempty"`
 		GenesisDomainType    string       `yaml:"GenesisDomainType,omitempty"`
 		AlanDomainType       string       `yaml:"AlanDomainType,omitempty"`
 		GenesisEpoch         phase0.Epoch `yaml:"GenesisEpoch,omitempty"`
@@ -139,6 +139,7 @@ func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	*n = NetworkConfig{
 		Name:                 aux.Name,
+		BeaconConfig:         aux.BeaconConfig,
 		GenesisDomainType:    genesisDomainArr,
 		AlanDomainType:       alanDomainArr,
 		GenesisEpoch:         aux.GenesisEpoch,
