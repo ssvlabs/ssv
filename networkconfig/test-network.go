@@ -12,6 +12,7 @@ import (
 var TestNetwork = NetworkConfig{
 	Name:                 "testnet",
 	Beacon:               beacon.NewNetwork(spectypes.BeaconTestNetwork),
+	BeaconConfig:         TestBeaconConfig,
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x1},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},
 	GenesisEpoch:         152834,
@@ -20,4 +21,13 @@ var TestNetwork = NetworkConfig{
 	Bootnodes: []string{
 		"enr:-Li4QFIQzamdvTxGJhvcXG_DFmCeyggSffDnllY5DiU47pd_K_1MRnSaJimWtfKJ-MD46jUX9TwgW5Jqe0t4pH41RYWGAYuFnlyth2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQN4v-N9zFYwEqzGPBBX37q24QPFvAVUtokIo1fblIsmTIN0Y3CCE4uDdWRwgg-j",
 	},
+}
+
+var TestBeaconConfig = BeaconConfig{
+	GenesisForkVersionVal:           HoleskyBeaconConfig.GenesisForkVersionVal,
+	MinGenesisTimeVal:               HoleskyBeaconConfig.MinGenesisTimeVal,
+	SlotDurationVal:                 12,
+	SlotsPerEpochVal:                32,
+	EpochsPerSyncCommitteePeriodVal: 256,
+	CapellaForkVersionVal:           HoleskyBeaconConfig.CapellaForkVersionVal,
 }
