@@ -10,27 +10,34 @@ const (
 	inboxReadFrequency = 1 * time.Millisecond
 )
 
+// QMsg wrapps the ssv message and adds the context
+type QMsg struct {
+	SSVMessage
+
+	Ctx context.Context
+}
+
 // Filter is a function that returns true if the message should be popped.
-type Filter func(*SSVMessage) bool
+type Filter func(*QMsg) bool
 
 // FilterAny returns a Filter that returns true for any message.
-func FilterAny(*SSVMessage) bool { return true }
+func FilterAny(*QMsg) bool { return true }
 
 // Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
 type Queue interface {
 	// Push blocks until the message is pushed to the queue.
-	Push(*SSVMessage)
+	Push(*QMsg)
 
 	// TryPush returns immediately with true if the message was pushed to the queue,
 	// or false if the queue is full.
-	TryPush(*SSVMessage) bool
+	TryPush(*QMsg) bool
 
 	// Pop returns and removes the next message in the queue, or blocks until a message is available.
 	// When the context is canceled, Pop returns immediately with any leftover message or nil.
-	Pop(context.Context, MessagePrioritizer, Filter) *SSVMessage
+	Pop(context.Context, MessagePrioritizer, Filter) *QMsg
 
 	// TryPop returns immediately with the next message in the queue, or nil if there is none.
-	TryPop(MessagePrioritizer, Filter) *SSVMessage
+	TryPop(MessagePrioritizer, Filter) *QMsg
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
@@ -41,7 +48,7 @@ type Queue interface {
 
 type priorityQueue struct {
 	head     *item
-	inbox    chan *SSVMessage
+	inbox    chan *QMsg
 	lastRead time.Time
 }
 
@@ -49,7 +56,7 @@ type priorityQueue struct {
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
 func New(capacity int) Queue {
 	return &priorityQueue{
-		inbox: make(chan *SSVMessage, capacity),
+		inbox: make(chan *QMsg, capacity),
 	}
 }
 
@@ -59,11 +66,11 @@ func NewDefault() Queue {
 	return New(32)
 }
 
-func (q *priorityQueue) Push(msg *SSVMessage) {
+func (q *priorityQueue) Push(msg *QMsg) {
 	q.inbox <- msg
 }
 
-func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
+func (q *priorityQueue) TryPush(msg *QMsg) bool {
 	select {
 	case q.inbox <- msg:
 		return true
@@ -72,7 +79,7 @@ func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 	}
 }
 
-func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer, filter Filter) *SSVMessage {
+func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer, filter Filter) *QMsg {
 	// Read any pending messages from the inbox.
 	q.readInbox()
 
@@ -84,7 +91,7 @@ func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer, filter Filter) *S
 	return nil
 }
 
-func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer, filter Filter) *SSVMessage {
+func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer, filter Filter) *QMsg {
 	// Read any pending messages from the inbox, if enough time has passed.
 	// inboxReadFrequency is a tradeoff between responsiveness and computational cost,
 	// since reading the inbox is more expensive than just reading the head.
@@ -145,7 +152,7 @@ func (q *priorityQueue) readInbox() {
 	}
 }
 
-func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *SSVMessage {
+func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *QMsg {
 	if q.head.next == nil {
 		if m := q.head.message; filter(m) {
 			q.head = nil
@@ -196,8 +203,8 @@ func (q *priorityQueue) Len() int {
 	return n
 }
 
-// item is a node in a linked list of DecodedSSVMessage.
+// item is a node in a linked list of DecodedQMsg.
 type item struct {
-	message *SSVMessage
+	message *QMsg
 	next    *item
 }

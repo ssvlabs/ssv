@@ -127,8 +127,9 @@ func TestMessagePrioritizer(t *testing.T) {
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
 				var err error
-				messages[i], err = DecodeSignedSSVMessage(m.ssvMessage(test.state))
+				dec, err := DecodeSignedSSVMessage(m.ssvMessage(test.state))
 				require.NoError(t, err)
+				messages[i] = &QMsg{SSVMessage: *dec}
 			}
 
 			var shuffles []messageSlice
@@ -313,10 +314,10 @@ func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage
 	}
 }
 
-type messageSlice []*SSVMessage
+type messageSlice []*QMsg
 
 func (m messageSlice) shuffle() messageSlice {
-	shuffled := make([]*SSVMessage, len(m))
+	shuffled := make([]*QMsg, len(m))
 	for i, j := range rand.Perm(len(m)) {
 		shuffled[i] = m[j]
 	}

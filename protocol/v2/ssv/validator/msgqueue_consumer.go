@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -17,7 +17,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(logger *zap.Logger, msg *queue.SSVMessage) error
+type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -28,7 +28,7 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
+func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
@@ -36,8 +36,13 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
+	qmsg := queue.QMsg{
+		SSVMessage: *msg,
+		Ctx:        ctx,
+	}
+
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
-		if pushed := q.Q.TryPush(msg); !pushed {
+		if pushed := q.Q.TryPush(&qmsg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
@@ -109,7 +114,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {
 			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.SSVMessage) bool {
+			filter = func(m *queue.QMsg) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
 					return false
@@ -119,7 +124,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
-			filter = func(m *queue.SSVMessage) bool {
+			filter = func(m *queue.QMsg) bool {
 				qbftMsg, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return true
@@ -150,8 +155,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
+		if err := handler(msg.Ctx, logger, &msg.SSVMessage); err != nil {
+			v.logMsg(logger, &msg.SSVMessage, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
 		}

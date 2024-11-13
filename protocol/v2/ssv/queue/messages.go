@@ -7,7 +7,6 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -100,7 +99,7 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The result will be 0 if equal, -1 if lower, 1 if higher.
-func compareHeightOrSlot(state *State, m *SSVMessage) int {
+func compareHeightOrSlot(state *State, m *QMsg) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Height == state.Height {
 			return 0
@@ -121,7 +120,7 @@ func compareHeightOrSlot(state *State, m *SSVMessage) int {
 
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
 // The result will be 0 if equal, -1 if lower, 1 if higher.
-func scoreRound(state *State, m *SSVMessage) int {
+func scoreRound(state *State, m *QMsg) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Round == state.Round {
 			return 2
@@ -136,7 +135,7 @@ func scoreRound(state *State, m *SSVMessage) int {
 
 // scoreMessageType returns a score based on the top level message type,
 // where event type messages are prioritized over other types.
-func scoreMessageType(m *SSVMessage) int {
+func scoreMessageType(m *QMsg) int {
 	switch mm := m.Body.(type) {
 	case *ssvtypes.EventMsg:
 		switch mm.Type {
@@ -152,7 +151,7 @@ func scoreMessageType(m *SSVMessage) int {
 }
 
 // scoreMessageSubtype returns an integer score for the message's type.
-func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
+func scoreMessageSubtype(state *State, m *QMsg, relativeHeight int) int {
 	_, isConsensusMessage := m.Body.(*specqbft.Message)
 
 	var (
@@ -215,7 +214,7 @@ func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 
 // scoreConsensusType returns an integer score for the type of consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
-func scoreConsensusType(m *SSVMessage) int {
+func scoreConsensusType(m *QMsg) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		switch qbftMsg.MsgType {
 		case specqbft.ProposalMsgType:
@@ -231,7 +230,7 @@ func scoreConsensusType(m *SSVMessage) int {
 	return 0
 }
 
-func isDecidedMessage(s *State, m *SSVMessage) bool {
+func isDecidedMessage(s *State, m *QMsg) bool {
 	consensusMessage, isConsensusMessage := m.Body.(*specqbft.Message)
 	if !isConsensusMessage {
 		return false
@@ -241,7 +240,7 @@ func isDecidedMessage(s *State, m *SSVMessage) bool {
 }
 
 // scoreCommitteeMessageSubtype returns an integer score for the message's type.
-func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
+func scoreCommitteeMessageSubtype(state *State, m *QMsg, relativeHeight int) int {
 	_, isConsensusMessage := m.Body.(*specqbft.Message)
 
 	var (
@@ -304,7 +303,7 @@ func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight in
 
 // scoreCommitteeConsensusType returns an integer score for the type of committee consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
-func scoreCommitteeConsensusType(m *SSVMessage) int {
+func scoreCommitteeConsensusType(m *QMsg) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		switch qbftMsg.MsgType {
 		case specqbft.CommitMsgType:

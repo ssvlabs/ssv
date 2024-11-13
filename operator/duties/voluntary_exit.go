@@ -4,12 +4,11 @@ import (
 	"context"
 	"math/big"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
@@ -59,7 +58,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			next = h.ticker.Next()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-			h.processExecution(currentSlot)
+			h.processExecution(ctx, currentSlot) // TODO use the right ctx here
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
@@ -104,7 +103,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-func (h *VoluntaryExitHandler) processExecution(slot phase0.Slot) {
+func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0.Slot) {
 	var dutiesForExecution, pendingDuties []*spectypes.ValidatorDuty
 
 	for _, duty := range h.dutyQueue {
@@ -134,7 +133,7 @@ func (h *VoluntaryExitHandler) processExecution(slot phase0.Slot) {
 	}
 
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-		h.dutiesExecutor.ExecuteDuties(h.logger, dutiesForExecution)
+		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))
