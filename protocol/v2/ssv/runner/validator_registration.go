@@ -201,12 +201,12 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(duty specty
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], share.ValidatorPubKey[:])
 
-	epoch := r.BaseRunner.NetworkConfig.BeaconConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(duty.DutySlot())
 
 	return &v1.ValidatorRegistration{
 		FeeRecipient: share.FeeRecipientAddress,
 		GasLimit:     spectypes.DefaultGasLimit,
-		Timestamp:    r.BaseRunner.NetworkConfig.BeaconConfig.EpochStartTime(epoch),
+		Timestamp:    r.BaseRunner.NetworkConfig.Beacon.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
 }

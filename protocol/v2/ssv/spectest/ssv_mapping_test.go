@@ -367,7 +367,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.DomainType = networkconfig.TestNetwork.AlanDomainType
+	base.DomainType = networkconfig.TestingNetworkConfig.AlanDomainType
 
 	logger := logging.TestLogger(t)
 
@@ -384,7 +384,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	}
 
 	if (ret.GetBaseRunner().DomainType == spectypes.DomainType{}) {
-		ret.GetBaseRunner().DomainType = networkconfig.TestNetwork.AlanDomainType
+		ret.GetBaseRunner().DomainType = networkconfig.TestingNetworkConfig.AlanDomainType
 	}
 
 	return ret
@@ -556,7 +556,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		ctx,
 		cancel,
 		logger,
-		networkconfig.TestNetwork,
+		networkconfig.TestingNetworkConfig,
 		&specCommittee.CommitteeMember,
 		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)

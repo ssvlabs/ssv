@@ -9,9 +9,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-var Holesky = NetworkConfig{
+var HoleskySSV = SSV{
 	Name:                 "holesky",
-	BeaconConfig:         HoleskyBeaconConfig,
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, 0x5, 0x1},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, 0x5, 0x2},
 	GenesisEpoch:         1,
@@ -24,7 +23,7 @@ var Holesky = NetworkConfig{
 	},
 }
 
-var HoleskyBeaconConfig = BeaconConfig{
+var HoleskyBeaconConfig = Beacon{
 	GenesisForkVersionVal:           phase0.Version{0x01, 0x01, 0x70, 0x00},
 	MinGenesisTimeVal:               time.Unix(1695902400, 0),
 	SlotDurationVal:                 12 * time.Second,

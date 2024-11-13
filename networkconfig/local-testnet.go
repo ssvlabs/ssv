@@ -8,9 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-var LocalTestnet = NetworkConfig{
+var LocalTestnetSSV = SSV{
 	Name:                 "local-testnet",
-	BeaconConfig:         LocalTestnetBeaconConfig,
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x1},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},
 	GenesisEpoch:         1,
@@ -21,7 +20,7 @@ var LocalTestnet = NetworkConfig{
 	},
 }
 
-var LocalTestnetBeaconConfig = BeaconConfig{
+var LocalTestnetBeaconConfig = Beacon{
 	GenesisForkVersionVal:           phase0.Version{0x99, 0x99, 0x99, 0x99},
 	MinGenesisTimeVal:               HoleskyBeaconConfig.MinGenesisTimeVal,
 	SlotDurationVal:                 12,

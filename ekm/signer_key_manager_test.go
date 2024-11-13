@@ -50,9 +50,11 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
-			BeaconConfig:      networkconfig.TestBeaconConfig,
-			GenesisDomainType: networkconfig.TestNetwork.DomainType(),
-			AlanDomainType:    networkconfig.TestNetwork.DomainType(),
+			Beacon: networkconfig.TestingBeaconConfig,
+			SSV: networkconfig.SSV{
+				GenesisDomainType: networkconfig.TestingNetworkConfig.DomainType(),
+				AlanDomainType:    networkconfig.TestingNetworkConfig.DomainType(),
+			},
 		}
 	}
 
@@ -88,7 +90,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.BeaconConfig.GetSpecBeaconNetwork(), logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestingNetworkConfig, logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 
@@ -717,7 +719,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
+			genesisspectypes.DomainType(networkconfig.TestingNetworkConfig.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)
@@ -749,7 +751,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
+			genesisspectypes.DomainType(networkconfig.TestingNetworkConfig.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)

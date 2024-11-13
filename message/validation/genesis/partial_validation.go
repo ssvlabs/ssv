@@ -68,7 +68,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	if msgSlot > signerState.Slot {
-		newEpoch := mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(signerState.Slot)
+		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 		signerState.ResetSlot(msgSlot, genesisspecqbft.FirstRound, newEpoch)
 	}
 
@@ -175,7 +175,7 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 	}
 
 	newDutyInSameEpoch := false
-	if msgSlot > signerState.Slot && mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(signerState.Slot) {
+	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
 		newDutyInSameEpoch = true
 	}
 

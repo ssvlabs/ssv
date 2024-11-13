@@ -375,7 +375,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.IsParticipating(c.networkConfig.BeaconConfig.EstimatedCurrentEpoch()) {
+		if s.IsParticipating(c.networkConfig.Beacon.EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
@@ -480,7 +480,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		c.committeesObservers.Set(
 			ssvMsg.GetID(),
 			ncv,
-			time.Duration(ttlSlots)*c.networkConfig.BeaconConfig.SlotDuration(),
+			time.Duration(ttlSlots)*c.networkConfig.Beacon.SlotDuration(),
 		)
 	} else {
 		ncv = item
@@ -1127,7 +1127,7 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 	go func() {
 		slotTicker := slotticker.New(c.logger, slotticker.Config{
 			SlotDuration: c.networkConfig.SlotDuration(),
-			GenesisTime:  c.networkConfig.GetGenesisTime(),
+			GenesisTime:  c.networkConfig.MinGenesisTime(),
 		})
 
 		next := slotTicker.Next()
@@ -1218,7 +1218,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks [][]byte, beacon beaconprotocol.BeaconNode) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
-	beforeUpdate := c.AllActiveIndices(c.networkConfig.BeaconConfig.EstimatedCurrentEpoch(), false)
+	beforeUpdate := c.AllActiveIndices(c.networkConfig.Beacon.EstimatedCurrentEpoch(), false)
 
 	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, beacon, c.UpdateValidatorsMetadata)
 	if err != nil {
@@ -1226,7 +1226,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 	}
 
 	// Refresh duties if there are any new active validators.
-	afterUpdate := c.AllActiveIndices(c.networkConfig.BeaconConfig.EstimatedCurrentEpoch(), false)
+	afterUpdate := c.AllActiveIndices(c.networkConfig.Beacon.EstimatedCurrentEpoch(), false)
 	if c.recentlyStartedValidators > 0 || hasNewValidators(beforeUpdate, afterUpdate) {
 		c.logger.Debug("new validators found after metadata update",
 			zap.Int("before", len(beforeUpdate)),
@@ -1235,7 +1235,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 		)
 		select {
 		case c.indicesChange <- struct{}{}:
-		case <-time.After(2 * c.networkConfig.BeaconConfig.SlotDuration()):
+		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration()):
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
 	}
@@ -1269,7 +1269,7 @@ func SetupCommitteeRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.BeaconConfig, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
@@ -1280,7 +1280,7 @@ func SetupCommitteeRunners(
 
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
-		epoch := options.NetworkConfig.BeaconConfig.EstimatedEpochAtSlot(slot)
+		epoch := options.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot)
 		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
 		crunner, err := runner.NewCommitteeRunner(
 			options.NetworkConfig,
@@ -1332,7 +1332,7 @@ func SetupRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.BeaconConfig, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 		config.ValueCheckF = valueCheckF
@@ -1353,15 +1353,15 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.BeaconConfig, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role], err = runner.NewProposerRunner(alanDomainType, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
-			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.BeaconConfig, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
 			runners[role], err = runner.NewAggregatorRunner(alanDomainType, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
 		case spectypes.RoleSyncCommitteeContribution:
-			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.BeaconConfig, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(alanDomainType, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
@@ -1406,7 +1406,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 			},
 			Storage: options.GenesisOptions.Storage.Get(role),
 			Network: options.GenesisOptions.Network,
-			Timer:   genesisroundtimer.New(ctx, options.NetworkConfig.BeaconConfig, role, nil),
+			Timer:   genesisroundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 		}
 		config.ValueCheckF = valueCheckF
 		identifier := genesisspectypes.NewMsgID(genesisssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
@@ -1415,7 +1415,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		return qbftCtrl
 	}
 
-	genesisBeaconNetwork := genesisspectypes.BeaconNetwork(options.NetworkConfig.BeaconConfig.GetSpecBeaconNetwork())
+	genesisBeaconNetwork := genesisspectypes.BeaconNetwork(options.NetworkConfig.Beacon.ConfigName())
 
 	runners := genesisrunner.DutyRunners{}
 	genesisDomainType := options.NetworkConfig.GenesisDomainType

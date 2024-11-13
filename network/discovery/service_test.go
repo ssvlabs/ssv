@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -159,12 +160,16 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.networkConfig = networkconfig.HoleskyStage
+	netCfg := networkconfig.NetworkConfig{
+		SSV:    networkconfig.HoleskyStageSSV,
+		Beacon: networkconfig.HoleskyBeaconConfig,
+	}
+	dvs.networkConfig = netCfg
 	// Test PublishENR method
 	dvs.PublishENR(logger)
 
 	// Check LocalNode has been updated
-	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.HoleskyStage)
+	checkLocalNodeDomainTypeAlignment(t, localNode, netCfg)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {

@@ -116,7 +116,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		select {
 		case c.validatorExitCh <- exitDesc:
 			logger.Debug("added voluntary exit task to pipeline")
-		case <-time.After(2 * c.networkConfig.BeaconConfig.SlotDuration()):
+		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration()):
 			logger.Error("failed to schedule ExitValidator duty!")
 		}
 	}()

@@ -69,7 +69,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	currentSlot := &utils.SlotValue{}
 
-	netCfg := networkconfig.TestNetwork
+	netCfg := networkconfig.TestingNetworkConfig
 	eh, _, err := setupEventHandler(t, ctx, logger, &netCfg, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
@@ -965,8 +965,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 
-		require.Equal(t, highestAttestation.Source.Epoch, netCfg.BeaconConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfg.BeaconConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
@@ -1014,8 +1014,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, netCfg.BeaconConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfg.BeaconConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
@@ -1105,8 +1105,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Greater(t, highestAttestation.Source.Epoch, netCfg.BeaconConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Greater(t, highestAttestation.Target.Epoch, netCfg.BeaconConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Greater(t, highestAttestation.Source.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
@@ -1358,7 +1358,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
-			BeaconConfig: networkconfig.TestBeaconConfig,
+			Beacon: networkconfig.TestingBeaconConfig,
 		}
 	}
 

@@ -22,8 +22,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 const (
@@ -147,13 +145,12 @@ type GoClient struct {
 	nodeVersion          string
 	nodeClient           NodeClient
 	gasLimit             uint64
-	operatorDataStore    operatordatastore.OperatorDataStore
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 	commonTimeout        time.Duration
 	longTimeout          time.Duration
-	beaconConfig         *networkconfig.BeaconConfig // using pointer to make sure it's fetched
+	beaconConfig         *networkconfig.Beacon // using pointer to make sure it's fetched
 	genesis              *v1.Genesis
 }
 
@@ -161,8 +158,6 @@ type GoClient struct {
 func New(
 	logger *zap.Logger,
 	opt Options,
-	operatorDataStore operatordatastore.OperatorDataStore,
-	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
 
@@ -192,7 +187,6 @@ func New(
 		ctx:               opt.Context,
 		client:            httpClient.(*eth2clienthttp.Service),
 		gasLimit:          opt.GasLimit,
-		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		commonTimeout:     commonTimeout,
 		longTimeout:       longTimeout,
@@ -228,8 +222,6 @@ func New(
 		zap.String("config", beaconConfig.String()),
 		zap.String("genesis", genesis.String()),
 	)
-
-	go client.registrationSubmitter(slotTickerProvider)
 
 	return client, nil
 }

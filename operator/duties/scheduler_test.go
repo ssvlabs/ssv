@@ -95,18 +95,20 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 
-	beaconCfg := networkconfig.BeaconConfig{
-		GenesisForkVersionVal:           networkconfig.TestNetwork.BeaconConfig.GenesisForkVersionVal,
-		CapellaForkVersionVal:           networkconfig.TestNetwork.BeaconConfig.CapellaForkVersionVal,
+	beaconCfg := networkconfig.Beacon{
+		GenesisForkVersionVal:           networkconfig.TestingNetworkConfig.Beacon.GenesisForkVersionVal,
+		CapellaForkVersionVal:           networkconfig.TestingNetworkConfig.Beacon.CapellaForkVersionVal,
 		MinGenesisTimeVal:               time.Unix(0, 0),
 		SlotDurationVal:                 150 * time.Millisecond,
 		SlotsPerEpochVal:                32,
-		EpochsPerSyncCommitteePeriodVal: networkconfig.TestNetwork.BeaconConfig.EpochsPerSyncCommitteePeriodVal,
+		EpochsPerSyncCommitteePeriodVal: networkconfig.TestingNetworkConfig.Beacon.EpochsPerSyncCommitteePeriodVal,
 	}
 
 	mockNetworkConfig := networkconfig.NetworkConfig{
-		BeaconConfig:  beaconCfg,
-		AlanForkEpoch: alanForkEpoch,
+		Beacon: beaconCfg,
+		SSV: networkconfig.SSV{
+			AlanForkEpoch: alanForkEpoch,
+		},
 	}
 
 	opts := &SchedulerOptions{
@@ -414,7 +416,7 @@ func TestScheduler_Run(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		Network:           networkconfig.TestNetwork,
+		Network:           networkconfig.TestingNetworkConfig,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
@@ -462,7 +464,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		Network:           networkconfig.TestNetwork,
+		Network:           networkconfig.TestingNetworkConfig,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker

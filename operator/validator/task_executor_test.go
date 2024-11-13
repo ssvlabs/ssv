@@ -183,10 +183,10 @@ func TestController_ReactivateCluster(t *testing.T) {
 		sharesStorage:     sharesStorage,
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
-		networkConfig:     networkconfig.TestNetwork,
+		networkConfig:     networkconfig.TestingNetworkConfig,
 		validatorOptions: validator.Options{
 			Storage:       storageMap,
-			NetworkConfig: networkconfig.TestNetwork,
+			NetworkConfig: networkconfig.TestingNetworkConfig,
 			GenesisOptions: validator.GenesisOptions{
 				Storage: genesisStorageMap,
 			},

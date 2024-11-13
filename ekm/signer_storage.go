@@ -18,10 +18,10 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/encryptor"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -51,18 +51,18 @@ type Storage interface {
 
 type storage struct {
 	db            basedb.Database
-	network       spectypes.BeaconNetwork
+	networkConfig networkconfig.NetworkConfig
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, network spectypes.BeaconNetwork, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, networkConfig networkconfig.NetworkConfig, logger *zap.Logger) Storage {
 	return &storage{
-		db:      db,
-		network: network,
-		logger:  logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
-		lock:    sync.RWMutex{},
+		db:            db,
+		networkConfig: networkConfig,
+		logger:        logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
+		lock:          sync.RWMutex{},
 	}
 }
 
@@ -87,7 +87,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(string(s.network) + obj)
+	return []byte(s.networkConfig.ConfigName() + obj)
 }
 
 // Name returns storage name.
@@ -95,11 +95,11 @@ func (s *storage) Name() string {
 	return "SSV Storage"
 }
 
-// Network returns the network storage is related to.
+// Network returns the networkConfig storage is related to.
 func (s *storage) Network() core.Network {
 	// This method is used only in tests,
 	// so s.network is always a network supported by core.Network.
-	return core.Network(s.network)
+	return core.Network(s.networkConfig.ConfigName())
 }
 
 // SaveWallet stores the given wallet.

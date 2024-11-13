@@ -7,9 +7,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-var HoleskyE2E = NetworkConfig{
+var HoleskyE2ESSV = SSV{
 	Name:                 "holesky-e2e",
-	BeaconConfig:         HoleskyBeaconConfig,
 	GenesisDomainType:    spectypes.DomainType{0x0, 0x0, 0xee, 0x0},
 	AlanDomainType:       spectypes.DomainType{0x0, 0x0, 0xee, 0x1},
 	GenesisEpoch:         1,

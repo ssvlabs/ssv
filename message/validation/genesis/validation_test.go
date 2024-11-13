@@ -59,7 +59,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	}
 	require.NoError(t, ns.Shares().Save(nil, share))
 
-	netCfg := networkconfig.TestNetwork
+	netCfg := networkconfig.TestingNetworkConfig
 
 	roleAttester := spectypes.BNRoleAttester
 
@@ -67,7 +67,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("happy flow", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -85,7 +85,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.NoError(t, err)
 	})
@@ -94,7 +94,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("message counts", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
@@ -119,7 +119,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.NoError(t, err)
 
@@ -173,14 +173,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message3, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg3)
 		require.NoError(t, err)
 
-		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.BeaconConfig.SlotDuration()), nil)
+		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.Beacon.SlotDuration()), nil)
 		require.NoError(t, err)
 		require.NotNil(t, state1)
 		require.EqualValues(t, height+1, state1.Slot)
 		require.EqualValues(t, 1, state1.Round)
 		require.EqualValues(t, MessageCounts{Commit: 1}, state1.MessageCounts)
 
-		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.BeaconConfig.SlotDuration()), nil)
+		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.Beacon.SlotDuration()), nil)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
 
 		signedMsg = spectestingutils.TestingCommitMultiSignerMessageWithHeight([]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, height+1)
@@ -196,7 +196,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message4, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg4)
 		require.NoError(t, err)
 
-		_, _, err = validator.validateSSVMessage(message4, receivedAt.Add(netCfg.BeaconConfig.SlotDuration()), nil)
+		_, _, err = validator.validateSSVMessage(message4, receivedAt.Add(netCfg.Beacon.SlotDuration()), nil)
 		require.NoError(t, err)
 		require.NotNil(t, state1)
 		require.EqualValues(t, height+1, state1.Slot)
@@ -208,13 +208,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("pubsub message has no data", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		pmsg := &pubsub.Message{}
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 
 		require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
@@ -224,7 +224,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("pubsub data too big", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey[:])[0])
 		pmsg := &pubsub.Message{
@@ -237,7 +237,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 
 		e := ErrPubSubDataTooBig
@@ -249,7 +249,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("empty pubsub message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey[:])[0])
 		pmsg := &pubsub.Message{
@@ -262,7 +262,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
@@ -271,7 +271,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Send a message with incorrect data (unable to decode incorrect message type)
 	t.Run("bad data format", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
@@ -294,7 +294,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedMessage.Error())
@@ -303,7 +303,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Send exact allowed data size amount but with invalid data (fails to decode)
 	t.Run("data size borderline / malformed message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
@@ -326,7 +326,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
@@ -376,7 +376,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Send an invalid SSV message type returns an error
 	t.Run("invalid SSV message type", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -457,7 +457,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("wrong domain", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -476,7 +476,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrWrongDomain
 		expectedErr.got = hex.EncodeToString(wrongDomain[:])
@@ -489,7 +489,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("invalid role", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -507,7 +507,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
@@ -516,7 +516,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("unexpected consensus message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -534,7 +534,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorContains(t, err, ErrUnexpectedConsensusMessage.Error())
 
@@ -624,10 +624,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrValidatorNotAttesting
@@ -644,8 +644,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
 
-		slot := netCfg.BeaconConfig.EstimatedCurrentSlot()
-		epoch := netCfg.BeaconConfig.EstimatedEpochAtSlot(slot)
+		slot := netCfg.Beacon.EstimatedCurrentSlot()
+		epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
 		height := specqbft.Height(slot)
 
 		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
@@ -675,7 +675,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 
 		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
@@ -696,8 +696,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
 
-		slot := netCfg.BeaconConfig.EstimatedCurrentSlot()
-		epoch := netCfg.BeaconConfig.EstimatedEpochAtSlot(slot)
+		slot := netCfg.Beacon.EstimatedCurrentSlot()
+		epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
 		height := specqbft.Height(slot)
 
 		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
@@ -727,7 +727,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 
 		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
@@ -769,10 +769,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrNoShareMetadata)
@@ -784,7 +784,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("too many duties", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -802,7 +802,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		_, _, err = validator.validateSSVMessage(message, netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait), nil)
+		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait), nil)
 		require.NoError(t, err)
 
 		validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+4)
@@ -821,7 +821,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		timeToWait, err = validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
 
-		_, _, err = validator.validateSSVMessage(message2, netCfg.BeaconConfig.GetSlotStartTime(slot+4).Add(timeToWait), nil)
+		_, _, err = validator.validateSSVMessage(message2, netCfg.Beacon.GetSlotStartTime(slot+4).Add(timeToWait), nil)
 		require.NoError(t, err)
 
 		validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+8)
@@ -839,14 +839,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err = validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		_, _, err = validator.validateSSVMessage(message3, netCfg.BeaconConfig.GetSlotStartTime(slot+8).Add(timeToWait), nil)
+		_, _, err = validator.validateSSVMessage(message3, netCfg.Beacon.GetSlotStartTime(slot+8).Add(timeToWait), nil)
 		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
 	})
 
 	// Throw error if getting a message for proposal and see there is no message from beacon
 	t.Run("no proposal duties", func(t *testing.T) {
 		const epoch = 1
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(epoch)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 		height := specqbft.Height(slot)
 
 		dutyStore := dutystore.New()
@@ -870,7 +870,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(spectypes.BNRoleProposer)
 		require.NoError(t, err)
-		_, _, err = validator.validateSSVMessage(message, netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait), nil)
+		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait), nil)
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
 		dutyStore = dutystore.New()
@@ -880,13 +880,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator = New(netCfg, WithNodeStorage(ns), WithDutyStore(dutyStore)).(*messageValidator)
 		timeToWait, err = validator.waitAfterSlotStart(spectypes.BNRoleProposer)
 		require.NoError(t, err)
-		_, _, err = validator.validateSSVMessage(message, netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait), nil)
+		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait), nil)
 		require.NoError(t, err)
 	})
 
 	// Get error when receiving a message with over 13 partial signatures
 	t.Run("partial message too big", func(t *testing.T) {
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
 		for i := 0; i < 13; i++ {
@@ -901,7 +901,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("signer ID not in committee", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 5, specqbft.Height(slot))
 
@@ -919,7 +919,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrSignerNotInCommittee)
 	})
@@ -928,7 +928,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("partial zero signer ID", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 0, specqbft.Height(slot))
 
@@ -946,7 +946,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrZeroSigner)
 	})
@@ -955,7 +955,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("partial inconsistent signer ID", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
 		msg.Message.Messages[0].Signer = 2
@@ -974,7 +974,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrUnexpectedSigner
 		expectedErr.got = spectypes.OperatorID(2)
@@ -986,7 +986,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("partial duplicated message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
 		msg.Message.Messages = append(msg.Message.Messages, msg.Message.Messages[0])
@@ -1005,7 +1005,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrDuplicatedPartialSignatureMessage)
 	})
@@ -1014,7 +1014,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("no partial signature messages", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
 		msg.Message.Messages = []*spectypes.PartialSignatureMessage{}
@@ -1033,7 +1033,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrNoPartialMessages)
 	})
@@ -1042,7 +1042,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("partial wrong signature size", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
 		msg.Signature = []byte{1}
@@ -1069,14 +1069,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
 
 	// Run partial message type validation tests
 	t.Run("partial message type validation", func(t *testing.T) {
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(162304)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(162304)
 
 		// Check happy flow of a duty for each role
 		t.Run("valid", func(t *testing.T) {
@@ -1131,7 +1131,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 					require.NoError(t, err)
 
-					receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot)
+					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 					_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 					require.NoError(t, err)
 				}
@@ -1163,7 +1163,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 			require.NoError(t, err)
 
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 			require.ErrorContains(t, err, ErrUnknownPartialMessageType.Error())
 		})
@@ -1205,7 +1205,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 					require.NoError(t, err)
 
-					receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot)
+					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 					_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 					require.ErrorContains(t, err, ErrPartialSignatureTypeRoleMismatch.Error())
 				}
@@ -1217,7 +1217,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("invalid QBFT message type", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		msg := &specqbft.Message{
@@ -1243,7 +1243,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrUnknownQBFTMessageType
 		require.ErrorIs(t, err, expectedErr)
@@ -1251,7 +1251,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving an incorrect signature size (too small)
 	t.Run("wrong signature size", func(t *testing.T) {
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -1265,7 +1265,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("zero signature", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		// Get error when receiving a consensus message with a zero signature
@@ -1288,7 +1288,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 			require.ErrorIs(t, err, ErrZeroSignature)
 		})
@@ -1313,7 +1313,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 			require.ErrorIs(t, err, ErrZeroSignature)
 		})
@@ -1323,7 +1323,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("no signers", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -1343,7 +1343,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrNoSigners)
 	})
@@ -1352,7 +1352,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("zero signer", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
@@ -1391,7 +1391,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 			require.ErrorIs(t, err, ErrZeroSigner)
 		})
@@ -1415,7 +1415,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 			require.ErrorIs(t, err, ErrZeroSigner)
 		})
@@ -1427,7 +1427,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("non unique signer", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
 			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
@@ -1448,7 +1448,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrDuplicatedSigner)
 	})
@@ -1457,7 +1457,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("signers not sorted", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
 			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
@@ -1478,7 +1478,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrSignersNotSorted)
 	})
@@ -1487,7 +1487,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("wrong signers length", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
 			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
@@ -1508,7 +1508,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrWrongSignersLength
@@ -1521,7 +1521,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("non decided with multiple signers", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		validSignedMessage := spectestingutils.TestingMultiSignerProposalMessage(
 			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
@@ -1540,7 +1540,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrNonDecidedWithMultipleSigners
@@ -1552,7 +1552,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("late message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -1571,11 +1571,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		tests := map[spectypes.BeaconRole]time.Time{
-			spectypes.BNRoleAttester:                  netCfg.BeaconConfig.GetSlotStartTime(slot + 35).Add(attesterTimeToWait),
-			spectypes.BNRoleAggregator:                netCfg.BeaconConfig.GetSlotStartTime(slot + 35).Add(aggregatorTimeToWait),
-			spectypes.BNRoleProposer:                  netCfg.BeaconConfig.GetSlotStartTime(slot + 4).Add(proposerTimeToWait),
-			spectypes.BNRoleSyncCommittee:             netCfg.BeaconConfig.GetSlotStartTime(slot + 4).Add(scTimeToWait),
-			spectypes.BNRoleSyncCommitteeContribution: netCfg.BeaconConfig.GetSlotStartTime(slot + 4).Add(sccTimeToWait),
+			spectypes.BNRoleAttester:                  netCfg.Beacon.GetSlotStartTime(slot + 35).Add(attesterTimeToWait),
+			spectypes.BNRoleAggregator:                netCfg.Beacon.GetSlotStartTime(slot + 35).Add(aggregatorTimeToWait),
+			spectypes.BNRoleProposer:                  netCfg.Beacon.GetSlotStartTime(slot + 4).Add(proposerTimeToWait),
+			spectypes.BNRoleSyncCommittee:             netCfg.Beacon.GetSlotStartTime(slot + 4).Add(scTimeToWait),
+			spectypes.BNRoleSyncCommitteeContribution: netCfg.Beacon.GetSlotStartTime(slot + 4).Add(sccTimeToWait),
 		}
 
 		for role, receivedAt := range tests {
@@ -1602,7 +1602,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("early message", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -1618,7 +1618,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg)
 		require.NoError(t, err)
 
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot - 1)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot - 1)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrEarlyMessage)
 	})
@@ -1627,7 +1627,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("not a leader", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[2], 2, height)
@@ -1645,7 +1645,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrSignerNotLeader
 		expectedErr.got = spectypes.OperatorID(2)
@@ -1657,7 +1657,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("malformed prepare justification", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -1677,7 +1677,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
 		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
@@ -1687,7 +1687,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("non-proposal with prepare justification", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.TestingProposalMessageWithParams(
 			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
@@ -1711,7 +1711,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrUnexpectedPrepareJustifications
@@ -1723,7 +1723,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("non-proposal with round change justification", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.TestingProposalMessageWithParams(
 			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
@@ -1748,7 +1748,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrUnexpectedRoundChangeJustifications
@@ -1760,7 +1760,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("malformed round change justification", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -1780,7 +1780,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
@@ -1790,7 +1790,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("wrong root hash", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -1810,7 +1810,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrInvalidHash
@@ -1821,7 +1821,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double proposal with different data", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signed1 := spectestingutils.TestingProposalMessageWithRound(ks.Shares[1], 1, 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1838,7 +1838,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
@@ -1868,7 +1868,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double prepare", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signed1 := spectestingutils.TestingPrepareMessage(ks.Shares[1], 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1885,7 +1885,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
@@ -1914,7 +1914,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double commit", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signed1 := spectestingutils.TestingCommitMessage(ks.Shares[1], 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1931,7 +1931,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
@@ -1958,7 +1958,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double round change", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signed1 := spectestingutils.TestingRoundChangeMessage(ks.Shares[1], 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1975,7 +1975,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
@@ -2002,7 +2002,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("too many decided", func(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
 
@@ -2022,7 +2022,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 
 		for i := 0; i < maxDecidedCount(len(share.Committee)); i++ {
 			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
@@ -2067,7 +2067,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				timeToWait, err := validator.waitAfterSlotStart(role)
 				require.NoError(t, err)
-				receivedAt := netCfg.BeaconConfig.GetSlotStartTime(0).Add(timeToWait)
+				receivedAt := netCfg.Beacon.GetSlotStartTime(0).Add(timeToWait)
 				_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
 			})
@@ -2079,7 +2079,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
 		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, 2)
 		encodedMessage, err := signedMessage.Encode()
@@ -2096,7 +2096,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.NoError(t, err)
 
@@ -2120,7 +2120,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Initialize tests for testing when sending a message with a slot before the current one
 	t.Run("slot already advanced", func(t *testing.T) {
 		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
 		// Send a consensus message with a slot before the current one should cause an error
@@ -2142,7 +2142,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			_, _, err = validator.validateSSVMessage(message, netCfg.BeaconConfig.GetSlotStartTime(slot+1).Add(timeToWait), nil)
+			_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+1).Add(timeToWait), nil)
 			require.NoError(t, err)
 
 			signedMessage = spectestingutils.TestingPrepareMessageWithHeight(ks.Shares[1], 1, height)
@@ -2160,7 +2160,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err = validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			_, _, err = validator.validateSSVMessage(message2, netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait), nil)
+			_, _, err = validator.validateSSVMessage(message2, netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait), nil)
 			require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 		})
 
@@ -2188,7 +2188,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			_, _, err = validator.validateSSVMessage(decodedMsg, netCfg.BeaconConfig.GetSlotStartTime(slot+1).Add(timeToWait), nil)
+			_, _, err = validator.validateSSVMessage(decodedMsg, netCfg.Beacon.GetSlotStartTime(slot+1).Add(timeToWait), nil)
 			require.NoError(t, err)
 
 			message = spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height)
@@ -2211,7 +2211,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err = validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			_, _, err = validator.validateSSVMessage(decodedMsg2, netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait), nil)
+			_, _, err = validator.validateSSVMessage(decodedMsg2, netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait), nil)
 			require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 		})
 	})
@@ -2221,7 +2221,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
 		msgID := spectypes.NewMsgID(spectypes.DomainType(netCfg.DomainType()), share.ValidatorPubKey[:], roleAttester)
-		slot := netCfg.BeaconConfig.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		eventMsg := &ssvtypes.EventMsg{}
 		encoded, err := eventMsg.Encode()
@@ -2238,7 +2238,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 		require.NoError(t, err)
-		receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
@@ -2272,10 +2272,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				},
 			}
 
-			slot := netCfg.BeaconConfig.FirstSlotAtEpoch(epoch)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 		})
@@ -2283,7 +2283,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("signed message", func(t *testing.T) {
 			validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			slot := netCfg.BeaconConfig.FirstSlotAtEpoch(epoch)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
 
@@ -2338,7 +2338,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
 			require.NoError(t, err)
 
@@ -2348,7 +2348,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("unexpected operator ID", func(t *testing.T) {
 			validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			slot := netCfg.BeaconConfig.FirstSlotAtEpoch(epoch)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
 
@@ -2404,7 +2404,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrOperatorNotFound.Error())
 
@@ -2414,7 +2414,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("malformed signature", func(t *testing.T) {
 			validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			slot := netCfg.BeaconConfig.FirstSlotAtEpoch(epoch)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
 
@@ -2467,7 +2467,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			timeToWait, err := validator.waitAfterSlotStart(roleAttester)
 			require.NoError(t, err)
-			receivedAt := netCfg.BeaconConfig.GetSlotStartTime(slot).Add(timeToWait)
+			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(timeToWait)
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrSignatureVerification.Error())
 

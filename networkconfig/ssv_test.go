@@ -4,9 +4,7 @@ import (
 	"math/big"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -15,12 +13,6 @@ import (
 func TestNetworkConfig(t *testing.T) {
 	yamlConfig := `
 Name: test
-BeaconConfig:
-    ForkVersion: "0x12345678"
-    MinGenesisTime: 1634025600
-    SlotDuration: 12s
-    SlotsPerEpoch: 32
-    EpochsPerSyncCommitteePeriod: 256
 GenesisDomainType: "0x87654321"
 AlanDomainType: "0xfedcba98"
 GenesisEpoch: 123456
@@ -32,16 +24,8 @@ Bootnodes:
 DiscoveryProtocolID: "0xaabbccddeeff"
 AlanForkEpoch: 123123123
 `
-	expectedConfig := NetworkConfig{
-		Name: "test",
-		BeaconConfig: BeaconConfig{
-			GenesisForkVersionVal:           phase0.Version{0x12, 0x34, 0x56, 0x78},
-			CapellaForkVersionVal:           phase0.Version{0x21, 0x43, 0x65, 0x87},
-			MinGenesisTimeVal:               time.Unix(1634025600, 0),
-			SlotDurationVal:                 12 * time.Second,
-			SlotsPerEpochVal:                32,
-			EpochsPerSyncCommitteePeriodVal: 256,
-		},
+	expectedConfig := SSV{
+		Name:                 "test",
 		GenesisDomainType:    [4]byte{0x87, 0x65, 0x43, 0x21},
 		AlanDomainType:       [4]byte{0xfe, 0xdc, 0xba, 0x98},
 		GenesisEpoch:         123456,
@@ -60,11 +44,11 @@ AlanForkEpoch: 123123123
 	require.NoError(t, yaml.Unmarshal([]byte(yamlConfig), &unmarshaledConfig))
 	require.EqualValues(t, expectedConfig, unmarshaledConfig)
 
-	require.Equal(t, unmarshaledConfig.BeaconConfig.GenesisForkVersionVal, unmarshaledConfig.GenesisForkVersion())
-	require.Equal(t, unmarshaledConfig.BeaconConfig.CapellaForkVersionVal, unmarshaledConfig.GenesisForkVersion())
-	require.Equal(t, unmarshaledConfig.BeaconConfig.SlotDurationVal, unmarshaledConfig.SlotDuration())
-	require.Equal(t, unmarshaledConfig.BeaconConfig.SlotsPerEpochVal, unmarshaledConfig.SlotsPerEpoch())
-	require.Equal(t, unmarshaledConfig.BeaconConfig.MinGenesisTimeVal, unmarshaledConfig.GetGenesisTime())
+	require.Equal(t, unmarshaledConfig.Beacon.GenesisForkVersionVal, unmarshaledConfig.GenesisForkVersion())
+	require.Equal(t, unmarshaledConfig.Beacon.CapellaForkVersionVal, unmarshaledConfig.GenesisForkVersion())
+	require.Equal(t, unmarshaledConfig.Beacon.SlotDurationVal, unmarshaledConfig.SlotDuration())
+	require.Equal(t, unmarshaledConfig.Beacon.SlotsPerEpochVal, unmarshaledConfig.SlotsPerEpoch())
+	require.Equal(t, unmarshaledConfig.Beacon.MinGenesisTimeVal, unmarshaledConfig.MinGenesisTime())
 
 	marshaledConfig, err := yaml.Marshal(unmarshaledConfig)
 	require.NoError(t, err)

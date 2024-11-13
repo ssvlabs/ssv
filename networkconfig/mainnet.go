@@ -9,9 +9,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-var Mainnet = NetworkConfig{
+var MainnetSSV = SSV{
 	Name:                 "mainnet",
-	BeaconConfig:         MainnetBeaconConfig,
 	GenesisDomainType:    spectypes.GenesisMainnet,
 	AlanDomainType:       spectypes.AlanMainnet,
 	GenesisEpoch:         218450,
@@ -33,7 +32,7 @@ var Mainnet = NetworkConfig{
 	},
 }
 
-var MainnetBeaconConfig = BeaconConfig{
+var MainnetBeaconConfig = Beacon{
 	GenesisForkVersionVal:           phase0.Version{0, 0, 0, 0},
 	MinGenesisTimeVal:               time.Unix(1606824023, 0),
 	SlotDurationVal:                 12 * time.Second,

@@ -75,7 +75,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusDescriptor, msgSlot, err
 	}
 
-	slotStartTime := mv.netCfg.BeaconConfig.GetSlotStartTime(msgSlot) /*.
+	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot) /*.
 	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
 
 	sinceSlotStart := time.Duration(0)
@@ -133,7 +133,7 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState = state.CreateSignerState(signer)
 		}
 		if msgSlot > signerState.Slot {
-			newEpoch := mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(signerState.Slot)
+			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
 		} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
 			signerState.Reset(msgRound)
@@ -249,7 +249,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	}
 
 	newDutyInSameEpoch := false
-	if msgSlot > signerState.Slot && mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(signerState.Slot) {
+	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
 		newDutyInSameEpoch = true
 	}
 
@@ -308,7 +308,7 @@ func (mv *messageValidator) validateBeaconDuty(
 			return ErrNoShareMetadata
 		}
 
-		epoch := mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(slot)
+		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
 		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
 		}
@@ -320,7 +320,7 @@ func (mv *messageValidator) validateBeaconDuty(
 			return ErrNoShareMetadata
 		}
 
-		period := mv.netCfg.BeaconConfig.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(slot))
+		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
 		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
 		}
@@ -378,9 +378,9 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole) (time.Duration, error) {
 	switch role {
 	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleSyncCommittee:
-		return mv.netCfg.BeaconConfig.SlotDuration() / 3, nil
+		return mv.netCfg.Beacon.SlotDuration() / 3, nil
 	case genesisspectypes.BNRoleAggregator, genesisspectypes.BNRoleSyncCommitteeContribution:
-		return mv.netCfg.BeaconConfig.SlotDuration() / 3 * 2, nil
+		return mv.netCfg.Beacon.SlotDuration() / 3 * 2, nil
 	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		return 0, nil
 	default:

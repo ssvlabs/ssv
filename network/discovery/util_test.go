@@ -30,7 +30,7 @@ import (
 var (
 	testLogger    = zap.NewNop()
 	testCtx       = context.Background()
-	testNetConfig = networkconfig.TestNetwork
+	testNetConfig = networkconfig.TestingNetworkConfig
 
 	testIP             = "127.0.0.1"
 	testBindIP         = "127.0.0.1"
@@ -91,29 +91,32 @@ func testingDiscovery(t *testing.T) *DiscV5Service {
 
 // NetworkConfig with fork epoch
 func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
-	n := networkconfig.HoleskyStage
+	n := networkconfig.HoleskyStageSSV
 	return networkconfig.NetworkConfig{
-		Name:                 n.Name,
-		GenesisDomainType:    n.GenesisDomainType,
-		AlanDomainType:       n.AlanDomainType,
-		GenesisEpoch:         n.GenesisEpoch,
-		RegistrySyncOffset:   n.RegistrySyncOffset,
-		RegistryContractAddr: n.RegistryContractAddr,
-		Bootnodes:            n.Bootnodes,
-		// Fork epoch
-		AlanForkEpoch: forkEpoch,
+		Beacon: networkconfig.HoleskyBeaconConfig,
+		SSV: networkconfig.SSV{
+			Name:                 n.Name,
+			GenesisDomainType:    n.GenesisDomainType,
+			AlanDomainType:       n.AlanDomainType,
+			GenesisEpoch:         n.GenesisEpoch,
+			RegistrySyncOffset:   n.RegistrySyncOffset,
+			RegistryContractAddr: n.RegistryContractAddr,
+			Bootnodes:            n.Bootnodes,
+			// Fork epoch
+			AlanForkEpoch: forkEpoch,
+		},
 	}
 }
 
 // NetworkConfig for staying in pre-fork
 func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.BeaconConfig.EstimatedCurrentEpoch() + 1000
+	forkEpoch := networkconfig.HoleskyBeaconConfig.EstimatedCurrentEpoch() + 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
 // NetworkConfig for staying in post-fork
 func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.BeaconConfig.EstimatedCurrentEpoch() - 1000
+	forkEpoch := networkconfig.HoleskyBeaconConfig.EstimatedCurrentEpoch() - 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 

@@ -55,10 +55,10 @@ func TestMsgValidator(t *testing.T) {
 	committeeID := share.CommitteeID()
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
-	mv := validation.New(networkconfig.TestNetwork, ns.ValidatorStore(), dutystore.New(), signatureVerifier)
+	mv := validation.New(networkconfig.TestingNetworkConfig, ns.ValidatorStore(), dutystore.New(), signatureVerifier)
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.BeaconConfig.EstimatedCurrentSlot()
+	slot := networkconfig.TestingNetworkConfig.Beacon.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]
@@ -180,7 +180,7 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(dutyExecutorID []byte, height qbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), dutyExecutorID, spectypes.RoleCommittee)
+	id := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleCommittee)
 	qbftMsg := &qbft.Message{
 		MsgType:    qbft.RoundChangeMsgType,
 		Height:     height,

@@ -56,7 +56,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestingNetworkConfig, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -182,12 +182,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.NodeStorage = nodeStorage
 	cfg.Metrics = nil
 	cfg.MessageValidator = validation.New(
-		networkconfig.TestNetwork,
+		networkconfig.TestingNetworkConfig,
 		nodeStorage.ValidatorStore(),
 		dutyStore,
 		signatureVerifier,
 	)
-	cfg.Network = networkconfig.TestNetwork
+	cfg.Network = networkconfig.TestingNetworkConfig
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
@@ -207,7 +207,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
 		cfg.MessageValidator = validation.New(
-			networkconfig.TestNetwork,
+			networkconfig.TestingNetworkConfig,
 			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,

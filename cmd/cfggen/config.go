@@ -21,8 +21,8 @@ type Config struct {
 		Discovery string `yaml:"Discovery,omitempty"`
 	} `yaml:"p2p,omitempty"`
 	SSV struct {
-		NetworkName   string                       `yaml:"Network,omitempty" env:"NETWORK" env-description:"Network is the network of this node,omitempty"`
-		CustomNetwork *networkconfig.NetworkConfig `yaml:"CustomNetwork,omitempty" env:"CUSTOM_NETWORK" env-description:"Custom network parameters,omitempty"`
+		NetworkName   string             `yaml:"Network,omitempty" env:"NETWORK" env-description:"Network is the network of this node,omitempty"`
+		CustomNetwork *networkconfig.SSV `yaml:"CustomNetwork,omitempty" env:"CUSTOM_NETWORK" env-description:"Custom network parameters,omitempty"`
 	} `yaml:"ssv,omitempty"`
 	OperatorPrivateKey string `yaml:"OperatorPrivateKey,omitempty"`
 	MetricsAPIPort     int    `yaml:"MetricsAPIPort,omitempty"`

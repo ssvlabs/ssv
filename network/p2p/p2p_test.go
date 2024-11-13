@@ -147,8 +147,8 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 	if nonCommitteeRole == spectypes.RoleCommittee {
 		panic("committee role shouldn't be used here")
 	}
-	netCfg := networkconfig.TestNetwork
-	height := specqbft.Height(netCfg.BeaconConfig.EstimatedCurrentSlot())
+	netCfg := networkconfig.TestingNetworkConfig
+	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
 
 	fullData := spectestingutils.TestingQBFTFullData
 
@@ -173,8 +173,8 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 }
 
 func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
-	netCfg := networkconfig.TestNetwork
-	height := specqbft.Height(netCfg.BeaconConfig.EstimatedCurrentSlot())
+	netCfg := networkconfig.TestingNetworkConfig
+	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
 
 	share := &ssvtypes.SSVShare{
 		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
@@ -231,7 +231,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]types.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), dutyExecutorID, role)
+	id := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,

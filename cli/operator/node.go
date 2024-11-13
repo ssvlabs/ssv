@@ -118,13 +118,42 @@ var StartNodeCmd = &cobra.Command{
 			metricsreporter.WithLogger(logger),
 		)
 
-		networkConfig, err := setupSSVNetwork(logger)
+		ssvNetworkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
+		cfg.ConsensusClient.Context = cmd.Context()
+		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
+
+		consensusClient, err := goclient.New(logger, cfg.ConsensusClient)
+		if err != nil {
+			logger.Fatal("failed to create beacon go-client", zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+		}
+
+		executionClient, err := executionclient.New(
+			cmd.Context(),
+			cfg.ExecutionClient.Addr,
+			ssvNetworkConfig.RegistryContractAddr,
+			executionclient.WithLogger(logger),
+			executionclient.WithMetrics(metricsReporter),
+			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
+			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
+			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
+			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+		)
+		if err != nil {
+			logger.Fatal("could not connect to execution client", zap.Error(err))
+		}
+
+		networkConfig := networkconfig.NetworkConfig{
+			SSV:    ssvNetworkConfig,
+			Beacon: consensusClient.BeaconConfig(),
+		}
+
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.BeaconConfig.GetSpecBeaconNetwork())
+		db, err := setupDB(logger, networkConfig)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -166,9 +195,11 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
+		go consensusClient.RegistrationSubmitter(operatorDataStore)
+
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, networkConfig.AlanForkNetworkName(), usingLocalEvents); err != nil {
+		if err := validateConfig(nodeStorage, ssvNetworkConfig.AlanForkNetworkName(), usingLocalEvents); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
@@ -183,34 +214,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
-
-		slotTickerProvider := func() slotticker.SlotTicker {
-			return slotticker.New(logger, slotticker.Config{
-				SlotDuration: networkConfig.SlotDuration(),
-				GenesisTime:  networkConfig.GetGenesisTime(),
-			})
-		}
-
-		cfg.ConsensusClient.Context = cmd.Context()
-		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
-
-		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
-
-		executionClient, err := executionclient.New(
-			cmd.Context(),
-			cfg.ExecutionClient.Addr,
-			networkConfig.RegistryContractAddr,
-			executionclient.WithLogger(logger),
-			executionclient.WithMetrics(metricsReporter),
-			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
-			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
-			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
-		)
-		if err != nil {
-			logger.Fatal("could not connect to execution client", zap.Error(err))
-		}
-
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
@@ -338,7 +341,14 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
+		slotTickerProvider := func() slotticker.SlotTicker {
+			return slotticker.New(logger, slotticker.Config{
+				SlotDuration: networkConfig.SlotDuration(),
+				GenesisTime:  networkConfig.MinGenesisTime(),
+			})
+		}
+
+		operatorNode = operator.New(cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -407,7 +417,7 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					DomainType: networkConfig.AlanDomainType,
+					DomainType: ssvNetworkConfig.AlanDomainType,
 					QBFTStores: storageMap,
 				},
 			)
@@ -482,7 +492,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network spectypes.BeaconNetwork) (*kv.BadgerDB, error) {
+func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -496,9 +506,9 @@ func setupDB(logger *zap.Logger, eth2Network spectypes.BeaconNetwork) (*kv.Badge
 	}
 
 	migrationOpts := migrations.Options{
-		Db:      db,
-		DbPath:  cfg.DBOptions.Path,
-		Network: eth2Network,
+		Db:            db,
+		DbPath:        cfg.DBOptions.Path,
+		NetworkConfig: networkConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
@@ -593,55 +603,55 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 	return nodeStorage, operatorData
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
-	var networkConfig networkconfig.NetworkConfig
+func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSV, error) {
+	var ssvConfig networkconfig.SSV
 
 	if cfg.SSVOptions.NetworkName == "" && cfg.SSVOptions.CustomNetwork == nil {
-		return networkConfig, fmt.Errorf("both network name and custom config were NOT found in config, only one is required")
+		return ssvConfig, fmt.Errorf("both network name and custom config were NOT found in config, only one is required")
 	}
 
 	if cfg.SSVOptions.NetworkName != "" && cfg.SSVOptions.CustomNetwork != nil {
-		return networkConfig, fmt.Errorf("both network name and custom config were found in config, only one is required")
+		return ssvConfig, fmt.Errorf("both network name and custom config were found in config, only one is required")
 	}
 
 	if cfg.SSVOptions.NetworkName != "" {
 		nc, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
-			return networkConfig, err
+			return ssvConfig, err
 		}
 
-		networkConfig = nc
+		ssvConfig = nc
 	} else {
 		logger.Info("network name not found in config, using custom network from config")
-		networkConfig = *cfg.SSVOptions.CustomNetwork
+		ssvConfig = *cfg.SSVOptions.CustomNetwork
 	}
 
 	if cfg.SSVOptions.CustomDomainType != "" {
 		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
-			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
+			return networkconfig.SSV{}, errors.New("custom domain type must be a hex string")
 		}
 		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
-			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+			return networkconfig.SSV{}, errors.Wrap(err, "failed to decode custom domain type")
 		}
 		if len(byts) != 4 {
-			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
+			return networkconfig.SSV{}, errors.New("custom domain type must be 4 bytes")
 		}
 
 		// Assign domain type as-is for Genesis.
-		networkConfig.GenesisDomainType = spectypes.DomainType(byts)
+		ssvConfig.GenesisDomainType = spectypes.DomainType(byts)
 
 		// Assign domain type incremented by 1 for Alan.
 		alanDomainType := binary.BigEndian.Uint32(byts) + 1
-		binary.BigEndian.PutUint32(networkConfig.AlanDomainType[:], alanDomainType)
+		binary.BigEndian.PutUint32(ssvConfig.AlanDomainType[:], alanDomainType)
 
 		logger.Info("running with custom domain type",
-			zap.Stringer("genesis", format.DomainType(networkConfig.GenesisDomainType)),
-			zap.Stringer("alan", format.DomainType(networkConfig.AlanDomainType)),
+			zap.Stringer("genesis", format.DomainType(ssvConfig.GenesisDomainType)),
+			zap.Stringer("alan", format.DomainType(ssvConfig.AlanDomainType)),
 		)
 	}
 
-	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
+	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(ssvConfig.GenesisDomainType))
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
@@ -649,11 +659,11 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	}
 
 	logger.Info("setting ssv network",
-		fields.Config(networkConfig),
+		fields.Config(ssvConfig),
 		zap.String("node_type", nodeType),
 	)
 
-	return networkConfig, nil
+	return ssvConfig, nil
 }
 
 func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2P) {
@@ -669,20 +679,6 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 		logger.Fatal("failed to setup p2p network", zap.Error(err))
 	}
 	return n, p2pv1.GenesisP2P{Network: n}
-}
-
-func setupConsensusClient(
-	logger *zap.Logger,
-	operatorDataStore operatordatastore.OperatorDataStore,
-	slotTickerProvider slotticker.Provider,
-) *goclient.GoClient {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
-	if err != nil {
-		logger.Fatal("failed to create beacon go-client", zap.Error(err),
-			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
-	}
-
-	return cl
 }
 
 func setupEventHandling(

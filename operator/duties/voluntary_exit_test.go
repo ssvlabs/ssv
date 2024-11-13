@@ -162,7 +162,7 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.NoError(t, err)
 	require.NotNil(t, block)
 
-	slot := scheduler.network.BeaconConfig.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0))
+	slot := scheduler.network.Beacon.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0))
 	require.EqualValues(t, blockNumber, slot)
 }
 

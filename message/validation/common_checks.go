@@ -30,7 +30,7 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 
 // messageEarliness returns how early message is or 0 if it's not
 func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.Time) time.Duration {
-	return mv.netCfg.BeaconConfig.GetSlotStartTime(slot).Sub(receivedAt)
+	return mv.netCfg.Beacon.GetSlotStartTime(slot).Sub(receivedAt)
 }
 
 // messageLateness returns how late message is or 0 if it's not
@@ -40,12 +40,12 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = mv.netCfg.BeaconConfig.SlotsPerEpoch() + lateSlotAllowance
+		ttl = mv.netCfg.Beacon.SlotsPerEpoch() + lateSlotAllowance
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	}
 
-	deadline := mv.netCfg.BeaconConfig.GetSlotStartTime(slot + ttl).
+	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin)
 
 	return receivedAt.Sub(deadline)
@@ -57,7 +57,7 @@ func (mv *messageValidator) validateDutyCount(
 	validatorIndices []phase0.ValidatorIndex,
 	signerStateBySlot *OperatorState,
 ) error {
-	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(msgSlot))
+	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot))
 
 	dutyLimit, exists := mv.dutyLimit(msgID, msgSlot, validatorIndices)
 	if !exists {
@@ -90,7 +90,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 	case spectypes.RoleCommittee:
 		validatorIndexCount := uint64(len(validatorIndices))
-		slotsPerEpoch := mv.netCfg.BeaconConfig.SlotsPerEpoch()
+		slotsPerEpoch := mv.netCfg.Beacon.SlotsPerEpoch()
 
 		// Skip duty search if validators * 2 exceeds slots per epoch,
 		// as the maximum duties per epoch is capped at the number of slots.
@@ -98,7 +98,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 		if validatorIndexCount < uint64(slotsPerEpoch)/2 {
 			// Check if there is at least one validator in the sync committee.
 			// If so, the duty limit is equal to the number of slots per epoch.
-			period := mv.netCfg.BeaconConfig.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(slot))
+			period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
 			for _, i := range validatorIndices {
 				if mv.dutyStore.SyncCommittee.Duty(period, i) != nil {
 					return uint64(slotsPerEpoch), true
@@ -120,7 +120,7 @@ func (mv *messageValidator) validateBeaconDuty(
 ) error {
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
-		epoch := mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(slot)
+		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
 		if mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
@@ -130,7 +130,7 @@ func (mv *messageValidator) validateBeaconDuty(
 
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleSyncCommitteeContribution {
-		period := mv.netCfg.BeaconConfig.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.BeaconConfig.EstimatedEpochAtSlot(slot))
+		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
 		if mv.dutyStore.SyncCommittee.Duty(period, validatorIndex) == nil {

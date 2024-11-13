@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
@@ -262,10 +263,14 @@ func (gc *GoClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
-	operatorID := gc.operatorDataStore.AwaitOperatorID()
+func (gc *GoClient) RegistrationSubmitter(operatorDataStore operatordatastore.OperatorDataStore) {
+	operatorID := operatorDataStore.AwaitOperatorID()
 
-	ticker := slotTickerProvider()
+	ticker := slotticker.New(gc.log, slotticker.Config{
+		SlotDuration: gc.beaconConfig.SlotDuration(),
+		GenesisTime:  gc.beaconConfig.MinGenesisTime(),
+	})
+
 	for {
 		select {
 		case <-gc.ctx.Done():

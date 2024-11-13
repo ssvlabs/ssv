@@ -266,7 +266,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
 	base := &runner.BaseRunner{
-		DomainType: networkconfig.TestNetwork.GenesisDomainType,
+		DomainType: networkconfig.TestingNetworkConfig.GenesisDomainType,
 	}
 
 	byts, _ := json.Marshal(baseRunnerMap)

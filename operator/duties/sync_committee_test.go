@@ -32,7 +32,7 @@ func setupSyncCommitteeDutiesMock(
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
 			}
-			period := s.network.BeaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
 		}).AnyTimes()
@@ -53,7 +53,7 @@ func setupSyncCommitteeDutiesMock(
 func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.ValidatorDuty {
 	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range duties {
-		if !handler.network.PastAlanForkAtEpoch(handler.network.BeaconConfig.EstimatedEpochAtSlot(slot)) {
+		if !handler.network.PastAlanForkAtEpoch(handler.network.Beacon.EstimatedEpochAtSlot(slot)) {
 			expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 		}
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
@@ -108,7 +108,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
-	currentSlot.Set(scheduler.network.BeaconConfig.LastSlotOfSyncPeriod(0))
+	currentSlot.Set(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -117,7 +117,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.network.BeaconConfig.GetEpochFirstSlot(scheduler.network.BeaconConfig.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.network.Beacon.GetEpochFirstSlot(scheduler.network.Beacon.FirstEpochOfSyncPeriod(1))
 	currentSlot.Set(firstSlotOfNextPeriod)
 	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -638,7 +638,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), scheduler.network.BeaconConfig.SlotDuration()/3)
+	require.Greater(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

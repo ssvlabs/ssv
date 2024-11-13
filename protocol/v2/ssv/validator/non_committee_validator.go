@@ -34,7 +34,7 @@ import (
 type CommitteeObserver struct {
 	logger                 *zap.Logger
 	Storage                *storage.QBFTStores
-	beaconConfig           networkconfig.BeaconConfig
+	beaconConfig           networkconfig.Beacon
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
@@ -76,7 +76,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		qbftController:         ctrl,
 		logger:                 opts.Logger,
 		Storage:                opts.Storage,
-		beaconConfig:           opts.NetworkConfig.BeaconConfig,
+		beaconConfig:           opts.NetworkConfig.Beacon,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
 		attesterRoots:          opts.AttesterRoots,

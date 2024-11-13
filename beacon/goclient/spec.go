@@ -11,7 +11,7 @@ import (
 )
 
 // BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
-func (gc *GoClient) BeaconConfig() networkconfig.BeaconConfig {
+func (gc *GoClient) BeaconConfig() networkconfig.Beacon {
 	if gc.beaconConfig == nil {
 		gc.log.Fatal("BeaconConfig must be called after GoClient is initialized (gc.beaconConfig is set)")
 	}
@@ -19,7 +19,7 @@ func (gc *GoClient) BeaconConfig() networkconfig.BeaconConfig {
 }
 
 // fetchBeaconConfig must be called once on GoClient's initialization
-func (gc *GoClient) fetchBeaconConfig() (*networkconfig.BeaconConfig, error) {
+func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain spec response: %w", err)
@@ -32,6 +32,16 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.BeaconConfig, error) {
 	}
 
 	// types of most values are already cast: https://github.com/attestantio/go-eth2-client/blob/v0.21.7/http/spec.go#L78
+
+	configNameRaw, ok := specResponse.Data["CONFIG_NAME"]
+	if !ok {
+		return nil, fmt.Errorf("config name not known by chain")
+	}
+
+	configName, ok := configNameRaw.(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to decode config name")
+	}
 
 	genesisForkVersionRaw, ok := specResponse.Data["GENESIS_FORK_VERSION"]
 	if !ok {
@@ -93,7 +103,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.BeaconConfig, error) {
 		return nil, fmt.Errorf("failed to decode epochs per sync committee")
 	}
 
-	return &networkconfig.BeaconConfig{
+	return &networkconfig.Beacon{
+		ConfigNameVal:                   configName,
 		GenesisForkVersionVal:           genesisForkVersion,
 		CapellaForkVersionVal:           capellaForkVersion,
 		MinGenesisTimeVal:               minGenesisTime,

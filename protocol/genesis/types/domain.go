@@ -8,7 +8,7 @@ import (
 
 // TODO: get rid of singleton, pass domain as a parameter
 var (
-	domain = genesisspectypes.DomainType(networkconfig.Mainnet.DomainType())
+	domain = genesisspectypes.DomainType(networkconfig.MainnetSSV.GenesisDomainType)
 )
 
 // GetDefaultDomain returns the global domain used across the system

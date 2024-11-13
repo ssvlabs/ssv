@@ -155,7 +155,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	require.Nil(t, storedCfg)
 
 	c1 := &ConfigLock{
-		NetworkName:      networkconfig.TestNetwork.Name,
+		NetworkName:      networkconfig.TestingNetworkConfig.Name,
 		UsingLocalEvents: false,
 	}
 	require.NoError(t, storage.SaveConfig(nil, c1))
@@ -166,7 +166,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	require.Equal(t, c1, storedCfg)
 
 	c2 := &ConfigLock{
-		NetworkName:      networkconfig.TestNetwork.Name + "1",
+		NetworkName:      networkconfig.TestingNetworkConfig.Name + "1",
 		UsingLocalEvents: false,
 	}
 	require.NoError(t, storage.SaveConfig(nil, c2))

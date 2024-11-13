@@ -161,7 +161,7 @@ func setupEventHandler(
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	operatorDataStore := operatordatastore.New(operatorData)
-	testNetworkConfig := networkconfig.TestNetwork
+	testNetworkConfig := networkconfig.TestingNetworkConfig
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {

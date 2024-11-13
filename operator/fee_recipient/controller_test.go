@@ -42,7 +42,7 @@ func TestSubmitProposal(t *testing.T) {
 
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
-	network := networkconfig.TestNetwork
+	network := networkconfig.TestingNetworkConfig
 	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{

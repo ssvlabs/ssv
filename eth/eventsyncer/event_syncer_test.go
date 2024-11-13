@@ -152,7 +152,7 @@ func setupEventHandler(
 	privateKey keys.OperatorPrivateKey,
 ) *eventhandler.EventHandler {
 	operatorDataStore := operatordatastore.New(operatorData)
-	testNetworkConfig := networkconfig.TestNetwork
+	testNetworkConfig := networkconfig.TestingNetworkConfig
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {

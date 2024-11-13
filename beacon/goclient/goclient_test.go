@@ -14,10 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestTimeouts(t *testing.T) {
@@ -33,7 +30,7 @@ func TestTimeouts(t *testing.T) {
 		undialableServer := mockServer(t, delays{
 			BaseDelay: commonTimeout * 2,
 		})
-		_, err := mockClient(t, ctx, undialableServer.URL, commonTimeout, longTimeout)
+		_, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
 		require.ErrorContains(t, err, "client is not active")
 	}
 
@@ -43,7 +40,7 @@ func TestTimeouts(t *testing.T) {
 			ValidatorsDelay:  longTimeout * 2,
 			BeaconStateDelay: longTimeout / 2,
 		})
-		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := mockClient(ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
 		validators, err := client.(*GoClient).GetValidatorData(nil) // Should call BeaconState internally.
@@ -67,7 +64,7 @@ func TestTimeouts(t *testing.T) {
 		unresponsiveServer := mockServer(t, delays{
 			ProposerDutiesDelay: longTimeout * 2,
 		})
-		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := mockClient(ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
 		_, err = client.(*GoClient).ProposerDuties(ctx, mockServerEpoch, nil)
@@ -80,7 +77,7 @@ func TestTimeouts(t *testing.T) {
 			BaseDelay:        commonTimeout / 2,
 			BeaconStateDelay: longTimeout / 2,
 		})
-		client, err := mockClient(t, ctx, fastServer.URL, commonTimeout, longTimeout)
+		client, err := mockClient(ctx, fastServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
 		validators, err := client.(*GoClient).GetValidatorData(nil)
@@ -93,7 +90,7 @@ func TestTimeouts(t *testing.T) {
 	}
 }
 
-func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
+func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
 	return New(
 		zap.NewNop(),
 		Options{
@@ -101,13 +98,6 @@ func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeo
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
-		},
-		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
-		func() slotticker.SlotTicker {
-			return slotticker.New(zap.NewNop(), slotticker.Config{
-				SlotDuration: 12 * time.Second,
-				GenesisTime:  time.Now(),
-			})
 		},
 	)
 }

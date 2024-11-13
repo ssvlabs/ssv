@@ -34,7 +34,7 @@ func setupSyncCommitteeGenesisDutiesMock(
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
 			}
-			period := s.network.BeaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
 		}).AnyTimes()
@@ -108,7 +108,7 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
-	currentSlot.Set(scheduler.network.BeaconConfig.LastSlotOfSyncPeriod(0))
+	currentSlot.Set(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -117,7 +117,7 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.network.BeaconConfig.GetEpochFirstSlot(scheduler.network.BeaconConfig.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.network.Beacon.GetEpochFirstSlot(scheduler.network.Beacon.FirstEpochOfSyncPeriod(1))
 	currentSlot.Set(firstSlotOfNextPeriod)
 	ticker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -638,7 +638,7 @@ func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.BeaconConfig.SlotDuration()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

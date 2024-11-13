@@ -22,10 +22,12 @@ import (
 )
 
 var TestNetwork = networkconfig.NetworkConfig{
-	BeaconConfig:      networkconfig.TestBeaconConfig,
-	GenesisDomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-	AlanDomainType:    spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-	AlanForkEpoch:     math.MaxUint64,
+	Beacon: networkconfig.TestingBeaconConfig,
+	SSV: networkconfig.SSV{
+		GenesisDomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		AlanDomainType:    spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
+		AlanForkEpoch:     math.MaxUint64,
+	},
 }
 
 func TestCheckPeer(t *testing.T) {

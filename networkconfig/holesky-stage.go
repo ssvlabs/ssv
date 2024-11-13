@@ -6,9 +6,8 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
-var HoleskyStage = NetworkConfig{
+var HoleskyStageSSV = SSV{
 	Name:                 "holesky-stage",
-	BeaconConfig:         HoleskyBeaconConfig,
 	GenesisDomainType:    [4]byte{0x00, 0x00, 0x31, 0x12},
 	AlanDomainType:       [4]byte{0x00, 0x00, 0x31, 0x13},
 	GenesisEpoch:         1,
