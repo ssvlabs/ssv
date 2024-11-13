@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 )
 
@@ -32,26 +32,8 @@ type ParticipantsRangeEntry struct {
 	Identifier convert.MessageID
 }
 
-// InstanceStore manages instance data.
-type InstanceStore interface {
-	// GetHighestInstance returns the highest instance for the given identifier.
-	GetHighestInstance(identifier []byte) (*StoredInstance, error)
-
-	// GetInstancesInRange returns historical instances in the given range.
-	GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*StoredInstance, error)
-
-	// SaveInstance updates/inserts the given instance to it's identifier's history.
-	SaveInstance(instance *StoredInstance) error
-
-	// SaveHighestInstance saves the given instance as the highest of it's identifier.
-	SaveHighestInstance(instance *StoredInstance) error
-
-	// SaveHighestAndHistoricalInstance saves the given instance as both the highest and historical.
-	SaveHighestAndHistoricalInstance(instance *StoredInstance) error
-
-	// GetInstance returns an historical instance for the given identifier and height.
-	GetInstance(identifier []byte, height specqbft.Height) (*StoredInstance, error)
-
+// QBFTStore is the store used by QBFT components
+type QBFTStore interface {
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(msgID []byte) error
 
@@ -63,9 +45,4 @@ type InstanceStore interface {
 
 	// GetParticipants returns participants in quorum for the given slot.
 	GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
-}
-
-// QBFTStore is the store used by QBFT components
-type QBFTStore interface {
-	InstanceStore
 }

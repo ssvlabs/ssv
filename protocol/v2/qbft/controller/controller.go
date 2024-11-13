@@ -6,17 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -123,7 +121,7 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.Sig
 }
 
 func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
-	inst := c.InstanceForHeight(logger, msg.QBFTMessage.Height)
+	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
 	}
@@ -161,32 +159,6 @@ func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	}
 
 	return nil
-}
-
-func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Height) *instance.Instance {
-	// Search in memory.
-	if inst := c.StoredInstances.FindInstance(height); inst != nil {
-		return inst
-	}
-
-	// Search in storage, if full node.
-	if !c.fullNode {
-		return nil
-	}
-	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
-	if err != nil {
-		logger.Debug("❗ could not load instance from storage",
-			fields.Height(height),
-			zap.Uint64("ctrl_height", uint64(c.Height)),
-			zap.Error(err))
-		return nil
-	}
-	if storedInst == nil {
-		return nil
-	}
-	inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier, storedInst.State.Height, c.OperatorSigner)
-	inst.State = storedInst.State
-	return inst
 }
 
 // GetIdentifier returns QBFT Identifier, used to identify messages

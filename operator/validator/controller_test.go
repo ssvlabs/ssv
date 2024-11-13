@@ -350,7 +350,6 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 	firstValidator := &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
-		Storage:     ibftstorage.NewStores(),
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
@@ -1099,7 +1098,7 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
 	return &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
-		Storage:     ibftstorage.NewStores(),
+
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
 				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
