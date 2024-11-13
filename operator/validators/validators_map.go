@@ -171,24 +171,10 @@ func (vm *ValidatorsMap) UpdateCommitteeAtomic(pubKey spectypes.CommitteeID, mut
 
 	// if committee was stopped, trigger cleanup
 	if vc.Stopped() {
-		vm.cleanup()
+		delete(vm.committees, pubKey)
 	}
 
 	return true
-}
-
-// cleanup removes all stopped committees from the state
-// must be called under write lock
-func (vm *ValidatorsMap) cleanup() {
-	var stopped []spectypes.CommitteeID
-	for k, v := range vm.committees {
-		if v.Stopped() {
-			stopped = append(stopped, k)
-		}
-	}
-	for _, k := range stopped {
-		delete(vm.committees, k)
-	}
 }
 
 // SizeCommittees returns the number of committees in the map
