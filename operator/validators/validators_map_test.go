@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -35,7 +34,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			cancel,
 			zap.NewNop(),
 			tests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-			&new(specssv.Committee).CommitteeMember, nil,
+			&spectypes.CommitteeMember{}, nil,
 			map[phase0.ValidatorIndex]*spectypes.Share{
 				0: new(spectypes.Share),
 			}, validator.NewCommitteeDutyGuard())
@@ -65,7 +64,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 			cancel,
 			zap.NewNop(),
 			tests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-			&new(specssv.Committee).CommitteeMember, nil,
+			&spectypes.CommitteeMember{}, nil,
 			map[phase0.ValidatorIndex]*spectypes.Share{
 				0: new(spectypes.Share),
 				1: new(spectypes.Share),
