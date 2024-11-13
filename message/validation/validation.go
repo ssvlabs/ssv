@@ -86,6 +86,13 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	mv.logger.Debug("RECEIVED MESSAGE >>>",
+		zap.String("peer_id", peerID.String()),
+		zap.String("topic", pmsg.GetTopic()),
+		zap.String("GetFrom", pmsg.GetFrom().String()),
+		zap.String("ReceivedFrom", pmsg.ReceivedFrom.String()),
+	)
+
 	if mv.selfAccept && peerID == mv.selfPID {
 		return mv.validateSelf(pmsg)
 	}
