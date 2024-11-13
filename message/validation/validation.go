@@ -101,10 +101,14 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	defer reportDone()
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
+
 	if err != nil {
 		return mv.handleValidationError(peerID, decodedMessage, err)
 	}
-
+	mv.logger.Debug("decodedMessageMsg CORRECTLY DECODED >>>",
+		zap.String("decodedMessageMsgID", decodedMessage.GetID().String()),
+		zap.String("ReceivedFrom", pmsg.ReceivedFrom.String()),
+	)
 	pmsg.ValidatorData = decodedMessage
 
 	return mv.handleValidationSuccess(decodedMessage)
