@@ -262,20 +262,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	return nil
 }
 
-// GetBeaconNetwork returns the beacon network the node is on
-// TODO: Remove this. This is a deprecated workaround for spec interface
-// DEPRECATED
-func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	switch gc.BeaconConfig().GenesisForkVersion {
-	case networkconfig.MainnetBeaconConfig.GenesisForkVersion:
-		return spectypes.MainNetwork
-	case networkconfig.HoleskyBeaconConfig.GenesisForkVersion:
-		return spectypes.HoleskyNetwork
-	default:
-		return spectypes.BeaconTestNetwork
-	}
-}
-
 func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	return gc.client.Events(ctx, topics, handler)
 }
