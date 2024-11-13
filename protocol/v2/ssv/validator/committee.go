@@ -35,7 +35,6 @@ type Committee struct {
 	cancel context.CancelFunc
 
 	mtx           sync.RWMutex
-	BeaconNetwork spectypes.BeaconNetwork
 	networkConfig networkconfig.NetworkConfig
 
 	Queues  map[phase0.Slot]queueContainer
