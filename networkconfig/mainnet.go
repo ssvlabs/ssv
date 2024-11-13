@@ -33,10 +33,10 @@ var MainnetSSV = SSV{
 }
 
 var MainnetBeaconConfig = Beacon{
-	GenesisForkVersionVal:           phase0.Version{0, 0, 0, 0},
-	MinGenesisTimeVal:               time.Unix(1606824023, 0),
-	SlotDurationVal:                 12 * time.Second,
-	SlotsPerEpochVal:                32,
-	EpochsPerSyncCommitteePeriodVal: 256,
-	CapellaForkVersionVal:           phase0.Version{0x03, 0x00, 0x00, 0x00},
+	GenesisForkVersion:           phase0.Version{0, 0, 0, 0},
+	MinGenesisTime:               time.Unix(1606824023, 0),
+	SlotDuration:                 12 * time.Second,
+	SlotsPerEpoch:                32,
+	EpochsPerSyncCommitteePeriod: 256,
+	CapellaForkVersion:           phase0.Version{0x03, 0x00, 0x00, 0x00},
 }

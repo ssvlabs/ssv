@@ -173,14 +173,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message3, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg3)
 		require.NoError(t, err)
 
-		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.Beacon.SlotDuration()), nil)
+		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.Beacon.SlotDuration), nil)
 		require.NoError(t, err)
 		require.NotNil(t, state1)
 		require.EqualValues(t, height+1, state1.Slot)
 		require.EqualValues(t, 1, state1.Round)
 		require.EqualValues(t, MessageCounts{Commit: 1}, state1.MessageCounts)
 
-		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.Beacon.SlotDuration()), nil)
+		_, _, err = validator.validateSSVMessage(message3, receivedAt.Add(netCfg.Beacon.SlotDuration), nil)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
 
 		signedMsg = spectestingutils.TestingCommitMultiSignerMessageWithHeight([]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, height+1)
@@ -196,7 +196,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message4, err := genesisqueue.DecodeGenesisSSVMessage(ssvMsg4)
 		require.NoError(t, err)
 
-		_, _, err = validator.validateSSVMessage(message4, receivedAt.Add(netCfg.Beacon.SlotDuration()), nil)
+		_, _, err = validator.validateSSVMessage(message4, receivedAt.Add(netCfg.Beacon.SlotDuration), nil)
 		require.NoError(t, err)
 		require.NotNil(t, state1)
 		require.EqualValues(t, height+1, state1.Slot)

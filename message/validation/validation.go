@@ -278,7 +278,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: mv.netCfg.Beacon.SlotsPerEpoch() * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.Beacon.SlotsPerEpoch * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

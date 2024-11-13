@@ -119,7 +119,7 @@ func (h *VoluntaryExitHandler) processExecution(slot phase0.Slot) {
 	}
 
 	h.dutyQueue = pendingDuties
-	h.duties.RemoveSlot(slot - h.network.SlotsPerEpoch())
+	h.duties.RemoveSlot(slot - h.network.SlotsPerEpoch)
 
 	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
 		toExecute := make([]*genesisspectypes.Duty, 0, len(dutiesForExecution))

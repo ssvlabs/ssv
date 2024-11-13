@@ -24,10 +24,10 @@ var HoleskySSV = SSV{
 }
 
 var HoleskyBeaconConfig = Beacon{
-	GenesisForkVersionVal:           phase0.Version{0x01, 0x01, 0x70, 0x00},
-	MinGenesisTimeVal:               time.Unix(1695902400, 0),
-	SlotDurationVal:                 12 * time.Second,
-	SlotsPerEpochVal:                32,
-	EpochsPerSyncCommitteePeriodVal: 256,
-	CapellaForkVersionVal:           phase0.Version{0x04, 0x01, 0x70, 0x00},
+	GenesisForkVersion:           phase0.Version{0x01, 0x01, 0x70, 0x00},
+	MinGenesisTime:               time.Unix(1695902400, 0),
+	SlotDuration:                 12 * time.Second,
+	SlotsPerEpoch:                32,
+	EpochsPerSyncCommitteePeriod: 256,
+	CapellaForkVersion:           phase0.Version{0x04, 0x01, 0x70, 0x00},
 }

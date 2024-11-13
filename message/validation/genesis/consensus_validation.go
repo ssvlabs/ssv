@@ -378,9 +378,9 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole) (time.Duration, error) {
 	switch role {
 	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleSyncCommittee:
-		return mv.netCfg.Beacon.SlotDuration() / 3, nil
+		return mv.netCfg.Beacon.SlotDuration / 3, nil
 	case genesisspectypes.BNRoleAggregator, genesisspectypes.BNRoleSyncCommitteeContribution:
-		return mv.netCfg.Beacon.SlotDuration() / 3 * 2, nil
+		return mv.netCfg.Beacon.SlotDuration / 3 * 2, nil
 	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		return 0, nil
 	default:

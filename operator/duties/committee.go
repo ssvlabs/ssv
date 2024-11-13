@@ -177,7 +177,7 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = h.network.Beacon.SlotsPerEpoch()
+	var attestationPropagationSlotRange = h.network.Beacon.SlotsPerEpoch
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
 		return true
 	}

@@ -266,10 +266,10 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 // TODO: Remove this. This is a deprecated workaround for spec interface
 // DEPRECATED
 func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	switch gc.BeaconConfig().GenesisForkVersionVal {
-	case networkconfig.MainnetBeaconConfig.GenesisForkVersionVal:
+	switch gc.BeaconConfig().GenesisForkVersion {
+	case networkconfig.MainnetBeaconConfig.GenesisForkVersion:
 		return spectypes.MainNetwork
-	case networkconfig.HoleskyBeaconConfig.GenesisForkVersionVal:
+	case networkconfig.HoleskyBeaconConfig.GenesisForkVersion:
 		return spectypes.HoleskyNetwork
 	default:
 		return spectypes.BeaconTestNetwork

@@ -82,7 +82,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.processExecution(currentEpoch, slot)
 			h.processFetching(ctx, currentEpoch, slot)
 
-			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
+			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
@@ -137,7 +137,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDuration()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDuration/2)
 	defer cancel()
 
 	slot := h.network.Beacon.EstimatedCurrentSlot()
@@ -277,7 +277,7 @@ func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role g
 func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = h.network.Beacon.SlotsPerEpoch()
+	var attestationPropagationSlotRange = h.network.Beacon.SlotsPerEpoch
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
 		return true
 	}
@@ -311,5 +311,5 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 }
 
 func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
-	return slot%h.network.Beacon.SlotsPerEpoch() > h.network.Beacon.SlotsPerEpoch()/2-2
+	return slot%h.network.Beacon.SlotsPerEpoch > h.network.Beacon.SlotsPerEpoch/2-2
 }

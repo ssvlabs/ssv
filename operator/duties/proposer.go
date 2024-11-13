@@ -85,7 +85,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			cancel()
 
 			// last slot of epoch
-			if slot%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
+			if slot%h.network.Beacon.SlotsPerEpoch == h.network.Beacon.SlotsPerEpoch-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}
@@ -113,7 +113,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDuration()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDuration/2)
 	defer cancel()
 
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()

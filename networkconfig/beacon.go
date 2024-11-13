@@ -10,14 +10,13 @@ import (
 )
 
 type Beacon struct {
-	// TODO: try to get rid of methods and use the values directly
-	ConfigNameVal                   string         `json:"config_name" yaml:"ConfigName"`
-	GenesisForkVersionVal           phase0.Version `json:"genesis_fork_version" yaml:"GenesisForkVersion"`
-	CapellaForkVersionVal           phase0.Version `json:"capella_fork_version" yaml:"CapellaForkVersion"`
-	MinGenesisTimeVal               time.Time      `json:"min_genesis_time" yaml:"MinGenesisTime"`
-	SlotDurationVal                 time.Duration  `json:"slot_duration" yaml:"SlotDuration"`
-	SlotsPerEpochVal                phase0.Slot    `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
-	EpochsPerSyncCommitteePeriodVal phase0.Epoch   `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
+	ConfigName                   string         `json:"config_name" yaml:"ConfigName"`
+	GenesisForkVersion           phase0.Version `json:"genesis_fork_version" yaml:"GenesisForkVersion"`
+	CapellaForkVersion           phase0.Version `json:"capella_fork_version" yaml:"CapellaForkVersion"`
+	MinGenesisTime               time.Time      `json:"min_genesis_time" yaml:"MinGenesisTime"`
+	SlotDuration                 time.Duration  `json:"slot_duration" yaml:"SlotDuration"`
+	SlotsPerEpoch                phase0.Slot    `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
+	EpochsPerSyncCommitteePeriod phase0.Epoch   `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
 }
 
 func (b Beacon) String() string {
@@ -29,54 +28,25 @@ func (b Beacon) String() string {
 	return string(encoded)
 }
 
-func (b Beacon) ConfigName() string {
-	return b.ConfigNameVal
-}
-
-func (b Beacon) GenesisForkVersion() phase0.Version {
-	return b.GenesisForkVersionVal
-}
-
-func (b Beacon) CapellaForkVersion() phase0.Version {
-	return b.CapellaForkVersionVal
-}
-
-func (b Beacon) MinGenesisTime() time.Time {
-	return b.MinGenesisTimeVal
-}
-
-func (b Beacon) SlotDuration() time.Duration {
-	return b.SlotDurationVal
-}
-
-func (b Beacon) SlotsPerEpoch() phase0.Slot {
-	return b.SlotsPerEpochVal
-}
-
-// EpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
-func (b Beacon) EpochsPerSyncCommitteePeriod() phase0.Epoch {
-	return b.EpochsPerSyncCommitteePeriodVal
-}
-
 // GetSlotStartTime returns the start time for the given slot
 func (b Beacon) GetSlotStartTime(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
 		panic("slot out of range")
 	}
-	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration() // #nosec G115: slot cannot exceed math.MaxInt64
-	return b.MinGenesisTime().Add(durationSinceGenesisStart)
+	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
+	return b.MinGenesisTime.Add(durationSinceGenesisStart)
 }
 
 func (b Beacon) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
 		panic("slot out of range")
 	}
-	d := time.Duration(slot) * b.SlotDuration() // #nosec G115: slot cannot exceed math.MaxInt64
-	return b.MinGenesisTime().Add(d)
+	d := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
+	return b.MinGenesisTime.Add(d)
 }
 
 func (b Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(epoch) * b.SlotsPerEpoch()
+	return phase0.Slot(epoch) * b.SlotsPerEpoch
 }
 
 func (b Beacon) EpochStartTime(epoch phase0.Epoch) time.Time {
@@ -96,11 +66,11 @@ func (b Beacon) EstimatedCurrentSlot() phase0.Slot {
 
 // EstimatedSlotAtTime estimates slot at the given time
 func (b Beacon) EstimatedSlotAtTime(time time.Time) phase0.Slot {
-	genesis := b.MinGenesisTime()
+	genesis := b.MinGenesisTime
 	if time.Before(genesis) {
 		return 0
 	}
-	return phase0.Slot(time.Sub(genesis) / b.SlotDuration()) // #nosec G115: genesis can't be negative
+	return phase0.Slot(time.Sub(genesis) / b.SlotDuration) // #nosec G115: genesis can't be negative
 }
 
 // EstimatedCurrentEpoch estimates the current epoch
@@ -111,27 +81,27 @@ func (b Beacon) EstimatedCurrentEpoch() phase0.Epoch {
 
 // EstimatedEpochAtSlot estimates epoch at the given slot
 func (b Beacon) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
-	return phase0.Epoch(slot / b.SlotsPerEpoch())
+	return phase0.Epoch(slot / b.SlotsPerEpoch)
 }
 
 // IsFirstSlotOfEpoch estimates epoch at the given slot
 func (b Beacon) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
-	return slot%b.SlotsPerEpoch() == 0
+	return slot%b.SlotsPerEpoch == 0
 }
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch
 func (b Beacon) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(epoch) * b.SlotsPerEpoch()
+	return phase0.Slot(epoch) * b.SlotsPerEpoch
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
 func (b Beacon) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
-	return uint64(epoch / b.EpochsPerSyncCommitteePeriod())
+	return uint64(epoch / b.EpochsPerSyncCommitteePeriod)
 }
 
 // FirstEpochOfSyncPeriod calculates the first epoch of the given sync period.
 func (b Beacon) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
-	return phase0.Epoch(period) * b.EpochsPerSyncCommitteePeriod()
+	return phase0.Epoch(period) * b.EpochsPerSyncCommitteePeriod
 }
 
 // LastSlotOfSyncPeriod calculates the first epoch of the given sync period.

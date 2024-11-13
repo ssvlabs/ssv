@@ -20,12 +20,12 @@ var TestingSSVConfig = SSV{
 }
 
 var TestingBeaconConfig = Beacon{
-	GenesisForkVersionVal:           HoleskyBeaconConfig.GenesisForkVersionVal,
-	MinGenesisTimeVal:               HoleskyBeaconConfig.MinGenesisTimeVal,
-	SlotDurationVal:                 12,
-	SlotsPerEpochVal:                32,
-	EpochsPerSyncCommitteePeriodVal: 256,
-	CapellaForkVersionVal:           HoleskyBeaconConfig.CapellaForkVersionVal,
+	GenesisForkVersion:           HoleskyBeaconConfig.GenesisForkVersion,
+	MinGenesisTime:               HoleskyBeaconConfig.MinGenesisTime,
+	SlotDuration:                 12,
+	SlotsPerEpoch:                32,
+	EpochsPerSyncCommitteePeriod: 256,
+	CapellaForkVersion:           HoleskyBeaconConfig.CapellaForkVersion,
 }
 
 var TestingNetworkConfig = NetworkConfig{

@@ -44,11 +44,11 @@ AlanForkEpoch: 123123123
 	require.NoError(t, yaml.Unmarshal([]byte(yamlConfig), &unmarshaledConfig))
 	require.EqualValues(t, expectedConfig, unmarshaledConfig)
 
-	require.Equal(t, unmarshaledConfig.Beacon.GenesisForkVersionVal, unmarshaledConfig.GenesisForkVersion())
-	require.Equal(t, unmarshaledConfig.Beacon.CapellaForkVersionVal, unmarshaledConfig.GenesisForkVersion())
-	require.Equal(t, unmarshaledConfig.Beacon.SlotDurationVal, unmarshaledConfig.SlotDuration())
-	require.Equal(t, unmarshaledConfig.Beacon.SlotsPerEpochVal, unmarshaledConfig.SlotsPerEpoch())
-	require.Equal(t, unmarshaledConfig.Beacon.MinGenesisTimeVal, unmarshaledConfig.MinGenesisTime())
+	require.Equal(t, unmarshaledConfig.Beacon.GenesisForkVersion, unmarshaledConfig.GenesisForkVersion)
+	require.Equal(t, unmarshaledConfig.Beacon.CapellaForkVersion, unmarshaledConfig.CapellaForkVersion)
+	require.Equal(t, unmarshaledConfig.Beacon.SlotDuration, unmarshaledConfig.SlotDuration)
+	require.Equal(t, unmarshaledConfig.Beacon.SlotsPerEpoch, unmarshaledConfig.SlotsPerEpoch)
+	require.Equal(t, unmarshaledConfig.Beacon.MinGenesisTime, unmarshaledConfig.MinGenesisTime)
 
 	marshaledConfig, err := yaml.Marshal(unmarshaledConfig)
 	require.NoError(t, err)

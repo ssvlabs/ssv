@@ -105,7 +105,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -156,7 +156,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -215,7 +215,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -272,7 +272,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -375,7 +375,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -478,7 +478,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -571,7 +571,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -952,7 +952,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -1009,7 +1009,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// STEP 3: wait for committee duty to be executed faster than 1/3 of the slot duration
 	startTime = time.Now()
@@ -1027,7 +1027,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -1086,7 +1086,7 @@ func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// skip to the next epoch
 	currentSlot.Set(phase0.Slot(2))
@@ -1114,7 +1114,7 @@ func TestScheduler_Committee_On_Fork_Attester_only(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchAttesterDutiesCall, executeAttesterDutiesCall, timeout)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

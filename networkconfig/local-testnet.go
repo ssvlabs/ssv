@@ -21,10 +21,10 @@ var LocalTestnetSSV = SSV{
 }
 
 var LocalTestnetBeaconConfig = Beacon{
-	GenesisForkVersionVal:           phase0.Version{0x99, 0x99, 0x99, 0x99},
-	MinGenesisTimeVal:               HoleskyBeaconConfig.MinGenesisTimeVal,
-	SlotDurationVal:                 12,
-	SlotsPerEpochVal:                32,
-	EpochsPerSyncCommitteePeriodVal: 256,
-	CapellaForkVersionVal:           phase0.Version{0x99, 0x99, 0x99, 0x99},
+	GenesisForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
+	MinGenesisTime:               HoleskyBeaconConfig.MinGenesisTime,
+	SlotDuration:                 12,
+	SlotsPerEpoch:                32,
+	EpochsPerSyncCommitteePeriod: 256,
+	CapellaForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
 }

@@ -40,7 +40,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = mv.netCfg.Beacon.SlotsPerEpoch() + lateSlotAllowance
+		ttl = mv.netCfg.Beacon.SlotsPerEpoch + lateSlotAllowance
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	}
@@ -90,7 +90,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 	case spectypes.RoleCommittee:
 		validatorIndexCount := uint64(len(validatorIndices))
-		slotsPerEpoch := mv.netCfg.Beacon.SlotsPerEpoch()
+		slotsPerEpoch := mv.netCfg.Beacon.SlotsPerEpoch
 
 		// Skip duty search if validators * 2 exceeds slots per epoch,
 		// as the maximum duties per epoch is capped at the number of slots.

@@ -267,8 +267,8 @@ func (gc *GoClient) RegistrationSubmitter(operatorDataStore operatordatastore.Op
 	operatorID := operatorDataStore.AwaitOperatorID()
 
 	ticker := slotticker.New(gc.log, slotticker.Config{
-		SlotDuration: gc.beaconConfig.SlotDuration(),
-		GenesisTime:  gc.beaconConfig.MinGenesisTime(),
+		SlotDuration: gc.beaconConfig.SlotDuration,
+		GenesisTime:  gc.beaconConfig.MinGenesisTime,
 	})
 
 	for {
@@ -282,7 +282,7 @@ func (gc *GoClient) RegistrationSubmitter(operatorDataStore operatordatastore.Op
 }
 
 func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operatorID spectypes.OperatorID) {
-	slotsPerEpoch := gc.BeaconConfig().SlotsPerEpoch()
+	slotsPerEpoch := gc.BeaconConfig().SlotsPerEpoch
 
 	// Lock:
 	// - getting and updating last slot to avoid multiple submission (both should be an atomic action but cannot be done with CAS)

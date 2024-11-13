@@ -291,7 +291,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		metrics = options.Metrics
 	}
 
-	cacheTTL := options.NetworkConfig.SlotDuration() * time.Duration(options.NetworkConfig.SlotsPerEpoch()*2) // #nosec G115
+	cacheTTL := options.NetworkConfig.SlotDuration * time.Duration(options.NetworkConfig.SlotsPerEpoch*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -480,7 +480,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		c.committeesObservers.Set(
 			ssvMsg.GetID(),
 			ncv,
-			time.Duration(ttlSlots)*c.networkConfig.Beacon.SlotDuration(),
+			time.Duration(ttlSlots)*c.networkConfig.Beacon.SlotDuration,
 		)
 	} else {
 		ncv = item
@@ -1126,8 +1126,8 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 
 	go func() {
 		slotTicker := slotticker.New(c.logger, slotticker.Config{
-			SlotDuration: c.networkConfig.SlotDuration(),
-			GenesisTime:  c.networkConfig.MinGenesisTime(),
+			SlotDuration: c.networkConfig.SlotDuration,
+			GenesisTime:  c.networkConfig.MinGenesisTime,
 		})
 
 		next := slotTicker.Next()
@@ -1235,7 +1235,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 		)
 		select {
 		case c.indicesChange <- struct{}{}:
-		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration()):
+		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration):
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
 	}
@@ -1415,7 +1415,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		return qbftCtrl
 	}
 
-	genesisBeaconNetwork := genesisspectypes.BeaconNetwork(options.NetworkConfig.Beacon.ConfigName())
+	genesisBeaconNetwork := genesisspectypes.BeaconNetwork(options.NetworkConfig.Beacon.ConfigName)
 
 	runners := genesisrunner.DutyRunners{}
 	genesisDomainType := options.NetworkConfig.GenesisDomainType

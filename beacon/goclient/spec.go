@@ -104,12 +104,12 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	return &networkconfig.Beacon{
-		ConfigNameVal:                   configName,
-		GenesisForkVersionVal:           genesisForkVersion,
-		CapellaForkVersionVal:           capellaForkVersion,
-		MinGenesisTimeVal:               minGenesisTime,
-		SlotDurationVal:                 slotDuration,
-		SlotsPerEpochVal:                phase0.Slot(slotsPerEpoch),
-		EpochsPerSyncCommitteePeriodVal: phase0.Epoch(epochsPerSyncCommittee),
+		ConfigName:                   configName,
+		GenesisForkVersion:           genesisForkVersion,
+		CapellaForkVersion:           capellaForkVersion,
+		MinGenesisTime:               minGenesisTime,
+		SlotDuration:                 slotDuration,
+		SlotsPerEpoch:                phase0.Slot(slotsPerEpoch),
+		EpochsPerSyncCommitteePeriod: phase0.Epoch(epochsPerSyncCommittee),
 	}, nil
 }

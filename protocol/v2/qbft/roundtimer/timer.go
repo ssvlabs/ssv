@@ -9,6 +9,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -28,11 +30,6 @@ var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 type Timer interface {
 	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
 	TimeoutForRound(height specqbft.Height, round specqbft.Round)
-}
-
-type BeaconNetwork interface {
-	GetSlotStartTime(slot phase0.Slot) time.Time
-	SlotDuration() time.Duration
 }
 
 type TimeoutOptions struct {
@@ -58,11 +55,11 @@ type RoundTimer struct {
 	// role is the role of the instance
 	role spectypes.RunnerRole
 	// beaconNetwork is the beacon network
-	beaconNetwork BeaconNetwork
+	beaconNetwork networkconfig.Beacon
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
+func New(pctx context.Context, beaconNetwork networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		mtx:           &sync.RWMutex{},
@@ -109,10 +106,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	switch t.role {
 	case spectypes.RoleCommittee:
 		// third of the slot time
-		baseDuration = t.beaconNetwork.SlotDuration() / 3
+		baseDuration = t.beaconNetwork.SlotDuration / 3
 	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
 		// two-third of the slot time
-		baseDuration = t.beaconNetwork.SlotDuration() / 3 * 2
+		baseDuration = t.beaconNetwork.SlotDuration / 3 * 2
 	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
