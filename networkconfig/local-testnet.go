@@ -2,6 +2,7 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -23,7 +24,7 @@ var LocalTestnetSSV = SSV{
 var LocalTestnetBeaconConfig = Beacon{
 	GenesisForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
 	MinGenesisTime:               HoleskyBeaconConfig.MinGenesisTime,
-	SlotDuration:                 12,
+	SlotDuration:                 12 * time.Second,
 	SlotsPerEpoch:                32,
 	EpochsPerSyncCommitteePeriod: 256,
 	CapellaForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},

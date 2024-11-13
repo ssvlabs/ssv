@@ -504,7 +504,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, nonUpdatedMetadataNextEpochIdentifier, slot)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.ValidatorTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())[0]
+		topicID := commons.CommitteeTopicID(shares.nonUpdatedMetadataNextEpoch.CommitteeID())[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrValidatorNotAttesting
 		expectedErr.got = eth2apiv1.ValidatorStatePendingQueued.String()

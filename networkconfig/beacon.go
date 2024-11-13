@@ -70,7 +70,8 @@ func (b Beacon) EstimatedSlotAtTime(time time.Time) phase0.Slot {
 	if time.Before(genesis) {
 		return 0
 	}
-	return phase0.Slot(time.Sub(genesis) / b.SlotDuration) // #nosec G115: genesis can't be negative
+	timeAfterGenesis := time.Sub(genesis)
+	return phase0.Slot(timeAfterGenesis / b.SlotDuration) // #nosec G115: genesis can't be negative
 }
 
 // EstimatedCurrentEpoch estimates the current epoch

@@ -2,6 +2,7 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -22,7 +23,7 @@ var TestingSSVConfig = SSV{
 var TestingBeaconConfig = Beacon{
 	GenesisForkVersion:           HoleskyBeaconConfig.GenesisForkVersion,
 	MinGenesisTime:               HoleskyBeaconConfig.MinGenesisTime,
-	SlotDuration:                 12,
+	SlotDuration:                 12 * time.Second,
 	SlotsPerEpoch:                32,
 	EpochsPerSyncCommitteePeriod: 256,
 	CapellaForkVersion:           HoleskyBeaconConfig.CapellaForkVersion,

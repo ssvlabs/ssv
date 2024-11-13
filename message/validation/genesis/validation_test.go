@@ -2245,7 +2245,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving an SSV message with an invalid signature.
 	t.Run("signature verification", func(t *testing.T) {
-		epoch := phase0.Epoch(123456789)
+		epoch := netCfg.EstimatedCurrentEpoch()
 
 		t.Run("unsigned message", func(t *testing.T) {
 			validator := New(netCfg, WithNodeStorage(ns)).(*messageValidator)
