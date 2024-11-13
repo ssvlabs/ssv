@@ -14,7 +14,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -87,18 +86,6 @@ func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types0.ValidatorD
 func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
-}
-
-// ExecuteGenesisDuty mocks base method.
-func (m *MockController) ExecuteGenesisDuty(logger *zap.Logger, duty *types.Duty) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteGenesisDuty", logger, duty)
-}
-
-// ExecuteGenesisDuty indicates an expected call of ExecuteGenesisDuty.
-func (mr *MockControllerMockRecorder) ExecuteGenesisDuty(logger, duty any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuty", reflect.TypeOf((*MockController)(nil).ExecuteGenesisDuty), logger, duty)
 }
 
 // ExitValidator mocks base method.

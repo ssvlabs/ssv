@@ -9,7 +9,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -87,7 +86,7 @@ func TestMsgValidator(t *testing.T) {
 
 		signedSSVMessage := &spectypes.SignedSSVMessage{
 			Signatures:  [][]byte{sig},
-			OperatorIDs: []types.OperatorID{operatorID},
+			OperatorIDs: []spectypes.OperatorID{operatorID},
 			SSVMessage:  ssvMsg,
 		}
 
@@ -115,7 +114,7 @@ func TestMsgValidator(t *testing.T) {
 
 		signedSSVMessage := &spectypes.SignedSSVMessage{
 			Signatures:  [][]byte{sig},
-			OperatorIDs: []types.OperatorID{operatorID},
+			OperatorIDs: []spectypes.OperatorID{operatorID},
 			SSVMessage:  ssvMsg,
 		}
 
@@ -149,7 +148,7 @@ func TestMsgValidator(t *testing.T) {
 
 		signedSSVMessage := &spectypes.SignedSSVMessage{
 			Signatures:  [][]byte{sig},
-			OperatorIDs: []types.OperatorID{operatorID},
+			OperatorIDs: []spectypes.OperatorID{operatorID},
 			SSVMessage:  ssvMsg,
 		}
 

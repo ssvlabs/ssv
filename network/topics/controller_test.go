@@ -17,7 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -250,7 +250,7 @@ func banningTest(t *testing.T, logger *zap.Logger, peers []*P, cids []string, sc
 	// publish some messages
 	for i, msg := range invalidMessages {
 		wg.Add(1)
-		go func(p *P, cid string, msg *spectypes.SSVMessage) {
+		go func(p *P, cid string, msg *spectypes.SignedSSVMessage) {
 			defer wg.Done()
 
 			raw, err := msg.Encode()
@@ -429,8 +429,8 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	return p
 }
 
-func msgSequence(pkHex string, n, committeeSize int, malformed bool) ([]*spectypes.SSVMessage, error) {
-	var messages []*spectypes.SSVMessage
+func msgSequence(pkHex string, n, committeeSize int, malformed bool) ([]*spectypes.SignedSSVMessage, error) {
+	var messages []*spectypes.SignedSSVMessage
 
 	for i := 0; i < n; i++ {
 		height := i * committeeSize
@@ -445,7 +445,7 @@ func msgSequence(pkHex string, n, committeeSize int, malformed bool) ([]*spectyp
 	return messages, nil
 }
 
-func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, error) {
+func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
@@ -457,35 +457,35 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 		return nil, err
 	}
 
-	signedMessage := genesisspecqbft.SignedMessage{
-		Signature: signature,
-		Signers:   []spectypes.OperatorID{1, 3, 4},
-		Message: genesisspecqbft.Message{
-			MsgType:    genesisspecqbft.RoundChangeMsgType,
-			Height:     genesisspecqbft.Height(height),
-			Round:      2,
-			Identifier: id[:],
-			Root:       [32]byte{},
-		},
-		FullData: nil,
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
+		Height:     specqbft.Height(height),
+		Round:      2,
+		Identifier: id[:],
+		Root:       [32]byte{},
 	}
 
-	msgData, err := signedMessage.Encode()
+	msgData, err := qbftMessage.Encode()
 	if err != nil {
 		return nil, err
 	}
 
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   id,
-		Data:    msgData,
+	signedMessage := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{signature},
+		OperatorIDs: []spectypes.OperatorID{1, 3, 4},
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   id,
+			Data:    msgData,
+		},
+		FullData: nil,
 	}
 
 	if malformed {
-		ssvMsg.MsgType = math.MaxUint64
+		signedMessage.SSVMessage.MsgType = math.MaxUint64
 	}
 
-	return ssvMsg, nil
+	return signedMessage, nil
 }
 
 type DummyMessageValidator struct {
