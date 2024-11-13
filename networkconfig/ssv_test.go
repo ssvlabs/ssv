@@ -39,16 +39,10 @@ AlanForkEpoch: 123123123
 		AlanForkEpoch:       123123123,
 	}
 
-	var unmarshaledConfig NetworkConfig
+	var unmarshaledConfig SSV
 
 	require.NoError(t, yaml.Unmarshal([]byte(yamlConfig), &unmarshaledConfig))
 	require.EqualValues(t, expectedConfig, unmarshaledConfig)
-
-	require.Equal(t, unmarshaledConfig.Beacon.GenesisForkVersion, unmarshaledConfig.GenesisForkVersion)
-	require.Equal(t, unmarshaledConfig.Beacon.CapellaForkVersion, unmarshaledConfig.CapellaForkVersion)
-	require.Equal(t, unmarshaledConfig.Beacon.SlotDuration, unmarshaledConfig.SlotDuration)
-	require.Equal(t, unmarshaledConfig.Beacon.SlotsPerEpoch, unmarshaledConfig.SlotsPerEpoch)
-	require.Equal(t, unmarshaledConfig.Beacon.MinGenesisTime, unmarshaledConfig.MinGenesisTime)
 
 	marshaledConfig, err := yaml.Marshal(unmarshaledConfig)
 	require.NoError(t, err)
