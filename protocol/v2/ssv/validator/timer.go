@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
+	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -48,8 +49,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 
-		qdec := &queue.QMsg{SSVMessage: *dec}
-		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(qdec); !pushed {
+		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
 				fields.Role(identifier.GetRoleType()))
 		}
@@ -112,8 +112,7 @@ func (v *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 
-		qdec := &queue.QMsg{SSVMessage: *dec}
-		if pushed := v.Queues[phase0.Slot(height)].Q.TryPush(qdec); !pushed {
+		if pushed := v.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
 				fields.Role(identifier.GetRoleType()))
 		}

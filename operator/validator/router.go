@@ -10,41 +10,28 @@ import (
 
 const bufSize = 65536
 
-func newMessageRouter(ctx context.Context, logger *zap.Logger) *messageRouter {
+func newMessageRouter(logger *zap.Logger) *messageRouter {
 	return &messageRouter{
-		ctx:    ctx,
 		logger: logger,
-		ch:     make(chan VMSG, bufSize),
+		ch:     make(chan network.DecodedSSVMessage, bufSize),
 	}
 }
 
 type messageRouter struct {
-	ctx    context.Context
 	logger *zap.Logger
-	ch     chan VMSG
+	ch     chan network.DecodedSSVMessage
 }
 
-type VMSG struct {
-	network.DecodedSSVMessage
-	ctx context.Context
-}
-
-func (r *messageRouter) Route(message network.DecodedSSVMessage) {
-	ctx := r.ctx
-
-	// TODO create new (tracing) context from request data:
-	// ctx := otel.GetTextMapPropagator().Extract(ctx, message.TraceData)
-	// pass the context down via r.ch
-
+func (r *messageRouter) Route(ctx context.Context, message network.DecodedSSVMessage) {
 	select {
-	case <-r.ctx.Done():
+	case <-ctx.Done():
 		r.logger.Warn("context canceled, dropping message")
-	case r.ch <- VMSG{ctx: ctx, DecodedSSVMessage: message}:
+	case r.ch <- message:
 	default:
 		r.logger.Warn("message router buffer is full, dropping message")
 	}
 }
 
-func (r *messageRouter) GetMessageChan() <-chan VMSG {
+func (r *messageRouter) GetMessageChan() <-chan network.DecodedSSVMessage {
 	return r.ch
 }

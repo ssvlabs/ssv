@@ -320,7 +320,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter:        newMessageRouter(options.Context, logger),
+		messageRouter:        newMessageRouter(logger),
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
@@ -396,7 +396,7 @@ func (c *controller) handleRouterMessages() {
 			return
 
 		case msg := <-ch:
-			switch m := msg.DecodedSSVMessage.(type) {
+			switch m := msg.(type) {
 			case *genesisqueue.GenesisSSVMessage:
 				if m.MsgType == genesismessage.SSVEventMsgType {
 					continue
@@ -428,9 +428,9 @@ func (c *controller) handleRouterMessages() {
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.Validator().HandleMessage(msg.ctx, c.logger, m)
+					v.Validator().HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.HandleMessage(msg.ctx, c.logger, m)
+					vc.HandleMessage(ctx, c.logger, m)
 				} else if c.validatorOptions.Exporter {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
@@ -764,17 +764,11 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(ssvMsg)
-
-		qMsg := queue.QMsg{
-			SSVMessage: *dec,
-			Ctx:        ctx,
-		}
-
 		if err != nil {
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.Validator().Queues[duty.RunnerRole()].Q.TryPush(&qMsg); !pushed {
+		if pushed := v.Validator().Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))

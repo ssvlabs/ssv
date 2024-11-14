@@ -5,10 +5,10 @@ import (
 	"errors"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -19,7 +19,7 @@ import (
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -49,12 +49,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 		logger.Debug("missing queue for slot created", fields.Slot(slot))
 	}
 
-	qmsg := queue.QMsg{
-		Ctx:        ctx,
-		SSVMessage: *msg,
-	}
-
-	if pushed := q.Q.TryPush(&qmsg); !pushed {
+	if pushed := q.Q.TryPush(msg); !pushed {
 		msgID := msg.MsgID.String()
 		logger.Warn("❗ dropping message because the queue is full",
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
@@ -107,7 +102,7 @@ func (c *Committee) ConsumeQueue(
 		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
-			filter = func(m *queue.QMsg) bool {
+			filter = func(m *queue.SSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
@@ -120,7 +115,7 @@ func (c *Committee) ConsumeQueue(
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
 		} else if runningInstance != nil && !runningInstance.State.Decided {
-			filter = func(ssvMessage *queue.QMsg) bool {
+			filter = func(ssvMessage *queue.SSVMessage) bool {
 				// don't read post consensus until decided
 				return ssvMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
@@ -145,8 +140,8 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Handle the message.
-		if err := handler(msg.Ctx, logger, &msg.SSVMessage); err != nil {
-			c.logMsg(logger, &msg.SSVMessage, "❗ could not handle message",
+		if err := handler(ctx, logger, msg); err != nil {
+			c.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
 			if errors.Is(err, runner.ErrNoValidDuties) {

@@ -20,7 +20,7 @@ func TestRouter(t *testing.T) {
 
 	logger := logging.TestLogger(t)
 
-	router := newMessageRouter(ctx, logger)
+	router := newMessageRouter(logger)
 
 	expectedCount := 1000
 	count := 0
@@ -49,9 +49,9 @@ func TestRouter(t *testing.T) {
 			},
 		}
 
-		router.Route(msg)
+		router.Route(context.TODO(), msg)
 		if i%2 == 0 {
-			go router.Route(msg)
+			go router.Route(context.TODO(), msg)
 		}
 	}
 

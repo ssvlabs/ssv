@@ -191,7 +191,6 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 }
 
 func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
-	qmsg := queue.QMsg{}
 	c.mtx.RLock()
 	queue, exists := c.Queues[slot]
 	c.mtx.RUnlock()
@@ -200,9 +199,7 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 		return
 	}
 
-	qmsg.SSVMessage = *dec
-
-	if pushed := queue.Q.TryPush(&qmsg); !pushed {
+	if pushed := queue.Q.TryPush(dec); !pushed {
 		c.logger.Warn("dropping ExecuteDuty message because the queue is full")
 	}
 }

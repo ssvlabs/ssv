@@ -2,7 +2,6 @@ package queue
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	"github.com/ssvlabs/ssv-spec/qbft"
 )
 
@@ -19,7 +18,7 @@ type State struct {
 // MessagePrioritizer is an interface for prioritizing messages.
 type MessagePrioritizer interface {
 	// Prior returns true if message A should be prioritized over B.
-	Prior(a, b *QMsg) bool
+	Prior(a, b *SSVMessage) bool
 }
 
 type standardPrioritizer struct {
@@ -32,7 +31,7 @@ func NewMessagePrioritizer(state *State) MessagePrioritizer {
 	return &standardPrioritizer{state: state}
 }
 
-func (p *standardPrioritizer) Prior(a, b *QMsg) bool {
+func (p *standardPrioritizer) Prior(a, b *SSVMessage) bool {
 	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
 	if msgScoreA != msgScoreB {
 		return msgScoreA > msgScoreB
@@ -81,7 +80,7 @@ type committeePrioritizer struct {
 	state *State
 }
 
-func (p *committeePrioritizer) Prior(a, b *QMsg) bool {
+func (p *committeePrioritizer) Prior(a, b *SSVMessage) bool {
 	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
 	if msgScoreA != msgScoreB {
 		return msgScoreA > msgScoreB

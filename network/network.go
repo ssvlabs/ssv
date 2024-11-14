@@ -1,9 +1,11 @@
 package network
 
 import (
+	"context"
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"go.uber.org/zap"
 
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
@@ -18,7 +20,7 @@ type DecodedSSVMessage interface {
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(message DecodedSSVMessage)
+	Route(ctx context.Context, message DecodedSSVMessage)
 }
 
 // MessageRouting allows to register a MessageRouter
