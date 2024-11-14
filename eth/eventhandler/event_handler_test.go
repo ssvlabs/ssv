@@ -964,14 +964,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-
-		require.Equal(t, highestAttestation.Source.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, currentSlot.GetSlot())
+		require.Equal(t, netCfg.EstimatedCurrentSlot(), highestProposal)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -1014,13 +1013,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, currentSlot.GetSlot())
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentSlot(), highestProposal)
 
 		blockNum++
 	})
