@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -77,6 +76,7 @@ const addressLength = 20
 // in terms of what types it supports, hence we define a bunch of own types here to satisfy it,
 // see more on this here: https://github.com/ferranbt/fastssz/issues/179#issuecomment-2454371820
 type storageShare struct {
+	ValidatorIndex        uint64
 	ValidatorPubKey       []byte             `ssz-max:"48"`
 	SharePubKey           []byte             `ssz-max:"48"`
 	Committee             []*storageOperator `ssz-max:"13"`
@@ -84,27 +84,17 @@ type storageShare struct {
 	DomainType            [4]byte `ssz-size:"4"`
 	FeeRecipientAddress   [addressLength]byte
 	Graffiti              []byte `ssz-max:"32"`
-	storageShareMetadata
+
+	Balance         uint64
+	Status          uint64
+	ActivationEpoch uint64
+	OwnerAddress    [addressLength]byte
+	Liquidated      bool
 }
 
 type storageOperator struct {
 	OperatorID uint64
 	PubKey     []byte `ssz-max:"48"`
-}
-
-type storageShareMetadata struct {
-	BeaconMetadata storageShareValidatorMetadata
-	OwnerAddress   [addressLength]byte
-	Liquidated     bool
-	// lastUpdated is an internal field that can be used to track the last time the metadata was updated.
-	lastUpdated time.Time
-}
-
-type storageShareValidatorMetadata struct {
-	Balance         uint64
-	Status          uint64
-	Index           uint64
-	ActivationEpoch uint64
 }
 
 // Encode encodes Share using ssz.
@@ -283,7 +273,8 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 		}
 	}
 	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
-	stShare := &storageShare{
+	return &storageShare{
+		ValidatorIndex:      uint64(share.ValidatorIndex),
 		ValidatorPubKey:     share.ValidatorPubKey[:],
 		SharePubKey:         share.SharePubKey,
 		Committee:           committee,
@@ -292,23 +283,12 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 		DomainType:          share.DomainType,
 		FeeRecipientAddress: share.FeeRecipientAddress,
 		Graffiti:            share.Graffiti,
-		storageShareMetadata: storageShareMetadata{
-			OwnerAddress: share.Metadata.OwnerAddress,
-			Liquidated:   share.Metadata.Liquidated,
-			lastUpdated:  share.Metadata.MetadataLastUpdated(),
-		},
+		OwnerAddress:        share.OwnerAddress,
+		Liquidated:          share.Liquidated,
+		Balance:             uint64(share.Balance),
+		Status:              uint64(share.Status), // nolint: gosec
+		ActivationEpoch:     uint64(share.ActivationEpoch),
 	}
-
-	if share.Metadata.BeaconMetadata != nil {
-		stShare.storageShareMetadata.BeaconMetadata = storageShareValidatorMetadata{
-			Balance:         uint64(share.Metadata.BeaconMetadata.Balance),
-			Status:          uint64(share.Metadata.BeaconMetadata.Status), // nolint: gosec
-			Index:           uint64(share.Metadata.BeaconMetadata.Index),
-			ActivationEpoch: uint64(share.Metadata.BeaconMetadata.ActivationEpoch),
-		}
-	}
-
-	return stShare
 }
 
 func (s *sharesStorage) storageShareToSpecShare(stShare *storageShare) (*types.SSVShare, error) {
@@ -329,6 +309,7 @@ func (s *sharesStorage) storageShareToSpecShare(stShare *storageShare) (*types.S
 
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
+			ValidatorIndex:      phase0.ValidatorIndex(stShare.ValidatorIndex),
 			ValidatorPubKey:     validatorPubKey,
 			SharePubKey:         stShare.SharePubKey,
 			Committee:           committee,
@@ -336,21 +317,12 @@ func (s *sharesStorage) storageShareToSpecShare(stShare *storageShare) (*types.S
 			FeeRecipientAddress: stShare.FeeRecipientAddress,
 			Graffiti:            stShare.Graffiti,
 		},
-		Metadata: types.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Balance:         phase0.Gwei(stShare.BeaconMetadata.Balance),
-				Status:          eth2apiv1.ValidatorState(stShare.BeaconMetadata.Status), // nolint: gosec
-				Index:           phase0.ValidatorIndex(stShare.BeaconMetadata.Index),
-				ActivationEpoch: phase0.Epoch(stShare.BeaconMetadata.ActivationEpoch),
-			},
-			OwnerAddress: stShare.OwnerAddress,
-			Liquidated:   stShare.Liquidated,
-		},
+		Balance:         phase0.Gwei(stShare.Balance),
+		Status:          eth2apiv1.ValidatorState(stShare.Status), // nolint: gosec
+		ActivationEpoch: phase0.Epoch(stShare.ActivationEpoch),
+		OwnerAddress:    stShare.OwnerAddress,
+		Liquidated:      stShare.Liquidated,
 	}
-	if stShare.BeaconMetadata.Index != 0 {
-		specShare.Share.ValidatorIndex = phase0.ValidatorIndex(stShare.BeaconMetadata.Index)
-	}
-	specShare.SetMetadataLastUpdated(stShare.lastUpdated)
 
 	return specShare, nil
 }
@@ -406,8 +378,10 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			if !exists {
 				continue
 			}
-			share.BeaconMetadata = metadata
-			share.Share.ValidatorIndex = metadata.Index
+			share.ValidatorIndex = metadata.Index
+			share.Balance = metadata.Balance
+			share.Status = metadata.Status
+			share.ActivationEpoch = metadata.ActivationEpoch
 			shares = append(shares, share)
 		}
 

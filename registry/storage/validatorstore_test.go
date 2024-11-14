@@ -14,11 +14,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
-
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var share1 = &ssvtypes.SSVShare{
@@ -30,15 +28,10 @@ var share1 = &ssvtypes.SSVShare{
 		FeeRecipientAddress: [20]byte{10, 20, 30},
 		Graffiti:            []byte("example"),
 	},
-	Metadata: ssvtypes.Metadata{
-		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-			Index:           phase0.ValidatorIndex(1),
-			ActivationEpoch: 100,
-			Status:          eth2apiv1.ValidatorStatePendingQueued,
-		},
-		OwnerAddress: common.HexToAddress("0x12345"),
-		Liquidated:   false,
-	},
+	ActivationEpoch: 100,
+	Status:          eth2apiv1.ValidatorStatePendingQueued,
+	OwnerAddress:    common.HexToAddress("0x12345"),
+	Liquidated:      false,
 }
 
 var share2 = &ssvtypes.SSVShare{
@@ -50,15 +43,10 @@ var share2 = &ssvtypes.SSVShare{
 		FeeRecipientAddress: [20]byte{40, 50, 60},
 		Graffiti:            []byte("test"),
 	},
-	Metadata: ssvtypes.Metadata{
-		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-			Index:           phase0.ValidatorIndex(2),
-			ActivationEpoch: 200,
-			Status:          eth2apiv1.ValidatorStatePendingQueued,
-		},
-		OwnerAddress: common.HexToAddress("0x67890"),
-		Liquidated:   false,
-	},
+	ActivationEpoch: 200,
+	Status:          eth2apiv1.ValidatorStatePendingQueued,
+	OwnerAddress:    common.HexToAddress("0x67890"),
+	Liquidated:      false,
 }
 
 var updatedShare2 = &ssvtypes.SSVShare{
@@ -70,15 +58,10 @@ var updatedShare2 = &ssvtypes.SSVShare{
 		FeeRecipientAddress: [20]byte{40, 50, 60},
 		Graffiti:            []byte("test"),
 	},
-	Metadata: ssvtypes.Metadata{
-		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-			Index:           phase0.ValidatorIndex(2),
-			ActivationEpoch: 200,
-			Status:          eth2apiv1.ValidatorStatePendingQueued,
-		},
-		OwnerAddress: common.HexToAddress("0x67890"),
-		Liquidated:   true,
-	},
+	ActivationEpoch: 200,
+	Status:          eth2apiv1.ValidatorStatePendingQueued,
+	OwnerAddress:    common.HexToAddress("0x67890"),
+	Liquidated:      true,
 }
 
 func TestValidatorStore(t *testing.T) {
@@ -452,11 +435,6 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 		}
 
 		return &ssvtypes.SSVShare{
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: phase0.ValidatorIndex(index),
-				},
-			},
 			Share: spectypes.Share{
 				ValidatorIndex:      phase0.ValidatorIndex(index),
 				ValidatorPubKey:     pk,
@@ -555,11 +533,6 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 		}
 
 		return &ssvtypes.SSVShare{
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: phase0.ValidatorIndex(index),
-				},
-			},
 			Share: spectypes.Share{
 				ValidatorIndex:      phase0.ValidatorIndex(index),
 				ValidatorPubKey:     pk,
@@ -840,15 +813,10 @@ func TestValidatorStore_HandlingDifferentStatuses(t *testing.T) {
 			FeeRecipientAddress: [20]byte{70, 80, 90},
 			Graffiti:            []byte("status_test"),
 		},
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Index:           phase0.ValidatorIndex(3),
-				ActivationEpoch: 300,
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
-			},
-			OwnerAddress: common.HexToAddress("0xabcde"),
-			Liquidated:   false,
-		},
+		ActivationEpoch: 300,
+		Status:          eth2apiv1.ValidatorStateActiveOngoing,
+		OwnerAddress:    common.HexToAddress("0xabcde"),
+		Liquidated:      false,
 	}
 
 	store := newValidatorStore(
@@ -899,15 +867,10 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 				FeeRecipientAddress: [20]byte{byte(i)},
 				Graffiti:            []byte("bulk_add"),
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index:           phase0.ValidatorIndex(i),
-					ActivationEpoch: phase0.Epoch(i),
-					Status:          eth2apiv1.ValidatorStatePendingQueued,
-				},
-				OwnerAddress: common.HexToAddress(fmt.Sprintf("0x%x", i)),
-				Liquidated:   false,
-			},
+			ActivationEpoch: phase0.Epoch(i),
+			Status:          eth2apiv1.ValidatorStatePendingQueued,
+			OwnerAddress:    common.HexToAddress(fmt.Sprintf("0x%x", i)),
+			Liquidated:      false,
 		}
 		bulkShares = append(bulkShares, share)
 		shareMap[share.ValidatorPubKey] = share
@@ -988,15 +951,10 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 			FeeRecipientAddress: [20]byte{70, 80, 90},
 			Graffiti:            []byte("invalid_committee"),
 		},
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Index:           phase0.ValidatorIndex(10),
-				ActivationEpoch: 500,
-				Status:          eth2apiv1.ValidatorStatePendingQueued,
-			},
-			OwnerAddress: common.HexToAddress("0xdeadbeef"),
-			Liquidated:   false,
-		},
+		ActivationEpoch: 500,
+		Status:          eth2apiv1.ValidatorStatePendingQueued,
+		OwnerAddress:    common.HexToAddress("0xdeadbeef"),
+		Liquidated:      false,
 	}
 
 	shareMap[invalidCommitteeShare.ValidatorPubKey] = invalidCommitteeShare
@@ -1094,8 +1052,8 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 	})
 
 	// Update shares
-	share1.Metadata.BeaconMetadata.Status = eth2apiv1.ValidatorStateActiveOngoing
-	share2.Metadata.BeaconMetadata.Status = eth2apiv1.ValidatorStateActiveOngoing
+	share1.Status = eth2apiv1.ValidatorStateActiveOngoing
+	share2.Status = eth2apiv1.ValidatorStateActiveOngoing
 
 	t.Run("bulk update shares", func(t *testing.T) {
 		require.NoError(t, store.handleSharesUpdated(share1, share2))
@@ -1103,8 +1061,8 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 		s2, e2 := store.Validator(share2.ValidatorPubKey[:])
 		require.True(t, e1)
 		require.True(t, e2)
-		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, s1.Metadata.BeaconMetadata.Status)
-		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, s2.Metadata.BeaconMetadata.Status)
+		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, s1.Status)
+		require.Equal(t, eth2apiv1.ValidatorStateActiveOngoing, s2.Status)
 	})
 }
 
@@ -1145,11 +1103,8 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	})
 
 	// Update share to have metadata
-	noMetadataShare.Metadata = ssvtypes.Metadata{
-		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-			Index: phase0.ValidatorIndex(10),
-		},
-	}
+	noMetadataShare.ValidatorIndex = phase0.ValidatorIndex(10)
+	noMetadataShare.Status = eth2apiv1.ValidatorStatePendingInitialized
 
 	t.Run("update share with metadata", func(t *testing.T) {
 		require.NoError(t, store.handleSharesUpdated(noMetadataShare))

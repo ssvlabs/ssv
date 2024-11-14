@@ -3,7 +3,7 @@ package types
 import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	typesv2 "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -45,9 +45,14 @@ func ConvertToGenesisSSVShare(alanSSVShare *typesv2.SSVShare, operator *spectype
 	genesisShare := ConvertToGenesisShare(&alanSSVShare.Share, operator)
 
 	convertedMetadata := Metadata{
-		BeaconMetadata: alanSSVShare.Metadata.BeaconMetadata,
-		OwnerAddress:   alanSSVShare.Metadata.OwnerAddress,
-		Liquidated:     alanSSVShare.Metadata.Liquidated,
+		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+			Balance:         alanSSVShare.Balance,
+			Status:          alanSSVShare.Status,
+			Index:           alanSSVShare.ValidatorIndex,
+			ActivationEpoch: alanSSVShare.ActivationEpoch,
+		},
+		OwnerAddress: alanSSVShare.OwnerAddress,
+		Liquidated:   alanSSVShare.Liquidated,
 		// lastUpdated field is not converted because it's unexported
 	}
 
