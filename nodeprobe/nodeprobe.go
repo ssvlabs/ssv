@@ -11,6 +11,10 @@ import (
 )
 
 const (
+	EventSyncerNode     = "Ethereum event syncer"
+	ConsensusClientNode = "Ethereum consensus client"
+	ExecutionClientNode = "Ethereum execution client"
+
 	probeInterval = 24 * time.Second
 )
 
@@ -87,16 +91,13 @@ func (p *Prober) probe(ctx context.Context) {
 					err = fmt.Errorf("panic: %v", e)
 				}
 				if err != nil {
-					// Update readiness and quit early.
+					// Update readiness and cancel context to quit early.
 					healthy.Store(false)
 					cancel()
+					p.logger.Error("node is not healthy", zap.String("node", name), zap.Error(err))
 				}
 			}()
-
-			err = node.Healthy(ctx)
-			if err != nil {
-				p.logger.Error("node is not healthy", zap.String("node", name), zap.Error(err))
-			}
+			err = node.Healthy(ctx) // error is handled in defer to also address panic(s)
 		}(name, node)
 	}
 	p.nodesMu.Unlock()
@@ -109,7 +110,10 @@ func (p *Prober) probe(ctx context.Context) {
 	p.healthy.Store(healthy.Load())
 
 	if !p.healthy.Load() {
-		p.logger.Error("not all nodes are healthy")
+		p.logger.Error(
+			"not all nodes are healthy",
+			zap.Strings("nodes", []string{EventSyncerNode, ConsensusClientNode, ExecutionClientNode}),
+		)
 		if h := p.unhealthyHandler; h != nil {
 			h()
 		}
@@ -120,7 +124,7 @@ func (p *Prober) probe(ctx context.Context) {
 }
 
 func (p *Prober) Wait() {
-	p.logger.Info("waiting until nodes are healthy")
+	p.logger.Info("waiting until Ethereum nodes are healthy")
 
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
@@ -137,14 +141,12 @@ func (p *Prober) AddNode(name string, node Node) {
 	p.nodes[name] = node
 }
 
-// TODO: string constants are error-prone.
-// Add a method to clients that returns their name or solve this in another way
 func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
 	p.nodesMu.Lock()
 	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
-	return p.nodes["consensus client"].Healthy(ctx)
+	return p.nodes[ConsensusClientNode].Healthy(ctx)
 }
 
 func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
@@ -152,7 +154,7 @@ func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
 	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
-	return p.nodes["execution client"].Healthy(ctx)
+	return p.nodes[ExecutionClientNode].Healthy(ctx)
 }
 
 func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
@@ -160,10 +162,9 @@ func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
 	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
-
-	es, ok := p.nodes["event syncer"]
+	es, ok := p.nodes[EventSyncerNode]
 	if !ok {
-		return fmt.Errorf("event syncer not found")
+		return fmt.Errorf("%s not found", EventSyncerNode)
 	}
 	return es.Healthy(ctx)
 }
