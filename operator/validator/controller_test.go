@@ -284,7 +284,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
 
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(&queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
@@ -292,7 +292,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(&queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
@@ -300,7 +300,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(&queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
 			MsgType: message.SSVSyncMsgType,
 			MsgID:   identifier,
@@ -308,7 +308,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(&queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
 			MsgType: 123,
 			MsgID:   identifier,
@@ -316,7 +316,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(&queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
 			MsgID:   identifier,
@@ -1029,7 +1029,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
 		networkConfig:           opts.networkConfig,
-		messageRouter:           newMessageRouter(logger),
+		messageRouter:           newMessageRouter(context.TODO(), logger),
 		committeeValidatorSetup: make(chan struct{}),
 		indicesChange:           make(chan struct{}, 32),
 		messageWorker: worker.NewWorker(logger, &worker.Config{

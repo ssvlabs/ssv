@@ -17,11 +17,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/validation"
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
@@ -374,7 +374,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,
-		MsgHandler: func(_ context.Context, topic string, msg *pubsub.Message) error {
+		MsgHandler: func(topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil
 		},

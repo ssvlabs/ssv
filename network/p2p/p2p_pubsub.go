@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
@@ -9,9 +8,9 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -217,8 +216,8 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 }
 
 // handlePubsubMessages reads messages from the given channel and calls the router, note that this function blocks.
-func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.Context, topic string, msg *pubsub.Message) error {
-	return func(ctx context.Context, topic string, msg *pubsub.Message) error {
+func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string, msg *pubsub.Message) error {
+	return func(topic string, msg *pubsub.Message) error {
 		if n.msgRouter == nil {
 			logger.Debug("msg router is not configured")
 			return nil
@@ -241,7 +240,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return fmt.Errorf("unknown decoded message type: %T", m)
 		}
 
-		n.msgRouter.Route(ctx, decodedMsg)
+		n.msgRouter.Route(decodedMsg)
 
 		return nil
 	}

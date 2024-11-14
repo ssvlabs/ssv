@@ -320,7 +320,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter:        newMessageRouter(logger),
+		messageRouter:        newMessageRouter(options.Context, logger),
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
