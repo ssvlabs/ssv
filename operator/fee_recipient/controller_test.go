@@ -8,13 +8,10 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -26,6 +23,9 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 func TestSubmitProposal(t *testing.T) {
@@ -145,15 +145,11 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 		return &types.SSVShare{
 			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
 				ValidatorIndex: phase0.ValidatorIndex(index),
-				Committee:      []*spectypes.ShareMember{&spectypes.ShareMember{Signer: operatorID}},
+				Committee:      []*spectypes.ShareMember{{Signer: operatorID}},
 			},
-			Metadata: types.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Index: phase0.ValidatorIndex(index),
-				},
-				OwnerAddress: common.BytesToAddress(ownerAddrByte[:]),
-				Liquidated:   false,
-			},
+			Status:       eth2apiv1.ValidatorStateActiveOngoing,
+			OwnerAddress: common.BytesToAddress(ownerAddrByte[:]),
+			Liquidated:   false,
 		}
 	}
 

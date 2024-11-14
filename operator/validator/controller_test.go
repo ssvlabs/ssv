@@ -18,10 +18,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -45,6 +41,9 @@ import (
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 const (
@@ -116,30 +115,20 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
-			Metadata: types.Metadata{
-				Liquidated: false,
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         0,
-					Status:          3, // ValidatorStatePendingInitialized
-					Index:           0,
-					ActivationEpoch: passedEpoch,
-				},
-			},
+			Balance:         0,
+			Status:          3, // ValidatorStatePendingInitialized
+			ActivationEpoch: passedEpoch,
+			Liquidated:      false,
 		},
 		{
 			Share: spectypes.Share{
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
-			Metadata: types.Metadata{
-				Liquidated: false,
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         0,
-					Status:          3, // Some other status
-					Index:           0,
-					ActivationEpoch: passedEpoch,
-				},
-			},
+			Balance:         0,
+			Status:          3, // Some other status
+			ActivationEpoch: passedEpoch,
+			Liquidated:      false,
 		},
 	}
 	_ = sharesWithMetadata
@@ -151,9 +140,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
-			Metadata: types.Metadata{
-				Liquidated: false,
-			},
+			Liquidated: false,
 		},
 		{
 			Share: spectypes.Share{
@@ -161,9 +148,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
-			Metadata: types.Metadata{
-				Liquidated: false,
-			},
+			Liquidated: false,
 		},
 	}
 	_ = sharesWithoutMetadata
@@ -348,19 +333,14 @@ func TestSetupValidators(t *testing.T) {
 
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
+			ValidatorIndex: 1,
 			// OperatorID:      2,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
-		Metadata: types.Metadata{
-			OwnerAddress: common.BytesToAddress([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			BeaconMetadata: &beacon.ValidatorMetadata{
-				Balance:         0,
-				Status:          3, // ValidatorStateActiveOngoing
-				Index:           1,
-				ActivationEpoch: passedEpoch,
-			},
-		},
+		Balance:         0,
+		Status:          3, // ValidatorStateActiveOngoing
+		ActivationEpoch: passedEpoch,
 	}
 
 	shareWithoutMetaData := &types.SSVShare{
@@ -369,10 +349,7 @@ func TestSetupValidators(t *testing.T) {
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
-		Metadata: types.Metadata{
-			OwnerAddress:   common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			BeaconMetadata: nil,
-		},
+		OwnerAddress: common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 	}
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
@@ -585,9 +562,7 @@ func TestGetValidator(t *testing.T) {
 
 	// Initialize a test validator with the decoded owner address
 	testValidator := &validator.Validator{
-		Share: &types.SSVShare{
-			Metadata: types.Metadata{},
-		},
+		Share: &types.SSVShare{},
 	}
 
 	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
@@ -632,27 +607,17 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Metadata: types.Metadata{
-					BeaconMetadata: &beacon.ValidatorMetadata{
-						Balance:         0,
-						Status:          3, // ValidatorStatePendingInitialized
-						Index:           0,
-						ActivationEpoch: passedEpoch,
-					},
-				},
+				Balance:         0,
+				Status:          3, // ValidatorStatePendingInitialized
+				ActivationEpoch: passedEpoch,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators[1:],
 				},
-				Metadata: types.Metadata{
-					BeaconMetadata: &beacon.ValidatorMetadata{
-						Balance:         0,
-						Status:          1, // Some other status
-						Index:           0,
-						ActivationEpoch: passedEpoch,
-					},
-				},
+				Balance:         0,
+				Status:          1, // Some other status
+				ActivationEpoch: passedEpoch,
 			},
 		}
 
@@ -691,14 +656,9 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Metadata: types.Metadata{
-					BeaconMetadata: &beacon.ValidatorMetadata{
-						Balance:         0,
-						Status:          3, // ValidatorStatePendingInitialized
-						Index:           0,
-						ActivationEpoch: passedEpoch,
-					},
-				},
+				Balance:         0,
+				Status:          3, // ValidatorStatePendingInitialized
+				ActivationEpoch: passedEpoch,
 			},
 		}
 
@@ -729,14 +689,9 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: nil,
 				},
-				Metadata: types.Metadata{
-					BeaconMetadata: &beacon.ValidatorMetadata{
-						Balance:         0,
-						Status:          3, // ValidatorStatePendingInitialized
-						Index:           0,
-						ActivationEpoch: passedEpoch,
-					},
-				},
+				Balance:         0,
+				Status:          3, // ValidatorStatePendingInitialized
+				ActivationEpoch: passedEpoch,
 			},
 		}
 
@@ -774,27 +729,17 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Metadata: types.Metadata{
-					BeaconMetadata: &beacon.ValidatorMetadata{
-						Balance:         0,
-						Status:          3, // ValidatorStatePendingInitialized
-						Index:           0,
-						ActivationEpoch: passedEpoch,
-					},
-				},
+				Balance:         0,
+				Status:          3, // ValidatorStatePendingInitialized
+				ActivationEpoch: passedEpoch,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Metadata: types.Metadata{
-					BeaconMetadata: &beacon.ValidatorMetadata{
-						Balance:         0,
-						Status:          1,
-						Index:           0,
-						ActivationEpoch: passedEpoch,
-					},
-				},
+				Balance:         0,
+				Status:          1,
+				ActivationEpoch: passedEpoch,
 			},
 		}
 
@@ -971,9 +916,7 @@ func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.
 			Share: spectypes.Share{
 				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
 			},
-			Metadata: types.Metadata{
-				OwnerAddress: common.BytesToAddress(ownerAddressBytes),
-			},
+			OwnerAddress: common.BytesToAddress(ownerAddressBytes),
 		},
 	}
 }

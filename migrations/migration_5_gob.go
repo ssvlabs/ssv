@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -14,7 +16,7 @@ var sharesPrefixGOB = []byte("shares")
 
 type storageShareGOB struct {
 	Share
-	types.Metadata
+	Metadata
 }
 
 // Decode decodes Share using gob.
@@ -50,6 +52,13 @@ type storageOperatorGOB struct {
 	PubKey     []byte `ssz-size:"48"`
 }
 
+// Metadata represents metadata of SSVShare.
+type Metadata struct {
+	BeaconMetadata *beaconprotocol.ValidatorMetadata
+	OwnerAddress   common.Address
+	Liquidated     bool
+}
+
 func storageShareGOBToSpecShare(share *storageShareGOB) (*types.SSVShare, error) {
 	committee := make([]*spectypes.ShareMember, len(share.Committee))
 	for i, c := range share.Committee {
@@ -75,11 +84,15 @@ func storageShareGOBToSpecShare(share *storageShareGOB) (*types.SSVShare, error)
 			FeeRecipientAddress: share.FeeRecipientAddress,
 			Graffiti:            share.Graffiti,
 		},
-		Metadata: share.Metadata,
+		OwnerAddress: share.OwnerAddress,
+		Liquidated:   share.Liquidated,
 	}
 
-	if share.BeaconMetadata != nil && share.BeaconMetadata.Index != 0 {
-		specShare.Share.ValidatorIndex = share.Metadata.BeaconMetadata.Index
+	if share.BeaconMetadata != nil {
+		specShare.ValidatorIndex = share.BeaconMetadata.Index
+		specShare.Balance = share.BeaconMetadata.Balance
+		specShare.Status = share.BeaconMetadata.Status
+		specShare.ActivationEpoch = share.BeaconMetadata.ActivationEpoch
 	}
 
 	return specShare, nil

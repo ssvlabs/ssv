@@ -57,7 +57,10 @@ func TestValidatorSerializer(t *testing.T) {
 	require.NotNil(t, v1.ValidatorPubKey)
 	require.Equal(t, hex.EncodeToString(v1.ValidatorPubKey[:]), hex.EncodeToString(validatorShare.ValidatorPubKey[:]))
 	require.NotNil(t, v1.Committee)
-	require.Equal(t, v1.BeaconMetadata, validatorShare.BeaconMetadata)
+	require.Equal(t, v1.ValidatorIndex, validatorShare.ValidatorIndex)
+	require.Equal(t, v1.Balance, validatorShare.Balance)
+	require.Equal(t, v1.Status, validatorShare.Status)
+	require.Equal(t, v1.ActivationEpoch, validatorShare.ActivationEpoch)
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
 	require.Equal(t, v1.Liquidated, validatorShare.Liquidated)
 
@@ -97,16 +100,12 @@ func TestSharesStorage(t *testing.T) {
 	}
 
 	validatorShare, _ := generateRandomShare(splitKeys)
-	validatorShare.Metadata = ssvtypes.Metadata{
-		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-			Balance:         1,
-			Status:          eth2apiv1.ValidatorStateActiveOngoing,
-			Index:           3,
-			ActivationEpoch: 4,
-		},
-		OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-		Liquidated:   false,
-	}
+	validatorShare.Balance = 1
+	validatorShare.Status = eth2apiv1.ValidatorStateActiveOngoing
+	validatorShare.ValidatorIndex = 3
+	validatorShare.ActivationEpoch = 4
+	validatorShare.OwnerAddress = common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e")
+	validatorShare.Liquidated = false
 	require.NoError(t, storage.Shares.Save(nil, validatorShare))
 
 	validatorShare2, _ := generateRandomShare(splitKeys)
@@ -135,7 +134,7 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	t.Run("List_Filter_ByClusterId", func(t *testing.T) {
-		clusterID := ssvtypes.ComputeClusterIDHash(validatorShare.Metadata.OwnerAddress, []uint64{1, 2, 3, 4})
+		clusterID := ssvtypes.ComputeClusterIDHash(validatorShare.OwnerAddress, []uint64{1, 2, 3, 4})
 
 		validators := storage.Shares.List(nil, ByClusterIDHash(clusterID))
 		require.Equal(t, 2, len(validators))
@@ -517,6 +516,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(splitKeys)))
 
 	return &storageShare{
+		ValidatorIndex:      3,
 		ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 		SharePubKey:         sk2.GetPublicKey().Serialize(),
 		Committee:           ibftCommittee,
@@ -525,16 +525,11 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 		DomainType:          networkconfig.TestNetwork.DomainType,
 		FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Graffiti:            bytes.Repeat([]byte{0x01}, 32),
-		storageShareMetadata: storageShareMetadata{
-			BeaconMetadata: storageShareValidatorMetadata{
-				Balance:         1,
-				Status:          2,
-				Index:           3,
-				ActivationEpoch: 4,
-			},
-			OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Liquidated:   true,
-		},
+		Balance:             1,
+		Status:              2,
+		ActivationEpoch:     4,
+		OwnerAddress:        common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+		Liquidated:          true,
 	}, &sk1
 }
 
@@ -558,6 +553,7 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShar
 
 	return &ssvtypes.SSVShare{
 		Share: spectypes.Share{
+			ValidatorIndex:      3,
 			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
 			ValidatorIndex:      3,
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
@@ -566,16 +562,11 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShar
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Balance:         1,
-				Status:          2,
-				Index:           3,
-				ActivationEpoch: 4,
-			},
-			OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Liquidated:   true,
-		},
+		Balance:         1,
+		Status:          2,
+		ActivationEpoch: 4,
+		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+		Liquidated:      true,
 	}, &sk1
 }
 

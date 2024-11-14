@@ -500,17 +500,13 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if share.BeaconMetadata == nil {
-		return nil, nil
-	}
-
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], share.ValidatorPubKey[:])
 
 	ed := &duties.ExitDescriptor{
 		OwnValidator:   false,
 		PubKey:         pk,
-		ValidatorIndex: share.BeaconMetadata.Index,
+		ValidatorIndex: share.ValidatorIndex,
 		BlockNumber:    event.Raw.BlockNumber,
 	}
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
