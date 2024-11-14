@@ -60,31 +60,32 @@ func setupTimer(beaconConfig networkconfig.Beacon, onTimeout OnRoundTimeoutF, ro
 }
 
 func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	beaconConfig := networkconfig.Beacon{
-		SlotDuration: 120 * time.Millisecond,
-	}
+	beaconConfig := networkconfig.TestingBeaconConfig
+	beaconConfig.SlotDuration = 120 * time.Millisecond
+	beaconConfig.MinGenesisTime = time.Now().Add(500 * time.Millisecond)
 
-	count := int32(0)
+	count := atomic.Int32{}
 	onTimeout := func(round specqbft.Round) {
-		atomic.AddInt32(&count, 1)
+		count.Add(1)
 	}
 
 	timer := setupTimer(beaconConfig, onTimeout, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
-	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + time.Millisecond*10)
-	require.Equal(t, int32(1), atomic.LoadInt32(&count))
+	require.Equal(t, int32(0), count.Load())
+	untilTimeout := timer.RoundTimeout(specqbft.FirstHeight, threshold)
+	<-time.After(untilTimeout + time.Millisecond*10)
+	require.Equal(t, int32(1), count.Load())
 }
 
 func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	beaconConfig := networkconfig.Beacon{
-		SlotDuration: 120 * time.Millisecond,
-	}
+	beaconConfig := networkconfig.TestingBeaconConfig
+	beaconConfig.SlotDuration = 120 * time.Millisecond
+	beaconConfig.MinGenesisTime = time.Now().Add(500 * time.Millisecond)
 
-	count := int32(0)
+	count := atomic.Int32{}
 	onTimeout := func(round specqbft.Round) {
-		atomic.AddInt32(&count, 1)
+		count.Add(1)
 	}
 
 	timer := setupTimer(beaconConfig, onTimeout, role, threshold)
@@ -92,26 +93,26 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2)) // reset before elapsed
-	require.Equal(t, int32(0), atomic.LoadInt32(&count))
+	require.Equal(t, int32(0), count.Load())
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + time.Millisecond*10)
-	require.Equal(t, int32(1), atomic.LoadInt32(&count))
+	require.Equal(t, int32(1), count.Load())
 }
 
 func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	var count int32
+	var count atomic.Int32
 	var timestamps = make([]int64, 4)
 	var mu sync.Mutex
 
 	onTimeout := func(index int) {
-		atomic.AddInt32(&count, 1)
+		count.Add(1)
 		mu.Lock()
 		timestamps[index] = time.Now().UnixNano()
 		mu.Unlock()
 	}
 
-	beaconConfig := networkconfig.Beacon{
-		SlotDuration: 100 * time.Millisecond,
-	}
+	beaconConfig := networkconfig.TestingBeaconConfig
+	beaconConfig.SlotDuration = 100 * time.Millisecond
+	beaconConfig.MinGenesisTime = time.Now().Add(500 * time.Millisecond)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -139,7 +140,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 	// Wait a bit more than the expected timeout to ensure all timers have triggered
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + time.Millisecond*100)
 
-	require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
+	require.Equal(t, int32(4), count.Load(), "All four timers should have triggered")
 
 	mu.Lock()
 	for i := 1; i < 4; i++ {
