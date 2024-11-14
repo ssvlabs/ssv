@@ -174,7 +174,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 }
 
 func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []spectypes.BeaconRole {
-	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
+	switch msg.MsgID.GetRoleType() {
+	case spectypes.RoleCommittee:
 		attester := ncv.attesterRoots.Get(root)
 		syncCommittee := ncv.syncCommRoots.Get(root)
 
@@ -188,11 +189,6 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		default:
 			return nil
 		}
-	}
-
-	switch msg.MsgID.GetRoleType() {
-	case spectypes.RoleCommittee:
-		// taken care above
 	case spectypes.RoleAggregator:
 		return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
 	case spectypes.RoleProposer:
