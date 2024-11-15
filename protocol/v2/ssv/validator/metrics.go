@@ -9,7 +9,6 @@ import (
 )
 
 type Metrics interface {
-	ValidatorInactive(publicKey []byte)
 	ValidatorNoIndex(publicKey []byte)
 	ValidatorError(publicKey []byte)
 	ValidatorReady(publicKey []byte)
@@ -26,7 +25,6 @@ type Metrics interface {
 
 type NopMetrics struct{}
 
-func (n NopMetrics) ValidatorInactive([]byte)                              {}
 func (n NopMetrics) ValidatorNoIndex([]byte)                               {}
 func (n NopMetrics) ValidatorError([]byte)                                 {}
 func (n NopMetrics) ValidatorReady([]byte)                                 {}
