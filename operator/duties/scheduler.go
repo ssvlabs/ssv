@@ -12,11 +12,10 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -31,19 +30,6 @@ import (
 )
 
 //go:generate mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
-
-var slotDelayHistogram = promauto.NewHistogram(prometheus.HistogramOpts{
-	Name:    "slot_ticker_delay_milliseconds",
-	Help:    "The delay in milliseconds of the slot ticker",
-	Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
-})
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(slotDelayHistogram); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
 
 const (
 	// blockPropagationDelay time to propagate around the nodes
@@ -381,11 +367,12 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
+		slotDelayHistogram.Record(context.TODO(), slotDelay.Seconds())
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
+			dutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.duty.type", duty.Type.String())))
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
@@ -403,9 +390,10 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
+		slotDelayHistogram.Record(context.TODO(), slotDelay.Seconds())
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
+			committeeDutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.runner.role", committee.duty.RunnerRole().String())))
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
