@@ -50,6 +50,7 @@ import (
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -119,6 +120,20 @@ var StartNodeCmd = &cobra.Command{
 		metricsReporter := metricsreporter.New(
 			metricsreporter.WithLogger(logger),
 		)
+
+		observabilityShutdown, err := observability.Initialize(
+			cmd.Parent().Short,
+			cmd.Parent().Version,
+			observability.WithMetrics())
+		if err != nil {
+			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+		}
+
+		defer func() {
+			if err = observabilityShutdown(cmd.Context()); err != nil {
+				logger.Error("could not shutdown observability object", zap.Error(err))
+			}
+		}()
 
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
@@ -203,7 +218,6 @@ var StartNodeCmd = &cobra.Command{
 			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
-			executionclient.WithMetrics(metricsReporter),
 			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
@@ -709,7 +723,6 @@ func setupEventHandling(
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
-		eventhandler.WithMetrics(metricsReporter),
 	)
 	if err != nil {
 		logger.Fatal("failed to setup event data handler", zap.Error(err))
@@ -720,7 +733,6 @@ func setupEventHandling(
 		executionClient,
 		eventHandler,
 		eventsyncer.WithLogger(logger),
-		eventsyncer.WithMetrics(metricsReporter),
 	)
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
