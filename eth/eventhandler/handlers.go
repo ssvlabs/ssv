@@ -89,7 +89,6 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		logger = logger.With(zap.Bool("own_operator", true))
 	}
 
-	eh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
 	logger.Debug("processed event")
 
 	return nil
@@ -189,7 +188,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 				return nil, err
 			}
 
-			eh.metrics.ValidatorError(event.PublicKey)
 			return nil, err
 		}
 
@@ -208,7 +206,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		eh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", true))
 	}
@@ -374,7 +371,6 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
-		eh.metrics.ValidatorRemoved(event.PublicKey)
 		logger.Debug("processed event")
 		return share.ValidatorPubKey, nil
 	}
