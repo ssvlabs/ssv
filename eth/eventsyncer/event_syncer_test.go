@@ -130,7 +130,6 @@ func TestEventSyncer(t *testing.T) {
 		eh,
 		WithLogger(logger),
 		WithStalenessThreshold(time.Second*10),
-		WithMetrics(nopMetrics{}),
 	)
 
 	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
