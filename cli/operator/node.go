@@ -125,6 +125,20 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 
+		observabilityShutdown, err := observability.Initialize(
+			cmd.Parent().Short,
+			cmd.Parent().Version,
+			observability.WithMetrics())
+		if err != nil {
+			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+		}
+
+		defer func() {
+			if err = observabilityShutdown(cmd.Context()); err != nil {
+				logger.Error("could not shutdown observability object", zap.Error(err))
+			}
+		}()
+
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
