@@ -23,11 +23,6 @@ const (
 	ssvNodeNotHealthy = float64(0)
 	ssvNodeHealthy    = float64(1)
 
-	executionClientFailure = float64(0)
-	executionClientSyncing = float64(1)
-	executionClientOK      = float64(2)
-
-	validatorInactive     = float64(0)
 	validatorNoIndex      = float64(1)
 	validatorError        = float64(2)
 	validatorReady        = float64(3)
@@ -49,27 +44,10 @@ var (
 		Name: "ssv_node_status",
 		Help: "Status of the operator node",
 	})
-	// TODO: rename "eth1" in metrics
-	executionClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_eth1_status",
-		Help: "Status of the connected execution client",
-	})
-	executionClientLastFetchedBlock = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_execution_client_last_fetched_block",
-		Help: "Last fetched block by execution client",
-	})
 	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
 	}, []string{"pubKey"})
-	eventProcessed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_eth1_sync_count_success",
-		Help: "Count succeeded execution client events",
-	}, []string{"etype"})
-	eventProcessingFailed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_eth1_sync_count_failed",
-		Help: "Count failed execution client events",
-	}, []string{"etype"})
 	operatorIndex = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:exporter:operator_index",
 		Help: "operator footprint",
@@ -165,12 +143,7 @@ type MetricsReporter interface {
 
 	SSVNodeHealthy()
 	SSVNodeNotHealthy()
-	ExecutionClientReady()
-	ExecutionClientSyncing()
-	ExecutionClientFailure()
-	ExecutionClientLastFetchedBlock(block uint64)
 	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
-	ValidatorInactive(publicKey []byte)
 	ValidatorNoIndex(publicKey []byte)
 	ValidatorError(publicKey []byte)
 	ValidatorReady(publicKey []byte)
@@ -181,13 +154,9 @@ type MetricsReporter interface {
 	ValidatorPending(publicKey []byte)
 	ValidatorRemoved(publicKey []byte)
 	ValidatorUnknown(publicKey []byte)
-	EventProcessed(eventName string)
-	EventProcessingFailed(eventName string)
 	MessagesReceivedFromPeer(peerId peer.ID)
 	MessagesReceivedTotal()
 	MessageValidationRSAVerifications()
-	LastBlockProcessed(block uint64)
-	LogsProcessingError(err error)
 	MessageAccepted(role spectypes.RunnerRole, round specqbft.Round)
 	MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round)
 	MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round)
@@ -226,47 +195,6 @@ func New(opts ...Option) MetricsReporter {
 		opt(mr)
 	}
 
-	// TODO: think how to register all metrics without adding them all to the slice
-	allMetrics := []prometheus.Collector{
-		ssvNodeStatus,
-		executionClientStatus,
-		executionClientLastFetchedBlock,
-		validatorStatus,
-		eventProcessed,
-		eventProcessingFailed,
-		operatorIndex,
-		messageValidationResult,
-		messageValidationSSVType,
-		messageValidationConsensusType,
-		messageValidationDuration,
-		signatureValidationDuration,
-		messageSize,
-		activeMsgValidation,
-		incomingQueueMessages,
-		outgoingQueueMessages,
-		droppedQueueMessages,
-		messageQueueSize,
-		messageQueueCapacity,
-		messageTimeInQueue,
-		inCommitteeMessages,
-		nonCommitteeMessages,
-		messagesReceivedFromPeer,
-		messagesReceivedTotal,
-		messageValidationRSAVerifications,
-		pubsubPeerScore,
-		pubsubPeerP4Score,
-	}
-
-	for i, c := range allMetrics {
-		if err := prometheus.Register(c); err != nil {
-			// TODO: think how to print metric name
-			mr.logger.Debug("could not register prometheus collector",
-				zap.Int("index", i),
-				zap.Error(err),
-			)
-		}
-	}
-
 	return &metricsReporter{}
 }
 
@@ -278,30 +206,11 @@ func (m *metricsReporter) SSVNodeNotHealthy() {
 	ssvNodeStatus.Set(ssvNodeNotHealthy)
 }
 
-func (m *metricsReporter) ExecutionClientReady() {
-	executionClientStatus.Set(executionClientOK)
-}
-
-func (m *metricsReporter) ExecutionClientSyncing() {
-	executionClientStatus.Set(executionClientSyncing)
-}
-
-func (m *metricsReporter) ExecutionClientFailure() {
-	executionClientStatus.Set(executionClientFailure)
-}
-
-func (m *metricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
-	executionClientLastFetchedBlock.Set(float64(block))
-}
-
 func (m *metricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256(publicKey))
 	operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
 }
 
-func (m *metricsReporter) ValidatorInactive(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorInactive)
-}
 func (m *metricsReporter) ValidatorNoIndex(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNoIndex)
 }
@@ -333,14 +242,6 @@ func (m *metricsReporter) ValidatorUnknown(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorUnknown)
 }
 
-func (m *metricsReporter) EventProcessed(eventName string) {
-	eventProcessed.WithLabelValues(eventName).Inc()
-}
-
-func (m *metricsReporter) EventProcessingFailed(eventName string) {
-	eventProcessingFailed.WithLabelValues(eventName).Inc()
-}
-
 func (m *metricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
 	messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
 }
@@ -352,10 +253,6 @@ func (m *metricsReporter) MessagesReceivedTotal() {
 func (m *metricsReporter) MessageValidationRSAVerifications() {
 	messageValidationRSAVerifications.WithLabelValues().Inc()
 }
-
-// TODO implement
-func (m *metricsReporter) LastBlockProcessed(uint64) {}
-func (m *metricsReporter) LogsProcessingError(error) {}
 
 func (m *metricsReporter) MessageAccepted(role spectypes.RunnerRole, round specqbft.Round) {
 	messageValidationResult.WithLabelValues(
