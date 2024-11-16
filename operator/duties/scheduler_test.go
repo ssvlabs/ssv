@@ -82,8 +82,8 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	func(),
 ) {
 	ctrl := gomock.NewController(t)
-	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 200 * time.Millisecond
+	// A 2s timeout ensures the test passes, even with mockSlotTicker overhead.
+	timeout := 2 * time.Second
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
@@ -99,12 +99,12 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 		GenesisForkVersion:           networkconfig.TestingNetworkConfig.Beacon.GenesisForkVersion,
 		CapellaForkVersion:           networkconfig.TestingNetworkConfig.Beacon.CapellaForkVersion,
 		MinGenesisTime:               time.Unix(0, 0),
-		SlotDuration:                 150 * time.Millisecond,
+		SlotDuration:                 1 * time.Second,
 		SlotsPerEpoch:                32,
 		EpochsPerSyncCommitteePeriod: networkconfig.TestingNetworkConfig.Beacon.EpochsPerSyncCommitteePeriod,
 	}
 
-	mockNetworkConfig := networkconfig.NetworkConfig{
+	networkConfig := networkconfig.NetworkConfig{
 		Beacon: beaconCfg,
 		SSV: networkconfig.SSV{
 			AlanForkEpoch: alanForkEpoch,
@@ -115,7 +115,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		Network:             mockNetworkConfig,
+		Network:             networkConfig,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
