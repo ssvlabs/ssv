@@ -1,6 +1,6 @@
 module github.com/ssvlabs/ssv
 
-go 1.22.0
+go 1.22.6
 
 require (
 	github.com/aquasecurity/table v1.8.0
