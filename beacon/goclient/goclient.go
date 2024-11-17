@@ -162,7 +162,7 @@ type GoClient struct {
 
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
-	// data regardless of the requested committeeIndex, which can be set
+	// data regardless of the requested committeeIndex.
 	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
 
 	commonTimeout time.Duration
