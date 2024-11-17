@@ -351,7 +351,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = nil
 		}
 
-		config := testing.TestingConfig(logger, keySetInstance, spectypes.BeaconRole(role)) // TODO confirm
+		config := testing.TestingConfig(logger, keySetInstance, spectypes.BeaconRole(role))
 		config.ValueCheckF = valCheck
 		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
