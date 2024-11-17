@@ -203,8 +203,6 @@ func New(
 		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 
-	epochDuration := casts.DurationFromUint64(opt.Network.SlotsPerEpoch()) * opt.Network.SlotDurationSec()
-
 	client := &GoClient{
 		log:               logger,
 		ctx:               opt.Context,
@@ -214,7 +212,7 @@ func New(
 		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
-			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * epochDuration),
+			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
