@@ -156,17 +156,13 @@ type GoClient struct {
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 
-	// attestationReqInflight helps us prevent the sending of multiple attestation data requests
-	// for the same slot number (to avoid doing unnecessary work).
+	// attestationReqInflight helps prevent duplicate attestation data requests
+	// from running in parallel.
 	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
-	// attestationDataCache stores attestation data from Beacon node for a bunch of recently made
-	// requests (by slot number). It allows for requesting attestation data once per slot from
-	// Beacon node as well as always having/observing the same consistent data in any given slot
-	// (eg, Beacon node might return different merkle root for the same slot for different requests,
-	// and this can lead to undesirable effects for GoClient users).
-	// attestationDataCache is used concurrently, hence thread-safe map.
-	// Note, we cache attestation data by slot (and not slot+committee_index) because it's the same
-	// data across all 64 Ethereum committees assigned for each slot.
+
+	// attestationDataCache helps reuse recently fetched attestation data.
+	// AttestationData is cached by slot only, because Beacon nodes should return the same
+	// data regardless of the requested committeeIndex, which can be set
 	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
 
 	commonTimeout time.Duration
