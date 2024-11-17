@@ -28,12 +28,10 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	return resp.Data, nil
 }
 
-// GetAttestationData returns attestation data for a given slot (which is same for all 64 committeeIndex
-// values that identify Ethereum committees chosen to attest on this slot).
-// Note, committeeIndex is an optional parameter that will be used to set AttestationData.Index
-// in the resulting data returned from this function.
-// Note, result returned is meant to be read-only, it's not safe to modify it (because it will be
-// accessed by multiple concurrent readers).
+// GetAttestationData returns attestation data for a given slot and committeeIndex.
+// Multiple calls for the same slot are joined into a single request, after which
+// the result is cached for a short duration, deep copied and returned
+// with the provided committeeIndex set.
 func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (
 	*phase0.AttestationData,
 	spec.DataVersion,
