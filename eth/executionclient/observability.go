@@ -25,7 +25,8 @@ const (
 )
 
 var (
-	meter            = otel.Meter(observabilityComponentName)
+	meter = otel.Meter(observabilityComponentName)
+
 	latencyHistogram = observability.GetMetric(
 		fmt.Sprintf("%s.latency.duration", observabilityComponentNamespace),
 		func(metricName string) (metric.Float64Histogram, error) {
@@ -79,21 +80,19 @@ func executionClientStatusAttribute(value executionClientStatus) attribute.KeyVa
 }
 
 func recordExecutionClientStatus(ctx context.Context, status executionClientStatus, nodeAddr string) {
-	clientStatusGauge.Record(ctx, 0,
-		metric.WithAttributes(executionClientAddrAttribute(nodeAddr)),
-		metric.WithAttributes(executionClientStatusAttribute(statusReady)),
-	)
-	clientStatusGauge.Record(ctx, 0,
-		metric.WithAttributes(executionClientAddrAttribute(nodeAddr)),
-		metric.WithAttributes(executionClientStatusAttribute(statusSyncing)),
-	)
-	clientStatusGauge.Record(ctx, 0,
-		metric.WithAttributes(executionClientAddrAttribute(nodeAddr)),
-		metric.WithAttributes(executionClientStatusAttribute(statusFailure)),
-	)
+	resetExecutionClientStatusGauge(ctx, nodeAddr)
 
 	clientStatusGauge.Record(ctx, 1,
 		metric.WithAttributes(executionClientAddrAttribute(nodeAddr)),
 		metric.WithAttributes(executionClientStatusAttribute(status)),
 	)
+}
+
+func resetExecutionClientStatusGauge(ctx context.Context, nodeAddr string) {
+	for _, status := range []executionClientStatus{statusReady, statusSyncing, statusFailure} {
+		clientStatusGauge.Record(ctx, 0,
+			metric.WithAttributes(executionClientAddrAttribute(nodeAddr)),
+			metric.WithAttributes(executionClientStatusAttribute(status)),
+		)
+	}
 }
