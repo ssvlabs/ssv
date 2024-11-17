@@ -82,8 +82,8 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 
 // withCommitteeIndex returns a deep copy of the attestation data with the provided committee index set.
 func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
-	// Marshal & unmarshal to make a deep copy. This is safer because it doesn't depend on
-	// other implementation details of AttestationData.
+	// Marshal & unmarshal to make a deep copy. This is safer because it won't break silently if
+	// a new field is added to AttestationData.
 	ssz, err := data.MarshalSSZ()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal attestation data: %w", err)
