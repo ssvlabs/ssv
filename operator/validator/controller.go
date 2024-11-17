@@ -1138,8 +1138,9 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	const batchSize = 512
 	var sleep = 2 * time.Second
 
-	activeSubnets := c.network.ActiveSubnets()
 	for {
+		activeSubnets := c.network.ActiveSubnets()
+
 		// Get the shares to fetch metadata for.
 		start := time.Now()
 		var existingShares, newShares []*ssvtypes.SSVShare
