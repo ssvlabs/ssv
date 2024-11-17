@@ -1,7 +1,6 @@
 package decided
 
 import (
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -20,8 +19,7 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.N
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
 	return func(msg qbftstorage.Participation) {
-		identifier := hex.EncodeToString(msg.PK[:])
-		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Slot, len(msg.Signers))
+		key := fmt.Sprintf("%x:%d:%d", msg.PK[:], msg.Slot, len(msg.Signers))
 		_, ok := c.Get(key)
 		if ok {
 			return
