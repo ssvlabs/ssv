@@ -42,7 +42,11 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	// Check cache.
 	cachedResult := gc.attestationDataCache.Get(slot)
 	if cachedResult != nil {
-		return withCommitteeIndex(cachedResult.Value(), committeeIndex), spec.DataVersionPhase0, nil
+		data, err := withCommitteeIndex(cachedResult.Value(), committeeIndex)
+		if err != nil {
+			return nil, DataVersionNil, fmt.Errorf("failed to set committee index: %w", err)
+		}
+		return data, spec.DataVersionPhase0, nil
 	}
 
 	// Have to make beacon node request and cache the result.
@@ -69,22 +73,27 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		return nil, DataVersionNil, err
 	}
 
-	return withCommitteeIndex(result, committeeIndex), spec.DataVersionPhase0, nil
+	data, err := withCommitteeIndex(result, committeeIndex)
+	if err != nil {
+		return nil, DataVersionNil, fmt.Errorf("failed to set committee index: %w", err)
+	}
+	return data, spec.DataVersionPhase0, nil
 }
 
-// withCommitteeIndex creates a shallow copy of data setting committeeIndex to the provided one, the
-// rest of attestation data stays unchanged.
-// Note, we don't want to modify the provided data object here because it might be accessed
-// concurrently, hence, we return shallow copy. We don't need to return deep copy because
-// we expect it to be used for read operations only.
-func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
-	return &phase0.AttestationData{
-		Slot:            data.Slot,
-		Index:           committeeIndex,
-		BeaconBlockRoot: data.BeaconBlockRoot,
-		Source:          data.Source,
-		Target:          data.Target,
+// withCommitteeIndex returns a deep copy of the attestation data with the provided committee index set.
+func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
+	// Marshal & unmarshal to make a deep copy. This is safer because it doesn't depend on
+	// other implementation details of AttestationData.
+	ssz, err := data.MarshalSSZ()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal attestation data: %w", err)
 	}
+	var cpy phase0.AttestationData
+	if err := cpy.UnmarshalSSZ(ssz); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal attestation data: %w", err)
+	}
+	cpy.Index = committeeIndex
+	return &cpy, nil
 }
 
 // SubmitAttestations implements Beacon interface
