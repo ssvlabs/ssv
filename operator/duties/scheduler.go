@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -374,7 +375,7 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			dutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.duty.type", duty.Type.String())))
+			dutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(observability.BeaconRoleAttribute(duty.Type)))
 			s.dutyExecutor.ExecuteGenesisDuty(logger, duty)
 		}()
 	}
@@ -394,7 +395,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			dutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.duty.type", duty.Type.String())))
+			dutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(observability.BeaconRoleAttribute(duty.Type)))
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
