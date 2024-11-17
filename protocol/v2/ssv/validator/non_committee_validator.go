@@ -160,9 +160,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 						Slot:    slot,
 						Signers: quorum,
 					},
-					DomainType: spectypes.DomainType(msg.MsgID.GetDomain()),
-					Role:       beaconRole,
-					PK:         validator.ValidatorPubKey,
+					Role:   beaconRole,
+					PubKey: validator.ValidatorPubKey,
 				}
 
 				ncv.newDecidedHandler(p)

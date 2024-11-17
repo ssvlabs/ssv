@@ -87,8 +87,8 @@ func HandleParticipantsQuery(logger *zap.Logger, store *storage.ParticipantStore
 		logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}
 	} else {
-		participations := toParticipations(domain, role, spectypes.ValidatorPK(pkRaw), participantsList)
-		data, err := ParticipantsAPIData(participations...)
+		participations := toParticipations(role, spectypes.ValidatorPK(pkRaw), participantsList)
+		data, err := ParticipantsAPIData(domain, participations...)
 		if err != nil {
 			res.Data = []string{err.Error()}
 		} else {
@@ -98,14 +98,13 @@ func HandleParticipantsQuery(logger *zap.Logger, store *storage.ParticipantStore
 	nm.Msg = res
 }
 
-func toParticipations(domain spectypes.DomainType, role spectypes.BeaconRole, pk spectypes.ValidatorPK, ee []qbftstorage.ParticipantsRangeEntry) []qbftstorage.Participation {
+func toParticipations(role spectypes.BeaconRole, pk spectypes.ValidatorPK, ee []qbftstorage.ParticipantsRangeEntry) []qbftstorage.Participation {
 	out := make([]qbftstorage.Participation, 0, len(ee))
 	for _, e := range ee {
 		p := qbftstorage.Participation{
 			ParticipantsRangeEntry: e,
-			DomainType:             domain,
 			Role:                   role,
-			PK:                     pk,
+			PubKey:                 pk,
 		}
 		out = append(out, p)
 	}

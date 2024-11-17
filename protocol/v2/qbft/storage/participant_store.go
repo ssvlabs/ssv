@@ -1,7 +1,6 @@
 package qbftstorage
 
 import (
-	"encoding/binary"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -10,35 +9,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-const (
-	domainSize       = 4
-	domainStartPos   = 0
-	pubKeySize       = 48
-	pubKeyStartPos   = domainStartPos + domainSize
-	roleTypeSize     = 4
-	roleTypeStartPos = pubKeyStartPos + pubKeySize
-)
-
-func legacyNewMsgID(domain spectypes.DomainType, pk []byte, role spectypes.BeaconRole) (mid spectypes.MessageID) {
-	roleByts := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roleByts, uint32(role)) // nolint: gosec
-	copy(mid[domainStartPos:domainStartPos+domainSize], domain[:])
-	copy(mid[pubKeyStartPos:pubKeyStartPos+pubKeySize], pk)
-	copy(mid[roleTypeStartPos:roleTypeStartPos+roleTypeSize], roleByts)
-	return mid
-}
-
+// Participation extends ParticipantsRangeEntry with role and pubkey.
 type Participation struct {
 	ParticipantsRangeEntry
-
-	DomainType spectypes.DomainType
-	Role       spectypes.BeaconRole
-	PK         spectypes.ValidatorPK
-}
-
-// LegacyMsgID is needed only for API backwards-compatibility
-func (p *Participation) LegacyMsgID() spectypes.MessageID {
-	return legacyNewMsgID(p.DomainType, p.PK[:], p.Role)
+	Role   spectypes.BeaconRole
+	PubKey spectypes.ValidatorPK
 }
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).

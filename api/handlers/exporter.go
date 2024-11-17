@@ -80,14 +80,12 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			for _, p := range participantsRange {
 				participationList = append(participationList, qbftstorage.Participation{
 					ParticipantsRangeEntry: p,
-
-					DomainType: e.NetworkConfig.DomainType(),
-					Role:       spectypes.BeaconRole(role),
-					PK:         spectypes.ValidatorPK(pubKey),
+					Role:                   spectypes.BeaconRole(role),
+					PubKey:                 spectypes.ValidatorPK(pubKey),
 				})
 			}
 
-			data, err := exporterapi.ParticipantsAPIData(participationList...)
+			data, err := exporterapi.ParticipantsAPIData(e.NetworkConfig.DomainType(), participationList...)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
 			}
