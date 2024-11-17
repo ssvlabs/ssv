@@ -210,8 +210,6 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		}
 	}
 
-	s.logger.Debug("save validators to shares storage", zap.Int("count", len(shares)))
-
 	s.storageMtx.Lock()
 	defer s.storageMtx.Unlock()
 
@@ -236,11 +234,11 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		}
 
 		if err := s.validatorStore.handleSharesUpdated(updateShares...); err != nil {
-			return err
+			return fmt.Errorf("handleSharesUpdated: %w", err)
 		}
 
 		if err := s.validatorStore.handleSharesAdded(addShares...); err != nil {
-			return err
+			return fmt.Errorf("handleSharesAdded: %w", err)
 		}
 
 		return nil
