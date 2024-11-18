@@ -158,13 +158,13 @@ func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.CommitteeID, v *validator
 
 // UpdateCommitteeAtomic allows to perform a mutation on a given committee in an atomic manner
 // returns true if the given committee was found
-func (vm *ValidatorsMap) UpdateCommitteeAtomic(pubKey spectypes.CommitteeID, mutate func(*validator.Committee)) bool {
+func (vm *ValidatorsMap) UpdateCommitteeAtomic(pubKey spectypes.CommitteeID, mutate func(*validator.Committee)) (*validator.Committee, bool) {
 	vm.mlock.Lock()
 	defer vm.mlock.Unlock()
 
 	vc, found := vm.committees[pubKey]
 	if !found || vc.Stopped() {
-		return false
+		return nil, false
 	}
 
 	mutate(vc)
@@ -174,7 +174,7 @@ func (vm *ValidatorsMap) UpdateCommitteeAtomic(pubKey spectypes.CommitteeID, mut
 		delete(vm.committees, pubKey)
 	}
 
-	return true
+	return vc, true
 }
 
 // SizeCommittees returns the number of committees in the map

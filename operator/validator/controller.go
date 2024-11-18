@@ -698,7 +698,7 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
 			}
-			_ = c.validatorsMap.UpdateCommitteeAtomic(v.Share().CommitteeID(), func(vc *validator.Committee) {
+			_, _ = c.validatorsMap.UpdateCommitteeAtomic(v.Share().CommitteeID(), func(vc *validator.Committee) {
 				vc.AddShare(&v.Share().Share)
 			})
 		} else {
@@ -889,9 +889,11 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	v.Stop()
 	c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
 
-	if !c.validatorsMap.UpdateCommitteeAtomic(v.Share().CommitteeID(), func(vc *validator.Committee) {
+	_, found := c.validatorsMap.UpdateCommitteeAtomic(v.Share().CommitteeID(), func(vc *validator.Committee) {
 		vc.RemoveShare(v.Share().Share.ValidatorIndex)
-	}) {
+	})
+
+	if !found {
 		c.logger.Warn("committee not found", fields.PubKey(pubKey[:]))
 	}
 }
@@ -957,12 +959,9 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 		c.printShare(v.Share(), "get validator")
 	}
 
-	var vc *validator.Committee
-
 	// Start a committee validator.
-	found = c.validatorsMap.UpdateCommitteeAtomic(operator.CommitteeID, func(fvc *validator.Committee) {
+	vc, found := c.validatorsMap.UpdateCommitteeAtomic(operator.CommitteeID, func(fvc *validator.Committee) {
 		fvc.AddShare(&share.Share)
-		vc = fvc
 	})
 
 	if !found {

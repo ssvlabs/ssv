@@ -18,7 +18,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 	t.Run("does nothing if committee not found", func(t *testing.T) {
 		var cmtID spectypes.CommitteeID
 		vm := validators.New(context.Background())
-		updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
+		_, updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
 			t.Fatal("should not be called")
 		})
 		assert.False(t, updated)
@@ -43,7 +43,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 		vm.PutCommittee(cmtID, cmt)
 		assert.Equal(t, 1, vm.SizeCommittees())
 
-		updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
+		_, updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
 			c.RemoveShare(0)
 		})
 
@@ -74,7 +74,7 @@ func TestUpdateCommitteeAtomic(t *testing.T) {
 		var cmtID spectypes.CommitteeID
 		vm.PutCommittee(cmtID, cmt)
 
-		updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
+		_, updated := vm.UpdateCommitteeAtomic(cmtID, func(c *validator.Committee) {
 			c.RemoveShare(0)
 		})
 
