@@ -14,7 +14,6 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 )
 
@@ -57,7 +56,6 @@ type Shares interface {
 }
 
 type sharesStorage struct {
-	logger         *zap.Logger
 	db             basedb.Database
 	prefix         []byte
 	shares         map[string]*types.SSVShare
@@ -118,9 +116,8 @@ func (s *storageShare) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
-		logger: logger,
 		shares: make(map[string]*types.SSVShare),
 		db:     db,
 		prefix: prefix,
