@@ -130,7 +130,7 @@ const (
 // legacyNewMsgID is needed only for API backwards-compatibility.
 func legacyNewMsgID(domain spectypes.DomainType, pk []byte, role spectypes.BeaconRole) (mid spectypes.MessageID) {
 	roleByts := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roleByts, uint32(role)) // nolint: gosec
+	binary.LittleEndian.PutUint32(roleByts, uint32(role)) // #nosec G115
 	copy(mid[domainStartPos:domainStartPos+domainSize], domain[:])
 	copy(mid[pubKeyStartPos:pubKeyStartPos+pubKeySize], pk)
 	copy(mid[roleTypeStartPos:roleTypeStartPos+roleTypeSize], roleByts)
