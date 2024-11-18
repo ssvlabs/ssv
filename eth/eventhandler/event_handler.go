@@ -202,12 +202,12 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		if err := eh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -226,12 +226,13 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		if err := eh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -250,13 +251,14 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		share, err := eh.handleValidatorAdded(txn, validatorAddedEvent)
 		if err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -279,13 +281,14 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		validatorPubKey, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
 		if err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -308,13 +311,14 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		sharesToLiquidate, err := eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
 		if err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -339,13 +343,14 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		sharesToReactivate, err := eh.handleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -370,13 +375,15 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		updated, err := eh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
 		if err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
+
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
@@ -399,13 +406,14 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		exitDescriptor, err := eh.handleValidatorExited(txn, validatorExitedEvent)
 		if err != nil {
-			eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
