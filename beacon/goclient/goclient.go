@@ -208,6 +208,8 @@ func New(
 		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
+			// we only fetch attestation data during the slot of the relevant duty (and never later),
+			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
 		commonTimeout: commonTimeout,
