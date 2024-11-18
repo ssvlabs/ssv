@@ -34,14 +34,14 @@ The conventions described in this document are based on the [OpenTelemetry docum
 
 `db.client.connection.timeouts` - Counter
 
-### Metric Attribute Conventions
+### Metric Attribute(label) Conventions
 
+- **High Cardinality**: High cardinality attributes are attributes with a large number of unique values. There isn’t a strict definition of how many is “too many,” but generally, 1–10 unique attribute values is considered normal. Attribute values like Peer IDs, IP addresses, and similar, depending on the context, are often high cardinality attributes and should be avoided. How problematic are they? Extremely problematic. High cardinality attributes are expensive to store, query, ingest, and process.
 - **Lowercase Letters**: Metric attribute names **MUST** be in lowercase.
 - **Component Delimiter**: A dot (`.`) **MUST** be used as the delimiter between components.
 - **Namespace** Metric attributes **SHOULD** be added under the metric namespace _when their usage and semantics are exclusive to the metric._ Otherwise the namespace should indicate the domain attributes belongs to. Example: `ethereum.beacon.role`
 
-
 ## Documentation
 [Metric attributes](https://opentelemetry.io/docs/specs/semconv/general/metrics/#metric-attributes)
 
-[Instrumentation selection](https://opentelemetry.io/docs/specs/otel/metrics/supplementary-guidelines/#guidelines-for-instrumentation-library-authors) 
+[Instrumentation selection](https://opentelemetry.io/docs/specs/otel/metrics/supplementary-guidelines/#guidelines-for-instrumentation-library-authors)  
