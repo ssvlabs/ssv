@@ -13,6 +13,7 @@ import (
 
 type dutyHandler interface {
 	Setup(
+		ctx context.Context,
 		name string,
 		logger *zap.Logger,
 		beaconNode BeaconNode,
@@ -25,12 +26,13 @@ type dutyHandler interface {
 		reorgEvents chan ReorgEvent,
 		indicesChange chan struct{},
 	)
-	HandleDuties(context.Context)
+	HandleDuties()
 	HandleInitialDuties(context.Context)
 	Name() string
 }
 
 type baseHandler struct {
+	ctx                 context.Context //shutdown hook
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
@@ -47,6 +49,7 @@ type baseHandler struct {
 }
 
 func (h *baseHandler) Setup(
+	ctx context.Context,
 	name string,
 	logger *zap.Logger,
 	beaconNode BeaconNode,
@@ -59,6 +62,7 @@ func (h *baseHandler) Setup(
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
 ) {
+	h.ctx = ctx
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient

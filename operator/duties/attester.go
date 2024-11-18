@@ -60,7 +60,7 @@ func (h *AttesterHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the next epoch.
-func (h *AttesterHandler) HandleDuties(ctx context.Context) {
+func (h *AttesterHandler) HandleDuties() {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
@@ -69,7 +69,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	next := h.ticker.Next()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-h.ctx.Done():
 			return
 
 		case <-next:
@@ -79,7 +79,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			h.processExecution(ctx, currentEpoch, slot) // TODO use the correct ctx here
+			ctx := withDutyTracingContext(h.ctx, buildStr)
+
+			h.processExecution(ctx, currentEpoch, slot)
 			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
@@ -108,6 +110,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
+
+				ctx := withReorgTracingContext(h.ctx, buildStr)
 
 				h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
 			} else if reorgEvent.Current {
