@@ -64,6 +64,12 @@ func HandleParticipantsQuery(logger *zap.Logger, store *storage.ParticipantStore
 		nm.Msg = res
 		return
 	}
+	if len(pkRaw) != pubKeySize {
+		logger.Warn("bad size for the provided public key", zap.Int("length", len(pkRaw)))
+		res.Data = []string{"bad size for the provided public key"}
+		nm.Msg = res
+		return
+	}
 
 	role, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
 	if err != nil {
