@@ -1,6 +1,7 @@
 package eventhandler
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ssvlabs/ssv/observability"
@@ -48,7 +49,11 @@ var (
 	)
 )
 
-func eventNameAttribute(value string) attribute.KeyValue {
+func eventNameAttribute(eventName string) attribute.KeyValue {
 	const eventNameAttrName = "ssv.event_syncer.event_name"
-	return attribute.String(eventNameAttrName, value)
+	return attribute.String(eventNameAttrName, eventName)
+}
+
+func recordEventProcessFailure(ctx context.Context, eventName string) {
+	eventsProcessFailureCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(eventName)))
 }
