@@ -21,11 +21,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
 	alanspectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -36,6 +31,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -427,13 +425,13 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			return nil, descriptor, ErrValidatorLiquidated
 		}
 
-		if share.BeaconMetadata == nil {
+		if !share.HasBeaconMetadata() {
 			return nil, descriptor, ErrNoShareMetadata
 		}
 
 		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 			err := ErrValidatorNotAttesting
-			err.got = share.BeaconMetadata.Status.String()
+			err.got = share.Status.String()
 			return nil, descriptor, err
 		}
 	}

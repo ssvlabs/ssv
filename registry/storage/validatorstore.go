@@ -7,9 +7,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"golang.org/x/exp/maps"
-
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"golang.org/x/exp/maps"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
@@ -232,7 +231,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
-			c.byValidatorIndex[share.BeaconMetadata.Index] = share
+			c.byValidatorIndex[share.ValidatorIndex] = share
 		}
 
 		// Update byCommitteeID
@@ -273,8 +272,8 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 	defer c.mu.Unlock()
 
 	// Update byValidatorIndex
-	if share.BeaconMetadata != nil {
-		delete(c.byValidatorIndex, share.BeaconMetadata.Index)
+	if share.HasBeaconMetadata() {
+		delete(c.byValidatorIndex, share.ValidatorIndex)
 	}
 
 	// Update byCommitteeID
@@ -327,7 +326,7 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 		}
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
-			c.byValidatorIndex[share.BeaconMetadata.Index] = share
+			c.byValidatorIndex[share.ValidatorIndex] = share
 		}
 
 		// Update byCommitteeID

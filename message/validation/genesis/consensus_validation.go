@@ -12,7 +12,6 @@ import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
@@ -304,24 +303,24 @@ func (mv *messageValidator) validateBeaconDuty(
 ) error {
 	switch role {
 	case genesisspectypes.BNRoleProposer:
-		if share.Metadata.BeaconMetadata == nil {
+		if !share.HasBeaconMetadata() {
 			return ErrNoShareMetadata
 		}
 
 		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
-		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
+		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, share.ValidatorIndex) == nil {
 			return ErrNoDuty
 		}
 
 		return nil
 
 	case genesisspectypes.BNRoleSyncCommittee, genesisspectypes.BNRoleSyncCommitteeContribution:
-		if share.Metadata.BeaconMetadata == nil {
+		if !share.HasBeaconMetadata() {
 			return ErrNoShareMetadata
 		}
 
 		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
-		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, share.Metadata.BeaconMetadata.Index) == nil {
+		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, share.ValidatorIndex) == nil {
 			return ErrNoDuty
 		}
 

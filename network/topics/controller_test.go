@@ -19,9 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/validation"
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
@@ -32,6 +29,8 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -391,7 +390,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	_, validatorStore, err := registrystorage.NewSharesStorage(db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

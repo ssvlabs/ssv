@@ -8,7 +8,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -128,7 +127,7 @@ func byPubKeys(pubkeys []api.Hex) registrystorage.SharesFilter {
 func byIndices(indices []uint64) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		for _, index := range indices {
-			if share.BeaconMetadata != nil && share.BeaconMetadata.Index == phase0.ValidatorIndex(index) {
+			if share.ValidatorIndex == phase0.ValidatorIndex(index) {
 				return true
 			}
 		}
@@ -185,9 +184,9 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 		Liquidated: share.Liquidated,
 	}
 	if share.HasBeaconMetadata() {
-		v.Index = share.Metadata.BeaconMetadata.Index
-		v.Status = share.Metadata.BeaconMetadata.Status.String()
-		v.ActivationEpoch = share.Metadata.BeaconMetadata.ActivationEpoch
+		v.Index = share.ValidatorIndex
+		v.Status = share.Status.String()
+		v.ActivationEpoch = share.ActivationEpoch
 	}
 	return v
 }

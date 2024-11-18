@@ -16,14 +16,12 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/networkconfig"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -42,14 +40,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	shares := []*ssvtypes.SSVShare{
 		{
-			Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-					Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
-				},
-				Liquidated: false,
-			},
+			Share:      *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: false,
 		},
 	}
 
@@ -177,14 +170,9 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
 
 	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
-			},
-			Liquidated: false,
-		},
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: false,
 	}
 	committeeID := share.CommitteeID()
 

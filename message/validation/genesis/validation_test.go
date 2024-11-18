@@ -18,22 +18,20 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	alanspectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
+	"go.uber.org/zap/zaptest"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -48,15 +46,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	ks := alanspectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
-		Share: *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  validatorIndex,
-			},
-			Liquidated: false,
-		},
+		Share:      *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: false,
 	}
+	share.Share.ValidatorIndex = validatorIndex
 	require.NoError(t, ns.Shares().Save(nil, share))
 
 	netCfg := networkconfig.TestNetwork
@@ -559,13 +553,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		liquidatedShare := &ssvtypes.SSVShare{
-			Share: *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-				},
-				Liquidated: true,
-			},
+			Share:      *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: true,
 		}
 		liquidatedShare.ValidatorPubKey = alanspectypes.ValidatorPK(liquidatedSK.PublicKey().Marshal())
 
@@ -599,13 +589,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		inactiveShare := &ssvtypes.SSVShare{
-			Share: *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateUnknown,
-				},
-				Liquidated: false,
-			},
+			Share:      *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+			Status:     eth2apiv1.ValidatorStatePendingInitialized,
+			Liquidated: false,
 		}
 		inactiveShare.ValidatorPubKey = alanspectypes.ValidatorPK(inactiveSK.PublicKey().Marshal())
 
@@ -631,7 +617,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrValidatorNotAttesting
-		expectedErr.got = eth2apiv1.ValidatorStateUnknown.String()
+		expectedErr.got = eth2apiv1.ValidatorStatePendingInitialized.String()
 		require.ErrorIs(t, err, expectedErr)
 
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey[:]))
@@ -649,14 +635,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
-			Share: *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status:          eth2apiv1.ValidatorStatePendingQueued,
-					ActivationEpoch: epoch + 1,
-				},
-				Liquidated: false,
-			},
+			Share:           *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+			Status:          eth2apiv1.ValidatorStatePendingQueued,
+			ActivationEpoch: epoch + 1,
+			Liquidated:      false,
 		}
 		nonUpdatedMetadataShare.ValidatorPubKey = alanspectypes.ValidatorPK(nonUpdatedMetadataSK.PublicKey().Marshal())
 
@@ -701,14 +683,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
-			Share: *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status:          eth2apiv1.ValidatorStatePendingQueued,
-					ActivationEpoch: epoch,
-				},
-				Liquidated: false,
-			},
+			Share:           *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+			Status:          eth2apiv1.ValidatorStatePendingQueued,
+			ActivationEpoch: epoch,
+			Liquidated:      false,
 		}
 		nonUpdatedMetadataShare.ValidatorPubKey = alanspectypes.ValidatorPK(nonUpdatedMetadataSK.PublicKey().Marshal())
 
@@ -746,11 +724,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		noMetadataShare := &ssvtypes.SSVShare{
-			Share: *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: nil,
-				Liquidated:     false,
-			},
+			Share:      *alanspectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+			Liquidated: false,
 		}
 		noMetadataShare.ValidatorPubKey = alanspectypes.ValidatorPK(noMetadataSK.PublicKey().Marshal())
 
@@ -1359,13 +1334,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		zeroSignerKS := alanspectestingutils.Testing7SharesSet()
 		zeroSignerShare := &ssvtypes.SSVShare{
-			Share: *alanspectestingutils.TestingShare(zeroSignerKS, alanspectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-				},
-				Liquidated: false,
-			},
+			Share:      *alanspectestingutils.TestingShare(zeroSignerKS, alanspectestingutils.TestingValidatorIndex),
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: false,
 		}
 		zeroSignerShare.Committee[0].Signer = 0
 		zeroSignerShare.ValidatorPubKey = alanspectypes.ValidatorPK(inactiveSK.PublicKey().Marshal())

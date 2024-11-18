@@ -9,19 +9,17 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 func TestController_LiquidateCluster(t *testing.T) {
@@ -213,26 +211,22 @@ func TestController_ReactivateCluster(t *testing.T) {
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
 	toReactivate := []*types.SSVShare{
 		{
-			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-			Metadata: types.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         0,
-					Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
-					Index:           1,
-					ActivationEpoch: 1,
-				},
+			Share: spectypes.Share{
+				ValidatorIndex:  1,
+				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
+			Balance:         0,
+			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
+			ActivationEpoch: 1,
 		},
 		{
-			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize())},
-			Metadata: types.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         0,
-					Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
-					Index:           1,
-					ActivationEpoch: 1,
-				},
+			Share: spectypes.Share{
+				ValidatorIndex:  1,
+				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
+			Balance:         0,
+			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
+			ActivationEpoch: 1,
 		},
 	}
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")

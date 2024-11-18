@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
@@ -51,7 +50,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
+				if uint64(share.ValidatorIndex)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
 					continue
 				}
 
@@ -76,7 +75,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				}
 
 				vrs = append(vrs, ValidatorRegistration{
-					ValidatorIndex: share.BeaconMetadata.Index,
+					ValidatorIndex: share.ValidatorIndex,
 					FeeRecipient:   hex.EncodeToString(share.FeeRecipientAddress[:]),
 				})
 			}
