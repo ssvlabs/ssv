@@ -200,13 +200,8 @@ func New(
 		client:            httpClient.(*eth2clienthttp.Service),
 		gasLimit:          opt.GasLimit,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		attestationDataCache: ttlcache.New(
-			// we only fetch attestation data during the slot of the relevant duty (and never later),
-			// hence caching it for 2 slots is sufficient
-			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
-		),
-		commonTimeout: commonTimeout,
-		longTimeout:   longTimeout,
+		commonTimeout:     commonTimeout,
+		longTimeout:       longTimeout,
 	}
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
@@ -231,6 +226,15 @@ func New(
 	}
 	client.genesis = genesis
 
+	client.attestationDataCache = ttlcache.New(
+		// we only fetch attestation data during the slot of the relevant duty (and never later),
+		// hence caching it for 2 slots is sufficient
+		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * beaconConfig.SlotDuration),
+	)
+
+	// Start automatic expired item deletion for attestationDataCache.
+	go client.attestationDataCache.Start()
+
 	logger.Info("consensus client connected",
 		fields.Name(httpClient.Name()),
 		fields.Address(httpClient.Address()),
@@ -239,9 +243,6 @@ func New(
 		zap.String("config", beaconConfig.String()),
 		zap.String("genesis", genesis.String()),
 	)
-
-	// Start automatic expired item deletion for attestationDataCache.
-	go client.attestationDataCache.Start()
 
 	return client, nil
 }
