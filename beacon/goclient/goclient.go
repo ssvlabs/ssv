@@ -13,10 +13,9 @@ import (
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -35,45 +34,6 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 )
-
-type beaconNodeStatus int32
-
-var (
-	allMetrics = []prometheus.Collector{
-		metricsBeaconNodeStatus,
-		metricsBeaconDataRequest,
-	}
-	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_beacon_status",
-		Help: "Status of the connected beacon node",
-	})
-
-	// metricsBeaconDataRequest is located here to avoid including waiting for 1/3 or 2/3 of slot time into request duration.
-	metricsBeaconDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_beacon_data_request_duration_seconds",
-		Help:    "Beacon data request duration (seconds)",
-		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-
-	metricsAttesterDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAttester.String())
-	metricsAggregatorDataRequest                = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAggregator.String())
-	metricsProposerDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleProposer.String())
-	metricsSyncCommitteeDataRequest             = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommittee.String())
-	metricsSyncCommitteeContributionDataRequest = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommitteeContribution.String())
-
-	statusUnknown beaconNodeStatus = 0
-	statusSyncing beaconNodeStatus = 1
-	statusOK      beaconNodeStatus = 2
-)
-
-func init() {
-	logger := zap.L()
-	for _, c := range allMetrics {
-		if err := prometheus.Register(c); err != nil {
-			logger.Debug("could not register prometheus collector")
-		}
-	}
-}
 
 // NodeClient is the type of the Beacon node.
 type NodeClient string
@@ -229,22 +189,27 @@ func (gc *GoClient) NodeClient() NodeClient {
 func (gc *GoClient) Healthy(ctx context.Context) error {
 	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
-		// TODO: get rid of global variable, pass metrics to goClient
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
 		return fmt.Errorf("failed to obtain node syncing status: %w", err)
 	}
 	if nodeSyncingResp == nil {
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
 		return fmt.Errorf("node syncing response is nil")
 	}
 	if nodeSyncingResp.Data == nil {
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
 		return fmt.Errorf("node syncing data is nil")
 	}
 	syncState := nodeSyncingResp.Data
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
-	metricsBeaconNodeStatus.Set(float64(statusSyncing))
+	recordBeaconClientStatus(ctx, statusSyncing, gc.client.Address())
+
+	syncDistance := uint64(syncState.SyncDistance)
+	if syncDistance <= math.MaxInt64 {
+		syncingDistanceGauge.Record(ctx, int64(syncDistance), metric.WithAttributes(beaconClientAddrAttribute(gc.client.Address())))
+	}
+
 	if syncState.IsSyncing {
 		return fmt.Errorf("syncing")
 	}
@@ -252,7 +217,8 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 		return fmt.Errorf("optimistic")
 	}
 
-	metricsBeaconNodeStatus.Set(float64(statusOK))
+	recordBeaconClientStatus(ctx, statusOK, gc.client.Address())
+
 	return nil
 }
 

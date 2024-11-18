@@ -12,6 +12,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -56,7 +58,11 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
-	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
+	attestationDataRequestHistogram.Record(
+		gc.ctx,
+		time.Since(scDataReqStart).Seconds(),
+		metric.WithAttributes(observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee)))
+
 	blockRoot := beaconBlockRootResp.Data
 
 	gc.waitToSlotTwoThirds(slot)
@@ -96,7 +102,10 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, err
 	}
 
-	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
+	attestationDataRequestHistogram.Record(
+		gc.ctx,
+		time.Since(sccDataReqStart).Seconds(),
+		metric.WithAttributes(observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommitteeContribution)))
 
 	return &contributions, spec.DataVersionAltair, nil
 }

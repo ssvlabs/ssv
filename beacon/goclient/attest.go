@@ -9,6 +9,9 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // AttesterDuties returns attester duties for a given epoch.
@@ -40,7 +43,10 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		return nil, DataVersionNil, fmt.Errorf("attestation data response is nil")
 	}
 
-	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
+	attestationDataRequestHistogram.Record(
+		gc.ctx,
+		time.Since(attDataReqStart).Seconds(),
+		metric.WithAttributes(observability.BeaconRoleAttribute(spectypes.BNRoleAttester)))
 
 	return resp.Data, spec.DataVersionPhase0, nil
 }

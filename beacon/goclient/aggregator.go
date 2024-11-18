@@ -9,6 +9,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -56,7 +59,10 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
 
-	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
+	attestationDataRequestHistogram.Record(
+		gc.ctx,
+		time.Since(aggDataReqStart).Seconds(),
+		metric.WithAttributes(observability.BeaconRoleAttribute(spectypes.BNRoleAggregator)))
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
