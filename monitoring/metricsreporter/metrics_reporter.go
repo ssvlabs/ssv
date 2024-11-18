@@ -128,14 +128,6 @@ var (
 		Name: "ssv_message_validation_rsa_checks",
 		Help: "The amount message validations",
 	}, []string{})
-	pubsubPeerScore = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:score:inspect",
-		Help: "Pubsub peer scores",
-	}, []string{"pid"})
-	pubsubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
-		Help: "Pubsub peer P4 scores (sum of square of counters for invalid message deliveries)",
-	}, []string{"pid"})
 )
 
 type MetricsReporter interface {
@@ -176,9 +168,6 @@ type MetricsReporter interface {
 	MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration)
 	InCommitteeMessage(msgType spectypes.MsgType, decided bool)
 	NonCommitteeMessage(msgType spectypes.MsgType, decided bool)
-	PeerScore(peerId peer.ID, score float64)
-	PeerP4Score(peerId peer.ID, score float64)
-	ResetPeerScores()
 	PeerDisconnected(peerId peer.ID)
 }
 
@@ -350,19 +339,6 @@ func (m *metricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided
 		str = "decided"
 	}
 	nonCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
-}
-
-func (m *metricsReporter) PeerScore(peerId peer.ID, score float64) {
-	pubsubPeerScore.WithLabelValues(peerId.String()).Set(score)
-}
-
-func (m *metricsReporter) PeerP4Score(peerId peer.ID, score float64) {
-	pubsubPeerP4Score.WithLabelValues(peerId.String()).Set(score)
-}
-
-func (m *metricsReporter) ResetPeerScores() {
-	pubsubPeerScore.Reset()
-	pubsubPeerP4Score.Reset()
 }
 
 // PeerDisconnected deletes all data about peers which connections have been closed by the current node
