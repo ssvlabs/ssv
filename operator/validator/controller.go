@@ -291,7 +291,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		metrics = options.Metrics
 	}
 
-	cacheTTL := options.NetworkConfig.SlotDuration * time.Duration(options.NetworkConfig.SlotsPerEpoch*2) // #nosec G115
+	cacheTTL := options.NetworkConfig.SlotDuration() * time.Duration(options.NetworkConfig.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -1126,8 +1126,8 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 
 	go func() {
 		slotTicker := slotticker.New(c.logger, slotticker.Config{
-			SlotDuration: c.networkConfig.SlotDuration,
-			GenesisTime:  c.networkConfig.MinGenesisTime,
+			SlotDuration: c.networkConfig.SlotDuration(),
+			GenesisTime:  c.networkConfig.MinGenesisTime(),
 		})
 
 		next := slotTicker.Next()

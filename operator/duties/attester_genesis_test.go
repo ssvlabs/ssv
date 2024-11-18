@@ -12,11 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func setupAttesterGenesisDutiesMock(
@@ -79,22 +77,24 @@ func TestScheduler_Attester_Genesis_Same_Slot(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	dutiesMap.Set(epoch, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(1),
+			Slot:           slot,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	currentSlot.Set(phase0.Slot(1))
+	currentSlot.Set(slot)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
-	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	duties, _ := dutiesMap.Get(epoch)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -115,30 +115,31 @@ func TestScheduler_Attester_Genesis_Diff_Slots(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	dutiesMap.Set(epoch, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(2),
+			Slot:           slot + 2,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	currentSlot.Set(phase0.Slot(0))
+	currentSlot.Set(slot)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
 	ticker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
-	currentSlot.Set(phase0.Slot(1))
+	currentSlot.Set(slot + 1)
 	ticker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
-	currentSlot.Set(phase0.Slot(2))
-	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	currentSlot.Set(slot + 2)
+	duties, _ := dutiesMap.Get(epoch)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -156,10 +157,11 @@ func TestScheduler_Attester_Genesis_Indices_Changed(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(0))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
@@ -171,26 +173,26 @@ func TestScheduler_Attester_Genesis_Indices_Changed(t *testing.T) {
 	scheduler.indicesChg <- struct{}{}
 	// no execution should happen in slot 0
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(0),
+			Slot:           slot,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
-			Slot:           phase0.Slot(1),
+			Slot:           slot + 1,
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		},
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 5},
-			Slot:           phase0.Slot(2),
+			Slot:           slot + 2,
 			ValidatorIndex: phase0.ValidatorIndex(3),
 		},
 	})
 
 	// STEP 3: wait for attester duties to be fetched again
-	currentSlot.Set(phase0.Slot(1))
+	currentSlot.Set(slot + 1)
 	waitForDuties.Set(true)
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -198,8 +200,8 @@ func TestScheduler_Attester_Genesis_Indices_Changed(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for attester duties to be executed
-	currentSlot.Set(phase0.Slot(2))
-	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	currentSlot.Set(slot + 2)
+	duties, _ := dutiesMap.Get(epoch)
 	expected := expectedExecutedGenesisAttesterDuties(handler, []*eth2apiv1.AttesterDuty{duties[2]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -217,10 +219,11 @@ func TestScheduler_Attester_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(0))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
@@ -229,39 +232,39 @@ func TestScheduler_Attester_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
-	currentSlot.Set(phase0.Slot(1))
+	currentSlot.Set(slot + 1)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(phase0.Epoch(0))
-	dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.AttesterDuty{
+	duties, _ := dutiesMap.Get(epoch)
+	dutiesMap.Set(epoch, append(duties, &eth2apiv1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
-		Slot:           phase0.Slot(3),
+		Slot:           slot + 3,
 		ValidatorIndex: phase0.ValidatorIndex(1),
 	}))
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger a change in active indices in the same slot
 	scheduler.indicesChg <- struct{}{}
-	duties, _ = dutiesMap.Get(phase0.Epoch(0))
-	dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.AttesterDuty{
+	duties, _ = dutiesMap.Get(epoch)
+	dutiesMap.Set(epoch, append(duties, &eth2apiv1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		Slot:           phase0.Slot(4),
+		Slot:           slot + 4,
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	}))
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for attester duties to be fetched
-	currentSlot.Set(phase0.Slot(2))
+	currentSlot.Set(slot + 2)
 	waitForDuties.Set(true)
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be executed
-	currentSlot.Set(phase0.Slot(3))
-	duties, _ = dutiesMap.Get(phase0.Epoch(0))
+	currentSlot.Set(slot + 3)
+	duties, _ = dutiesMap.Get(epoch)
 	expected := expectedExecutedGenesisAttesterDuties(handler, []*eth2apiv1.AttesterDuty{duties[0]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -269,8 +272,8 @@ func TestScheduler_Attester_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 7: wait for attester duties to be executed
-	currentSlot.Set(phase0.Slot(4))
-	duties, _ = dutiesMap.Get(phase0.Epoch(0))
+	currentSlot.Set(slot + 4)
+	duties, _ = dutiesMap.Get(epoch)
 	expected = expectedExecutedGenesisAttesterDuties(handler, []*eth2apiv1.AttesterDuty{duties[1]})
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -289,17 +292,18 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition(t *testing.T
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(63))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot + 63)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(66),
+			Slot:           slot + 66,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -321,7 +325,7 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition(t *testing.T
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(64))
+	currentSlot.Set(slot + 64)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -332,10 +336,10 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition(t *testing.T
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(67),
+			Slot:           slot + 67,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -343,18 +347,18 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition(t *testing.T
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
-	currentSlot.Set(phase0.Slot(65))
+	currentSlot.Set(slot + 65)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: The first assigned duty should not be executed
-	currentSlot.Set(phase0.Slot(66))
+	currentSlot.Set(slot + 66)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
-	currentSlot.Set(phase0.Slot(67))
-	duties, _ := dutiesMap.Get(phase0.Epoch(2))
+	currentSlot.Set(slot + 67)
+	duties, _ := dutiesMap.Get(epoch + 2)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -373,17 +377,18 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition_Indices_Chan
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(63))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot + 63)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(66),
+			Slot:           slot + 66,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -406,7 +411,7 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition_Indices_Chan
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(64))
+	currentSlot.Set(slot + 64)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -417,10 +422,10 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition_Indices_Chan
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(67),
+			Slot:           slot + 67,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -429,27 +434,27 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Epoch_Transition_Indices_Chan
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(phase0.Epoch(2))
-	dutiesMap.Set(phase0.Epoch(2), append(duties, &eth2apiv1.AttesterDuty{
+	duties, _ := dutiesMap.Get(epoch + 2)
+	dutiesMap.Set(epoch+2, append(duties, &eth2apiv1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		Slot:           phase0.Slot(67),
+		Slot:           slot + 67,
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	}))
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
-	currentSlot.Set(phase0.Slot(65))
+	currentSlot.Set(slot + 65)
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The first assigned duty should not be executed
-	currentSlot.Set(phase0.Slot(66))
+	currentSlot.Set(slot + 66)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 8: The second assigned duty should be executed
-	currentSlot.Set(phase0.Slot(67))
-	duties, _ = dutiesMap.Get(phase0.Epoch(2))
+	currentSlot.Set(slot + 67)
+	duties, _ = dutiesMap.Get(epoch + 2)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -468,19 +473,20 @@ func TestScheduler_Attester_Genesis_Reorg_Previous(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	dutiesMap.Set(epoch+1, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(35),
+			Slot:           slot + 35,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	currentSlot.Set(phase0.Slot(32))
+	currentSlot.Set(slot + 32)
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
@@ -499,7 +505,7 @@ func TestScheduler_Attester_Genesis_Reorg_Previous(t *testing.T) {
 
 	// STEP 3: Ticker with no action
 	waitForDuties.Set(true)
-	currentSlot.Set(phase0.Slot(33))
+	currentSlot.Set(slot + 33)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -510,10 +516,10 @@ func TestScheduler_Attester_Genesis_Reorg_Previous(t *testing.T) {
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+1, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(36),
+			Slot:           slot + 36,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -521,18 +527,18 @@ func TestScheduler_Attester_Genesis_Reorg_Previous(t *testing.T) {
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for no action to be taken
-	currentSlot.Set(phase0.Slot(34))
+	currentSlot.Set(slot + 34)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: The first assigned duty should not be executed
-	currentSlot.Set(phase0.Slot(35))
+	currentSlot.Set(slot + 35)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
-	currentSlot.Set(phase0.Slot(36))
-	duties, _ := dutiesMap.Get(phase0.Epoch(1))
+	currentSlot.Set(slot + 36)
+	duties, _ := dutiesMap.Get(epoch + 1)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -551,19 +557,20 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Indices_Change_Same_Slot(t *t
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	dutiesMap.Set(epoch+1, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(35),
+			Slot:           slot + 35,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	currentSlot.Set(phase0.Slot(32))
+	currentSlot.Set(slot + 32)
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
@@ -581,7 +588,7 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Indices_Change_Same_Slot(t *t
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(33))
+	currentSlot.Set(slot + 33)
 	waitForDuties.Set(true)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -593,10 +600,10 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Indices_Change_Same_Slot(t *t
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+1, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(36),
+			Slot:           slot + 36,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -605,27 +612,27 @@ func TestScheduler_Attester_Genesis_Reorg_Previous_Indices_Change_Same_Slot(t *t
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(phase0.Epoch(1))
-	dutiesMap.Set(phase0.Epoch(1), append(duties, &eth2apiv1.AttesterDuty{
+	duties, _ := dutiesMap.Get(epoch + 1)
+	dutiesMap.Set(epoch+1, append(duties, &eth2apiv1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		Slot:           phase0.Slot(36),
+		Slot:           slot + 36,
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	}))
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
-	currentSlot.Set(phase0.Slot(34))
+	currentSlot.Set(slot + 34)
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The first assigned duty should not be executed
-	currentSlot.Set(phase0.Slot(35))
+	currentSlot.Set(slot + 35)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 8: The second and new from indices change assigned duties should be executed
-	currentSlot.Set(phase0.Slot(36))
-	duties, _ = dutiesMap.Get(phase0.Epoch(1))
+	currentSlot.Set(slot + 36)
+	duties, _ = dutiesMap.Get(epoch + 1)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -644,17 +651,18 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(48))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot + 48)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(64),
+			Slot:           slot + 64,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -675,7 +683,7 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(49))
+	currentSlot.Set(slot + 49)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -686,10 +694,10 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(65),
+			Slot:           slot + 65,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -697,16 +705,16 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
-	currentSlot.Set(phase0.Slot(50))
+	currentSlot.Set(slot + 50)
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: skip to the next epoch
-	currentSlot.Set(phase0.Slot(51))
-	for slot := currentSlot.Get(); slot < 64; slot++ {
-		mockTicker.Send(slot)
+	currentSlot.Set(slot + 51)
+	for s := currentSlot.Get(); s < slot+64; s++ {
+		mockTicker.Send(s)
 		waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-		currentSlot.Set(slot + 1)
+		currentSlot.Set(s + 1)
 	}
 
 	// STEP 7: The first assigned duty should not be executed
@@ -715,8 +723,8 @@ func TestScheduler_Attester_Genesis_Reorg_Current(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 8: The second assigned duty should be executed
-	currentSlot.Set(phase0.Slot(65))
-	duties, _ := dutiesMap.Get(phase0.Epoch(2))
+	currentSlot.Set(slot + 65)
+	duties, _ := dutiesMap.Get(epoch + 2)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -735,17 +743,18 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(48))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot + 48)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(64),
+			Slot:           slot + 64,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -766,7 +775,7 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot.Set(phase0.Slot(49))
+	currentSlot.Set(slot + 49)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -777,10 +786,10 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+2, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(65),
+			Slot:           slot + 65,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -789,25 +798,25 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(phase0.Epoch(2))
-	dutiesMap.Set(phase0.Epoch(2), append(duties, &eth2apiv1.AttesterDuty{
+	duties, _ := dutiesMap.Get(epoch + 2)
+	dutiesMap.Set(epoch+2, append(duties, &eth2apiv1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		Slot:           phase0.Slot(65),
+		Slot:           slot + 65,
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	}))
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be fetched again for the next epoch due to indices change
-	currentSlot.Set(phase0.Slot(50))
+	currentSlot.Set(slot + 50)
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: skip to the next epoch
-	currentSlot.Set(phase0.Slot(51))
-	for slot := currentSlot.Get(); slot < 64; slot++ {
-		mockTicker.Send(slot)
+	currentSlot.Set(slot + 51)
+	for s := currentSlot.Get(); s < slot+64; s++ {
+		mockTicker.Send(s)
 		waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-		currentSlot.Set(slot + 1)
+		currentSlot.Set(s + 1)
 	}
 
 	// STEP 8: The first assigned duty should not be executed
@@ -816,8 +825,8 @@ func TestScheduler_Attester_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 9: The second assigned duty should be executed
-	currentSlot.Set(phase0.Slot(65))
-	duties, _ = dutiesMap.Get(phase0.Epoch(2))
+	currentSlot.Set(slot + 65)
+	duties, _ = dutiesMap.Get(epoch + 2)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -835,19 +844,20 @@ func TestScheduler_Attester_Genesis_Early_Block(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	dutiesMap.Set(epoch, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(2),
+			Slot:           slot + 2,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	currentSlot.Set(phase0.Slot(0))
+	currentSlot.Set(slot)
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
@@ -855,15 +865,15 @@ func TestScheduler_Attester_Genesis_Early_Block(t *testing.T) {
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
-	currentSlot.Set(phase0.Slot(1))
+	currentSlot.Set(slot + 1)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration
 	startTime := time.Now()
-	currentSlot.Set(phase0.Slot(2))
+	currentSlot.Set(slot + 2)
 	mockTicker.Send(currentSlot.Get())
-	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	duties, _ := dutiesMap.Get(epoch)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -888,17 +898,18 @@ func TestScheduler_Attester_Genesis_Start_In_The_End_Of_The_Epoch(t *testing.T) 
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(31))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot + 31)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
-	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+1, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(32),
+			Slot:           slot + 32,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -909,8 +920,8 @@ func TestScheduler_Attester_Genesis_Start_In_The_End_Of_The_Epoch(t *testing.T) 
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for attester duties to be executed
-	currentSlot.Set(phase0.Slot(32))
-	duties, _ := dutiesMap.Get(phase0.Epoch(1))
+	currentSlot.Set(slot + 32)
+	duties, _ := dutiesMap.Get(epoch + 1)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -928,17 +939,18 @@ func TestScheduler_Attester_Genesis_Fetch_Execute_Next_Epoch_Duty(t *testing.T) 
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
 	)
-	currentSlot.Set(phase0.Slot(13))
-	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	scheduler, logger, mockTicker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	slot := scheduler.network.EstimatedCurrentSlot()
+	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
+	currentSlot.Set(slot + 13)
 	fetchDutiesCall, executeDutiesCall := setupAttesterGenesisDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startFn()
 
-	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+	dutiesMap.Set(epoch+1, []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			Slot:           phase0.Slot(32),
+			Slot:           slot + 32,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
@@ -948,19 +960,19 @@ func TestScheduler_Attester_Genesis_Fetch_Execute_Next_Epoch_Duty(t *testing.T) 
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
-	currentSlot.Set(phase0.Slot(14))
+	currentSlot.Set(slot + 14)
 	mockTicker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for duties to be fetched for the next epoch
-	currentSlot.Set(phase0.Slot(15))
+	currentSlot.Set(slot + 15)
 	waitForDuties.Set(true)
 	mockTicker.Send(currentSlot.Get())
 	waitForGenesisDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for attester duties to be executed
-	currentSlot.Set(phase0.Slot(32))
-	duties, _ := dutiesMap.Get(phase0.Epoch(1))
+	currentSlot.Set(slot + 32)
+	duties, _ := dutiesMap.Get(epoch + 1)
 	expected := expectedExecutedGenesisAttesterDuties(handler, duties)
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
 

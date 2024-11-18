@@ -15,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -72,14 +73,33 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot], alanForkEpoch phase0.Epoch) (
+type configOpt func(n *networkconfig.NetworkConfig)
+
+var withEpoch = func(epoch phase0.Epoch) func(n *networkconfig.NetworkConfig) {
+	return func(n *networkconfig.NetworkConfig) {
+		n.AlanForkEpoch = epoch
+	}
+}
+
+var withFarFutureEpoch = func() func(n *networkconfig.NetworkConfig) {
+	return func(n *networkconfig.NetworkConfig) {
+		n.AlanForkEpoch = goclient.FarFutureEpoch
+	}
+}
+
+var withSlotDuration = func(d time.Duration) func(n *networkconfig.NetworkConfig) {
+	return func(n *networkconfig.NetworkConfig) {
+		n.Beacon.SlotDuration = d
+	}
+}
+
+func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, configOpts ...configOpt) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
 	time.Duration,
 	context.CancelFunc,
-	*pool.ContextPool,
-	func(),
+	*pool.ContextPool, func(),
 ) {
 	ctrl := gomock.NewController(t)
 	// A 2s timeout ensures the test passes, even with mockSlotTicker overhead.
@@ -107,8 +127,12 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	networkConfig := networkconfig.NetworkConfig{
 		Beacon: beaconCfg,
 		SSV: networkconfig.SSV{
-			AlanForkEpoch: alanForkEpoch,
+			AlanForkEpoch: beaconCfg.EstimatedCurrentEpoch(),
 		},
+	}
+
+	for _, opt := range configOpts {
+		opt(&networkConfig)
 	}
 
 	opts := &SchedulerOptions{
