@@ -1,7 +1,9 @@
 package goclient
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -39,6 +41,11 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Logf("mock server handling request: %s", r.URL.Path)
 
+			var compactedSpecConfig, compactedGenesis bytes.Buffer
+
+			require.NoError(t, json.Compact(&compactedSpecConfig, []byte(specConfigJSONExample)))
+			require.NoError(t, json.Compact(&compactedGenesis, []byte(genesisJSONExample)))
+
 			expInitRequests := map[string][]byte{
 				"/eth/v1/node/syncing": []byte(`{
 				  "data": {
@@ -54,6 +61,8 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 					"version": "Lighthouse/v4.5.0-441fc16/x86_64-linux"
 				  }
 				}`),
+				"/eth/v1/config/spec":    compactedSpecConfig.Bytes(),
+				"/eth/v1/beacon/genesis": compactedGenesis.Bytes(),
 			}
 			for reqPath, respData := range expInitRequests {
 				if reqPath == r.URL.Path {

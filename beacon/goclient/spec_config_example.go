@@ -1,9 +1,9 @@
-package networkconfig
+package goclient
 
-// beaconConfigJSONExample is a spec config example taken from Prysm on holesky network.
+// specConfigJSONExample is a spec config example taken from Prysm on holesky network.
 // It might be useful as a reference to beacon node spec format.
 // nolint: unused
-const beaconConfigJSONExample = `{
+const specConfigJSONExample = `{
   "data": {
     "ALTAIR_FORK_EPOCH": "0",
     "ALTAIR_FORK_VERSION": "0x02017000",
@@ -159,6 +159,15 @@ const beaconConfigJSONExample = `{
     "WEIGHT_DENOMINATOR": "64",
     "WHISTLEBLOWER_REWARD_QUOTIENT": "512",
     "WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA": "4096"
+  }
+}
+`
+
+const genesisJSONExample = `{
+  "data": {
+    "genesis_time": "1695902400",
+    "genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
+    "genesis_fork_version": "0x01017000"
   }
 }
 `
