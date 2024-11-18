@@ -218,6 +218,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		e := ErrTooManyPartialSignatureMessages
 		e.got = partialSignatureMessageCount
 		e.want = 1
+		return e
 	}
 
 	return nil
