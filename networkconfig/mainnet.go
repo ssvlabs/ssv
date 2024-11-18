@@ -33,6 +33,7 @@ var MainnetSSV = SSV{
 }
 
 var MainnetBeaconConfig = Beacon{
+	ConfigName:                   string(spectypes.MainNetwork),
 	GenesisForkVersion:           phase0.Version{0, 0, 0, 0},
 	MinGenesisTime:               time.Unix(1606824023, 0),
 	SlotDuration:                 12 * time.Second,

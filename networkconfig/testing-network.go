@@ -21,6 +21,7 @@ var TestingSSVConfig = SSV{
 }
 
 var TestingBeaconConfig = Beacon{
+	ConfigName:                   string(spectypes.HoleskyNetwork), // it must be something known by ekm
 	GenesisForkVersion:           HoleskyBeaconConfig.GenesisForkVersion,
 	MinGenesisTime:               HoleskyBeaconConfig.MinGenesisTime,
 	SlotDuration:                 12 * time.Second,

@@ -22,6 +22,7 @@ var LocalTestnetSSV = SSV{
 }
 
 var LocalTestnetBeaconConfig = Beacon{
+	ConfigName:                   string(spectypes.HoleskyNetwork),
 	GenesisForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
 	MinGenesisTime:               HoleskyBeaconConfig.MinGenesisTime,
 	SlotDuration:                 12 * time.Second,

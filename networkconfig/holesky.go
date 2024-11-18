@@ -24,6 +24,7 @@ var HoleskySSV = SSV{
 }
 
 var HoleskyBeaconConfig = Beacon{
+	ConfigName:                   string(spectypes.HoleskyNetwork),
 	GenesisForkVersion:           phase0.Version{0x01, 0x01, 0x70, 0x00},
 	MinGenesisTime:               time.Unix(1695902400, 0),
 	SlotDuration:                 12 * time.Second,

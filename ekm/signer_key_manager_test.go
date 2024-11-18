@@ -30,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -40,7 +41,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManager {
+func testKeyManager(t *testing.T, network networkconfig.Interface) KeyManager {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -49,16 +50,10 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 	require.NoError(t, err)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{
-			Beacon: networkconfig.TestingBeaconConfig,
-			SSV: networkconfig.SSV{
-				GenesisDomainType: networkconfig.TestingNetworkConfig.DomainType(),
-				AlanDomainType:    networkconfig.TestingNetworkConfig.DomainType(),
-			},
-		}
+		network = utils.SetupMockNetworkConfig(t, nil)
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
+	km, err := NewETHKeyManagerSigner(logger, db, network, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

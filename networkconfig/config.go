@@ -37,6 +37,11 @@ type DomainTypeProvider interface {
 }
 
 type Interface interface { // TODO: rename?
+	DomainTypeProvider
+	PastAlanFork() bool
+	PastAlanForkAtEpoch(epoch phase0.Epoch) bool
+
+	BeaconNetwork() string
 	GenesisForkVersion() phase0.Version
 	MinGenesisTime() time.Time
 	SlotDuration() time.Duration
@@ -58,9 +63,6 @@ type Interface interface { // TODO: rename?
 	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
 	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
 	LastSlotOfSyncPeriod(period uint64) phase0.Slot
-
-	PastAlanFork() bool
-	PastAlanForkAtEpoch(epoch phase0.Epoch) bool
 }
 
 var _ Interface = NetworkConfig{}
@@ -114,4 +116,8 @@ func (n NetworkConfig) EpochsPerSyncCommitteePeriod() phase0.Epoch {
 // DomainType returns current domain type based on the current fork.
 func (n NetworkConfig) DomainType() spectypes.DomainType {
 	return n.DomainTypeAtEpoch(n.EstimatedCurrentEpoch())
+}
+
+func (n NetworkConfig) BeaconNetwork() string {
+	return n.Beacon.ConfigName
 }

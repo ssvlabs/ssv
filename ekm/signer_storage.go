@@ -51,13 +51,13 @@ type Storage interface {
 
 type storage struct {
 	db            basedb.Database
-	networkConfig networkconfig.NetworkConfig
+	networkConfig networkconfig.Interface
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, networkConfig networkconfig.NetworkConfig, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, networkConfig networkconfig.Interface, logger *zap.Logger) Storage {
 	return &storage{
 		db:            db,
 		networkConfig: networkConfig,
@@ -87,7 +87,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(s.networkConfig.ConfigName + obj)
+	return []byte(s.networkConfig.BeaconNetwork() + obj)
 }
 
 // Name returns storage name.
@@ -99,7 +99,7 @@ func (s *storage) Name() string {
 func (s *storage) Network() core.Network {
 	// This method is used only in tests,
 	// so s.network is always a network supported by core.Network.
-	return core.Network(s.networkConfig.ConfigName)
+	return core.Network(s.networkConfig.BeaconNetwork())
 }
 
 // SaveWallet stores the given wallet.

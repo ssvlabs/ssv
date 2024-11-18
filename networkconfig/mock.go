@@ -108,6 +108,48 @@ func (m *MockInterface) EXPECT() *MockInterfaceMockRecorder {
 	return m.recorder
 }
 
+// BeaconNetwork mocks base method.
+func (m *MockInterface) BeaconNetwork() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeaconNetwork")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// BeaconNetwork indicates an expected call of BeaconNetwork.
+func (mr *MockInterfaceMockRecorder) BeaconNetwork() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeaconNetwork", reflect.TypeOf((*MockInterface)(nil).BeaconNetwork))
+}
+
+// DomainType mocks base method.
+func (m *MockInterface) DomainType() types.DomainType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DomainType")
+	ret0, _ := ret[0].(types.DomainType)
+	return ret0
+}
+
+// DomainType indicates an expected call of DomainType.
+func (mr *MockInterfaceMockRecorder) DomainType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockInterface)(nil).DomainType))
+}
+
+// DomainTypeAtEpoch mocks base method.
+func (m *MockInterface) DomainTypeAtEpoch(epoch phase0.Epoch) types.DomainType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DomainTypeAtEpoch", epoch)
+	ret0, _ := ret[0].(types.DomainType)
+	return ret0
+}
+
+// DomainTypeAtEpoch indicates an expected call of DomainTypeAtEpoch.
+func (mr *MockInterfaceMockRecorder) DomainTypeAtEpoch(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainTypeAtEpoch", reflect.TypeOf((*MockInterface)(nil).DomainTypeAtEpoch), epoch)
+}
+
 // EpochStartTime mocks base method.
 func (m *MockInterface) EpochStartTime(epoch phase0.Epoch) time.Time {
 	m.ctrl.T.Helper()
@@ -344,6 +386,20 @@ func (m *MockInterface) MinGenesisTime() time.Time {
 func (mr *MockInterfaceMockRecorder) MinGenesisTime() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinGenesisTime", reflect.TypeOf((*MockInterface)(nil).MinGenesisTime))
+}
+
+// NextDomainType mocks base method.
+func (m *MockInterface) NextDomainType() types.DomainType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextDomainType")
+	ret0, _ := ret[0].(types.DomainType)
+	return ret0
+}
+
+// NextDomainType indicates an expected call of NextDomainType.
+func (mr *MockInterfaceMockRecorder) NextDomainType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextDomainType", reflect.TypeOf((*MockInterface)(nil).NextDomainType))
 }
 
 // PastAlanFork mocks base method.

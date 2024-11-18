@@ -46,7 +46,7 @@ type ethKeyManagerSigner struct {
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
 	storage           Storage
-	netCfg            networkconfig.NetworkConfig
+	netCfg            networkconfig.Interface
 	slashingProtector core.SlashingProtector
 }
 
@@ -70,7 +70,7 @@ type KeyManager interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, networkConfig networkconfig.NetworkConfig, encryptionKey string) (KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, networkConfig networkconfig.Interface, encryptionKey string) (KeyManager, error) {
 	signerStore := NewSignerStorage(db, networkConfig, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
@@ -98,7 +98,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, networkConfi
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(networkConfig.Beacon.ConfigName))
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(networkConfig.BeaconNetwork()))
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
@@ -326,7 +326,7 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 
 // BumpSlashingProtection updates the slashing protection data for a given public key.
 func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
-	currentSlot := km.netCfg.Beacon.EstimatedCurrentSlot()
+	currentSlot := km.netCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
 	if err := km.updateHighestAttestation(pubKey, currentSlot); err != nil {
@@ -349,7 +349,7 @@ func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phas
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	currentEpoch := km.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+	currentEpoch := km.netCfg.EstimatedEpochAtSlot(slot)
 	minimalSP := km.computeMinimalAttestationSP(currentEpoch)
 
 	// Check if the retrieved highest attestation data is valid and not outdated.
