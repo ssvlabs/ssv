@@ -65,11 +65,11 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			currentEpoch := h.network.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+			ctx, cancel := context.WithDeadline(ctx, h.network.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.indicesChanged = false
@@ -85,13 +85,13 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			cancel()
 
 			// last slot of epoch
-			if slot%h.network.Beacon.SlotsPerEpoch == h.network.Beacon.SlotsPerEpoch-1 {
+			if slot%h.network.SlotsPerEpoch() == h.network.SlotsPerEpoch()-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
+			currentEpoch := h.network.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
@@ -102,8 +102,8 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case <-h.indicesChange:
-			slot := h.network.Beacon.EstimatedCurrentSlot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			slot := h.network.EstimatedCurrentSlot()
+			currentEpoch := h.network.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
@@ -113,10 +113,10 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDuration/2)
+	ctx, cancel := context.WithTimeout(ctx, h.network.SlotDuration()/2)
 	defer cancel()
 
-	epoch := h.network.Beacon.EstimatedCurrentEpoch()
+	epoch := h.network.EstimatedCurrentEpoch()
 	h.processFetching(ctx, epoch)
 }
 
@@ -222,7 +222,7 @@ func (h *ProposerHandler) toGenesisSpecDuty(duty *eth2apiv1.ProposerDuty, role g
 }
 
 func (h *ProposerHandler) shouldExecute(duty *eth2apiv1.ProposerDuty) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentSlot := h.network.EstimatedCurrentSlot()
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == duty.Slot {
 		return true

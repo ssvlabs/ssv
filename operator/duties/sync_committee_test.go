@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -27,12 +28,39 @@ func setupSyncCommitteeDutiesMock(
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 
+	s.network.(*networkconfig.MockInterface).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) uint64 {
+			return uint64(epoch / s.network.EpochsPerSyncCommitteePeriod())
+		},
+	).AnyTimes()
+
+	s.network.(*networkconfig.MockInterface).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
+		func(period uint64) phase0.Epoch {
+			return phase0.Epoch(period) * s.network.EpochsPerSyncCommitteePeriod()
+		},
+	).AnyTimes()
+
+	s.network.(*networkconfig.MockInterface).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
+		func(period uint64) phase0.Slot {
+			lastEpoch := s.network.FirstEpochOfSyncPeriod(period+1) - 1
+			// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
+			// as it will never be included, hence -1.
+			return s.network.GetEpochFirstSlot(lastEpoch+1) - 2
+		},
+	).AnyTimes()
+
+	s.network.(*networkconfig.MockInterface).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) phase0.Slot {
+			return phase0.Slot(epoch) * s.network.SlotsPerEpoch()
+		},
+	).AnyTimes()
+
 	s.beaconNode.(*MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
 			}
-			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			period := s.network.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
 		}).AnyTimes()
@@ -53,7 +81,7 @@ func setupSyncCommitteeDutiesMock(
 func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.ValidatorDuty {
 	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range duties {
-		if !handler.network.PastAlanForkAtEpoch(handler.network.Beacon.EstimatedEpochAtSlot(slot)) {
+		if !handler.network.PastAlanForkAtEpoch(handler.network.EstimatedEpochAtSlot(slot)) {
 			expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 		}
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
@@ -66,6 +94,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
+		forkEpoch     = phase0.Epoch(0)
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{{
 			Share: spectypes.Share{
@@ -85,7 +114,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 
 	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
 	currentSlot.Set(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startFn()
 
@@ -107,7 +136,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
-	currentSlot.Set(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
+	currentSlot.Set(scheduler.network.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -116,7 +145,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.network.Beacon.GetEpochFirstSlot(scheduler.network.Beacon.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.network.GetEpochFirstSlot(scheduler.network.FirstEpochOfSyncPeriod(1))
 	currentSlot.Set(firstSlotOfNextPeriod)
 	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -131,6 +160,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
+		forkEpoch     = phase0.Epoch(0)
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -151,18 +181,13 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 			},
 		}
 	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
-	slot := scheduler.network.EstimatedCurrentSlot()
-	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
-	period := scheduler.network.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-
-	dutiesMap.Set(period, []*v1.SyncCommitteeDuty{
+	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	dutiesMap.Set(period+1, []*v1.SyncCommitteeDuty{
+	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
 			ValidatorIndex: phase0.ValidatorIndex(2),
@@ -170,7 +195,8 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	})
 
 	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
-	currentSlot.Set(slot + (256*32 - 49))
+	currentSlot.Set(phase0.Slot(256*32 - 49))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startFn()
 
@@ -182,7 +208,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 2: wait for sync committee duties to be executed
-	currentSlot.Set(slot + (256*32 - 48))
+	currentSlot.Set(phase0.Slot(256*32 - 48))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -202,8 +228,8 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	// ...
 
 	// STEP 4: new period, wait for sync committee duties to be executed
-	currentSlot.Set(slot + 256*32)
-	duties, _ = dutiesMap.Get(period + 1)
+	currentSlot.Set(phase0.Slot(256 * 32))
+	duties, _ = dutiesMap.Get(1)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
@@ -220,86 +246,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
-	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
-	slot := scheduler.network.EstimatedCurrentSlot()
-	epoch := scheduler.network.EstimatedEpochAtSlot(slot)
-	period := scheduler.network.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-
-	currentSlot.Set(slot + 256*32 - 3)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
-	startFn()
-
-	dutiesMap.Set(period+1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
-	})
-
-	// STEP 1: wait for sync committee duties to be fetched for next period
-	waitForDuties.Set(true)
-	ticker.Send(currentSlot.Get())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 2: trigger a change in active indices
-	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(period + 1)
-	dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
-		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		ValidatorIndex: phase0.ValidatorIndex(2),
-	}))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 3: wait for sync committee duties to be fetched again
-	currentSlot.Set(slot + 256*32 - 2)
-	ticker.Send(currentSlot.Get())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 4: no action should be taken
-	currentSlot.Set(slot + 256*32 - 1)
-	ticker.Send(currentSlot.Get())
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 5: execute duties
-	currentSlot.Set(slot + 256*32)
-	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(currentSlot.Get())
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
-}
-
-func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
-	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
+		forkEpoch     = phase0.Epoch(0)
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -321,7 +268,84 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		}
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
+	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	startFn()
+
+	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
+
+	// STEP 1: wait for sync committee duties to be fetched for next period
+	waitForDuties.Set(true)
+	ticker.Send(currentSlot.Get())
+	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 2: trigger a change in active indices
+	scheduler.indicesChg <- struct{}{}
+	duties, _ := dutiesMap.Get(1)
+	dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
+		PubKey:         phase0.BLSPubKey{1, 2, 4},
+		ValidatorIndex: phase0.ValidatorIndex(2),
+	}))
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 3: wait for sync committee duties to be fetched again
+	currentSlot.Set(phase0.Slot(256*32 - 2))
+	ticker.Send(currentSlot.Get())
+	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 4: no action should be taken
+	currentSlot.Set(phase0.Slot(256*32 - 1))
+	ticker.Send(currentSlot.Get())
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 5: execute duties
+	currentSlot.Set(phase0.Slot(256 * 32))
+	duties, _ = dutiesMap.Get(1)
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
+	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+	ticker.Send(currentSlot.Get())
+	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+	// Stop scheduler & wait for graceful exit.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}
+
+func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
+	var (
+		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		waitForDuties = &SafeValue[bool]{}
+		forkEpoch     = phase0.Epoch(0)
+		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares  = []*ssvtypes.SSVShare{
+			{
+				Share: spectypes.Share{
+					Committee: []*spectypes.ShareMember{
+						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+					},
+					ValidatorIndex: 1,
+				},
+			},
+			{
+				Share: spectypes.Share{
+					Committee: []*spectypes.ShareMember{
+						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+					},
+					ValidatorIndex: 2,
+				},
+			},
+		}
+	)
+	currentSlot.Set(phase0.Slot(256*32 - 3))
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startFn()
 
@@ -380,6 +404,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
+		forkEpoch     = phase0.Epoch(0)
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -401,7 +426,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		}
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startFn()
 
@@ -473,6 +498,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
+		forkEpoch     = phase0.Epoch(0)
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -502,7 +528,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		}
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startFn()
 
@@ -583,6 +609,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
+		forkEpoch     = phase0.Epoch(0)
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{{
 			Share: spectypes.Share{
@@ -601,7 +628,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	})
 
 	currentSlot.Set(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, forkEpoch)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startFn()
 
@@ -639,7 +666,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration/3)
+	require.Greater(t, time.Since(startTime), scheduler.network.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

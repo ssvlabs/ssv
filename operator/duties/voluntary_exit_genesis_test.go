@@ -7,6 +7,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -17,7 +18,7 @@ func TestVoluntaryExitHandler_HandleGenesisDuties(t *testing.T) {
 	currentSlot := &SafeValue[phase0.Slot]{}
 	currentSlot.Set(0)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, withFarFutureEpoch())
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
 	startFn()
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)

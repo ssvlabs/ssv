@@ -15,7 +15,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -73,37 +72,18 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-type configOpt func(n *networkconfig.NetworkConfig)
-
-var withEpoch = func(epoch phase0.Epoch) func(n *networkconfig.NetworkConfig) {
-	return func(n *networkconfig.NetworkConfig) {
-		n.AlanForkEpoch = epoch
-	}
-}
-
-var withFarFutureEpoch = func() func(n *networkconfig.NetworkConfig) {
-	return func(n *networkconfig.NetworkConfig) {
-		n.AlanForkEpoch = goclient.FarFutureEpoch
-	}
-}
-
-var withSlotDuration = func(d time.Duration) func(n *networkconfig.NetworkConfig) {
-	return func(n *networkconfig.NetworkConfig) {
-		n.Beacon.SlotDuration = d
-	}
-}
-
-func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, configOpts ...configOpt) (
+func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot], alanForkEpoch phase0.Epoch) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
 	time.Duration,
 	context.CancelFunc,
-	*pool.ContextPool, func(),
+	*pool.ContextPool,
+	func(),
 ) {
 	ctrl := gomock.NewController(t)
-	// A 2s timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 2 * time.Second
+	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
+	timeout := 200 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
@@ -114,32 +94,13 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, configOpts ...
 	mockValidatorController := NewMockValidatorController(ctrl)
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
-
-	beaconCfg := networkconfig.Beacon{
-		GenesisForkVersion:           networkconfig.TestingNetworkConfig.Beacon.GenesisForkVersion,
-		CapellaForkVersion:           networkconfig.TestingNetworkConfig.Beacon.CapellaForkVersion,
-		MinGenesisTime:               time.Unix(0, 0),
-		SlotDuration:                 1 * time.Second,
-		SlotsPerEpoch:                32,
-		EpochsPerSyncCommitteePeriod: networkconfig.TestingNetworkConfig.Beacon.EpochsPerSyncCommitteePeriod,
-	}
-
-	networkConfig := networkconfig.NetworkConfig{
-		Beacon: beaconCfg,
-		SSV: networkconfig.SSV{
-			AlanForkEpoch: beaconCfg.EstimatedCurrentEpoch(),
-		},
-	}
-
-	for _, opt := range configOpts {
-		opt(&networkConfig)
-	}
+	mockNetworkConfig := networkconfig.NewMockInterface(ctrl)
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		Network:             networkConfig,
+		Network:             mockNetworkConfig,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
@@ -156,6 +117,46 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, configOpts ...
 	s.handlers = handlers
 
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+	mockNetworkConfig.EXPECT().MinGenesisTime().Return(time.Unix(0, 0)).AnyTimes()
+	mockNetworkConfig.EXPECT().SlotDuration().Return(150 * time.Millisecond).AnyTimes()
+	mockNetworkConfig.EXPECT().SlotsPerEpoch().Return(phase0.Slot(32)).AnyTimes()
+	mockNetworkConfig.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
+		func(slot phase0.Slot) time.Time {
+			return time.Now()
+		},
+	).AnyTimes()
+	mockNetworkConfig.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
+		func(slot phase0.Slot) phase0.Epoch {
+			return phase0.Epoch(slot / s.network.SlotsPerEpoch())
+		},
+	).AnyTimes()
+
+	mockNetworkConfig.EXPECT().EstimatedCurrentSlot().DoAndReturn(
+		func() phase0.Slot {
+			return currentSlot.Get()
+		},
+	).AnyTimes()
+
+	mockNetworkConfig.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
+		func() phase0.Epoch {
+			return phase0.Epoch(currentSlot.Get() / s.network.SlotsPerEpoch())
+		},
+	).AnyTimes()
+
+	mockNetworkConfig.EXPECT().EpochsPerSyncCommitteePeriod().Return(phase0.Epoch(256)).AnyTimes()
+
+	mockNetworkConfig.EXPECT().PastAlanForkAtEpoch(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) bool {
+			return epoch >= alanForkEpoch
+		},
+	).AnyTimes()
+
+	mockNetworkConfig.EXPECT().PastAlanFork().DoAndReturn(
+		func() bool {
+			return s.network.EstimatedCurrentEpoch() >= alanForkEpoch
+		},
+	).AnyTimes()
 
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)

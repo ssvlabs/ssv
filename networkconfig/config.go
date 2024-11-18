@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/config.go -source=./config.go
+//go:generate mockgen -package=networkconfig -destination=./mock.go -source=./config.go
 
 var SupportedConfigs = map[string]SSV{
 	MainnetSSV.Name:      MainnetSSV,
@@ -36,7 +36,7 @@ type DomainTypeProvider interface {
 	DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType
 }
 
-type BeaconNetwork interface {
+type Interface interface { // TODO: rename?
 	GenesisForkVersion() phase0.Version
 	MinGenesisTime() time.Time
 	SlotDuration() time.Duration
@@ -58,9 +58,12 @@ type BeaconNetwork interface {
 	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
 	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
 	LastSlotOfSyncPeriod(period uint64) phase0.Slot
+
+	PastAlanFork() bool
+	PastAlanForkAtEpoch(epoch phase0.Epoch) bool
 }
 
-var _ BeaconNetwork = NetworkConfig{}
+var _ Interface = NetworkConfig{}
 
 type NetworkConfig struct {
 	SSV
