@@ -1,8 +1,8 @@
 package duties
 
 import (
+	"context"
 	"encoding/hex"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
@@ -30,7 +30,7 @@ func (h *ValidatorRegistrationHandler) Name() string {
 	return spectypes.BNRoleValidatorRegistration.String()
 }
 
-func (h *ValidatorRegistrationHandler) HandleDuties() {
+func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
@@ -40,7 +40,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties() {
 	next := h.ticker.Next()
 	for {
 		select {
-		case <-h.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-next:
@@ -66,10 +66,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties() {
 						// no need for other params
 					}})
 				} else {
-					buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, slot, slot%32+1)
-					ctx := withDutyTracingContext(h.ctx, buildStr)
-
-					h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{
+					h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{ // TODO use the correct ctx here
 						Type:           spectypes.BNRoleValidatorRegistration,
 						ValidatorIndex: share.ValidatorIndex,
 						PubKey:         pk,

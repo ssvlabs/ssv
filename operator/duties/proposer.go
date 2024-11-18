@@ -51,14 +51,14 @@ func (h *ProposerHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the current epoch.
-func (h *ProposerHandler) HandleDuties() {
+func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
 	next := h.ticker.Next()
 	for {
 		select {
-		case <-h.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-next:
@@ -68,16 +68,14 @@ func (h *ProposerHandler) HandleDuties() {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(h.ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			ctx = withDutyTracingContext(ctx, buildStr)
-
+			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch)
-				h.processExecution(ctx, currentEpoch, slot)
+				h.processExecution(ctx, currentEpoch, slot) // TODO use the correct ctx here
 			} else {
-				h.processExecution(ctx, currentEpoch, slot)
+				h.processExecution(ctx, currentEpoch, slot) // TODO use the correct ctx here
 				if h.indicesChanged {
 					h.indicesChanged = false
 					h.processFetching(ctx, currentEpoch)

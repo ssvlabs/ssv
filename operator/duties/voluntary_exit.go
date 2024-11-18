@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -44,22 +43,19 @@ func (h *VoluntaryExitHandler) Name() string {
 	return spectypes.BNRoleVoluntaryExit.String()
 }
 
-func (h *VoluntaryExitHandler) HandleDuties() {
+func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
 	next := h.ticker.Next()
 	for {
 		select {
-		case <-h.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-
-			buildStr := fmt.Sprintf("s%v-#%v", currentSlot, currentSlot%32+1)
-			ctx := withDutyTracingContext(h.ctx, buildStr)
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
 			h.processExecution(ctx, currentSlot) // TODO use the right ctx here
@@ -69,7 +65,7 @@ func (h *VoluntaryExitHandler) HandleDuties() {
 				return
 			}
 
-			blockSlot, err := h.blockSlot(h.ctx, exitDescriptor.BlockNumber)
+			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
 					zap.Error(err))

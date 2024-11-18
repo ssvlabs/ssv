@@ -60,7 +60,7 @@ func (h *SyncCommitteeHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the next period.
-func (h *SyncCommitteeHandler) HandleDuties() {
+func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
@@ -75,7 +75,7 @@ func (h *SyncCommitteeHandler) HandleDuties() {
 	next := h.ticker.Next()
 	for {
 		select {
-		case <-h.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-next:
@@ -86,10 +86,8 @@ func (h *SyncCommitteeHandler) HandleDuties() {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(h.ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			ctx = withDutyTracingContext(ctx, buildStr)
-
-			h.processExecution(ctx, period, slot)
+			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+			h.processExecution(ctx, period, slot) // TODO use the correct ctx here
 			h.processFetching(ctx, period, true)
 			cancel()
 

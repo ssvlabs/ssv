@@ -194,7 +194,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 		reorgFeed.Subscribe(reorgCh)
 
 		handler.Setup(
-			ctx,
 			handler.Name(),
 			logger,
 			s.beaconNode,
@@ -212,9 +211,9 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 		handler.HandleInitialDuties(ctx)
 
 		handler := handler
-		s.pool.Go(func(context.Context) error {
+		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
-			handler.HandleDuties()
+			handler.HandleDuties(ctx)
 			return nil
 		})
 	}

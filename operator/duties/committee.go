@@ -41,14 +41,14 @@ func (h *CommitteeHandler) Name() string {
 	return "CLUSTER"
 }
 
-func (h *CommitteeHandler) HandleDuties() {
+func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
 	next := h.ticker.Next()
 	for {
 		select {
-		case <-h.ctx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-next:
@@ -66,10 +66,8 @@ func (h *CommitteeHandler) HandleDuties() {
 				continue
 			}
 
-			ctx := withDutyTracingContext(h.ctx, buildStr)
-
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
-			h.processExecution(ctx, period, epoch, slot)
+			h.processExecution(ctx, period, epoch, slot) // TODO use the correct ctx here
 
 		case <-h.reorg:
 			// do nothing
