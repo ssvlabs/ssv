@@ -6,10 +6,11 @@ import (
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
+
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
-	"go.uber.org/zap"
 )
 
 var TestingGraffiti = [32]byte{1}

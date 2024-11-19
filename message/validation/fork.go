@@ -7,7 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 type ForkingMessageValidation struct {

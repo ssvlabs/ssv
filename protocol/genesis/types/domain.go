@@ -3,7 +3,7 @@ package types
 import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 // TODO: get rid of singleton, pass domain as a parameter

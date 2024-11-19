@@ -23,7 +23,7 @@ import (
 	"tailscale.com/util/singleflight"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 const (

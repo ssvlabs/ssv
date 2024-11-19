@@ -10,12 +10,12 @@
 package networkconfig
 
 import (
-	reflect "reflect"
-	time "time"
+	"reflect"
+	"time"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/ssvlabs/ssv-spec/types"
-	gomock "go.uber.org/mock/gomock"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/mock/gomock"
 )
 
 // MockDomainTypeProvider is a mock of DomainTypeProvider interface.

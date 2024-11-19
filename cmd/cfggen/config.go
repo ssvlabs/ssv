@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 type Config struct {

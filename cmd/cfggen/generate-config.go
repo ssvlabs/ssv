@@ -13,7 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"gopkg.in/yaml.v2"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 const (
