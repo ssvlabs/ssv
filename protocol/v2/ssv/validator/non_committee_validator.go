@@ -41,7 +41,7 @@ type CommitteeObserver struct {
 	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache            *DomainCache
-	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
+	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
 type CommitteeObserverOptions struct {
@@ -82,7 +82,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		attesterRoots:          opts.AttesterRoots,
 		syncCommRoots:          opts.SyncCommRoots,
 		domainCache:            opts.DomainCache,
-		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
+		postConsensusContainer: make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
 	}
 }
 
@@ -220,15 +220,22 @@ func (ncv *CommitteeObserver) processMessage(
 ) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
 
+	currentSlot := signedMsg.Slot
+	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
+	if !exist {
+		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
+		ncv.postConsensusContainer[signedMsg.Slot] = slotValidators
+	}
+
 	for _, msg := range signedMsg.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		if !exists {
 			return nil, fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
 		}
-		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
+		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
 			container = ssv.NewPartialSigContainer(validator.Quorum())
-			ncv.postConsensusContainer[msg.ValidatorIndex] = container
+			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			ncv.resolveDuplicateSignature(container, msg, validator)
@@ -250,6 +257,13 @@ func (ncv *CommitteeObserver) processMessage(
 			}
 		}
 	}
+
+	// Remove older slots container
+	thresholdSlot := currentSlot - 12 // won't get new messages after 12 slots
+	if _, exists := ncv.postConsensusContainer[thresholdSlot]; exists {
+		delete(ncv.postConsensusContainer, thresholdSlot)
+	}
+
 	return quorums, nil
 }
 
