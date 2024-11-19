@@ -188,12 +188,12 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	clusterValidatorCount := len(committeeInfo.indices)
-	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
+	clusterValidatorCount := uint64(len(committeeInfo.indices))
+	partialSignatureMessageCount := uint64(len(partialSignatureMessages.Messages))
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster
-		if partialSignatureMessageCount > min(2*clusterValidatorCount, clusterValidatorCount+syncCommitteeSize) {
+		if partialSignatureMessageCount > min(2*clusterValidatorCount, clusterValidatorCount+mv.netCfg.SyncCommitteeSize) {
 			return ErrTooManyPartialSignatureMessages
 		}
 

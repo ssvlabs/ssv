@@ -19,9 +19,10 @@ import (
 func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 	// Hash the signature.
 	hash := sha256.Sum256(proof)
+	cfg := gc.beaconConfig
 
 	// Keep the signature if it's an aggregator.
-	modulo := SyncCommitteeSize / SyncCommitteeSubnetCount / TargetAggregatorsPerSyncSubcommittee
+	modulo := cfg.SyncCommitteeSize / cfg.SyncCommitteeSubnetCount / cfg.TargetAggregatorsPerSyncSubcommittee
 	if modulo == uint64(0) {
 		// Modulo must be at least 1.
 		modulo = 1
@@ -31,7 +32,7 @@ func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 
 // SyncCommitteeSubnetID returns sync committee subnet ID from subcommittee index
 func (gc *GoClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
-	return uint64(index) / (SyncCommitteeSize / SyncCommitteeSubnetCount), nil
+	return uint64(index) / (gc.beaconConfig.SyncCommitteeSize / gc.beaconConfig.SyncCommitteeSubnetCount), nil
 }
 
 // GetSyncCommitteeContribution returns

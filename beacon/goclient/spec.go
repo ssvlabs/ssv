@@ -6,6 +6,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
@@ -102,13 +103,68 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		return nil, fmt.Errorf("failed to decode epochs per sync committee")
 	}
 
+	syncCommitteeSizeRaw, ok := specResponse.Data["SYNC_COMMITTEE_SIZE"]
+	if !ok {
+		return nil, fmt.Errorf("sync committee size not known by chain")
+	}
+
+	syncCommitteeSize, ok := syncCommitteeSizeRaw.(uint64)
+	if !ok {
+		return nil, fmt.Errorf("failed to decode sync committee size")
+	}
+
+	syncCommitteeSubnetCountRaw, ok := specResponse.Data["SYNC_COMMITTEE_SUBNET_COUNT"]
+	if !ok {
+		return nil, fmt.Errorf("sync committee subnet count not known by chain")
+	}
+
+	syncCommitteeSubnetCount, ok := syncCommitteeSubnetCountRaw.(uint64)
+	if !ok {
+		return nil, fmt.Errorf("failed to decode sync committee subnet count")
+	}
+
+	targetAggregatorsPerCommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_COMMITTEE"]
+	if !ok {
+		return nil, fmt.Errorf("target aggregators per committee not known by chain")
+	}
+
+	targetAggregatorsPerCommittee, ok := targetAggregatorsPerCommitteeRaw.(uint64)
+	if !ok {
+		return nil, fmt.Errorf("failed to decode target aggregators per committee")
+	}
+
+	targetAggregatorsPerSyncSubcommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"]
+	if !ok {
+		return nil, fmt.Errorf("target aggregators per sync subcommittee not known by chain")
+	}
+
+	targetAggregatorsPerSyncSubcommittee, ok := targetAggregatorsPerSyncSubcommitteeRaw.(uint64)
+	if !ok {
+		return nil, fmt.Errorf("failed to decode target aggregators per sync subcommittee")
+	}
+
+	intervalsPerSlotRaw, ok := specResponse.Data["INTERVALS_PER_SLOT"]
+	if !ok {
+		return nil, fmt.Errorf("intervals per slots not known by chain")
+	}
+
+	intervalsPerSlot, ok := intervalsPerSlotRaw.(uint64)
+	if !ok {
+		return nil, fmt.Errorf("failed to decode intervals per slots")
+	}
+
 	return &networkconfig.Beacon{
-		ConfigName:                   configName,
-		GenesisForkVersion:           genesisForkVersion,
-		CapellaForkVersion:           capellaForkVersion,
-		MinGenesisTime:               minGenesisTime,
-		SlotDuration:                 slotDuration,
-		SlotsPerEpoch:                phase0.Slot(slotsPerEpoch),
-		EpochsPerSyncCommitteePeriod: phase0.Epoch(epochsPerSyncCommittee),
+		ConfigName:                           configName,
+		GenesisForkVersion:                   genesisForkVersion,
+		CapellaForkVersion:                   capellaForkVersion,
+		MinGenesisTime:                       minGenesisTime,
+		SlotDuration:                         slotDuration,
+		SlotsPerEpoch:                        phase0.Slot(slotsPerEpoch),
+		EpochsPerSyncCommitteePeriod:         phase0.Epoch(epochsPerSyncCommittee),
+		SyncCommitteeSize:                    syncCommitteeSize,
+		SyncCommitteeSubnetCount:             syncCommitteeSubnetCount,
+		TargetAggregatorsPerSyncSubcommittee: targetAggregatorsPerSyncSubcommittee,
+		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
+		IntervalsPerSlot:                     intervalsPerSlot,
 	}, nil
 }

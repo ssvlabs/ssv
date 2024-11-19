@@ -24,11 +24,16 @@ var HoleskySSV = SSV{
 }
 
 var HoleskyBeaconConfig = Beacon{
-	ConfigName:                   string(spectypes.HoleskyNetwork),
-	GenesisForkVersion:           phase0.Version{0x01, 0x01, 0x70, 0x00},
-	MinGenesisTime:               time.Unix(1695902400, 0),
-	SlotDuration:                 12 * time.Second,
-	SlotsPerEpoch:                32,
-	EpochsPerSyncCommitteePeriod: 256,
-	CapellaForkVersion:           phase0.Version{0x04, 0x01, 0x70, 0x00},
+	ConfigName:                           string(spectypes.HoleskyNetwork),
+	GenesisForkVersion:                   phase0.Version{0x01, 0x01, 0x70, 0x00},
+	CapellaForkVersion:                   phase0.Version{0x04, 0x01, 0x70, 0x00},
+	MinGenesisTime:                       time.Unix(1695902400, 0),
+	SlotDuration:                         12 * time.Second,
+	SlotsPerEpoch:                        32,
+	EpochsPerSyncCommitteePeriod:         256,
+	SyncCommitteeSize:                    512,
+	SyncCommitteeSubnetCount:             4,
+	TargetAggregatorsPerSyncSubcommittee: 16,
+	TargetAggregatorsPerCommittee:        16,
+	IntervalsPerSlot:                     3,
 }

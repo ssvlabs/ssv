@@ -1,9 +1,7 @@
 package goclient
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -41,11 +39,6 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Logf("mock server handling request: %s", r.URL.Path)
 
-			var compactedSpecConfig, compactedGenesis bytes.Buffer
-
-			require.NoError(t, json.Compact(&compactedSpecConfig, []byte(specConfigJSONExample)))
-			require.NoError(t, json.Compact(&compactedGenesis, []byte(genesisJSONExample)))
-
 			expInitRequests := map[string][]byte{
 				"/eth/v1/node/syncing": []byte(`{
 				  "data": {
@@ -61,8 +54,29 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 					"version": "Lighthouse/v4.5.0-441fc16/x86_64-linux"
 				  }
 				}`),
-				"/eth/v1/config/spec":    compactedSpecConfig.Bytes(),
-				"/eth/v1/beacon/genesis": compactedGenesis.Bytes(),
+				"/eth/v1/config/spec": []byte(`{
+				  "data": {
+					"CONFIG_NAME": "holesky",
+					"GENESIS_FORK_VERSION": "0x01017000",
+					"CAPELLA_FORK_VERSION": "0x04017000",
+					"MIN_GENESIS_TIME": "1695902100",
+					"SECONDS_PER_SLOT": "12",
+					"SLOTS_PER_EPOCH": "32",
+					"EPOCHS_PER_SYNC_COMMITTEE_PERIOD": "256",
+					"SYNC_COMMITTEE_SIZE": "512",
+					"SYNC_COMMITTEE_SUBNET_COUNT": "4",
+					"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
+					"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
+					"INTERVALS_PER_SLOT": "3"
+				  }
+				}`),
+				"/eth/v1/beacon/genesis": []byte(`{
+				  "data": {
+					"genesis_time": "1695902400",
+					"genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
+					"genesis_fork_version": "0x01017000"
+				  }
+				}`),
 			}
 			for reqPath, respData := range expInitRequests {
 				if reqPath == r.URL.Path {

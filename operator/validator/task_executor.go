@@ -63,7 +63,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 		go func() {
 			select {
 			case c.indicesChange <- struct{}{}:
-			case <-time.After(12 * time.Second):
+			case <-time.After(c.networkConfig.SlotDuration()):
 				logger.Error("failed to notify indices change")
 			}
 		}()

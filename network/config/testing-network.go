@@ -22,13 +22,18 @@ var TestingSSVConfig = SSV{
 }
 
 var TestingBeaconConfig = Beacon{
-	ConfigName:                   string(spectypes.BeaconTestNetwork),
-	GenesisForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
-	MinGenesisTime:               time.Unix(1616508000, 0),
-	SlotDuration:                 12 * time.Second,
-	SlotsPerEpoch:                32,
-	EpochsPerSyncCommitteePeriod: 256,
-	CapellaForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
+	ConfigName:                           string(spectypes.BeaconTestNetwork),
+	GenesisForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
+	CapellaForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
+	MinGenesisTime:                       time.Unix(1616508000, 0),
+	SlotDuration:                         12 * time.Second,
+	SlotsPerEpoch:                        32,
+	EpochsPerSyncCommitteePeriod:         256,
+	SyncCommitteeSize:                    512,
+	SyncCommitteeSubnetCount:             4,
+	TargetAggregatorsPerSyncSubcommittee: 16,
+	TargetAggregatorsPerCommittee:        16,
+	IntervalsPerSlot:                     3,
 }
 
 var TestingNetworkConfig = NetworkConfig{

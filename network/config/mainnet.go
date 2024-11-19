@@ -33,13 +33,18 @@ var MainnetSSV = SSV{
 }
 
 var MainnetBeaconConfig = Beacon{
-	ConfigName:                   string(spectypes.MainNetwork),
-	GenesisForkVersion:           phase0.Version{0, 0, 0, 0},
-	MinGenesisTime:               time.Unix(1606824023, 0),
-	SlotDuration:                 12 * time.Second,
-	SlotsPerEpoch:                32,
-	EpochsPerSyncCommitteePeriod: 256,
-	CapellaForkVersion:           phase0.Version{0x03, 0x00, 0x00, 0x00},
+	ConfigName:                           string(spectypes.MainNetwork),
+	GenesisForkVersion:                   phase0.Version{0, 0, 0, 0},
+	CapellaForkVersion:                   phase0.Version{0x03, 0x00, 0x00, 0x00},
+	MinGenesisTime:                       time.Unix(1606824023, 0),
+	SlotDuration:                         12 * time.Second,
+	SlotsPerEpoch:                        32,
+	EpochsPerSyncCommitteePeriod:         256,
+	SyncCommitteeSize:                    512,
+	SyncCommitteeSubnetCount:             4,
+	TargetAggregatorsPerSyncSubcommittee: 16,
+	TargetAggregatorsPerCommittee:        16,
+	IntervalsPerSlot:                     3,
 }
 
 var MainnetConfig = NetworkConfig{

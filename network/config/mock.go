@@ -346,6 +346,34 @@ func (mr *MockInterfaceMockRecorder) GetSlotStartTime(slot any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotStartTime", reflect.TypeOf((*MockInterface)(nil).GetSlotStartTime), slot)
 }
 
+// IntervalDuration mocks base method.
+func (m *MockInterface) IntervalDuration() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IntervalDuration")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// IntervalDuration indicates an expected call of IntervalDuration.
+func (mr *MockInterfaceMockRecorder) IntervalDuration() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IntervalDuration", reflect.TypeOf((*MockInterface)(nil).IntervalDuration))
+}
+
+// IntervalsPerSlot mocks base method.
+func (m *MockInterface) IntervalsPerSlot() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IntervalsPerSlot")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// IntervalsPerSlot indicates an expected call of IntervalsPerSlot.
+func (mr *MockInterfaceMockRecorder) IntervalsPerSlot() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IntervalsPerSlot", reflect.TypeOf((*MockInterface)(nil).IntervalsPerSlot))
+}
+
 // IsFirstSlotOfEpoch mocks base method.
 func (m *MockInterface) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	m.ctrl.T.Helper()

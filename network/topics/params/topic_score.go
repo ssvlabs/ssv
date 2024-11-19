@@ -155,6 +155,7 @@ func NewOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnet
 		Network: NetworkOpts{
 			ActiveValidators: activeValidators,
 			Subnets:          subnets,
+			NetCfg:           &netCfg,
 		},
 		Topic: TopicOpts{},
 	}
@@ -169,8 +170,9 @@ func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uin
 	// Set topic weight with equal weights
 	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
 
+	rc := newRateCalculator(netCfg)
 	// Set the expected message rate for the topic
-	opts.Topic.ExpectedMsgRate = calculateMessageRateForTopic(committees)
+	opts.Topic.ExpectedMsgRate = rc.calculateMessageRateForTopic(committees)
 
 	return opts
 }

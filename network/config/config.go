@@ -29,23 +29,24 @@ type Interface interface { // TODO: rename?
 	MinGenesisTime() time.Time
 	SlotDuration() time.Duration
 	SlotsPerEpoch() phase0.Slot
+	EpochsPerSyncCommitteePeriod() phase0.Epoch
+	IntervalsPerSlot() uint64
+
 	EstimatedCurrentSlot() phase0.Slot
+	EstimatedCurrentEpoch() phase0.Epoch
 	EstimatedSlotAtTime(time time.Time) phase0.Slot
 	EstimatedTimeAtSlot(slot phase0.Slot) time.Time
-	EstimatedCurrentEpoch() phase0.Epoch
 	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
 	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
 	EpochStartTime(epoch phase0.Epoch) time.Time
-
 	GetSlotStartTime(slot phase0.Slot) time.Time
 	GetSlotEndTime(slot phase0.Slot) time.Time
 	IsFirstSlotOfEpoch(slot phase0.Slot) bool
 	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
-
-	EpochsPerSyncCommitteePeriod() phase0.Epoch
 	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
 	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
 	LastSlotOfSyncPeriod(period uint64) phase0.Slot
+	IntervalDuration() time.Duration
 }
 
 var _ Interface = NetworkConfig{}
@@ -94,6 +95,11 @@ func (n NetworkConfig) EpochDuration() time.Duration {
 // SlotsPerEpoch returns number of slots per one epoch
 func (n NetworkConfig) SlotsPerEpoch() phase0.Slot {
 	return n.Beacon.SlotsPerEpoch
+}
+
+// IntervalsPerSlot returns number of intervals per slot
+func (n NetworkConfig) IntervalsPerSlot() uint64 {
+	return n.Beacon.IntervalsPerSlot
 }
 
 // MinGenesisTime returns the min genesis time

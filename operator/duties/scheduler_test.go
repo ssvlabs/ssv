@@ -21,6 +21,10 @@ import (
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 )
 
+var (
+	FarFutureEpoch phase0.Epoch = 1<<64 - 1
+)
+
 type MockSlotTicker interface {
 	Next() <-chan time.Time
 	Slot() phase0.Slot

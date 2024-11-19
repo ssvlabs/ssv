@@ -10,13 +10,18 @@ import (
 )
 
 type Beacon struct {
-	ConfigName                   string         `json:"config_name" yaml:"ConfigName"`
-	GenesisForkVersion           phase0.Version `json:"genesis_fork_version" yaml:"GenesisForkVersion"`
-	CapellaForkVersion           phase0.Version `json:"capella_fork_version" yaml:"CapellaForkVersion"`
-	MinGenesisTime               time.Time      `json:"min_genesis_time" yaml:"MinGenesisTime"`
-	SlotDuration                 time.Duration  `json:"slot_duration" yaml:"SlotDuration"`
-	SlotsPerEpoch                phase0.Slot    `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
-	EpochsPerSyncCommitteePeriod phase0.Epoch   `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
+	ConfigName                           string         `json:"config_name" yaml:"ConfigName"`
+	GenesisForkVersion                   phase0.Version `json:"genesis_fork_version" yaml:"GenesisForkVersion"`
+	CapellaForkVersion                   phase0.Version `json:"capella_fork_version" yaml:"CapellaForkVersion"`
+	MinGenesisTime                       time.Time      `json:"min_genesis_time" yaml:"MinGenesisTime"`
+	SlotDuration                         time.Duration  `json:"slot_duration" yaml:"SlotDuration"`
+	SlotsPerEpoch                        phase0.Slot    `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
+	EpochsPerSyncCommitteePeriod         phase0.Epoch   `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
+	SyncCommitteeSize                    uint64         `json:"sync_committee_size" yaml:"SyncCommitteeSize"`
+	SyncCommitteeSubnetCount             uint64         `json:"sync_committee_subnet_count" yaml:"SyncCommitteeSubnetCount"`
+	TargetAggregatorsPerSyncSubcommittee uint64         `json:"target_aggregators_per_sync_subcommittee" yaml:"TargetAggregatorsPerSyncSubcommittee"`
+	TargetAggregatorsPerCommittee        uint64         `json:"target_aggregators_per_committee" yaml:"TargetAggregatorsPerCommittee"`
+	IntervalsPerSlot                     uint64         `json:"intervals_per_slot" yaml:"IntervalsPerSlot"`
 }
 
 func (b Beacon) String() string {
@@ -115,4 +120,12 @@ func (b Beacon) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 
 func (b Beacon) EstimatedCurrentEpochStartTime() time.Time {
 	return b.GetSlotStartTime(b.GetEpochFirstSlot(b.EstimatedCurrentEpoch()))
+}
+
+func (b Beacon) IntervalDuration() time.Duration {
+	if b.IntervalsPerSlot > math.MaxInt64 {
+		panic("intervals per slot out of range")
+	}
+
+	return b.SlotDuration / time.Duration(b.IntervalsPerSlot) // #nosec G115: intervals per slot cannot exceed math.MaxInt64
 }
