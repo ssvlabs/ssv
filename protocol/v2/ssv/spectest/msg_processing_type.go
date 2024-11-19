@@ -234,6 +234,8 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
+	r.GetBaseRunner().NetworkConfig = networkconfig.TestingNetworkConfig
+
 	// override
 	test.PostDutyRunnerState = r
 
