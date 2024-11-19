@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	oneEpochDuration = (12 * time.Second) * 32
+	oneEpochDuration = (12 * time.Second) * 32 // TODO: get from beacon config
 )
 
 // scoreDecay determines the decay rate from the provided time period till

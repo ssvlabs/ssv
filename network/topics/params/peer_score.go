@@ -18,9 +18,9 @@ const (
 
 	// Overall parameters
 	topicScoreCap = 32.72
-	decayInterval = 32 * (time.Second * 12) // One epoch
+	decayInterval = 32 * (time.Second * 12) // One epoch TODO: get from beacon config
 	decayToZero   = 0.01
-	retainScore   = 100 * 32 * 12 * time.Second
+	retainScore   = 100 * 32 * 12 * time.Second // TODO: get from beacon config
 
 	// P5
 	appSpecificWeight = 0

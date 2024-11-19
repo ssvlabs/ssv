@@ -23,7 +23,7 @@ import (
 func DefaultScoringConfig() *ScoringConfig {
 	return &ScoringConfig{
 		IPColocationWeight: -35.11,
-		OneEpochDuration:   (12 * time.Second) * 32,
+		OneEpochDuration:   (12 * time.Second) * 32, // TODO: get from beacon config
 	}
 }
 
