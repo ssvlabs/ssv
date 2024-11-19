@@ -38,7 +38,9 @@ func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) 
 	if err := ts.Stream.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		return nil, errors.Wrap(err, "could not set read deadline")
 	}
-	return io.ReadAll(ts.Stream)
+	size, err := io.ReadAll(ts.Stream)
+
+	return size, err
 }
 
 // WriteWithTimeout reads next message with timeout
@@ -48,9 +50,10 @@ func (ts *streamWrapper) WriteWithTimeout(data []byte, timeout time.Duration) er
 	}
 
 	n := len(data)
-	bytsWrote, err := ts.Stream.Write(data)
-	if bytsWrote != n {
-		return errors.Errorf("written bytes (%d) to sync stream doesnt match input data (%d)", bytsWrote, n)
+	bytesWrote, err := ts.Stream.Write(data)
+	if bytesWrote != n {
+		return errors.Errorf("written bytes (%d) to sync stream doesnt match input data (%d)", bytesWrote, n)
 	}
+
 	return err
 }
