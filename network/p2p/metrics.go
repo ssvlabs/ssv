@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/peers/connections"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,10 +12,6 @@ import (
 
 	"github.com/ssvlabs/ssv/utils/format"
 )
-
-type Metrics interface {
-	connections.Metrics
-}
 
 var (
 	// MetricsAllConnectedPeers counts all connected peers

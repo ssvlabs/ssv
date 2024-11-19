@@ -14,7 +14,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
@@ -224,8 +223,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 
 	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
 
-	mr := metricsreporter.New()
-	p, err := New(logger, cfg, mr)
+	p, err := New(logger, cfg)
 	if err != nil {
 		return nil, err
 	}

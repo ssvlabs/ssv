@@ -86,7 +86,6 @@ type p2pNetwork struct {
 	connHandler  connections.ConnHandler
 	connGater    connmgr.ConnectionGater
 	trustedPeers []*peer.AddrInfo
-	metrics      Metrics
 
 	state int32
 
@@ -107,7 +106,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
+func New(logger *zap.Logger, cfg *Config) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
@@ -127,7 +126,6 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
-		metrics:                 mr,
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err
