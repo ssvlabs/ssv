@@ -86,10 +86,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	slotDuration := DefaultSlotDuration
-	slotDurationRaw, ok := specResponse.Data["SECONDS_PER_SLOT"]
-	if ok {
-		slotDurationDecoded, ok := slotDurationRaw.(time.Duration)
-		if ok {
+	if slotDurationRaw, ok := specResponse.Data["SECONDS_PER_SLOT"]; ok {
+		if slotDurationDecoded, ok := slotDurationRaw.(time.Duration); ok {
 			slotDuration = slotDurationDecoded
 			gc.log.Warn("seconds per slot not known by chain, using default value",
 				zap.Any("value", slotDuration))
@@ -97,10 +95,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	slotsPerEpoch := DefaultSlotsPerEpoch
-	slotsPerEpochRaw, ok := specResponse.Data["SLOTS_PER_EPOCH"]
-	if ok {
-		slotsPerEpochDecoded, ok := slotsPerEpochRaw.(uint64)
-		if ok {
+	if slotsPerEpochRaw, ok := specResponse.Data["SLOTS_PER_EPOCH"]; ok {
+		if slotsPerEpochDecoded, ok := slotsPerEpochRaw.(uint64); ok {
 			slotsPerEpoch = phase0.Slot(slotsPerEpochDecoded)
 			gc.log.Warn("slots per epoch not known by chain, using default value",
 				zap.Any("value", slotsPerEpoch))
@@ -108,10 +104,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	epochsPerSyncCommitteePeriod := DefaultEpochsPerSyncCommitteePeriod
-	epochsPerSyncCommitteePeriodRaw, ok := specResponse.Data["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]
-	if ok {
-		epochsPerSyncCommitteePeriodDecoded, ok := epochsPerSyncCommitteePeriodRaw.(uint64)
-		if ok {
+	if epochsPerSyncCommitteePeriodRaw, ok := specResponse.Data["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]; ok {
+		if epochsPerSyncCommitteePeriodDecoded, ok := epochsPerSyncCommitteePeriodRaw.(uint64); ok {
 			epochsPerSyncCommitteePeriod = phase0.Epoch(epochsPerSyncCommitteePeriodDecoded)
 			gc.log.Warn("epochs per sync committee not known by chain, using default value",
 				zap.Any("value", epochsPerSyncCommitteePeriod))
@@ -119,10 +113,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	syncCommitteeSize := DefaultSyncCommitteeSize
-	syncCommitteeSizeRaw, ok := specResponse.Data["SYNC_COMMITTEE_SIZE"]
-	if ok {
-		syncCommitteeSizeDecoded, ok := syncCommitteeSizeRaw.(uint64)
-		if ok {
+	if syncCommitteeSizeRaw, ok := specResponse.Data["SYNC_COMMITTEE_SIZE"]; ok {
+		if syncCommitteeSizeDecoded, ok := syncCommitteeSizeRaw.(uint64); ok {
 			syncCommitteeSize = syncCommitteeSizeDecoded
 			gc.log.Warn("sync committee size not known by chain, using default value",
 				zap.Any("value", syncCommitteeSize))
@@ -130,10 +122,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	syncCommitteeSubnetCount := DefaultSyncCommitteeSubnetCount
-	syncCommitteeSubnetCountRaw, ok := specResponse.Data["SYNC_COMMITTEE_SUBNET_COUNT"]
-	if ok {
-		syncCommitteeSubnetCountDecoded, ok := syncCommitteeSubnetCountRaw.(uint64)
-		if ok {
+	if syncCommitteeSubnetCountRaw, ok := specResponse.Data["SYNC_COMMITTEE_SUBNET_COUNT"]; ok {
+		if syncCommitteeSubnetCountDecoded, ok := syncCommitteeSubnetCountRaw.(uint64); ok {
 			syncCommitteeSubnetCount = syncCommitteeSubnetCountDecoded
 			gc.log.Warn("sync committee subnet count not known by chain, using default value",
 				zap.Any("value", syncCommitteeSubnetCount))
@@ -141,10 +131,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	targetAggregatorsPerCommittee := DefaultTargetAggregatorsPerCommittee
-	targetAggregatorsPerCommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_COMMITTEE"]
-	if ok {
-		targetAggregatorsPerCommitteeDecoded, ok := targetAggregatorsPerCommitteeRaw.(uint64)
-		if ok {
+	if targetAggregatorsPerCommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_COMMITTEE"]; ok {
+		if targetAggregatorsPerCommitteeDecoded, ok := targetAggregatorsPerCommitteeRaw.(uint64); ok {
 			targetAggregatorsPerCommittee = targetAggregatorsPerCommitteeDecoded
 			gc.log.Warn("target aggregators per committee not known by chain, using default value",
 				zap.Any("value", targetAggregatorsPerCommittee))
@@ -152,10 +140,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	targetAggregatorsPerSyncSubcommittee := DefaultTargetAggregatorsPerSyncSubcommittee
-	targetAggregatorsPerSyncSubcommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"]
-	if ok {
-		targetAggregatorsPerSyncSubcommitteeDecoded, ok := targetAggregatorsPerSyncSubcommitteeRaw.(uint64)
-		if ok {
+	if targetAggregatorsPerSyncSubcommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"]; ok {
+		if targetAggregatorsPerSyncSubcommitteeDecoded, ok := targetAggregatorsPerSyncSubcommitteeRaw.(uint64); ok {
 			targetAggregatorsPerSyncSubcommittee = targetAggregatorsPerSyncSubcommitteeDecoded
 			gc.log.Warn("target aggregators per sync subcommittee not known by chain, using default value",
 				zap.Any("value", targetAggregatorsPerSyncSubcommittee))
@@ -163,10 +149,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	intervalsPerSlot := DefaultIntervalsPerSlot
-	intervalsPerSlotRaw, ok := specResponse.Data["INTERVALS_PER_SLOT"]
-	if ok {
-		intervalsPerSlotDecoded, ok := intervalsPerSlotRaw.(uint64)
-		if ok {
+	if intervalsPerSlotRaw, ok := specResponse.Data["INTERVALS_PER_SLOT"]; ok {
+		if intervalsPerSlotDecoded, ok := intervalsPerSlotRaw.(uint64); ok {
 			intervalsPerSlot = intervalsPerSlotDecoded
 			gc.log.Warn("intervals per slot not known by chain, using default value",
 				zap.Any("value", intervalsPerSlot))
