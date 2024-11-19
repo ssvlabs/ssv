@@ -5,7 +5,7 @@
 
 # SSV Node
 
-[![API Reference](https://img.shields.io/badge/API%20Reference-blue)](https://pkg.go.dev/github.com/bloxapp/ssv)
+[![API Reference](https://img.shields.io/badge/API%20Reference-blue)](https://pkg.go.dev/github.com/ssvlabs/ssv)
 ![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/full-test.yml/badge.svg?branch=stage)
 ![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/lint.yml/badge.svg?branch=stage)
 ![Test Coverage](./docs/resources/cov-badge.svg)
@@ -48,7 +48,7 @@ The following documents contain instructions and information on how to get start
 
 - [Operator Node Installation](https://docs.ssv.network/run-a-node/operator-node/installation)
 - [Developers' Guide](./docs/DEV_GUIDE.md)
-- [SSV API Docs](https://bloxapp.github.io/ssv/)
+- [SSV API Docs](https://ssvlabs.github.io/ssv/)
 
 ## <img src="https://github.com/Anmol-Baranwal/Cool-GIFs-For-GitHub/assets/74038190/fa83eeb9-f4e2-4d85-93f0-688af11babf8" width="35">&nbsp; Contribution
 
