@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -79,6 +80,15 @@ func (n NetworkConfig) GenesisForkVersion() phase0.Version {
 // SlotDuration returns slot duration
 func (n NetworkConfig) SlotDuration() time.Duration {
 	return n.Beacon.SlotDuration
+}
+
+// EpochDuration returns slot duration
+func (n NetworkConfig) EpochDuration() time.Duration {
+	slotsPerEpoch := n.Beacon.SlotsPerEpoch
+	if slotsPerEpoch > math.MaxInt64 {
+		panic("slot out of range")
+	}
+	return n.Beacon.SlotDuration * time.Duration(slotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
 }
 
 // SlotsPerEpoch returns number of slots per one epoch

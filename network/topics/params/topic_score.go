@@ -7,6 +7,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -46,12 +47,12 @@ var (
 
 // NetworkOpts is the config struct for network configurations
 type NetworkOpts struct {
+	// NetCfg defines network config
+	NetCfg *networkconfig.NetworkConfig
 	// ActiveValidators is the amount of validators in the network
 	ActiveValidators uint64
 	// Subnets is the number of subnets in the network
 	Subnets int
-	// OneEpochDuration is used as a time-frame length to control scoring in a dynamic way
-	OneEpochDuration time.Duration
 	// TotalTopicsWeight is the weight of all the topics in the network
 	TotalTopicsWeight float64
 }
@@ -94,9 +95,8 @@ type Options struct {
 }
 
 func (o *Options) defaults() {
-	// Network
-	if o.Network.OneEpochDuration == 0 {
-		o.Network.OneEpochDuration = oneEpochDuration
+	if o.Network.NetCfg == nil {
+		o.Network.NetCfg = &networkconfig.MainnetConfig
 	}
 	if o.Network.TotalTopicsWeight == 0 {
 		o.Network.TotalTopicsWeight = totalTopicsWeight
@@ -133,7 +133,7 @@ func (o *Options) defaults() {
 		o.Topic.MeshDeliveryCapFactor = meshDeliveryCapFactor
 	}
 	if o.Topic.MeshDeliveryActivationTime == 0 {
-		o.Topic.MeshDeliveryActivationTime = o.Network.OneEpochDuration * 3
+		o.Topic.MeshDeliveryActivationTime = o.Network.NetCfg.EpochDuration() * 3
 	}
 	// Topic - P4
 	if o.Topic.InvalidMessageDecayEpochs == 0 {
@@ -150,7 +150,7 @@ func (o *Options) maxScore() float64 {
 }
 
 // NewOpts creates new TopicOpts instance
-func NewOpts(activeValidators uint64, subnets int) *Options {
+func NewOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int) *Options {
 	return &Options{
 		Network: NetworkOpts{
 			ActiveValidators: activeValidators,
@@ -161,9 +161,9 @@ func NewOpts(activeValidators uint64, subnets int) *Options {
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
+func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
-	opts := NewOpts(activeValidators, subnets)
+	opts := NewOpts(netCfg, activeValidators, subnets)
 	opts.defaults()
 
 	// Set topic weight with equal weights
@@ -176,9 +176,9 @@ func NewSubnetTopicOpts(activeValidators uint64, subnets int, committees []*stor
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOptsValidators(activeValidators uint64, subnets int) *Options {
+func NewSubnetTopicOptsValidators(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int) *Options {
 	// Create options with default values
-	opts := NewOpts(activeValidators, subnets)
+	opts := NewOpts(netCfg, activeValidators, subnets)
 	opts.defaults()
 
 	// Set topic weight with equal weights
@@ -201,13 +201,15 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	// Set to default if not set
 	opts.defaults()
 
+	decayInterval := opts.Network.NetCfg.EpochDuration()
 	expectedMessagesPerDecayInterval := opts.Topic.ExpectedMsgRate * decayInterval.Seconds()
 
 	// P1
 	timeInMeshCap := float64(opts.Topic.TimeInMeshQuantumCap) / float64(opts.Topic.TimeInMeshQuantum)
 
 	// P2
-	firstMessageDeliveriesDecay := scoreDecay(opts.Network.OneEpochDuration*opts.Topic.FirstDeliveryDecayEpochs, decayInterval)
+	oneEpochDuration := opts.Network.NetCfg.EpochDuration()
+	firstMessageDeliveriesDecay := scoreDecay(oneEpochDuration*opts.Topic.FirstDeliveryDecayEpochs, decayInterval)
 	firstMessageDeliveriesCap := 1.0
 	if expectedMessagesPerDecayInterval > 0 {
 		firstMessageDeliveriesCap, err = decayConvergence(firstMessageDeliveriesDecay, 2*(expectedMessagesPerDecayInterval)/float64(opts.Topic.D))
@@ -217,7 +219,7 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	}
 
 	// P3
-	meshMessageDeliveriesDecay := scoreDecay(opts.Network.OneEpochDuration*opts.Topic.MeshDeliveryDecayEpochs, decayInterval)
+	meshMessageDeliveriesDecay := scoreDecay(oneEpochDuration*opts.Topic.MeshDeliveryDecayEpochs, decayInterval)
 	meshMessageDeliveriesThreshold := 1.0
 	if expectedMessagesPerDecayInterval > 0 {
 		meshMessageDeliveriesThreshold, err = decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerDecayInterval * opts.Topic.MeshDeliveryDampeningFactor))
@@ -232,7 +234,7 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * opts.Topic.MeshDeliveryCapFactor
 
 	// P4
-	invalidMessageDeliveriesDecay := scoreDecay(opts.Topic.InvalidMessageDecayEpochs*opts.Network.OneEpochDuration, decayInterval)
+	invalidMessageDeliveriesDecay := scoreDecay(opts.Topic.InvalidMessageDecayEpochs*oneEpochDuration, decayInterval)
 	invalidMessageDeliveriesWeight := graylistThreshold / (opts.Topic.TopicWeight * float64(opts.Topic.MaxInvalidMessagesAllowed) * float64(opts.Topic.MaxInvalidMessagesAllowed))
 
 	params := &pubsub.TopicScoreParams{

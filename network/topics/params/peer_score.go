@@ -6,6 +6,8 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 const (
@@ -17,10 +19,9 @@ const (
 	opportunisticGraftThreshold = 5
 
 	// Overall parameters
-	topicScoreCap = 32.72
-	decayInterval = 32 * (time.Second * 12) // One epoch TODO: get from beacon config
-	decayToZero   = 0.01
-	retainScore   = 100 * 32 * 12 * time.Second // TODO: get from beacon config
+	topicScoreCap              = 32.72
+	decayToZero                = 0.01
+	retainScoreEpochMultiplier = 100
 
 	// P5
 	appSpecificWeight = 0
@@ -45,13 +46,11 @@ func PeerScoreThresholds() *pubsub.PeerScoreThresholds {
 }
 
 // PeerScoreParams returns peer score params according to the given options
-func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableColocation bool, ipWhilelist ...*net.IPNet) *pubsub.PeerScoreParams {
-	if oneEpoch == 0 {
-		oneEpoch = oneEpochDuration
-	}
+func PeerScoreParams(netCfg networkconfig.NetworkConfig, msgIDCacheTTL time.Duration, disableColocation bool, ipWhilelist ...*net.IPNet) *pubsub.PeerScoreParams {
+	epochDuration := netCfg.EpochDuration()
 
 	// P7 calculation
-	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, decayInterval)
+	behaviourPenaltyDecay := scoreDecay(epochDuration*10, epochDuration)
 	maxAllowedRatePerDecayInterval := 10.0
 	targetVal, _ := decayConvergence(behaviourPenaltyDecay, maxAllowedRatePerDecayInterval)
 	targetVal = targetVal - behaviourPenaltyThreshold
@@ -66,9 +65,9 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableColocation bo
 		Topics: make(map[string]*pubsub.TopicScoreParams),
 		// Overall parameters
 		TopicScoreCap: topicScoreCap,
-		DecayInterval: decayInterval,
+		DecayInterval: epochDuration,
 		DecayToZero:   decayToZero,
-		RetainScore:   retainScore,
+		RetainScore:   retainScoreEpochMultiplier * epochDuration,
 		SeenMsgTTL:    msgIDCacheTTL,
 
 		// P5

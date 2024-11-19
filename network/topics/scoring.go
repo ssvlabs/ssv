@@ -5,25 +5,22 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/registry/storage"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // DefaultScoringConfig returns the default scoring config
 func DefaultScoringConfig() *ScoringConfig {
 	return &ScoringConfig{
 		IPColocationWeight: -35.11,
-		OneEpochDuration:   (12 * time.Second) * 32, // TODO: get from beacon config
 	}
 }
 
@@ -216,7 +213,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts := params.NewSubnetTopicOpts(totalValidators, commons.Subnets(), topicCommittees)
+		opts := params.NewSubnetTopicOpts(cfg.NetworkConfig, totalValidators, commons.Subnets(), topicCommittees)
 
 		// Generate topic parameters
 		tp, err := params.TopicParams(opts)
@@ -239,7 +236,7 @@ func validatorTopicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(strin
 		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
 			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
 		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOptsValidators(totalValidators, commons.Subnets())
+		opts := params.NewSubnetTopicOptsValidators(cfg.NetworkConfig, totalValidators, commons.Subnets())
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))

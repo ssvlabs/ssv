@@ -41,3 +41,8 @@ var MainnetBeaconConfig = Beacon{
 	EpochsPerSyncCommitteePeriod: 256,
 	CapellaForkVersion:           phase0.Version{0x03, 0x00, 0x00, 0x00},
 }
+
+var MainnetConfig = NetworkConfig{
+	SSV:    MainnetSSV,
+	Beacon: MainnetBeaconConfig,
+}
