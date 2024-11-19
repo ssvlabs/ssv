@@ -60,7 +60,7 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 		slotsSinceGenesis := timeSinceGenesis / cfg.SlotDuration
 		nextSlotStartTime := cfg.GenesisTime.Add((slotsSinceGenesis + 1) * cfg.SlotDuration)
 		initialDelay = time.Until(nextSlotStartTime)
-		initialSlot = phase0.Slot(slotsSinceGenesis)
+		initialSlot = phase0.Slot(slotsSinceGenesis) // nolint: gosec
 	}
 
 	return &slotTicker{
