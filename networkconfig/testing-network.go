@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -21,13 +22,13 @@ var TestingSSVConfig = SSV{
 }
 
 var TestingBeaconConfig = Beacon{
-	ConfigName:                   string(spectypes.HoleskyNetwork), // it must be something known by ekm
-	GenesisForkVersion:           HoleskyBeaconConfig.GenesisForkVersion,
-	MinGenesisTime:               HoleskyBeaconConfig.MinGenesisTime,
+	ConfigName:                   string(spectypes.BeaconTestNetwork),
+	GenesisForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
+	MinGenesisTime:               time.Unix(1616508000, 0),
 	SlotDuration:                 12 * time.Second,
 	SlotsPerEpoch:                32,
 	EpochsPerSyncCommitteePeriod: 256,
-	CapellaForkVersion:           HoleskyBeaconConfig.CapellaForkVersion,
+	CapellaForkVersion:           phase0.Version{0x99, 0x99, 0x99, 0x99},
 }
 
 var TestingNetworkConfig = NetworkConfig{
