@@ -27,6 +27,7 @@ func (tests *MultiMsgProcessingSpecTest) Run(t *testing.T) {
 
 	for _, test := range tests.Tests {
 		t.Run(test.TestName(), func(t *testing.T) {
+			test.ParentName = tests.Name
 			test.RunAsPartOfMultiTest(t, tests.logger)
 		})
 	}
