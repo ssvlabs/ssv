@@ -1,8 +1,7 @@
 package goclient
 
 // specConfigJSONExample is a spec config example taken from Prysm on holesky network.
-// It might be useful as a reference to beacon node spec format.
-// nolint: unused
+// It's used in unit tests but might be useful as a reference to beacon node spec format.
 const specConfigJSONExample = `{
   "data": {
     "ALTAIR_FORK_EPOCH": "0",
@@ -163,6 +162,8 @@ const specConfigJSONExample = `{
 }
 `
 
+// genesisJSONExample is a genesis example taken from Prysm on holesky network.
+// It's used in unit tests but might be useful as a reference to beacon node genesis format.
 const genesisJSONExample = `{
   "data": {
     "genesis_time": "1695902400",
