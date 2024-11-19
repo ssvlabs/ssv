@@ -79,7 +79,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			h.processExecution(ctx, currentEpoch, slot) // TODO use the correct ctx here
+			h.processExecution(ctx, currentEpoch, slot)
 			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()

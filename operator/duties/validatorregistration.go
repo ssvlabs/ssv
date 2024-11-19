@@ -66,7 +66,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 						// no need for other params
 					}})
 				} else {
-					h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{ // TODO use the correct ctx here
+					h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{
 						Type:           spectypes.BNRoleValidatorRegistration,
 						ValidatorIndex: share.ValidatorIndex,
 						PubKey:         pk,

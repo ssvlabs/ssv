@@ -67,7 +67,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			}
 
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
-			h.processExecution(ctx, period, epoch, slot) // TODO use the correct ctx here
+			h.processExecution(ctx, period, epoch, slot)
 
 		case <-h.reorg:
 			// do nothing

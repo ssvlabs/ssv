@@ -73,9 +73,9 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				h.fetchFirst = false
 				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch)
-				h.processExecution(ctx, currentEpoch, slot) // TODO use the correct ctx here
+				h.processExecution(ctx, currentEpoch, slot)
 			} else {
-				h.processExecution(ctx, currentEpoch, slot) // TODO use the correct ctx here
+				h.processExecution(ctx, currentEpoch, slot)
 				if h.indicesChanged {
 					h.indicesChanged = false
 					h.processFetching(ctx, currentEpoch)
