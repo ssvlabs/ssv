@@ -13,14 +13,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/utils/casts"
+	"github.com/stretchr/testify/require"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -58,12 +57,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 			lastErr = err
 		}
 	}
-
-	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError, "expected %v, but got %v", test.ExpectedError, lastErr)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	validateError(t, lastErr, test.Name, test.ExpectedError)
 
 	postRoot, err := preInstance.State.GetRoot()
 	require.NoError(t, err)
