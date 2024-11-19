@@ -90,7 +90,7 @@ func (d *Duties[D]) Set(epoch phase0.Epoch, duties []StoreDuty[D]) {
 	d.m[epoch] = mapped
 }
 
-func (d *Duties[D]) ResetEpoch(epoch phase0.Epoch) {
+func (d *Duties[D]) Reset(epoch phase0.Epoch) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
