@@ -216,13 +216,13 @@ func New(
 
 	beaconConfig, err := client.fetchBeaconConfig()
 	if err != nil {
-		logger.Fatal("Failed to fetch spec config", zap.Error(err))
+		return nil, fmt.Errorf("fetch spec config: %w", err)
 	}
 	client.beaconConfig = beaconConfig
 
 	genesis, err := client.fetchGenesis()
 	if err != nil {
-		logger.Fatal("Failed to fetch spec config", zap.Error(err))
+		return nil, fmt.Errorf("fetch genesis: %w", err)
 	}
 	client.genesis = genesis
 
