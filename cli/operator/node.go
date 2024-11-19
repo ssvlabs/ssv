@@ -615,12 +615,12 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSV, error) {
 	}
 
 	if cfg.SSVOptions.NetworkName != "" {
-		nc, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
+		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
 			return ssvConfig, err
 		}
 
-		ssvConfig = nc
+		ssvConfig = snc
 	} else {
 		logger.Info("network name not found in config, using custom network from config")
 		ssvConfig = *cfg.SSVOptions.CustomNetwork

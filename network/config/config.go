@@ -11,24 +11,6 @@ import (
 
 //go:generate mockgen -package=networkconfig -destination=./mock.go -source=./config.go
 
-var SupportedConfigs = map[string]SSV{
-	MainnetSSV.Name:      MainnetSSV,
-	HoleskySSV.Name:      HoleskySSV,
-	HoleskyStageSSV.Name: HoleskyStageSSV,
-	LocalTestnetSSV.Name: LocalTestnetSSV,
-	HoleskyE2ESSV.Name:   HoleskyE2ESSV,
-}
-
-const alanForkName = "alan"
-
-func GetNetworkConfigByName(name string) (SSV, error) {
-	if network, ok := SupportedConfigs[name]; ok {
-		return network, nil
-	}
-
-	return SSV{}, fmt.Errorf("network not supported: %v", name)
-}
-
 // DomainTypeProvider is an interface for getting the domain type based on the current or given epoch.
 type DomainTypeProvider interface {
 	DomainType() spectypes.DomainType

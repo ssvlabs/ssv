@@ -12,6 +12,24 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+const alanForkName = "alan"
+
+var SupportedSSVConfigs = map[string]SSV{
+	MainnetSSV.Name:      MainnetSSV,
+	HoleskySSV.Name:      HoleskySSV,
+	HoleskyStageSSV.Name: HoleskyStageSSV,
+	LocalTestnetSSV.Name: LocalTestnetSSV,
+	HoleskyE2ESSV.Name:   HoleskyE2ESSV,
+}
+
+func GetSSVConfigByName(name string) (SSV, error) {
+	if network, ok := SupportedSSVConfigs[name]; ok {
+		return network, nil
+	}
+
+	return SSV{}, fmt.Errorf("network not supported: %v", name)
+}
+
 type SSV struct {
 	Name                 string               `yaml:"Name,omitempty"`
 	GenesisDomainType    spectypes.DomainType `yaml:"GenesisDomainType,omitempty"`
