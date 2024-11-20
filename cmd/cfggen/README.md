@@ -45,7 +45,6 @@ cfggen [flags]
 | `--network-name`                         | string | `LocalTestnetSSV`                 | Name of the network.                                                       |
 | `--network-genesis-domain`               | string | Derived from local testnet config | Hex-encoded genesis domain type (prefixed with `0x`).                      |
 | `--network-alan-domain`                  | string | Derived from local testnet config | Hex-encoded Alan domain type (prefixed with `0x`).                         |
-| `--network-genesis-epoch`                | uint64 | Derived from local testnet config | Genesis epoch for the network.                                             |
 | `--network-registry-sync-offset`         | uint64 | Derived from local testnet config | Registry sync offset for the network.                                      |
 | `--network-registry-contract-addr`       | string | Derived from local testnet config | Ethereum address of the network registry contract (e.g., `0xYourAddress`). |
 | `--network-bootnodes`                    | string | Derived from local testnet config | Comma-separated list of network bootnodes.                                 |
@@ -106,7 +105,6 @@ cfggen \
   --network-name "CustomNet" \
   --network-genesis-domain "0xabcdef12" \
   --network-alan-domain "0x12345678" \
-  --network-genesis-epoch 100 \
   --network-registry-sync-offset 50 \
   --network-registry-contract-addr "0xYourRegistryContractAddress" \
   --network-bootnodes "enode://bootnode1@127.0.0.1:30303,enode://bootnode2@127.0.0.1:30304" \
@@ -177,7 +175,6 @@ MetricsAPIPort: 8080
         - `Name`: Name of the custom network.
         - `GenesisDomainType`: Hex-encoded genesis domain type (prefixed with `0x`).
         - `AlanDomainType`: Hex-encoded Alan domain type (prefixed with `0x`).
-        - `GenesisEpoch`: Genesis epoch for the network.
         - `RegistrySyncOffset`: Registry sync offset for the network.
         - `RegistryContractAddr`: Ethereum address of the network registry contract.
         - `Bootnodes`: List of network bootnodes.

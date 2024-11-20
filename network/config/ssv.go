@@ -51,7 +51,6 @@ func (s SSV) MarshalYAML() (interface{}, error) {
 		Name                      string       `yaml:"Name,omitempty"`
 		GenesisDomainType         string       `yaml:"GenesisDomainType,omitempty"`
 		AlanDomainType            string       `yaml:"AlanDomainType,omitempty"`
-		GenesisEpoch              phase0.Epoch `yaml:"GenesisEpoch,omitempty"`
 		RegistrySyncOffset        *big.Int     `yaml:"RegistrySyncOffset,omitempty"`
 		RegistryContractAddr      string       `yaml:"RegistryContractAddr,omitempty"`
 		Bootnodes                 []string     `yaml:"Bootnodes,omitempty"`
@@ -80,7 +79,6 @@ func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		Name                      string       `yaml:"Name,omitempty"`
 		GenesisDomainType         string       `yaml:"GenesisDomainType,omitempty"`
 		AlanDomainType            string       `yaml:"AlanDomainType,omitempty"`
-		GenesisEpoch              phase0.Epoch `yaml:"GenesisEpoch,omitempty"`
 		RegistrySyncOffset        *big.Int     `yaml:"RegistrySyncOffset,omitempty"`
 		RegistryContractAddr      string       `yaml:"RegistryContractAddr,omitempty"`
 		Bootnodes                 []string     `yaml:"Bootnodes,omitempty"`
