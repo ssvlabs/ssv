@@ -22,7 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -90,6 +89,7 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
+	ctx                 context.Context
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
@@ -142,6 +142,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
+		ctx:      opts.Ctx,
 	}
 
 	return s
