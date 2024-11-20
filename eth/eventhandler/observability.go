@@ -18,7 +18,7 @@ const (
 var (
 	meter = otel.Meter(observabilityComponentName)
 
-	eventsProcessSuccessCounter = observability.GetMetric(
+	eventsProcessSuccessCounter = observability.NewMetric(
 		fmt.Sprintf("%s.events_processed", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Counter, error) {
 			return meter.Int64Counter(
@@ -28,7 +28,7 @@ var (
 		},
 	)
 
-	eventsProcessFailureCounter = observability.GetMetric(
+	eventsProcessFailureCounter = observability.NewMetric(
 		fmt.Sprintf("%s.events_failed", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Counter, error) {
 			return meter.Int64Counter(
@@ -38,7 +38,7 @@ var (
 		},
 	)
 
-	lastProcessedBlockGauge = observability.GetMetric(
+	lastProcessedBlockGauge = observability.NewMetric(
 		fmt.Sprintf("%s.last_processed_block", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Gauge, error) {
 			return meter.Int64Gauge(

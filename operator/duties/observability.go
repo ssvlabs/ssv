@@ -18,7 +18,7 @@ const (
 var (
 	meter = otel.Meter(observabilityComponentName)
 
-	slotDelayHistogram = observability.GetMetric(
+	slotDelayHistogram = observability.NewMetric(
 		fmt.Sprintf("%s.slot_ticker_delay.duration", observabilityComponentNamespace),
 		func(metricName string) (metric.Float64Histogram, error) {
 			return meter.Float64Histogram(
@@ -29,7 +29,7 @@ var (
 		},
 	)
 
-	dutiesExecutedCounter = observability.GetMetric(
+	dutiesExecutedCounter = observability.NewMetric(
 		fmt.Sprintf("%s.executions", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Counter, error) {
 			return meter.Int64Counter(
@@ -39,7 +39,7 @@ var (
 		},
 	)
 
-	committeeDutiesExecutedCounter = observability.GetMetric(
+	committeeDutiesExecutedCounter = observability.NewMetric(
 		fmt.Sprintf("%s.committee_executions", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Counter, error) {
 			return meter.Int64Counter(
