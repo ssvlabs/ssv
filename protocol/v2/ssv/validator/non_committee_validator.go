@@ -31,6 +31,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
+const postConsensusContainerCapacity = 34
+
 type CommitteeObserver struct {
 	logger                 *zap.Logger
 	Storage                *storage.QBFTStores
@@ -82,7 +84,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		attesterRoots:          opts.AttesterRoots,
 		syncCommRoots:          opts.SyncCommRoots,
 		domainCache:            opts.DomainCache,
-		postConsensusContainer: make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
+		postConsensusContainer: make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, postConsensusContainerCapacity),
 	}
 }
 
@@ -259,8 +261,14 @@ func (ncv *CommitteeObserver) processMessage(
 	}
 
 	// Remove older slots container
-	thresholdSlot := currentSlot - 12 // won't get new messages after 12 slots
-	delete(ncv.postConsensusContainer, thresholdSlot)
+	if len(ncv.postConsensusContainer) >= postConsensusContainerCapacity {
+		thresholdSlot := currentSlot - postConsensusContainerCapacity
+		for slot := range ncv.postConsensusContainer {
+			if slot < thresholdSlot {
+				delete(ncv.postConsensusContainer, slot)
+			}
+		}
+	}
 
 	return quorums, nil
 }
