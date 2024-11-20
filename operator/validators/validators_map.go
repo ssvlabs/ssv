@@ -7,6 +7,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // TODO: use queues
@@ -156,23 +157,37 @@ func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.CommitteeID, v *validator
 	vm.committees[pubKey] = v
 }
 
-// UpdateCommitteeAtomic allows to perform a mutation on a given committee in an atomic manner
-// returns true if the given committee was found
-func (vm *ValidatorsMap) UpdateCommitteeAtomic(pubKey spectypes.CommitteeID, mutate func(*validator.Committee)) (*validator.Committee, bool) {
+// RemoveShareFromCommittee removes the share from its committee
+func (vm *ValidatorsMap) RemoveShareFromCommittee(share *types.SSVShare) (*validator.Committee, bool) {
 	vm.mlock.Lock()
 	defer vm.mlock.Unlock()
 
-	vc, found := vm.committees[pubKey]
+	vc, found := vm.committees[share.CommitteeID()]
 	if !found || vc.Stopped() {
 		return nil, false
 	}
 
-	mutate(vc)
+	vc.RemoveShare(share.Share.ValidatorIndex)
 
 	// if committee was stopped, trigger cleanup
 	if vc.Stopped() {
-		delete(vm.committees, pubKey)
+		delete(vm.committees, share.CommitteeID())
 	}
+
+	return vc, true
+}
+
+// AddShareToCommittee adds share to its committee
+func (vm *ValidatorsMap) AddShareToCommittee(share *types.SSVShare) (*validator.Committee, bool) {
+	vm.mlock.Lock()
+	defer vm.mlock.Unlock()
+
+	vc, found := vm.committees[share.CommitteeID()]
+	if !found || vc.Stopped() {
+		return nil, false
+	}
+
+	vc.AddShare(&share.Share)
 
 	return vc, true
 }
