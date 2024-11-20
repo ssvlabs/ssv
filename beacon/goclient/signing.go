@@ -15,7 +15,7 @@ import (
 func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
 	forkData := &phase0.ForkData{
 		CurrentVersion:        gc.BeaconConfig().CapellaForkVersion,
-		GenesisValidatorsRoot: gc.Genesis().GenesisValidatorsRoot,
+		GenesisValidatorsRoot: gc.BeaconConfig().Genesis.GenesisValidatorsRoot,
 	}
 
 	root, err := forkData.HashTreeRoot()
@@ -34,7 +34,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
-			CurrentVersion:        gc.BeaconConfig().GenesisForkVersion,
+			CurrentVersion:        gc.BeaconConfig().GenesisForkVersion1(),
 			GenesisValidatorsRoot: phase0.Root{},
 		}
 		root, err := forkData.HashTreeRoot()

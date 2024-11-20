@@ -10,7 +10,6 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -147,7 +146,6 @@ type GoClient struct {
 	nodeVersion          string
 	nodeClient           NodeClient
 	beaconConfig         *networkconfig.Beacon // using pointer to make sure it's fetched
-	genesis              *v1.Genesis
 	gasLimit             uint64
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
@@ -220,12 +218,6 @@ func New(
 	}
 	client.beaconConfig = beaconConfig
 
-	genesis, err := client.fetchGenesis()
-	if err != nil {
-		return nil, fmt.Errorf("fetch genesis: %w", err)
-	}
-	client.genesis = genesis
-
 	client.attestationDataCache = ttlcache.New(
 		// we only fetch attestation data during the slot of the relevant duty (and never later),
 		// hence caching it for 2 slots is sufficient
@@ -241,7 +233,6 @@ func New(
 		zap.String("client", string(client.nodeClient)),
 		zap.String("version", client.nodeVersion),
 		zap.String("config", beaconConfig.String()),
-		zap.String("genesis", genesis.String()),
 	)
 
 	return client, nil

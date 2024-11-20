@@ -62,7 +62,7 @@ func setupTimer(beaconConfig networkconfig.Beacon, onTimeout OnRoundTimeoutF, ro
 func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
 	beaconConfig := networkconfig.TestingBeaconConfig
 	beaconConfig.SlotDuration = 120 * time.Millisecond
-	beaconConfig.MinGenesisTime = time.Now().Add(500 * time.Millisecond)
+	beaconConfig.Genesis.GenesisTime = time.Now().Add(500 * time.Millisecond)
 
 	count := atomic.Int32{}
 	onTimeout := func(round specqbft.Round) {
@@ -81,7 +81,7 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
 	beaconConfig := networkconfig.TestingBeaconConfig
 	beaconConfig.SlotDuration = 120 * time.Millisecond
-	beaconConfig.MinGenesisTime = time.Now().Add(500 * time.Millisecond)
+	beaconConfig.Genesis.GenesisTime = time.Now().Add(500 * time.Millisecond)
 
 	count := atomic.Int32{}
 	onTimeout := func(round specqbft.Round) {
@@ -112,7 +112,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 
 	beaconConfig := networkconfig.TestingBeaconConfig
 	beaconConfig.SlotDuration = 100 * time.Millisecond
-	beaconConfig.MinGenesisTime = time.Now().Add(500 * time.Millisecond)
+	beaconConfig.Genesis.GenesisTime = time.Now().Add(500 * time.Millisecond)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {

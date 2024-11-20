@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -24,10 +25,7 @@ var HoleskySSV = SSV{
 
 var HoleskyBeaconConfig = Beacon{
 	ConfigName:                           string(spectypes.HoleskyNetwork),
-	GenesisForkVersion:                   phase0.Version{0x01, 0x01, 0x70, 0x00},
 	CapellaForkVersion:                   phase0.Version{0x04, 0x01, 0x70, 0x00},
-	MinGenesisTime:                       time.Unix(1695902400, 0),
-	GenesisDelay:                         5 * time.Minute,
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,
 	EpochsPerSyncCommitteePeriod:         256,
@@ -36,4 +34,9 @@ var HoleskyBeaconConfig = Beacon{
 	TargetAggregatorsPerSyncSubcommittee: 16,
 	TargetAggregatorsPerCommittee:        16,
 	IntervalsPerSlot:                     3,
+	Genesis: v1.Genesis{
+		GenesisTime:           time.Unix(1695902400, 0),
+		GenesisValidatorsRoot: phase0.Root{0xD8, 0xEA, 0x17, 0x1F, 0x3C, 0x94, 0xAE, 0xA2, 0x1E, 0xBC, 0x42, 0xA1, 0xED, 0x61, 0x05, 0x2A, 0xCF, 0x3F, 0x92, 0x09, 0xC0, 0x0E, 0x4E, 0xFB, 0xAA, 0xDD, 0xAC, 0x09, 0xED, 0x9B, 0x80, 0x78},
+		GenesisForkVersion:    phase0.Version{0x01, 0x01, 0x70, 0x00},
+	},
 }

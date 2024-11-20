@@ -55,16 +55,6 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		return nil, fmt.Errorf("failed to decode config name")
 	}
 
-	genesisForkVersionRaw, ok := specResponse.Data["GENESIS_FORK_VERSION"]
-	if !ok {
-		return nil, fmt.Errorf("genesis fork version not known by chain")
-	}
-
-	genesisForkVersion, ok := genesisForkVersionRaw.(phase0.Version)
-	if !ok {
-		return nil, fmt.Errorf("failed to decode genesis fork version")
-	}
-
 	capellaForkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
 	if !ok {
 		return nil, fmt.Errorf("capella fork version not known by chain")
@@ -73,26 +63,6 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	capellaForkVersion, ok := capellaForkVersionRaw.(phase0.Version)
 	if !ok {
 		return nil, fmt.Errorf("failed to decode capella fork version")
-	}
-
-	minGenesisTimeRaw, ok := specResponse.Data["MIN_GENESIS_TIME"]
-	if !ok {
-		return nil, fmt.Errorf("min genesis time not known by chain")
-	}
-
-	minGenesisTime, ok := minGenesisTimeRaw.(time.Time)
-	if !ok {
-		return nil, fmt.Errorf("failed to decode min genesis time")
-	}
-
-	genesisDelayRaw, ok := specResponse.Data["GENESIS_DELAY"]
-	if !ok {
-		return nil, fmt.Errorf("genesis delay not known by chain")
-	}
-
-	genesisDelay, ok := genesisDelayRaw.(time.Duration)
-	if !ok {
-		return nil, fmt.Errorf("failed to decode genesis delay")
 	}
 
 	slotDuration := DefaultSlotDuration
@@ -167,12 +137,20 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		}
 	}
 
+	genesisResponse, err := gc.client.Genesis(gc.ctx, &api.GenesisOpts{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
+	}
+	if genesisResponse == nil {
+		return nil, fmt.Errorf("genesis response is nil")
+	}
+	if genesisResponse.Data == nil {
+		return nil, fmt.Errorf("genesis response data is nil")
+	}
+
 	return &networkconfig.Beacon{
 		ConfigName:                           configName,
-		GenesisForkVersion:                   genesisForkVersion,
 		CapellaForkVersion:                   capellaForkVersion,
-		MinGenesisTime:                       minGenesisTime,
-		GenesisDelay:                         genesisDelay,
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,
 		EpochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,
@@ -181,5 +159,6 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		TargetAggregatorsPerSyncSubcommittee: targetAggregatorsPerSyncSubcommittee,
 		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
 		IntervalsPerSlot:                     intervalsPerSlot,
+		Genesis:                              *genesisResponse.Data,
 	}, nil
 }

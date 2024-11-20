@@ -69,7 +69,7 @@ func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
 
 // GenesisForkVersion returns the genesis fork version of the network.
 func (n NetworkConfig) GenesisForkVersion() phase0.Version {
-	return n.Beacon.GenesisForkVersion
+	return n.Beacon.Genesis.GenesisForkVersion
 }
 
 // SlotDuration returns slot duration

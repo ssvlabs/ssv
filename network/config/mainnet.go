@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -33,10 +34,7 @@ var MainnetSSV = SSV{
 
 var MainnetBeaconConfig = Beacon{
 	ConfigName:                           string(spectypes.MainNetwork),
-	GenesisForkVersion:                   phase0.Version{0, 0, 0, 0},
 	CapellaForkVersion:                   phase0.Version{0x03, 0x00, 0x00, 0x00},
-	MinGenesisTime:                       time.Unix(1606824023, 0),
-	GenesisDelay:                         0, // TODO: confirm this value
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,
 	EpochsPerSyncCommitteePeriod:         256,
@@ -45,6 +43,11 @@ var MainnetBeaconConfig = Beacon{
 	TargetAggregatorsPerSyncSubcommittee: 16,
 	TargetAggregatorsPerCommittee:        16,
 	IntervalsPerSlot:                     3,
+	Genesis: v1.Genesis{
+		GenesisTime:           time.Unix(1606824023, 0),
+		GenesisValidatorsRoot: phase0.Root{0x4B, 0x36, 0x3D, 0xB9, 0x4E, 0x28, 0x61, 0x20, 0xD7, 0x6E, 0xB9, 0x05, 0x34, 0x0F, 0xDD, 0x4E, 0x54, 0xBF, 0xE9, 0xF0, 0x6B, 0xF3, 0x3F, 0xF6, 0xCF, 0x5A, 0xD2, 0x7F, 0x51, 0x1B, 0xFE, 0x95},
+		GenesisForkVersion:    phase0.Version{0, 0, 0, 0},
+	},
 }
 
 var MainnetConfig = NetworkConfig{

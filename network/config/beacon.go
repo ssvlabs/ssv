@@ -5,15 +5,13 @@ import (
 	"math"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 type Beacon struct {
 	ConfigName                           string
-	GenesisForkVersion                   phase0.Version
 	CapellaForkVersion                   phase0.Version
-	MinGenesisTime                       time.Time
-	GenesisDelay                         time.Duration
 	SlotDuration                         time.Duration
 	SlotsPerEpoch                        phase0.Slot
 	EpochsPerSyncCommitteePeriod         phase0.Epoch
@@ -22,6 +20,7 @@ type Beacon struct {
 	TargetAggregatorsPerSyncSubcommittee uint64
 	TargetAggregatorsPerCommittee        uint64
 	IntervalsPerSlot                     uint64
+	Genesis                              v1.Genesis
 }
 
 func (b Beacon) String() string {
@@ -29,7 +28,11 @@ func (b Beacon) String() string {
 }
 
 func (b Beacon) GenesisTime() time.Time {
-	return b.MinGenesisTime.Add(b.GenesisDelay)
+	return b.Genesis.GenesisTime
+}
+
+func (b Beacon) GenesisForkVersion1() phase0.Version {
+	return b.Genesis.GenesisForkVersion
 }
 
 // GetSlotStartTime returns the start time for the given slot

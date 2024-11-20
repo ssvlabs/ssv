@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -23,10 +24,7 @@ var LocalTestnetSSV = SSV{
 
 var LocalTestnetBeaconConfig = Beacon{
 	ConfigName:                           string(spectypes.HoleskyNetwork),
-	GenesisForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
 	CapellaForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
-	MinGenesisTime:                       HoleskyBeaconConfig.MinGenesisTime,
-	GenesisDelay:                         HoleskyBeaconConfig.GenesisDelay,
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,
 	EpochsPerSyncCommitteePeriod:         256,
@@ -35,4 +33,9 @@ var LocalTestnetBeaconConfig = Beacon{
 	TargetAggregatorsPerSyncSubcommittee: 16,
 	TargetAggregatorsPerCommittee:        16,
 	IntervalsPerSlot:                     3,
+	Genesis: v1.Genesis{
+		GenesisTime:           HoleskyBeaconConfig.Genesis.GenesisTime,
+		GenesisValidatorsRoot: HoleskyBeaconConfig.Genesis.GenesisValidatorsRoot,
+		GenesisForkVersion:    phase0.Version{0x99, 0x99, 0x99, 0x99},
+	},
 }
