@@ -140,22 +140,22 @@ func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-func (n SSV) AlanForkNetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, alanForkName)
+func (s SSV) AlanForkNetworkName() string {
+	return fmt.Sprintf("%s:%s", s.Name, alanForkName)
 }
 
-func (n SSV) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
-	return epoch >= n.AlanForkEpoch
+func (s SSV) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
+	return epoch >= s.AlanForkEpoch
 }
 
 // DomainTypeAtEpoch returns domain type based on the fork at the given epoch.
-func (n SSV) DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType {
-	if n.PastAlanForkAtEpoch(epoch) {
-		return n.AlanDomainType
+func (s SSV) DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType {
+	if s.PastAlanForkAtEpoch(epoch) {
+		return s.AlanDomainType
 	}
-	return n.GenesisDomainType
+	return s.GenesisDomainType
 }
 
-func (n SSV) NextDomainType() spectypes.DomainType {
-	return n.AlanDomainType
+func (s SSV) NextDomainType() spectypes.DomainType {
+	return s.AlanDomainType
 }
