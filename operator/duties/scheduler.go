@@ -25,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -94,6 +93,7 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
+	ctx                 context.Context
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
@@ -146,6 +146,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
+		ctx:      opts.Ctx,
 	}
 
 	return s
@@ -370,12 +371,12 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Record(context.TODO(), slotDelay.Seconds())
+		slotDelayHistogram.Record(s.ctx, slotDelay.Seconds())
 		go func() {
 			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			dutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(observability.BeaconRoleAttribute(duty.Type)))
+			recordDutyExecuted(s.ctx, duty.Type)
 			s.dutyExecutor.ExecuteGenesisDuty(logger, duty)
 		}()
 	}
@@ -390,12 +391,12 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Record(context.TODO(), slotDelay.Seconds())
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			dutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(observability.BeaconRoleAttribute(duty.Type)))
+			recordDutyExecuted(ctx, duty.Type)
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
@@ -413,10 +414,10 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Record(context.TODO(), slotDelay.Seconds())
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			committeeDutiesExecutedCounter.Add(context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.runner.role", committee.duty.RunnerRole().String())))
+			committeeDutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("ssv.runner.role", committee.duty.RunnerRole().String())))
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
