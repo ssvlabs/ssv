@@ -5,10 +5,9 @@ import (
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
 const validatorRegistrationEpochInterval = uint64(10)
@@ -85,10 +84,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }
