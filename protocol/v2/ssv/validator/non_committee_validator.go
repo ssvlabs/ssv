@@ -260,9 +260,7 @@ func (ncv *CommitteeObserver) processMessage(
 
 	// Remove older slots container
 	thresholdSlot := currentSlot - 12 // won't get new messages after 12 slots
-	if _, exists := ncv.postConsensusContainer[thresholdSlot]; exists {
-		delete(ncv.postConsensusContainer, thresholdSlot)
-	}
+	delete(ncv.postConsensusContainer, thresholdSlot)
 
 	return quorums, nil
 }
