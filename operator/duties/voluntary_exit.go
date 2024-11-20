@@ -58,7 +58,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			next = h.ticker.Next()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-			h.processExecution(ctx, currentSlot) // TODO use the right ctx here
+			h.processExecution(ctx, currentSlot)
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
