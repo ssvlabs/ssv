@@ -64,7 +64,7 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 	}
 
 	return &slotTicker{
-		logger:       logger,
+		logger:       logger.Named("slot_ticker"),
 		timer:        timerProvider(initialDelay),
 		slotDuration: cfg.SlotDuration,
 		genesisTime:  cfg.GenesisTime,
@@ -91,7 +91,7 @@ func (s *slotTicker) Next() <-chan time.Time {
 	if nextSlot <= s.slot {
 		// We've already ticked for this slot, so we need to wait for the next one.
 		nextSlot = s.slot + 1
-		s.logger.Debug("slotTicker: double tick", zap.Uint64("slot", uint64(s.slot)))
+		s.logger.Debug("double tick", zap.Uint64("slot", uint64(s.slot)))
 	}
 	nextSlotStartTime := s.genesisTime.Add(casts.DurationFromUint64(uint64(nextSlot)) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
