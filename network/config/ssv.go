@@ -34,7 +34,7 @@ type SSV struct {
 	Name                 string               `yaml:"Name,omitempty"`
 	GenesisDomainType    spectypes.DomainType `yaml:"GenesisDomainType,omitempty"`
 	AlanDomainType       spectypes.DomainType `yaml:"AlanDomainType,omitempty"`
-	GenesisEpoch         phase0.Epoch         `yaml:"GenesisEpoch,omitempty"`
+	GenesisEpoch         phase0.Epoch         `yaml:"GenesisEpoch,omitempty"` // TODO: delete?
 	RegistrySyncOffset   *big.Int             `yaml:"RegistrySyncOffset,omitempty"`
 	RegistryContractAddr ethcommon.Address    `yaml:"RegistryContractAddr,omitempty"`
 	Bootnodes            []string             `yaml:"Bootnodes,omitempty"`
