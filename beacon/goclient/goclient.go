@@ -16,12 +16,12 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/rs/zerolog"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/metric"
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 )
