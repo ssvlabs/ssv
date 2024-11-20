@@ -126,6 +126,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockNetworkConfig.EXPECT().SlotDuration().Return(150 * time.Millisecond).AnyTimes()
 	mockNetworkConfig.EXPECT().IntervalDuration().Return(s.network.SlotDuration() / 3).AnyTimes()
 	mockNetworkConfig.EXPECT().SlotsPerEpoch().Return(phase0.Slot(32)).AnyTimes()
+	mockNetworkConfig.EXPECT().SlotsPerPeriod().Return(phase0.Slot(256) * s.network.SlotsPerEpoch()).AnyTimes()
 	mockNetworkConfig.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
 			return time.Now()
