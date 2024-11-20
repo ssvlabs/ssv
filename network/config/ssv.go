@@ -2,7 +2,6 @@ package networkconfig
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"strings"
@@ -42,12 +41,7 @@ type SSV struct {
 }
 
 func (s SSV) String() string {
-	b, err := json.MarshalIndent(s, "", "\t")
-	if err != nil {
-		return fmt.Sprintf("<malformed: %v>", err)
-	}
-
-	return string(b)
+	return fmt.Sprintf("%#v", s)
 }
 
 func (s SSV) MarshalYAML() (interface{}, error) {

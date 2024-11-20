@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -57,12 +56,7 @@ type NetworkConfig struct {
 }
 
 func (n NetworkConfig) String() string {
-	b, err := json.MarshalIndent(n, "", "\t")
-	if err != nil {
-		return fmt.Sprintf("<malformed: %v>", err)
-	}
-
-	return string(b)
+	return fmt.Sprintf("%#v", n)
 }
 
 func (n NetworkConfig) PastAlanFork() bool {

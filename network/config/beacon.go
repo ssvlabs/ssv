@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -10,28 +9,23 @@ import (
 )
 
 type Beacon struct {
-	ConfigName                           string         `json:"config_name" yaml:"ConfigName"`
-	GenesisForkVersion                   phase0.Version `json:"genesis_fork_version" yaml:"GenesisForkVersion"`
-	CapellaForkVersion                   phase0.Version `json:"capella_fork_version" yaml:"CapellaForkVersion"`
-	MinGenesisTime                       time.Time      `json:"min_genesis_time" yaml:"MinGenesisTime"`
-	GenesisDelay                         time.Duration  `json:"genesis_delay" yaml:"GenesisDelay"`
-	SlotDuration                         time.Duration  `json:"slot_duration" yaml:"SlotDuration"`
-	SlotsPerEpoch                        phase0.Slot    `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
-	EpochsPerSyncCommitteePeriod         phase0.Epoch   `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
-	SyncCommitteeSize                    uint64         `json:"sync_committee_size" yaml:"SyncCommitteeSize"`
-	SyncCommitteeSubnetCount             uint64         `json:"sync_committee_subnet_count" yaml:"SyncCommitteeSubnetCount"`
-	TargetAggregatorsPerSyncSubcommittee uint64         `json:"target_aggregators_per_sync_subcommittee" yaml:"TargetAggregatorsPerSyncSubcommittee"`
-	TargetAggregatorsPerCommittee        uint64         `json:"target_aggregators_per_committee" yaml:"TargetAggregatorsPerCommittee"`
-	IntervalsPerSlot                     uint64         `json:"intervals_per_slot" yaml:"IntervalsPerSlot"`
+	ConfigName                           string
+	GenesisForkVersion                   phase0.Version
+	CapellaForkVersion                   phase0.Version
+	MinGenesisTime                       time.Time
+	GenesisDelay                         time.Duration
+	SlotDuration                         time.Duration
+	SlotsPerEpoch                        phase0.Slot
+	EpochsPerSyncCommitteePeriod         phase0.Epoch
+	SyncCommitteeSize                    uint64
+	SyncCommitteeSubnetCount             uint64
+	TargetAggregatorsPerSyncSubcommittee uint64
+	TargetAggregatorsPerCommittee        uint64
+	IntervalsPerSlot                     uint64
 }
 
 func (b Beacon) String() string {
-	encoded, err := json.Marshal(b)
-	if err != nil {
-		return fmt.Sprintf("<malformed: %v>", err)
-	}
-
-	return string(encoded)
+	return fmt.Sprintf("%#v", b)
 }
 
 func (b Beacon) GenesisTime() time.Time {
