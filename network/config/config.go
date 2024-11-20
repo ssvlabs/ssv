@@ -26,7 +26,7 @@ type Interface interface { // TODO: rename?
 
 	BeaconNetwork() string
 	GenesisForkVersion() phase0.Version
-	MinGenesisTime() time.Time
+	GenesisTime() time.Time
 	SlotDuration() time.Duration
 	SlotsPerEpoch() phase0.Slot
 	EpochsPerSyncCommitteePeriod() phase0.Epoch
@@ -100,11 +100,6 @@ func (n NetworkConfig) SlotsPerEpoch() phase0.Slot {
 // IntervalsPerSlot returns number of intervals per slot
 func (n NetworkConfig) IntervalsPerSlot() uint64 {
 	return n.Beacon.IntervalsPerSlot
-}
-
-// MinGenesisTime returns the min genesis time
-func (n NetworkConfig) MinGenesisTime() time.Time {
-	return n.Beacon.MinGenesisTime
 }
 
 func (n NetworkConfig) EpochsPerSyncCommitteePeriod() phase0.Epoch {

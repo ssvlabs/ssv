@@ -268,7 +268,7 @@ func (gc *GoClient) RegistrationSubmitter(operatorDataStore operatordatastore.Op
 
 	ticker := slotticker.New(gc.log, slotticker.Config{
 		SlotDuration: gc.beaconConfig.SlotDuration,
-		GenesisTime:  gc.beaconConfig.MinGenesisTime,
+		GenesisTime:  gc.beaconConfig.GenesisTime(),
 	})
 
 	for {

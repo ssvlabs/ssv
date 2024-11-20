@@ -85,6 +85,16 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		return nil, fmt.Errorf("failed to decode min genesis time")
 	}
 
+	genesisDelayRaw, ok := specResponse.Data["GENESIS_DELAY"]
+	if !ok {
+		return nil, fmt.Errorf("genesis delay not known by chain")
+	}
+
+	genesisDelay, ok := genesisDelayRaw.(time.Duration)
+	if !ok {
+		return nil, fmt.Errorf("failed to decode genesis delay")
+	}
+
 	slotDuration := DefaultSlotDuration
 	if slotDurationRaw, ok := specResponse.Data["SECONDS_PER_SLOT"]; ok {
 		if slotDurationDecoded, ok := slotDurationRaw.(time.Duration); ok {
@@ -162,6 +172,7 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		GenesisForkVersion:                   genesisForkVersion,
 		CapellaForkVersion:                   capellaForkVersion,
 		MinGenesisTime:                       minGenesisTime,
+		GenesisDelay:                         genesisDelay,
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,
 		EpochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,

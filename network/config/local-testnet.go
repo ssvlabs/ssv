@@ -27,6 +27,7 @@ var LocalTestnetBeaconConfig = Beacon{
 	GenesisForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
 	CapellaForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
 	MinGenesisTime:                       HoleskyBeaconConfig.MinGenesisTime,
+	GenesisDelay:                         HoleskyBeaconConfig.GenesisDelay,
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,
 	EpochsPerSyncCommitteePeriod:         256,

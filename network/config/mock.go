@@ -304,6 +304,20 @@ func (mr *MockInterfaceMockRecorder) GenesisForkVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenesisForkVersion", reflect.TypeOf((*MockInterface)(nil).GenesisForkVersion))
 }
 
+// GenesisTime mocks base method.
+func (m *MockInterface) GenesisTime() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenesisTime")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GenesisTime indicates an expected call of GenesisTime.
+func (mr *MockInterfaceMockRecorder) GenesisTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenesisTime", reflect.TypeOf((*MockInterface)(nil).GenesisTime))
+}
+
 // GetEpochFirstSlot mocks base method.
 func (m *MockInterface) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	m.ctrl.T.Helper()
@@ -400,20 +414,6 @@ func (m *MockInterface) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 func (mr *MockInterfaceMockRecorder) LastSlotOfSyncPeriod(period any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastSlotOfSyncPeriod", reflect.TypeOf((*MockInterface)(nil).LastSlotOfSyncPeriod), period)
-}
-
-// MinGenesisTime mocks base method.
-func (m *MockInterface) MinGenesisTime() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MinGenesisTime")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// MinGenesisTime indicates an expected call of MinGenesisTime.
-func (mr *MockInterfaceMockRecorder) MinGenesisTime() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinGenesisTime", reflect.TypeOf((*MockInterface)(nil).MinGenesisTime))
 }
 
 // NextDomainType mocks base method.

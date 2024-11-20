@@ -28,6 +28,7 @@ var HoleskyBeaconConfig = Beacon{
 	GenesisForkVersion:                   phase0.Version{0x01, 0x01, 0x70, 0x00},
 	CapellaForkVersion:                   phase0.Version{0x04, 0x01, 0x70, 0x00},
 	MinGenesisTime:                       time.Unix(1695902400, 0),
+	GenesisDelay:                         5 * time.Minute,
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,
 	EpochsPerSyncCommitteePeriod:         256,

@@ -14,6 +14,7 @@ type Beacon struct {
 	GenesisForkVersion                   phase0.Version `json:"genesis_fork_version" yaml:"GenesisForkVersion"`
 	CapellaForkVersion                   phase0.Version `json:"capella_fork_version" yaml:"CapellaForkVersion"`
 	MinGenesisTime                       time.Time      `json:"min_genesis_time" yaml:"MinGenesisTime"`
+	GenesisDelay                         time.Duration  `json:"genesis_delay" yaml:"GenesisDelay"`
 	SlotDuration                         time.Duration  `json:"slot_duration" yaml:"SlotDuration"`
 	SlotsPerEpoch                        phase0.Slot    `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
 	EpochsPerSyncCommitteePeriod         phase0.Epoch   `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
@@ -33,13 +34,17 @@ func (b Beacon) String() string {
 	return string(encoded)
 }
 
+func (b Beacon) GenesisTime() time.Time {
+	return b.MinGenesisTime.Add(b.GenesisDelay)
+}
+
 // GetSlotStartTime returns the start time for the given slot
 func (b Beacon) GetSlotStartTime(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
 		panic("slot out of range")
 	}
 	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
-	return b.MinGenesisTime.Add(durationSinceGenesisStart)
+	return b.GenesisTime().Add(durationSinceGenesisStart)
 }
 
 func (b Beacon) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
@@ -47,7 +52,7 @@ func (b Beacon) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 		panic("slot out of range")
 	}
 	d := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
-	return b.MinGenesisTime.Add(d)
+	return b.GenesisTime().Add(d)
 }
 
 func (b Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
@@ -71,7 +76,7 @@ func (b Beacon) EstimatedCurrentSlot() phase0.Slot {
 
 // EstimatedSlotAtTime estimates slot at the given time
 func (b Beacon) EstimatedSlotAtTime(time time.Time) phase0.Slot {
-	genesis := b.MinGenesisTime
+	genesis := b.GenesisTime()
 	if time.Before(genesis) {
 		return 0
 	}

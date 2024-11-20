@@ -1127,7 +1127,7 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 	go func() {
 		slotTicker := slotticker.New(c.logger, slotticker.Config{
 			SlotDuration: c.networkConfig.SlotDuration(),
-			GenesisTime:  c.networkConfig.MinGenesisTime(),
+			GenesisTime:  c.networkConfig.GenesisTime(),
 		})
 
 		next := slotTicker.Next()

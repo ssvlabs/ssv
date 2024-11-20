@@ -37,6 +37,7 @@ var MainnetBeaconConfig = Beacon{
 	GenesisForkVersion:                   phase0.Version{0, 0, 0, 0},
 	CapellaForkVersion:                   phase0.Version{0x03, 0x00, 0x00, 0x00},
 	MinGenesisTime:                       time.Unix(1606824023, 0),
+	GenesisDelay:                         0, // TODO: confirm this value
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,
 	EpochsPerSyncCommitteePeriod:         256,

@@ -26,6 +26,7 @@ var TestingBeaconConfig = Beacon{
 	GenesisForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
 	CapellaForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
 	MinGenesisTime:                       time.Unix(1616508000, 0),
+	GenesisDelay:                         0,
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,
 	EpochsPerSyncCommitteePeriod:         256,
