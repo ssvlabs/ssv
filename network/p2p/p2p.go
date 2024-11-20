@@ -257,13 +257,14 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger, connector)
 
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
+
 	// don't report metrics in tests
 	if n.cfg.Metrics != nil {
-		async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
+		async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, n.host.Network().Peers()))
 
-		async.Interval(n.ctx, peerIdentitiesReportingInterval, n.reportPeerIdentities(logger))
+		async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host.Network().Peers(), n.idx))
 
-		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
+		async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.topicsCtrl))
 	}
 
 	if err := n.subscribeToSubnets(logger); err != nil {
@@ -289,7 +290,6 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
 		if currentCount < n.cfg.MaxPeers {
-			_ = n.idx.GetSubnetsStats() // trigger metrics update
 			return
 		}
 

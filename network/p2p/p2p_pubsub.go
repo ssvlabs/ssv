@@ -16,9 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
-	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -231,10 +229,8 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
 			decodedMsg = m
-			metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(m.MsgType)).Inc()
 		case *genesisqueue.GenesisSSVMessage:
 			decodedMsg = m
-			metricsRouterIncoming.WithLabelValues(genesismessage.MsgTypeToString(m.MsgType)).Inc()
 		case nil:
 			return errors.New("message was not decoded")
 		default:
