@@ -27,7 +27,7 @@ const (
 var (
 	meter = otel.Meter(observabilityComponentName)
 
-	latencyHistogram = observability.GetMetric(
+	latencyHistogram = observability.NewMetric(
 		fmt.Sprintf("%s.latency.duration", observabilityComponentNamespace),
 		func(metricName string) (metric.Float64Histogram, error) {
 			return meter.Float64Histogram(
@@ -39,7 +39,7 @@ var (
 		},
 	)
 
-	syncingDistanceGauge = observability.GetMetric(
+	syncingDistanceGauge = observability.NewMetric(
 		fmt.Sprintf("%s.syncing.distance", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Gauge, error) {
 			return meter.Int64Gauge(
@@ -49,7 +49,7 @@ var (
 		},
 	)
 
-	clientStatusGauge = observability.GetMetric(
+	clientStatusGauge = observability.NewMetric(
 		fmt.Sprintf("%s.syncing.status", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Gauge, error) {
 			return meter.Int64Gauge(
@@ -58,7 +58,7 @@ var (
 		},
 	)
 
-	lastProcessedBlockGauge = observability.GetMetric(
+	lastProcessedBlockGauge = observability.NewMetric(
 		fmt.Sprintf("%s.syncing.last_processed_block", observabilityComponentNamespace),
 		func(metricName string) (metric.Int64Gauge, error) {
 			return meter.Int64Gauge(
