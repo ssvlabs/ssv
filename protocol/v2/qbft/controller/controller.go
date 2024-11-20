@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -84,7 +85,7 @@ func (c *Controller) forceStopAllInstanceExceptCurrent() {
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
+func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
 	msg, err := specqbft.NewProcessingMessage(signedMessage)
 	if err != nil {
 		return nil, errors.New("could not create ProcessingMessage from signed message")

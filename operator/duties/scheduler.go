@@ -20,7 +20,6 @@ import (
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -43,15 +42,15 @@ const (
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
 	ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty)
-	ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty)
-	ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap)
+	ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty)
+	ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
 	ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty)
-	ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDuty)
-	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
+	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 }
 
 type BeaconNode interface {
@@ -372,7 +371,6 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Record(s.ctx, slotDelay.Seconds())
 		go func() {
 			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
@@ -384,7 +382,7 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 }
 
 // ExecuteDuties tries to execute the given duties
-func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -392,20 +390,19 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Valida
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Record(s.ctx, slotDelay.Seconds())
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-
-			recordDutyExecuted(s.ctx, duty.Type)
-			s.dutyExecutor.ExecuteDuty(logger, duty)
+			recordDutyExecuted(ctx, duty.Type)
+			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
@@ -416,11 +413,11 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeD
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Record(s.ctx, slotDelay.Seconds())
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			committeeDutiesExecutedCounter.Add(s.ctx, 1, metric.WithAttributes(attribute.String("ssv.runner.role", committee.duty.RunnerRole().String())))
-			s.dutyExecutor.ExecuteCommitteeDuty(logger, committee.id, duty)
+			committeeDutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("ssv.runner.role", committee.duty.RunnerRole().String())))
+			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
 }
