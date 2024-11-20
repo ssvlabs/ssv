@@ -40,16 +40,16 @@ func main() {
 	operatorPrivateKey := flag.String("operator-private-key", "", "Secret key")
 	metricsAPIPort := flag.Int("metrics-api-port", 0, "Metrics API port")
 
-	networkName := flag.String("network-name", defaultNetwork.Name, "Network name")
-	networkGenesisDomain := flag.String("network-genesis-domain", "0x"+hex.EncodeToString(defaultNetwork.GenesisDomainType[:]), "Network genesis domain")
-	networkAlanDomain := flag.String("network-alan-domain", "0x"+hex.EncodeToString(defaultNetwork.AlanDomainType[:]), "Network alan domain")
-	networkRegistrySyncOffset := flag.Uint64("network-registry-sync-offset", defaultNetwork.RegistrySyncOffset.Uint64(), "Network registry sync offset")
-	networkRegistryContractAddr := flag.String("network-registry-contract-addr", defaultNetwork.RegistryContractAddr.String(), "Network registry contract addr")
-	networkBootnodes := flag.String("network-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "Network bootnodes (comma-separated)")
-	networkDiscoveryProtocolID := flag.String("network-discovery-protocol-id", "0x"+hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:]), "Network discovery protocol ID")
-	networkAlanForkEpoch := flag.Uint64("network-alan-fork-epoch", uint64(defaultNetwork.AlanForkEpoch), "Network Alan fork epoch")
-	networkMaxValidatorsPerCommittee := flag.Int("network-max-validators-per-committee", defaultNetwork.MaxValidatorsPerCommittee, "Network max validators per committee")
-	networkTotalEthereumValidators := flag.Int("network-total-ethereum-validators", defaultNetwork.TotalEthereumValidators, "Network total ethereum validators")
+	ssvNetworkName := flag.String("ssv-network-name", defaultNetwork.Name, "SSV network name")
+	ssvGenesisDomain := flag.String("ssv-genesis-domain", "0x"+hex.EncodeToString(defaultNetwork.GenesisDomainType[:]), "SSV genesis domain")
+	ssvAlanDomain := flag.String("ssv-alan-domain", "0x"+hex.EncodeToString(defaultNetwork.AlanDomainType[:]), "SSV Alan fork domain type")
+	ssvAlanForkEpoch := flag.Uint64("ssv-alan-fork-epoch", uint64(defaultNetwork.AlanForkEpoch), "SSV Alan fork epoch")
+	ssvRegistrySyncOffset := flag.Uint64("ssv-registry-sync-offset", defaultNetwork.RegistrySyncOffset.Uint64(), "SSV registry sync offset")
+	ssvRegistryContractAddr := flag.String("ssv-registry-contract-addr", defaultNetwork.RegistryContractAddr.String(), "SSV registry contract addr")
+	ssvBootnodes := flag.String("ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")
+	ssvDiscoveryProtocolID := flag.String("ssv-discovery-protocol-id", "0x"+hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:]), "SSV discovery protocol ID")
+	ssvMaxValidatorsPerCommittee := flag.Int("ssv-max-validators-per-committee", defaultNetwork.MaxValidatorsPerCommittee, "SSV max validators per committee")
+	ssvTotalEthereumValidators := flag.Int("ssv-total-ethereum-validators", defaultNetwork.TotalEthereumValidators, "Total ethereum network validators")
 
 	flag.Parse()
 
@@ -61,17 +61,17 @@ func main() {
 		log.Fatalf("The --execution-client flag is mandatory")
 	}
 
-	parsedGenesisDomain, err := hex.DecodeString(strings.TrimPrefix(*networkGenesisDomain, "0x"))
+	parsedGenesisDomain, err := hex.DecodeString(strings.TrimPrefix(*ssvGenesisDomain, "0x"))
 	if err != nil {
 		log.Fatalf("Failed to decode genesis network domain: %v", err)
 	}
 
-	parsedAlanDomain, err := hex.DecodeString(strings.TrimPrefix(*networkAlanDomain, "0x"))
+	parsedAlanDomain, err := hex.DecodeString(strings.TrimPrefix(*ssvAlanDomain, "0x"))
 	if err != nil {
 		log.Fatalf("Failed to decode alan network domain: %v", err)
 	}
 
-	parsedDiscoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(*networkDiscoveryProtocolID, "0x"))
+	parsedDiscoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(*ssvDiscoveryProtocolID, "0x"))
 	if err != nil {
 		log.Fatalf("Failed to decode discovery protocol ID: %v", err)
 	}
@@ -82,8 +82,8 @@ func main() {
 	}
 
 	var bootnodes []string
-	if *networkBootnodes != "" {
-		bootnodes = strings.Split(*networkBootnodes, sliceSeparator)
+	if *ssvBootnodes != "" {
+		bootnodes = strings.Split(*ssvBootnodes, sliceSeparator)
 	}
 
 	var config Config
@@ -95,16 +95,16 @@ func main() {
 	config.OperatorPrivateKey = *operatorPrivateKey
 	config.MetricsAPIPort = *metricsAPIPort
 	config.SSV.CustomNetwork = &networkconfig.SSV{
-		Name:                      *networkName,
+		Name:                      *ssvNetworkName,
 		GenesisDomainType:         spectypes.DomainType(parsedGenesisDomain),
 		AlanDomainType:            spectypes.DomainType(parsedAlanDomain),
-		RegistrySyncOffset:        new(big.Int).SetUint64(*networkRegistrySyncOffset),
-		RegistryContractAddr:      ethcommon.HexToAddress(*networkRegistryContractAddr),
+		RegistrySyncOffset:        new(big.Int).SetUint64(*ssvRegistrySyncOffset),
+		RegistryContractAddr:      ethcommon.HexToAddress(*ssvRegistryContractAddr),
 		Bootnodes:                 bootnodes,
 		DiscoveryProtocolID:       parsedDiscoveryProtocolIDArr,
-		AlanForkEpoch:             phase0.Epoch(*networkAlanForkEpoch),
-		MaxValidatorsPerCommittee: *networkMaxValidatorsPerCommittee,
-		TotalEthereumValidators:   *networkTotalEthereumValidators,
+		AlanForkEpoch:             phase0.Epoch(*ssvAlanForkEpoch),
+		MaxValidatorsPerCommittee: *ssvMaxValidatorsPerCommittee,
+		TotalEthereumValidators:   *ssvTotalEthereumValidators,
 	}
 
 	data, err := yaml.Marshal(&config)
