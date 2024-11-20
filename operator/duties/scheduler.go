@@ -93,7 +93,6 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
-	ctx                 context.Context
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
@@ -146,7 +145,6 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
-		ctx:      opts.Ctx,
 	}
 
 	return s
@@ -371,12 +369,10 @@ func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesissp
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Record(s.ctx, slotDelay.Seconds())
 		go func() {
 			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			recordDutyExecuted(s.ctx, duty.Type)
 			s.dutyExecutor.ExecuteGenesisDuty(logger, duty)
 		}()
 	}
