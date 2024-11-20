@@ -10,10 +10,7 @@ import (
 
 // Ethereum parameters
 const (
-	EthereumValidators                = 1000000 // TODO: how to get it from network config?
-	EstimatedAttestationCommitteeSize = float64(EthereumValidators) / float64(2048)
-	MaxValidatorsPerCommittee         = 560 // TODO: should we get it from ssv network config?
-	SingleSCDutiesLimit               = 0
+	SingleSCDutiesLimit = 0
 )
 
 type rateCalculator struct {
@@ -96,10 +93,10 @@ func (rc *rateCalculator) calcExpectedSingleSCCommitteeDutiesPerEpoch(numValidat
 func (rc *rateCalculator) generateCachedValues() {
 	// Cache costly calculations
 
-	expectedCommNumber := make([]float64, 0, MaxValidatorsPerCommittee)
-	expectedSingleSCC := make([]float64, 0, MaxValidatorsPerCommittee)
+	expectedCommNumber := make([]float64, 0, rc.netCfg.SSV.MaxValidatorsPerCommittee)
+	expectedSingleSCC := make([]float64, 0, rc.netCfg.SSV.MaxValidatorsPerCommittee)
 
-	for i := 0; i < MaxValidatorsPerCommittee; i++ {
+	for i := 0; i < rc.netCfg.SSV.MaxValidatorsPerCommittee; i++ {
 		expectedCommNumber = append(expectedCommNumber, rc.calcExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation(i))
 		expectedSingleSCC = append(expectedSingleSCC, rc.calcExpectedSingleSCCommitteeDutiesPerEpoch(i))
 	}
@@ -110,7 +107,7 @@ func (rc *rateCalculator) generateCachedValues() {
 
 func (rc *rateCalculator) expectedNumberOfCommitteeDutiesPerEpochDueToAttestationCached(numValidators int) float64 {
 	// If the committee has more validators than our computed cache, we return the limit value
-	if numValidators >= MaxValidatorsPerCommittee {
+	if numValidators >= rc.netCfg.SSV.MaxValidatorsPerCommittee {
 		return float64(rc.MaxAttestationDutiesPerEpochForCommittee())
 	}
 
@@ -119,7 +116,7 @@ func (rc *rateCalculator) expectedNumberOfCommitteeDutiesPerEpochDueToAttestatio
 
 func (rc *rateCalculator) expectedSingleSCCommitteeDutiesPerEpochCached(numValidators int) float64 {
 	// If the committee has more validators than our computed cache, we return the limit value
-	if numValidators >= MaxValidatorsPerCommittee {
+	if numValidators >= rc.netCfg.SSV.MaxValidatorsPerCommittee {
 		return SingleSCDutiesLimit
 	}
 
@@ -127,15 +124,15 @@ func (rc *rateCalculator) expectedSingleSCCommitteeDutiesPerEpochCached(numValid
 }
 
 func (rc *rateCalculator) AggregatorProbability() float64 {
-	return 16.0 / EstimatedAttestationCommitteeSize
+	return 16.0 / rc.EstimatedAttestationCommitteeSize()
 }
 
 func (rc *rateCalculator) ProposalProbability() float64 {
-	return 1.0 / float64(EthereumValidators)
+	return 1.0 / float64(rc.netCfg.TotalEthereumValidators)
 }
 
 func (rc *rateCalculator) SyncCommitteeProbability() float64 {
-	return float64(rc.netCfg.SyncCommitteeSize) / float64(EthereumValidators)
+	return float64(rc.netCfg.SyncCommitteeSize) / float64(rc.netCfg.TotalEthereumValidators)
 }
 
 func (rc *rateCalculator) SyncCommitteeAggProb() float64 {
@@ -144,6 +141,10 @@ func (rc *rateCalculator) SyncCommitteeAggProb() float64 {
 
 func (rc *rateCalculator) MaxAttestationDutiesPerEpochForCommittee() uint64 {
 	return uint64(rc.netCfg.SlotsPerEpoch())
+}
+
+func (rc *rateCalculator) EstimatedAttestationCommitteeSize() float64 {
+	return float64(rc.netCfg.TotalEthereumValidators) / 2048.0
 }
 
 // Expected number of messages per duty step

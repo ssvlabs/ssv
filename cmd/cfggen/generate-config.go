@@ -48,6 +48,8 @@ func main() {
 	networkBootnodes := flag.String("network-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "Network bootnodes (comma-separated)")
 	networkDiscoveryProtocolID := flag.String("network-discovery-protocol-id", "0x"+hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:]), "Network discovery protocol ID")
 	networkAlanForkEpoch := flag.Uint64("network-alan-fork-epoch", uint64(defaultNetwork.AlanForkEpoch), "Network Alan fork epoch")
+	networkMaxValidatorsPerCommittee := flag.Int("network-max-validators-per-committee", defaultNetwork.MaxValidatorsPerCommittee, "Network max validators per committee")
+	networkTotalEthereumValidators := flag.Int("network-total-ethereum-validators", defaultNetwork.TotalEthereumValidators, "Network total ethereum validators")
 
 	flag.Parse()
 
@@ -93,14 +95,16 @@ func main() {
 	config.OperatorPrivateKey = *operatorPrivateKey
 	config.MetricsAPIPort = *metricsAPIPort
 	config.SSV.CustomNetwork = &networkconfig.SSV{
-		Name:                 *networkName,
-		GenesisDomainType:    spectypes.DomainType(parsedGenesisDomain),
-		AlanDomainType:       spectypes.DomainType(parsedAlanDomain),
-		RegistrySyncOffset:   new(big.Int).SetUint64(*networkRegistrySyncOffset),
-		RegistryContractAddr: ethcommon.HexToAddress(*networkRegistryContractAddr),
-		Bootnodes:            bootnodes,
-		DiscoveryProtocolID:  parsedDiscoveryProtocolIDArr,
-		AlanForkEpoch:        phase0.Epoch(*networkAlanForkEpoch),
+		Name:                      *networkName,
+		GenesisDomainType:         spectypes.DomainType(parsedGenesisDomain),
+		AlanDomainType:            spectypes.DomainType(parsedAlanDomain),
+		RegistrySyncOffset:        new(big.Int).SetUint64(*networkRegistrySyncOffset),
+		RegistryContractAddr:      ethcommon.HexToAddress(*networkRegistryContractAddr),
+		Bootnodes:                 bootnodes,
+		DiscoveryProtocolID:       parsedDiscoveryProtocolIDArr,
+		AlanForkEpoch:             phase0.Epoch(*networkAlanForkEpoch),
+		MaxValidatorsPerCommittee: *networkMaxValidatorsPerCommittee,
+		TotalEthereumValidators:   *networkTotalEthereumValidators,
 	}
 
 	data, err := yaml.Marshal(&config)

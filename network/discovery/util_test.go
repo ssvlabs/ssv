@@ -95,14 +95,15 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 	return networkconfig.NetworkConfig{
 		Beacon: networkconfig.HoleskyBeaconConfig,
 		SSV: networkconfig.SSV{
-			Name:                 n.Name,
-			GenesisDomainType:    n.GenesisDomainType,
-			AlanDomainType:       n.AlanDomainType,
-			RegistrySyncOffset:   n.RegistrySyncOffset,
-			RegistryContractAddr: n.RegistryContractAddr,
-			Bootnodes:            n.Bootnodes,
-			// Fork epoch
-			AlanForkEpoch: forkEpoch,
+			Name:                      n.Name,
+			GenesisDomainType:         n.GenesisDomainType,
+			AlanDomainType:            n.AlanDomainType,
+			RegistrySyncOffset:        n.RegistrySyncOffset,
+			RegistryContractAddr:      n.RegistryContractAddr,
+			Bootnodes:                 n.Bootnodes,
+			AlanForkEpoch:             forkEpoch,
+			MaxValidatorsPerCommittee: n.MaxValidatorsPerCommittee,
+			TotalEthereumValidators:   n.TotalEthereumValidators,
 		},
 	}
 }

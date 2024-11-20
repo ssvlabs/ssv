@@ -11,12 +11,14 @@ import (
 )
 
 var MainnetSSV = SSV{
-	Name:                 "mainnet",
-	GenesisDomainType:    spectypes.GenesisMainnet,
-	AlanDomainType:       spectypes.AlanMainnet,
-	AlanForkEpoch:        327375, // Nov-25-2024 12:00:23 PM UTC
-	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
-	RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
+	Name:                      "mainnet",
+	GenesisDomainType:         spectypes.GenesisMainnet,
+	AlanDomainType:            spectypes.AlanMainnet,
+	AlanForkEpoch:             327375, // Nov-25-2024 12:00:23 PM UTC
+	RegistrySyncOffset:        new(big.Int).SetInt64(17507487),
+	RegistryContractAddr:      ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
+	MaxValidatorsPerCommittee: 560,
+	TotalEthereumValidators:   1072679, // active_validators from https://mainnet.beaconcha.in/index/data on Nov 20, 2024
 	Bootnodes: []string{
 		// Blox
 		"enr:-Li4QHEPYASj5ZY3BXXKXAoWcoIw0ChgUlTtfOSxgNlYxlmpEWUR_K6Nr04VXsMpWSQxWWM4QHDyypnl92DQNpWkMS-GAYiWUvo8h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCzmKVSJc2VjcDI1NmsxoQOW29na1pUAQw4jF3g0zsPgJG89ViHJOOkHFFklnC2UyIN0Y3CCE4qDdWRwgg-i",

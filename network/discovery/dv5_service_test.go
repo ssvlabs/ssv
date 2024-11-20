@@ -24,9 +24,11 @@ import (
 var TestNetwork = networkconfig.NetworkConfig{
 	Beacon: networkconfig.TestingBeaconConfig,
 	SSV: networkconfig.SSV{
-		GenesisDomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-		AlanDomainType:    spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-		AlanForkEpoch:     math.MaxUint64,
+		GenesisDomainType:         spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		AlanDomainType:            spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
+		AlanForkEpoch:             math.MaxUint64,
+		MaxValidatorsPerCommittee: networkconfig.TestingSSVConfig.MaxValidatorsPerCommittee,
+		TotalEthereumValidators:   networkconfig.TestingSSVConfig.TotalEthereumValidators,
 	},
 }
 
