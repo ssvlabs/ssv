@@ -98,7 +98,6 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 			Name:                 n.Name,
 			GenesisDomainType:    n.GenesisDomainType,
 			AlanDomainType:       n.AlanDomainType,
-			GenesisEpoch:         n.GenesisEpoch,
 			RegistrySyncOffset:   n.RegistrySyncOffset,
 			RegistryContractAddr: n.RegistryContractAddr,
 			Bootnodes:            n.Bootnodes,

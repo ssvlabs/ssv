@@ -136,7 +136,6 @@ ssv:
     Name: LocalTestnetSSV
     GenesisDomainType: "0xabcdef12"
     AlanDomainType: "0x12345678"
-    GenesisEpoch: 0
     RegistrySyncOffset: 0
     RegistryContractAddr: "0xYourRegistryContractAddress"
     Bootnodes:

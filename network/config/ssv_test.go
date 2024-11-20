@@ -15,7 +15,6 @@ func TestNetworkConfig(t *testing.T) {
 Name: test
 GenesisDomainType: "0x87654321"
 AlanDomainType: "0xfedcba98"
-GenesisEpoch: 123456
 RegistrySyncOffset: "321654"
 RegistryContractAddr: 0xd6b633304Db2DD59ce93753FA55076DA367e5b2c
 Bootnodes:
@@ -28,7 +27,6 @@ AlanForkEpoch: 123123123
 		Name:                 "test",
 		GenesisDomainType:    [4]byte{0x87, 0x65, 0x43, 0x21},
 		AlanDomainType:       [4]byte{0xfe, 0xdc, 0xba, 0x98},
-		GenesisEpoch:         123456,
 		RegistrySyncOffset:   new(big.Int).SetInt64(321654),
 		RegistryContractAddr: ethcommon.HexToAddress("0xd6b633304Db2DD59ce93753FA55076DA367e5b2c"),
 		Bootnodes: []string{

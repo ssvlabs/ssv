@@ -34,7 +34,6 @@ type SSV struct {
 	Name                 string               `yaml:"Name,omitempty"`
 	GenesisDomainType    spectypes.DomainType `yaml:"GenesisDomainType,omitempty"`
 	AlanDomainType       spectypes.DomainType `yaml:"AlanDomainType,omitempty"`
-	GenesisEpoch         phase0.Epoch         `yaml:"GenesisEpoch,omitempty"` // TODO: delete?
 	RegistrySyncOffset   *big.Int             `yaml:"RegistrySyncOffset,omitempty"`
 	RegistryContractAddr ethcommon.Address    `yaml:"RegistryContractAddr,omitempty"`
 	Bootnodes            []string             `yaml:"Bootnodes,omitempty"`
@@ -66,7 +65,6 @@ func (s SSV) MarshalYAML() (interface{}, error) {
 		Name:                 s.Name,
 		GenesisDomainType:    "0x" + hex.EncodeToString(s.GenesisDomainType[:]),
 		AlanDomainType:       "0x" + hex.EncodeToString(s.AlanDomainType[:]),
-		GenesisEpoch:         s.GenesisEpoch,
 		RegistrySyncOffset:   s.RegistrySyncOffset,
 		RegistryContractAddr: s.RegistryContractAddr.String(),
 		Bootnodes:            s.Bootnodes,
@@ -128,7 +126,6 @@ func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		Name:                 aux.Name,
 		GenesisDomainType:    genesisDomainArr,
 		AlanDomainType:       alanDomainArr,
-		GenesisEpoch:         aux.GenesisEpoch,
 		RegistrySyncOffset:   aux.RegistrySyncOffset,
 		RegistryContractAddr: ethcommon.HexToAddress(aux.RegistryContractAddr),
 		Bootnodes:            aux.Bootnodes,

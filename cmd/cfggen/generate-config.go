@@ -43,7 +43,6 @@ func main() {
 	networkName := flag.String("network-name", defaultNetwork.Name, "Network name")
 	networkGenesisDomain := flag.String("network-genesis-domain", "0x"+hex.EncodeToString(defaultNetwork.GenesisDomainType[:]), "Network genesis domain")
 	networkAlanDomain := flag.String("network-alan-domain", "0x"+hex.EncodeToString(defaultNetwork.AlanDomainType[:]), "Network alan domain")
-	networkGenesisEpoch := flag.Uint64("network-genesis-epoch", uint64(defaultNetwork.GenesisEpoch), "Network genesis epoch")
 	networkRegistrySyncOffset := flag.Uint64("network-registry-sync-offset", defaultNetwork.RegistrySyncOffset.Uint64(), "Network registry sync offset")
 	networkRegistryContractAddr := flag.String("network-registry-contract-addr", defaultNetwork.RegistryContractAddr.String(), "Network registry contract addr")
 	networkBootnodes := flag.String("network-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "Network bootnodes (comma-separated)")
@@ -97,7 +96,6 @@ func main() {
 		Name:                 *networkName,
 		GenesisDomainType:    spectypes.DomainType(parsedGenesisDomain),
 		AlanDomainType:       spectypes.DomainType(parsedAlanDomain),
-		GenesisEpoch:         phase0.Epoch(*networkGenesisEpoch),
 		RegistrySyncOffset:   new(big.Int).SetUint64(*networkRegistrySyncOffset),
 		RegistryContractAddr: ethcommon.HexToAddress(*networkRegistryContractAddr),
 		Bootnodes:            bootnodes,

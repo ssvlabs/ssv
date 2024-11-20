@@ -13,7 +13,6 @@ var MainnetSSV = SSV{
 	Name:                 "mainnet",
 	GenesisDomainType:    spectypes.GenesisMainnet,
 	AlanDomainType:       spectypes.AlanMainnet,
-	GenesisEpoch:         218450,
 	AlanForkEpoch:        327375, // Nov-25-2024 12:00:23 PM UTC
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
