@@ -90,7 +90,6 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
-	ctx                 context.Context
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
@@ -143,7 +142,6 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
-		ctx:      opts.Ctx,
 	}
 
 	return s
