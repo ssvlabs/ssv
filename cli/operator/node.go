@@ -606,24 +606,19 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSV, error) {
 	var ssvConfig networkconfig.SSV
 
-	if cfg.SSVOptions.NetworkName == "" && cfg.SSVOptions.CustomNetwork == nil {
-		return ssvConfig, fmt.Errorf("both network name and custom config were NOT found in config, only one is required")
-	}
-
-	if cfg.SSVOptions.NetworkName != "" && cfg.SSVOptions.CustomNetwork != nil {
-		return ssvConfig, fmt.Errorf("both network name and custom config were found in config, only one is required")
-	}
-
-	if cfg.SSVOptions.NetworkName != "" {
+	if cfg.SSVOptions.CustomNetwork != nil {
+		ssvConfig = *cfg.SSVOptions.CustomNetwork
+		logger.Info("using custom network config")
+	} else if cfg.SSVOptions.NetworkName != "" {
 		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
 			return ssvConfig, err
 		}
 
 		ssvConfig = snc
-	} else {
-		logger.Info("network name not found in config, using custom network from config")
-		ssvConfig = *cfg.SSVOptions.CustomNetwork
+		logger.Info("found network config by name",
+			zap.String("name", cfg.SSVOptions.NetworkName),
+		)
 	}
 
 	if cfg.SSVOptions.CustomDomainType != "" {

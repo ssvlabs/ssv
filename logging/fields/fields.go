@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dgraph-io/ristretto"
@@ -23,7 +21,9 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
@@ -390,8 +390,8 @@ func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
 }
 
-func Config(val fmt.Stringer) zap.Field {
-	return zap.Stringer(FieldConfig, val)
+func Config(val networkconfig.SSV) zap.Field {
+	return zap.String(FieldConfig, fmt.Sprintf("%#v", val))
 }
 
 func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
