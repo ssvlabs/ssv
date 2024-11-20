@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/hex"
 	"path/filepath"
 	"reflect"
@@ -91,7 +92,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
-			err = test.Committee.StartDuty(logger, input.(*spectypes.CommitteeDuty))
+			err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
 			if err != nil {
 				lastErr = err
 			}
@@ -100,7 +101,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
-			err = test.Committee.ProcessMessage(logger, msg)
+			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
 				lastErr = err
 			}

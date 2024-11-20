@@ -17,7 +17,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(logger *zap.Logger, msg *queue.SSVMessage) error
+type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -28,7 +28,7 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
+func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
@@ -150,7 +150,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
+		if err := handler(ctx, logger, msg); err != nil {
 			v.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))

@@ -7,10 +7,10 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
@@ -79,7 +79,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			h.processExecution(currentEpoch, slot)
+			h.processExecution(ctx, currentEpoch, slot)
 			h.processFetching(ctx, currentEpoch, slot)
 
 			slotsPerEpoch := h.network.SlotsPerEpoch()
@@ -166,7 +166,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	}
 }
 
-func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
+func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
 		return
@@ -192,7 +192,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {

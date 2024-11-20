@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
@@ -176,6 +177,6 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	err := test.Runner.StartNewDuty(logger, test.Duty, test.Threshold)
+	err := test.Runner.StartNewDuty(context.TODO(), logger, test.Duty, test.Threshold)
 	return err
 }
