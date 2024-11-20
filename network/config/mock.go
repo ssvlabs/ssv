@@ -164,20 +164,6 @@ func (mr *MockInterfaceMockRecorder) EpochStartTime(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochStartTime", reflect.TypeOf((*MockInterface)(nil).EpochStartTime), epoch)
 }
 
-// EpochsPerSyncCommitteePeriod mocks base method.
-func (m *MockInterface) EpochsPerSyncCommitteePeriod() phase0.Epoch {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EpochsPerSyncCommitteePeriod")
-	ret0, _ := ret[0].(phase0.Epoch)
-	return ret0
-}
-
-// EpochsPerSyncCommitteePeriod indicates an expected call of EpochsPerSyncCommitteePeriod.
-func (mr *MockInterfaceMockRecorder) EpochsPerSyncCommitteePeriod() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockInterface)(nil).EpochsPerSyncCommitteePeriod))
-}
-
 // EstimatedCurrentEpoch mocks base method.
 func (m *MockInterface) EstimatedCurrentEpoch() phase0.Epoch {
 	m.ctrl.T.Helper()
@@ -374,20 +360,6 @@ func (mr *MockInterfaceMockRecorder) IntervalDuration() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IntervalDuration", reflect.TypeOf((*MockInterface)(nil).IntervalDuration))
 }
 
-// IntervalsPerSlot mocks base method.
-func (m *MockInterface) IntervalsPerSlot() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IntervalsPerSlot")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// IntervalsPerSlot indicates an expected call of IntervalsPerSlot.
-func (mr *MockInterfaceMockRecorder) IntervalsPerSlot() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IntervalsPerSlot", reflect.TypeOf((*MockInterface)(nil).IntervalsPerSlot))
-}
-
 // IsFirstSlotOfEpoch mocks base method.
 func (m *MockInterface) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	m.ctrl.T.Helper()
@@ -484,4 +456,18 @@ func (m *MockInterface) SlotsPerEpoch() phase0.Slot {
 func (mr *MockInterfaceMockRecorder) SlotsPerEpoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotsPerEpoch", reflect.TypeOf((*MockInterface)(nil).SlotsPerEpoch))
+}
+
+// SlotsPerPeriod mocks base method.
+func (m *MockInterface) SlotsPerPeriod() phase0.Slot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SlotsPerPeriod")
+	ret0, _ := ret[0].(phase0.Slot)
+	return ret0
+}
+
+// SlotsPerPeriod indicates an expected call of SlotsPerPeriod.
+func (mr *MockInterfaceMockRecorder) SlotsPerPeriod() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotsPerPeriod", reflect.TypeOf((*MockInterface)(nil).SlotsPerPeriod))
 }

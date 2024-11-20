@@ -149,8 +149,6 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 		},
 	).AnyTimes()
 
-	mockNetworkConfig.EXPECT().EpochsPerSyncCommitteePeriod().Return(phase0.Epoch(256)).AnyTimes()
-
 	mockNetworkConfig.EXPECT().PastAlanForkAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) bool {
 			return epoch >= alanForkEpoch

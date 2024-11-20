@@ -29,13 +29,13 @@ func setupSyncCommitteeGenesisDutiesMock(
 
 	s.network.(*networkconfig.MockInterface).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
-			return uint64(epoch / s.network.EpochsPerSyncCommitteePeriod())
+			return uint64(epoch / 256)
 		},
 	).AnyTimes()
 
 	s.network.(*networkconfig.MockInterface).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Epoch {
-			return phase0.Epoch(period) * s.network.EpochsPerSyncCommitteePeriod()
+			return phase0.Epoch(period) * 256
 		},
 	).AnyTimes()
 

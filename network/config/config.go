@@ -2,7 +2,6 @@ package networkconfig
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -28,8 +27,6 @@ type Interface interface { // TODO: rename?
 	GenesisTime() time.Time
 	SlotDuration() time.Duration
 	SlotsPerEpoch() phase0.Slot
-	EpochsPerSyncCommitteePeriod() phase0.Epoch
-	IntervalsPerSlot() uint64
 
 	EstimatedCurrentSlot() phase0.Slot
 	EstimatedCurrentEpoch() phase0.Epoch
@@ -46,6 +43,7 @@ type Interface interface { // TODO: rename?
 	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
 	LastSlotOfSyncPeriod(period uint64) phase0.Slot
 	IntervalDuration() time.Duration
+	SlotsPerPeriod() phase0.Slot
 }
 
 var _ Interface = NetworkConfig{}
@@ -72,27 +70,9 @@ func (n NetworkConfig) SlotDuration() time.Duration {
 	return n.Beacon.SlotDuration
 }
 
-// EpochDuration returns slot duration
-func (n NetworkConfig) EpochDuration() time.Duration {
-	slotsPerEpoch := n.Beacon.SlotsPerEpoch
-	if slotsPerEpoch > math.MaxInt64 {
-		panic("slot out of range")
-	}
-	return n.Beacon.SlotDuration * time.Duration(slotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
-}
-
 // SlotsPerEpoch returns number of slots per one epoch
 func (n NetworkConfig) SlotsPerEpoch() phase0.Slot {
 	return n.Beacon.SlotsPerEpoch
-}
-
-// IntervalsPerSlot returns number of intervals per slot
-func (n NetworkConfig) IntervalsPerSlot() uint64 {
-	return n.Beacon.IntervalsPerSlot
-}
-
-func (n NetworkConfig) EpochsPerSyncCommitteePeriod() phase0.Epoch {
-	return n.Beacon.EpochsPerSyncCommitteePeriod
 }
 
 // DomainType returns current domain type based on the current fork.

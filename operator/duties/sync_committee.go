@@ -8,10 +8,10 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
@@ -92,7 +92,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			cancel()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
-			periodSlots := h.slotsPerPeriod()
+			periodSlots := h.network.SlotsPerPeriod()
 			if slot%periodSlots == periodSlots-h.preparationSlots-1 {
 				h.fetchNextPeriod = true
 			}
@@ -323,10 +323,6 @@ func calculateSubscriptions(endEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommi
 }
 
 func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
-	periodSlots := h.slotsPerPeriod()
+	periodSlots := h.network.SlotsPerPeriod()
 	return slot%periodSlots > periodSlots-h.preparationSlots-2
-}
-
-func (h *SyncCommitteeHandler) slotsPerPeriod() phase0.Slot {
-	return phase0.Slot(h.network.EpochsPerSyncCommitteePeriod()) * h.network.SlotsPerEpoch()
 }

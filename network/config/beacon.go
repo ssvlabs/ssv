@@ -41,7 +41,7 @@ func (b Beacon) GetSlotStartTime(slot phase0.Slot) time.Time {
 		panic("slot out of range")
 	}
 	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
-	return b.GenesisTime().Add(durationSinceGenesisStart)
+	return b.Genesis.GenesisTime.Add(durationSinceGenesisStart)
 }
 
 func (b Beacon) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
@@ -49,7 +49,7 @@ func (b Beacon) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 		panic("slot out of range")
 	}
 	d := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
-	return b.GenesisTime().Add(d)
+	return b.Genesis.GenesisTime.Add(d)
 }
 
 func (b Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
@@ -128,6 +128,18 @@ func (b Beacon) IntervalDuration() time.Duration {
 	if b.IntervalsPerSlot > math.MaxInt64 {
 		panic("intervals per slot out of range")
 	}
-
 	return b.SlotDuration / time.Duration(b.IntervalsPerSlot) // #nosec G115: intervals per slot cannot exceed math.MaxInt64
+}
+
+// EpochDuration returns epoch duration
+func (b Beacon) EpochDuration() time.Duration {
+	slotsPerEpoch := b.SlotsPerEpoch
+	if slotsPerEpoch > math.MaxInt64 {
+		panic("slot out of range")
+	}
+	return b.SlotDuration * time.Duration(slotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
+}
+
+func (b Beacon) SlotsPerPeriod() phase0.Slot {
+	return phase0.Slot(b.EpochsPerSyncCommitteePeriod) * b.SlotsPerEpoch
 }
