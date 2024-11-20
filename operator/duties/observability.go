@@ -1,6 +1,7 @@
 package duties
 
 import (
+	"context"
 	"fmt"
 
 	"go.opentelemetry.io/otel"
@@ -48,3 +49,7 @@ var (
 		},
 	)
 )
+
+func recordDutyExecuted[T observability.BeaconRole](ctx context.Context, beaconRole T) {
+	dutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(observability.BeaconRoleAttribute(beaconRole)))
+}
