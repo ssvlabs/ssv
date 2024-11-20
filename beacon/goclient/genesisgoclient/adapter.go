@@ -28,10 +28,10 @@ func (a *adapter) GetAttestationData(slot phase0.Slot, committeeIndex phase0.Com
 }
 
 func (a *adapter) GetBeaconNetwork() genesisspectypes.BeaconNetwork {
-	switch a.GoClient.BeaconConfig().Genesis.GenesisForkVersion {
-	case networkconfig.MainnetBeaconConfig.Genesis.GenesisForkVersion:
+	switch a.GoClient.BeaconConfig().GenesisForkVersion() {
+	case networkconfig.MainnetBeaconConfig.GenesisForkVersion():
 		return genesisspectypes.BeaconNetwork(spectypes.MainNetwork)
-	case networkconfig.HoleskyBeaconConfig.Genesis.GenesisForkVersion:
+	case networkconfig.HoleskyBeaconConfig.GenesisForkVersion():
 		return genesisspectypes.BeaconNetwork(spectypes.HoleskyNetwork)
 	default:
 		return genesisspectypes.BeaconNetwork(spectypes.BeaconTestNetwork)

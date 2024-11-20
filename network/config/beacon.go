@@ -31,7 +31,7 @@ func (b Beacon) GenesisTime() time.Time {
 	return b.Genesis.GenesisTime
 }
 
-func (b Beacon) GenesisForkVersion1() phase0.Version {
+func (b Beacon) GenesisForkVersion() phase0.Version {
 	return b.Genesis.GenesisForkVersion
 }
 
