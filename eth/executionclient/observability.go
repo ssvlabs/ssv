@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	observabilityComponentName      = "github.com/ssvlabs/ssv/eth/executionclient"
-	observabilityComponentNamespace = "ssv.el"
+	observabilityName      = "github.com/ssvlabs/ssv/eth/executionclient"
+	observabilityNamespace = "ssv.el"
 )
 
 type executionClientStatus string
@@ -25,57 +25,44 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityComponentName)
+	meter = otel.Meter(observabilityName)
 
 	latencyHistogram = observability.NewMetric(
-		fmt.Sprintf("%s.latency.duration", observabilityComponentNamespace),
-		func(metricName string) (metric.Float64Histogram, error) {
-			return meter.Float64Histogram(
-				metricName,
-				metric.WithUnit("s"),
-				metric.WithDescription("execution client latency in seconds"),
-				metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...),
-			)
-		},
-	)
+		meter.Float64Histogram(
+			metricName("latency.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("execution client latency in seconds"),
+			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	syncingDistanceGauge = observability.NewMetric(
-		fmt.Sprintf("%s.syncing.distance", observabilityComponentNamespace),
-		func(metricName string) (metric.Int64Gauge, error) {
-			return meter.Int64Gauge(
-				metricName,
-				metric.WithUnit("{block}"),
-				metric.WithDescription("execution client syncing distance which is a delta between highest and current blocks"))
-		},
-	)
+		meter.Int64Gauge(
+			metricName("syncing.distance"),
+			metric.WithUnit("{block}"),
+			metric.WithDescription("execution client syncing distance which is a delta between highest and current blocks")))
 
 	clientStatusGauge = observability.NewMetric(
-		fmt.Sprintf("%s.syncing.status", observabilityComponentNamespace),
-		func(metricName string) (metric.Int64Gauge, error) {
-			return meter.Int64Gauge(
-				metricName,
-				metric.WithDescription("execution client syncing status"))
-		},
-	)
+		meter.Int64Gauge(
+			metricName("syncing.status"),
+			metric.WithDescription("execution client syncing status")))
 
 	lastProcessedBlockGauge = observability.NewMetric(
-		fmt.Sprintf("%s.syncing.last_processed_block", observabilityComponentNamespace),
-		func(metricName string) (metric.Int64Gauge, error) {
-			return meter.Int64Gauge(
-				metricName,
-				metric.WithUnit("{block_number}"),
-				metric.WithDescription("last processed block by execution client"))
-		},
-	)
+		meter.Int64Gauge(
+			metricName("syncing.last_processed_block"),
+			metric.WithUnit("{block_number}"),
+			metric.WithDescription("last processed block by execution client")))
 )
 
+func metricName(name string) string {
+	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
+}
+
 func executionClientAddrAttribute(value string) attribute.KeyValue {
-	eventNameAttrName := fmt.Sprintf("%s.addr", observabilityComponentNamespace)
+	eventNameAttrName := fmt.Sprintf("%s.addr", observabilityNamespace)
 	return attribute.String(eventNameAttrName, value)
 }
 
 func executionClientStatusAttribute(value executionClientStatus) attribute.KeyValue {
-	eventNameAttrName := fmt.Sprintf("%s.status", observabilityComponentNamespace)
+	eventNameAttrName := fmt.Sprintf("%s.status", observabilityNamespace)
 	return attribute.String(eventNameAttrName, string(value))
 }
 

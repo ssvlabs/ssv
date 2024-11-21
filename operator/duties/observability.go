@@ -11,44 +11,36 @@ import (
 )
 
 const (
-	observabilityComponentName      = "github.com/ssvlabs/ssv/operator/duties"
-	observabilityComponentNamespace = "ssv.operator.duty_scheduler"
+	observabilityName      = "github.com/ssvlabs/ssv/operator/duties"
+	observabilityNamespace = "ssv.operator.duty_scheduler"
 )
 
 var (
-	meter = otel.Meter(observabilityComponentName)
+	meter = otel.Meter(observabilityName)
 
 	slotDelayHistogram = observability.NewMetric(
-		fmt.Sprintf("%s.slot_ticker_delay.duration", observabilityComponentNamespace),
-		func(metricName string) (metric.Float64Histogram, error) {
-			return meter.Float64Histogram(
-				metricName,
-				metric.WithUnit("s"),
-				metric.WithDescription("delay of the slot ticker in seconds"),
-				metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...))
-		},
-	)
+		meter.Float64Histogram(
+			metricName("slot_ticker_delay.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("delay of the slot ticker in seconds"),
+			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	dutiesExecutedCounter = observability.NewMetric(
-		fmt.Sprintf("%s.executions", observabilityComponentNamespace),
-		func(metricName string) (metric.Int64Counter, error) {
-			return meter.Int64Counter(
-				metricName,
-				metric.WithUnit("{duty}"),
-				metric.WithDescription("total number of duties executed by scheduler"))
-		},
-	)
+		meter.Int64Counter(
+			metricName("executions"),
+			metric.WithUnit("{duty}"),
+			metric.WithDescription("total number of duties executed by scheduler")))
 
 	committeeDutiesExecutedCounter = observability.NewMetric(
-		fmt.Sprintf("%s.committee_executions", observabilityComponentNamespace),
-		func(metricName string) (metric.Int64Counter, error) {
-			return meter.Int64Counter(
-				metricName,
-				metric.WithUnit("{committee_duty}"),
-				metric.WithDescription("total number of committee duties executed by scheduler"))
-		},
-	)
+		meter.Int64Counter(
+			metricName("committee_executions"),
+			metric.WithUnit("{committee_duty}"),
+			metric.WithDescription("total number of committee duties executed by scheduler")))
 )
+
+func metricName(name string) string {
+	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
+}
 
 func recordDutyExecuted[T observability.BeaconRole](ctx context.Context, beaconRole T) {
 	dutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(observability.BeaconRoleAttribute(beaconRole)))
