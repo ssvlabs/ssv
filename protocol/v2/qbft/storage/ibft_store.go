@@ -2,13 +2,16 @@ package qbftstorage
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 )
+
+const maxCommitteeSize = 13 // TODO: define in ssv network config
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
@@ -32,17 +35,63 @@ type ParticipantsRangeEntry struct {
 	Identifier convert.MessageID
 }
 
+type Quorum struct {
+	Signers     []spectypes.OperatorID
+	Committee   []spectypes.OperatorID
+	ValidatorPK spectypes.ValidatorPK // optional payload
+}
+
+func (q *Quorum) ToBitMask() OperatorsBitMask {
+	if len(q.Committee) > maxCommitteeSize || len(q.Signers) > maxCommitteeSize || len(q.Signers) > len(q.Committee) {
+		panic(fmt.Sprintf("invalid signers/quorum size: %d/%d", len(q.Committee), len(q.Signers)))
+	}
+
+	bitmask := OperatorsBitMask(0)
+	i, j := 0, 0
+	for i < len(q.Signers) && j < len(q.Committee) {
+		if q.Signers[i] == q.Committee[j] {
+			bitmask |= 1 << uint(j) // #nosec G115 -- j cannot exceed maxCommitteeSize
+			i++
+			j++
+		} else if q.Signers[i] < q.Committee[j] {
+			i++
+		} else { // A[i] > B[j]
+			j++
+		}
+	}
+
+	return bitmask
+}
+
+type OperatorsBitMask uint16
+
+func (obm OperatorsBitMask) Signers(committee []spectypes.OperatorID) []spectypes.OperatorID {
+	if len(committee) > maxCommitteeSize {
+		panic(fmt.Sprintf("invalid committee size: %d", len(committee)))
+	}
+
+	signers := make([]spectypes.OperatorID, 0)
+	for j := 0; j < len(committee); j++ {
+		// #nosec G115 -- j cannot exceed maxCommitteeSize
+		if obm&(1<<uint(j)) != 0 {
+			signers = append(signers, committee[j])
+		}
+	}
+
+	return signers
+}
+
 // QBFTStore is the store used by QBFT components
 type QBFTStore interface {
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(msgID []byte) error
 
 	// UpdateParticipants updates participants in quorum.
-	UpdateParticipants(identifier convert.MessageID, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
+	UpdateParticipants(identifier convert.MessageID, slot phase0.Slot, newParticipants Quorum) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
-	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
+	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot, committee []spectypes.OperatorID) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipants returns participants in quorum for the given slot.
-	GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
+	GetParticipants(identifier convert.MessageID, slot phase0.Slot, committee []spectypes.OperatorID) ([]spectypes.OperatorID, error)
 }

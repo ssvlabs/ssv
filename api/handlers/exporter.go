@@ -12,12 +12,14 @@ import (
 	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type Exporter struct {
 	DomainType spectypes.DomainType
 	QBFTStores *ibftstorage.QBFTStores
+	Shares     registrystorage.Shares
 }
 
 type ParticipantResponse struct {
@@ -79,7 +81,17 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			from := phase0.Slot(request.From)
 			to := phase0.Slot(request.To)
 
-			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
+			share, ok := e.Shares.Get(nil, pubKey)
+			if !ok {
+				return api.Error(fmt.Errorf("share not found"))
+			}
+
+			operatorIDs := make([]spectypes.OperatorID, 0, len(share.Committee))
+			for _, sm := range share.Committee {
+				operatorIDs = append(operatorIDs, sm.Signer)
+			}
+
+			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to, operatorIDs)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}

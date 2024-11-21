@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 func TestEncodeDecodeOperators(t *testing.T) {
@@ -37,7 +39,7 @@ func TestEncodeDecodeOperators(t *testing.T) {
 	}
 }
 
-func Test_mergeQuorums(t *testing.T) {
+func Test_mergeParticipants(t *testing.T) {
 	tests := []struct {
 		name          string
 		participants1 []spectypes.OperatorID
@@ -48,7 +50,7 @@ func Test_mergeQuorums(t *testing.T) {
 			name:          "Both participants empty",
 			participants1: []spectypes.OperatorID{},
 			participants2: []spectypes.OperatorID{},
-			expected:      nil,
+			expected:      []spectypes.OperatorID{},
 		},
 		{
 			name:          "First participants empty",
@@ -81,23 +83,29 @@ func Test_mergeQuorums(t *testing.T) {
 			expected:      []spectypes.OperatorID{1, 2, 3},
 		},
 		{
-			name:          "Unsorted input participants",
-			participants1: []spectypes.OperatorID{5, 1, 3},
-			participants2: []spectypes.OperatorID{4, 2, 6},
-			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
-		},
-		{
 			name:          "Large participants size",
 			participants1: []spectypes.OperatorID{1, 3, 5, 7, 9, 11, 13},
-			participants2: []spectypes.OperatorID{2, 4, 6, 8, 10, 12, 14},
-			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+			participants2: []spectypes.OperatorID{2, 4, 6, 8, 10, 12},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
 		},
 	}
 
 	for _, tt := range tests {
+		committee := []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+
 		t.Run(tt.name, func(t *testing.T) {
-			result := mergeParticipants(tt.participants1, tt.participants2)
-			require.Equal(t, tt.expected, result)
+			q1 := qbftstorage.Quorum{
+				Signers:   tt.participants1,
+				Committee: committee,
+			}
+
+			q2 := qbftstorage.Quorum{
+				Signers:   tt.participants2,
+				Committee: committee,
+			}
+
+			result := mergeParticipants(q1.ToBitMask(), q2.ToBitMask())
+			require.Equal(t, tt.expected, result.Signers(committee))
 		})
 	}
 }
