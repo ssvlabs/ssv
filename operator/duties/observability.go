@@ -12,7 +12,7 @@ import (
 
 const (
 	observabilityName      = "github.com/ssvlabs/ssv/operator/duties"
-	observabilityNamespace = "ssv.operator.duty_scheduler"
+	observabilityNamespace = "ssv.duty.scheduler"
 )
 
 var (
