@@ -268,8 +268,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.ticker.Next():
-			slot := s.ticker.Slot()
+		case <-s.ticker.NextWait():
+			slot := s.ticker.NextSlot()
 
 			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
 			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)

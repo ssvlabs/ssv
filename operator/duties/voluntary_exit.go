@@ -46,15 +46,15 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
-	next := h.ticker.Next()
+	next := h.ticker.NextWait()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-next:
-			currentSlot := h.ticker.Slot()
-			next = h.ticker.Next()
+			currentSlot := h.ticker.NextSlot()
+			next = h.ticker.NextWait()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
 			h.processExecution(ctx, currentSlot)

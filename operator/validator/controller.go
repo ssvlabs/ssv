@@ -14,8 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -59,6 +57,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -1133,13 +1132,13 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 			GenesisTime:  c.networkConfig.GetGenesisTime(),
 		})
 
-		next := slotTicker.Next()
+		next := slotTicker.NextWait()
 		for {
 			select {
 			case <-c.ctx.Done():
 				return
 			case <-next:
-				next = slotTicker.Next()
+				next = slotTicker.NextWait()
 				if c.networkConfig.PastAlanFork() {
 					// Cancel genesis context to stop the genesis validators.
 					c.cancelGenesisCtx()
