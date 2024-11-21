@@ -5,10 +5,10 @@ import (
 	"errors"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -16,13 +16,28 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
+func messageToLogFields(msg *queue.SSVMessage) []zap.Field {
+	var lf []zap.Field
+
+	lf = append(lf, fields.MessageType(msg.MsgType))
+	lf = append(lf, fields.Role(msg.MsgID.GetRoleType()))
+
+	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
+	lf = append(lf, fields.CommitteeID(cid))
+
+	sm, ok := msg.Body.(*specqbft.Message)
+	if ok {
+		lf = append(lf, fields.QBFTMessageType(sm.MsgType))
+	}
+
+	return lf
+}
+
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
+	c.logMsg(c.logger, msg, "handle message, push to queue", messageToLogFields(msg)...)
 
 	slot, err := msg.Slot()
 	if err != nil {
@@ -102,27 +117,42 @@ func (c *Committee) ConsumeQueue(
 		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
-			filter = func(m *queue.SSVMessage) bool {
-				sm, ok := m.Body.(*specqbft.Message)
+			filter = func(m *queue.SSVMessage) (ok bool) {
+				var lf = messageToLogFields(m)
+
+				defer func() {
+					lf = append(lf, zap.Bool("result", ok))
+					c.logMsg(c.logger, m, "filter1", lf...)
+				}()
+
+				var sm *specqbft.Message
+				sm, ok = m.Body.(*specqbft.Message)
 				if !ok {
+					lf = append(lf, zap.String("check", "partial signature"))
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
 				}
 
 				if sm.Round != state.Round { // allow next round or change round messages.
+					lf = append(lf, zap.String("check", "round"))
 					return true
 				}
 
+				lf = append(lf, zap.String("check", "prepare-commit"))
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
 		} else if runningInstance != nil && !runningInstance.State.Decided {
-			filter = func(ssvMessage *queue.SSVMessage) bool {
+			filter = func(ssvMessage *queue.SSVMessage) (ok bool) {
+				defer func() {
+					var lf = messageToLogFields(ssvMessage)
+					lf = append(lf, zap.Bool("result", ok))
+					c.logMsg(c.logger, ssvMessage, "filter2", lf...)
+				}()
 				// don't read post consensus until decided
 				return ssvMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
 		// Pop the highest priority message for the current state.
-		// TODO: (Alan) bring back filter
 		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
 		if ctx.Err() != nil {
 			break
