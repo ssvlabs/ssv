@@ -24,6 +24,8 @@ const (
 	participantsKey    = "participants"
 )
 
+var errNotBitmask = errors.New("not a bitmask")
+
 var (
 	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_highest_decided",
@@ -78,17 +80,29 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 	defer txn.Discard()
 
 	existing, err := i.getParticipantsBitMask(txn, identifier, slot)
-	if err != nil {
-		return false, fmt.Errorf("get participants %w", err)
+	if errors.Is(err, errNotBitmask) {
+		existingList, err := i.getParticipants(txn, identifier, slot)
+		if err != nil {
+			return false, fmt.Errorf("get participants: %w", err)
+		}
+
+		quorumAdapter := qbftstorage.Quorum{
+			Signers:   existingList,
+			Committee: newParticipants.Committee,
+		}
+
+		existing = quorumAdapter.ToBitMask()
+	} else if err != nil {
+		return false, fmt.Errorf("get participants bitmask: %w", err)
 	}
 
-	merged := mergeParticipants(existing, newParticipants.ToBitMask())
+	merged := mergeParticipantsBitMask(existing, newParticipants.ToBitMask())
 	if merged == existing {
 		return false, nil
 	}
 
 	if err := i.saveParticipantsBitMask(txn, identifier, slot, merged); err != nil {
-		return false, fmt.Errorf("save participants: %w", err)
+		return false, fmt.Errorf("save participants bitmask: %w", err)
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -132,6 +146,9 @@ func (i *ibftStorage) GetParticipants(
 	committee []spectypes.OperatorID,
 ) ([]spectypes.OperatorID, error) {
 	bm, err := i.getParticipantsBitMask(nil, identifier, slot)
+	if errors.Is(err, errNotBitmask) {
+		return i.getParticipants(nil, identifier, slot)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get participants bit mask: %w", err)
 	}
@@ -152,7 +169,25 @@ func (i *ibftStorage) getParticipantsBitMask(
 		return 0, nil
 	}
 
+	if len(val) != 2 { // uint16
+		return 0, errNotBitmask
+	}
+
 	return qbftstorage.OperatorsBitMask(byteSliceToUInt16(val)), nil
+}
+
+// DEPRECATED, left for compatibility with old data format
+func (i *ibftStorage) getParticipants(txn basedb.ReadWriter, identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	val, found, err := i.get(txn, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+
+	operators := decodeOperators(val)
+	return operators, nil
 }
 
 func (i *ibftStorage) saveParticipantsBitMask(
@@ -169,7 +204,8 @@ func (i *ibftStorage) saveParticipantsBitMask(
 	return nil
 }
 
-func mergeParticipants(existingParticipants, newParticipants qbftstorage.OperatorsBitMask) qbftstorage.OperatorsBitMask {
+// mergeParticipantsBitMask merges two participants bitmasks. Extracted into a method for testing.
+func mergeParticipantsBitMask(existingParticipants, newParticipants qbftstorage.OperatorsBitMask) qbftstorage.OperatorsBitMask {
 	return existingParticipants | newParticipants
 }
 
@@ -222,6 +258,7 @@ func byteSliceToUInt16(b []byte) uint16 {
 	return binary.LittleEndian.Uint16(b)
 }
 
+// DEPRECATED, left for compatibility with old data format (tests only)
 func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
 	encoded := make([]byte, len(operators)*8)
 	for i, v := range operators {
@@ -231,6 +268,7 @@ func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
 	return encoded, nil
 }
 
+// DEPRECATED, left for compatibility with old data format
 func decodeOperators(encoded []byte) []spectypes.OperatorID {
 	if len(encoded)%8 != 0 {
 		panic("corrupted storage: wrong encoded operators length")

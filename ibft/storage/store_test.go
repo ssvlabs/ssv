@@ -39,7 +39,7 @@ func TestEncodeDecodeOperators(t *testing.T) {
 	}
 }
 
-func Test_mergeParticipants(t *testing.T) {
+func Test_mergeParticipantsBitMask(t *testing.T) {
 	tests := []struct {
 		name          string
 		participants1 []spectypes.OperatorID
@@ -104,7 +104,7 @@ func Test_mergeParticipants(t *testing.T) {
 				Committee: committee,
 			}
 
-			result := mergeParticipants(q1.ToBitMask(), q2.ToBitMask())
+			result := mergeParticipantsBitMask(q1.ToBitMask(), q2.ToBitMask())
 			require.Equal(t, tt.expected, result.Signers(committee))
 		})
 	}
