@@ -26,17 +26,6 @@ var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySe
 	return baseRunner(logger, spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
 }
 
-var ProposerBlindedBlockRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	ret := baseRunner(
-		logger,
-		spectypes.BNRoleProposer,
-		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil),
-		keySet,
-	)
-	ret.(*runner.ProposerRunner).ProducesBlindedBlocks = true
-	return ret
-}
-
 var AggregatorRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectypes.BNRoleAggregator, specssv.AggregatorValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
 }
@@ -116,6 +105,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			km,
 			valCheck,
 			TestingHighestDecidedSlot,
+			[]byte("graffiti"),
 		)
 	case spectypes.BNRoleSyncCommittee:
 		return runner.NewSyncCommitteeRunner(

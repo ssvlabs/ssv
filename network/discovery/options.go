@@ -4,10 +4,11 @@ import (
 	"crypto/ecdsa"
 	"net"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/network/commons"
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"

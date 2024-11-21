@@ -86,7 +86,6 @@ type SchedulerOptions struct {
 	IndicesChg          chan struct{}
 	ValidatorExitCh     <-chan ExitDescriptor
 	SlotTickerProvider  slotticker.Provider
-	BuilderProposals    bool
 	DutyStore           *dutystore.Store
 }
 
@@ -97,7 +96,6 @@ type Scheduler struct {
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
 	executeDuty         ExecuteDutyFunc
-	builderProposals    bool
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -127,7 +125,6 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		slotTickerProvider:  opts.SlotTickerProvider,
 		executeDuty:         opts.ExecuteDuty,
 		validatorController: opts.ValidatorController,
-		builderProposals:    opts.BuilderProposals,
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
 
@@ -136,14 +133,12 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
+			NewValidatorRegistrationHandler(),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
-	}
-	if s.builderProposals {
-		s.handlers = append(s.handlers, NewValidatorRegistrationHandler())
 	}
 	return s
 }

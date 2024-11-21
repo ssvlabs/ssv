@@ -18,7 +18,7 @@ variables:
   #PRODUCTION
   ACCOUNT_ID_INFRA_PROD: 764289642555
   AWS_REGION_INFRA_PROD: "us-west-2"
-  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
+  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_PROD.amazonaws.com/$IMAGE_NAME
   APP_REPLICAS_INFRA_PROD: "1"
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
   PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
@@ -120,32 +120,39 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - main
+    - exporter-api
 
 Deploy nodes to prod:
   stage: deploy
   tags:
     - blox-infra-prod
   script:
-    - apk add bash
+    - apk add bash curl
     - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
     - export SSV_EXPORTER_CPU_LIMIT=$PROD_SSV_EXPORTER_CPU_LIMIT
     - export SSV_EXPORTER_MEM_LIMIT=$PROD_SSV_EXPORTER_MEM_LIMIT
     - export SSV_NODES_CPU_LIMIT_V3=$PROD_SSV_NODES_CPU_LIMIT_V3
     - export SSV_NODES_MEM_LIMIT_V3=$PROD_SSV_NODES_MEM_LIMIT_V3
+    - export SSV_NODES_CPU_LIMIT_HOLESKY=$PROD_SSV_NODES_CPU_LIMIT_HOLESKY
+    - export SSV_NODES_MEM_LIMIT_HOLESKY=$PROD_SSV_NODES_MEM_LIMIT_HOLESKY
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
+    - mkdir ~/.kube/
+    - echo $PROD_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
     # +-------------------------------+
     # |  🟠 Deploy SSV Holesky nodes  |
     # +-------------------------------+
-    - .k8/production/holesky/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    - .k8/production/holesky/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_HOLESKY $SSV_NODES_MEM_LIMIT_HOLESKY
     #
     # +-------------------------------+
     # │  🟠 Deploy Holesky Bootnode   |
     # +-------------------------------+
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
-    #- .k8/production/holesky/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    # - .k8/production/holesky/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
     #
     # +----------------------------+
     # |  🔴 Deploy SSV Mainnet nodes  |
@@ -166,7 +173,7 @@ Deploy exporter to prod:
   tags:
     - blox-infra-prod
   script:
-    - apk add bash
+    - apk add bash curl
     - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
     - export SSV_EXPORTER_CPU_LIMIT=$PROD_SSV_EXPORTER_CPU_LIMIT
     - export SSV_EXPORTER_MEM_LIMIT=$PROD_SSV_EXPORTER_MEM_LIMIT
@@ -174,26 +181,37 @@ Deploy exporter to prod:
     - export SSV_EXPORTER_MAINNET_MEM_LIMIT=$PROD_SSV_EXPORTER_MAINNET_MEM_LIMIT
     - export SSV_EXPORTER_2_MAINNET_CPU_LIMIT=$PROD_SSV_EXPORTER_2_MAINNET_CPU_LIMIT
     - export SSV_EXPORTER_2_MAINNET_MEM_LIMIT=$PROD_SSV_EXPORTER_2_MAINNET_MEM_LIMIT
+    - export SSV_EXPORTER_3_MAINNET_CPU_LIMIT=$PROD_SSV_EXPORTER_3_MAINNET_CPU_LIMIT
+    - export SSV_EXPORTER_3_MAINNET_MEM_LIMIT=$PROD_SSV_EXPORTER_3_MAINNET_MEM_LIMIT
     - export SSV_NODES_CPU_LIMIT_V3=$PROD_SSV_NODES_CPU_LIMIT_V3
     - export SSV_NODES_MEM_LIMIT_V3=$PROD_SSV_NODES_MEM_LIMIT_V3
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
+    - mkdir ~/.kube/
+    - echo $PROD_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
     #
     # +-------------------------------+
     # |  🟠 Deploy Holesky exporter   |
     # +-------------------------------+
-    - .k8/production/holesky/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
+    # - .k8/production/holesky/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
     #
     # +------------------------------+
     # │  🔴 Deploy Mainnet exporter  |
     # +------------------------------+
-    # - .k8/production/mainnet/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_MAINNET_CPU_LIMIT $SSV_EXPORTER_MAINNET_MEM_LIMIT
-    #
-    # +------------------------------+
-    # │  🔴 Deploy Mainnet exporter 2|
-    # +------------------------------+
-    - .k8/production/mainnet/scripts/deploy-exporters-2.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_2_MAINNET_CPU_LIMIT $SSV_EXPORTER_2_MAINNET_MEM_LIMIT
+    - .k8/production/mainnet/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_MAINNET_CPU_LIMIT $SSV_EXPORTER_MAINNET_MEM_LIMIT
+    # #
+    # # +------------------------------+
+    # # │  🔴 Deploy Mainnet exporter 2|
+    # # +------------------------------+
+    # - .k8/production/mainnet/scripts/deploy-exporters-2.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_2_MAINNET_CPU_LIMIT $SSV_EXPORTER_2_MAINNET_MEM_LIMIT
+    # # +------------------------------+
+    # # │  🔴 Deploy Mainnet exporter 3|
+    # # +------------------------------+
+    # - .k8/production/mainnet/scripts/deploy-exporters-3.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_3_MAINNET_CPU_LIMIT $SSV_EXPORTER_3_MAINNET_MEM_LIMIT
   only:
     - main
 

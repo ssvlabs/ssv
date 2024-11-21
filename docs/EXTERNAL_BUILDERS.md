@@ -5,9 +5,6 @@
 1. Configure your beacon node to use an external builder
    - Lighthouse: https://lighthouse-book.sigmaprime.io/builders.html
    - Prysm: https://docs.prylabs.network/docs/prysm-usage/parameters
-2. Enable builder proposals for SSV node by setting an according variable to `true`:
-   - YAML config: `BuilderProposals` 
-   - environment variable: `BUILDER_PROPOSALS`
 
 ## How it works
 
