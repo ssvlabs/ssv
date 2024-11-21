@@ -43,7 +43,8 @@ func NewInMemory(logger *zap.Logger, options basedb.Options) (*BadgerDB, error) 
 func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*BadgerDB, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
-	options.Path = "./data/db-main-on-stage-2024-11-21"
+	options.Path = "./data/db-main-on-stage-2024-11-21--17"
+
 	opt := badger.DefaultOptions(options.Path)
 
 	if inMemory {
