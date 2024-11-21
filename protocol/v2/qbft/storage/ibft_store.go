@@ -3,6 +3,7 @@ package qbftstorage
 import (
 	"encoding/json"
 	"fmt"
+	"math/bits"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -70,7 +71,7 @@ func (obm OperatorsBitMask) Signers(committee []spectypes.OperatorID) []spectype
 		panic(fmt.Sprintf("invalid committee size: %d", len(committee)))
 	}
 
-	signers := make([]spectypes.OperatorID, 0)
+	signers := make([]spectypes.OperatorID, 0, bits.OnesCount16(uint16(obm)))
 	for j := 0; j < len(committee); j++ {
 		// #nosec G115 -- j cannot exceed maxCommitteeSize
 		if obm&(1<<uint(j)) != 0 {
