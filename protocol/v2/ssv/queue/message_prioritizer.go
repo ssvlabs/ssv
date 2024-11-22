@@ -3,6 +3,10 @@ package queue
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"go.uber.org/zap"
 )
 
 // State represents a portion of the current state
@@ -72,34 +76,69 @@ func scoreHeight(relativeHeight int) int {
 	return 0
 }
 
-func NewCommitteeQueuePrioritizer(state *State) MessagePrioritizer {
-	return &committeePrioritizer{state: state}
+func NewCommitteeQueuePrioritizer(logger *zap.Logger, state *State) MessagePrioritizer {
+	return &committeePrioritizer{logger: logger, state: state}
 }
 
 type committeePrioritizer struct {
-	state *State
+	state  *State
+	logger *zap.Logger
 }
 
-func (p *committeePrioritizer) Prior(a, b *SSVMessage) bool {
+func (p *committeePrioritizer) Prior(a, b *SSVMessage) (ok bool) {
+	var fields []zap.Field
+
+	defer func() {
+		fields = append(fields, zap.Bool("result", ok))
+		logMsg(p.logger, a, "resultonly", fields...)
+	}()
+
+	logMsg(p.logger, a, "messageA")
+	logMsg(p.logger, b, "messageB")
+
 	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
 	if msgScoreA != msgScoreB {
+		fields = append(fields, zap.String("check", "msgScoreA > msgScoreB"))
 		return msgScoreA > msgScoreB
 	}
 
 	relativeHeightA, relativeHeightB := compareHeightOrSlot(p.state, a), compareHeightOrSlot(p.state, b)
 	if relativeHeightA != relativeHeightB {
+		fields = append(fields, zap.String("check", "scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)"))
 		return scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)
 	}
 
 	scoreA, scoreB := scoreCommitteeMessageSubtype(p.state, a, relativeHeightA), scoreCommitteeMessageSubtype(p.state, b, relativeHeightB)
 	if scoreA != scoreB {
+		fields = append(fields, zap.String("check", "1#scoreA > scoreB"))
 		return scoreA > scoreB
 	}
 
 	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
 	if scoreA != scoreB {
+		fields = append(fields, zap.String("check", "2#scoreA > scoreB"))
 		return scoreA > scoreB
 	}
 
+	fields = append(fields, zap.String("check", "return true"))
 	return true
+}
+
+func logMsg(logger *zap.Logger, msg *SSVMessage, logMsg string, lf ...zap.Field) {
+	lf = append(lf, fields.Role(msg.MsgID.GetRoleType()))
+
+	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
+	lf = append(lf, fields.CommitteeID(cid))
+
+	switch msg.SSVMessage.MsgType {
+	case spectypes.SSVConsensusMsgType:
+		sm := msg.Body.(*specqbft.Message)
+		lf = append(lf, fields.QBFTMessageType(sm.MsgType))
+		lf = append(lf, zap.Uint64("msg_height", uint64(sm.Height)))
+	case spectypes.SSVPartialSignatureMsgType:
+		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		lf = append(lf, fields.MessageType(msg.MsgType))
+		lf = append(lf, fields.Slot(psm.Slot))
+	}
+	logger.Debug(logMsg, lf...)
 }

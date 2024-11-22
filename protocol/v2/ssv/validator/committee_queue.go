@@ -113,7 +113,12 @@ func (c *Committee) ConsumeQueue(
 			}
 		}
 
-		filter := queue.FilterAny
+		filter := func(ssvMessage *queue.SSVMessage) bool {
+			var lf = messageToLogFields(ssvMessage)
+			c.logMsg(c.logger, ssvMessage, "filterAny", lf...)
+			return true
+		}
+
 		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
@@ -153,7 +158,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
+		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(logger, &state), filter)
 		if ctx.Err() != nil {
 			break
 		}
@@ -168,6 +173,8 @@ func (c *Committee) ConsumeQueue(
 				zap.Ints("past_10_lengths", lens))
 			lens = lens[:0]
 		}
+
+		c.logMsg(c.logger, msg, "handle message, pop queue", messageToLogFields(msg)...)
 
 		// Handle the message.
 		if err := handler(ctx, logger, msg); err != nil {
@@ -193,7 +200,6 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 		baseFields = []zap.Field{
 			zap.Uint64("msg_height", uint64(sm.Height)),
 			zap.Uint64("msg_round", uint64(sm.Round)),
-			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
