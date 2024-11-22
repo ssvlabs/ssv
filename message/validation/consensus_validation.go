@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -210,8 +211,10 @@ func (mv *messageValidator) validateQBFTLogic(
 
 			if consensusMessage.Round == signerState.Round {
 				// Rule: Peer must not send two proposals with different data
-				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-					return ErrDifferentProposalData
+				if len(signedSSVMessage.FullData) != 0 && signerState.HashedProposalData != nil {
+					if *signerState.HashedProposalData != sha256.Sum256(signedSSVMessage.FullData) {
+						return ErrDifferentProposalData
+					}
 				}
 
 				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
@@ -329,7 +332,8 @@ func (mv *messageValidator) processSignerState(
 	signerState *SignerState,
 ) error {
 	if len(signedSSVMessage.FullData) != 0 && consensusMessage.MsgType == specqbft.ProposalMsgType {
-		signerState.ProposalData = signedSSVMessage.FullData
+		fullDataHash := sha256.Sum256(signedSSVMessage.FullData)
+		signerState.HashedProposalData = &fullDataHash
 	}
 
 	signerCount := len(signedSSVMessage.OperatorIDs)
