@@ -4,8 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -69,7 +67,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, state); err != nil {
+	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo.operatorIDs, state); err != nil {
 		return consensusMessage, err
 	}
 
@@ -223,15 +221,14 @@ func (mv *messageValidator) validateQBFTLogic(
 				}
 			}
 		} else if len(signedSSVMessage.OperatorIDs) > 1 {
-			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
-			encodedOperators, err := encodeOperators(signedSSVMessage.OperatorIDs)
-			if err != nil {
-				return err
+			quorum := Quorum{
+				Signers:   signedSSVMessage.OperatorIDs,
+				Committee: committee,
 			}
 
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
 			if signerState.SeenSigners != nil {
-				if _, ok := signerState.SeenSigners[encodedOperators]; ok {
+				if _, ok := signerState.SeenSigners[quorum.ToBitMask()]; ok {
 					return ErrDecidedWithSameSigners
 				}
 			}
@@ -296,7 +293,12 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	return nil
 }
 
-func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, consensusState *consensusState) error {
+func (mv *messageValidator) updateConsensusState(
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	consensusMessage *specqbft.Message,
+	committee []spectypes.OperatorID,
+	consensusState *consensusState,
+) error {
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
 
@@ -312,7 +314,7 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 			}
 		}
 
-		if err := mv.processSignerState(signedSSVMessage, consensusMessage, signerState); err != nil {
+		if err := mv.processSignerState(signedSSVMessage, consensusMessage, committee, signerState); err != nil {
 			return err
 		}
 	}
@@ -320,23 +322,27 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 	return nil
 }
 
-func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, signerState *SignerState) error {
+func (mv *messageValidator) processSignerState(
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	consensusMessage *specqbft.Message,
+	committee []spectypes.OperatorID,
+	signerState *SignerState,
+) error {
 	if len(signedSSVMessage.FullData) != 0 && consensusMessage.MsgType == specqbft.ProposalMsgType {
 		signerState.ProposalData = signedSSVMessage.FullData
 	}
 
 	signerCount := len(signedSSVMessage.OperatorIDs)
 	if signerCount > 1 {
-		encodedOperators, err := encodeOperators(signedSSVMessage.OperatorIDs)
-		if err != nil {
-			// encodeOperators must never re
-			return ErrEncodeOperators
+		quorum := Quorum{
+			Signers:   signedSSVMessage.OperatorIDs,
+			Committee: committee,
 		}
 
 		if signerState.SeenSigners == nil {
-			signerState.SeenSigners = make(map[[sha256.Size]byte]struct{}) // lazy init on demand to reduce mem consumption
+			signerState.SeenSigners = make(map[SignersBitMask]struct{}) // lazy init on demand to reduce mem consumption
 		}
-		signerState.SeenSigners[encodedOperators] = struct{}{}
+		signerState.SeenSigners[quorum.ToBitMask()] = struct{}{}
 	}
 
 	return signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
@@ -455,15 +461,4 @@ func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round spe
 
 	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
 	return committee[index]
-}
-
-func encodeOperators(operators []spectypes.OperatorID) ([sha256.Size]byte, error) {
-	buf := new(bytes.Buffer)
-	for _, operator := range operators {
-		if err := binary.Write(buf, binary.LittleEndian, operator); err != nil {
-			return [sha256.Size]byte{}, err
-		}
-	}
-	hash := sha256.Sum256(buf.Bytes())
-	return hash, nil
 }

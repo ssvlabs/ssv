@@ -3,8 +3,6 @@ package validation
 // signer_state.go describes state of a signer.
 
 import (
-	"crypto/sha256"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
@@ -16,7 +14,7 @@ type SignerState struct {
 	Round         specqbft.Round
 	MessageCounts MessageCounts
 	ProposalData  []byte
-	SeenSigners   map[[sha256.Size]byte]struct{}
+	SeenSigners   map[SignersBitMask]struct{}
 }
 
 func NewSignerState(slot phase0.Slot, round specqbft.Round) *SignerState {
