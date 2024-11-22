@@ -4,25 +4,24 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // consensusState keeps track of the signers for a given public key and role.
 type consensusState struct {
-	state           map[spectypes.OperatorID]*OperatorState
+	state           []*OperatorState
 	storedSlotCount phase0.Slot
 	mu              sync.Mutex
 }
 
-func (cs *consensusState) GetOrCreate(signer spectypes.OperatorID) *OperatorState {
+func (cs *consensusState) GetOrCreate(idx int) *OperatorState {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
-	if _, ok := cs.state[signer]; !ok {
-		cs.state[signer] = newOperatorState(cs.storedSlotCount)
+	if cs.state[idx] == nil {
+		cs.state[idx] = newOperatorState(cs.storedSlotCount)
 	}
 
-	return cs.state[signer]
+	return cs.state[idx]
 }
 
 type OperatorState struct {

@@ -140,3 +140,16 @@ func (mv *messageValidator) validateBeaconDuty(
 
 	return nil
 }
+
+func (mv *messageValidator) signerIndexInCommittee(signer spectypes.OperatorID, committee []spectypes.OperatorID) int {
+	// Probably converting committee to a map would be faster, but since committee size is <13, this should be okay.
+	// Although, we need to change it if it appears in pprof output.
+	for i, oid := range committee {
+		if oid == signer {
+			return i
+		}
+	}
+
+	mv.logger.Panic(fmt.Sprintf("signer %v must be in committee %v", signer, committee))
+	panic("unreachable") // fix compilation issue
+}

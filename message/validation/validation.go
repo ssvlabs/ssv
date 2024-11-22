@@ -169,7 +169,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 }
 
 func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.operatorIDs); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
 		return err
 	}
 
@@ -202,7 +202,7 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 }
 
 type CommitteeInfo struct {
-	operatorIDs []spectypes.OperatorID
+	committee   []spectypes.OperatorID
 	indices     []phase0.ValidatorIndex
 	committeeID spectypes.CommitteeID
 }
@@ -225,7 +225,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}
 
 		return CommitteeInfo{
-			operatorIDs: committee.Operators,
+			committee:   committee.Operators,
 			indices:     committee.Indices,
 			committeeID: committeeID,
 		}, nil
@@ -260,19 +260,19 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	return CommitteeInfo{
-		operatorIDs: operators,
+		committee:   operators,
 		indices:     []phase0.ValidatorIndex{validator.BeaconMetadata.Index},
 		committeeID: validator.CommitteeID(),
 	}, nil
 }
 
-func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
+func (mv *messageValidator) consensusState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *consensusState {
 	mv.consensusStateIndexMu.Lock()
 	defer mv.consensusStateIndexMu.Unlock()
 
 	if _, ok := mv.consensusStateIndex[messageID]; !ok {
 		cs := &consensusState{
-			state:           make(map[spectypes.OperatorID]*OperatorState),
+			state:           make([]*OperatorState, len(committee)),
 			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[messageID] = cs

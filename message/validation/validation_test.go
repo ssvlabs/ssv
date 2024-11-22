@@ -150,8 +150,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		msgID := committeeIdentifier
-		state := validator.consensusState(msgID)
-		for i := spectypes.OperatorID(1); i <= 4; i++ {
+		state := validator.consensusState(msgID, committee)
+		for i := range committee {
 			signerState := state.GetOrCreate(i)
 			require.NotNil(t, signerState)
 		}
@@ -167,7 +167,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.GetOrCreate(1)
+		stateBySlot := state.GetOrCreate(0)
 		require.NotNil(t, stateBySlot)
 
 		storedState := stateBySlot.Get(slot)
@@ -175,7 +175,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
-		for i := spectypes.OperatorID(2); i <= 4; i++ {
+		for i := 1; i < len(committee); i++ {
 			require.NotNil(t, state.GetOrCreate(i))
 		}
 
@@ -530,7 +530,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			PrepareJustification:     [][]byte{},
 		}
 
-		leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, []spectypes.OperatorID{1, 2, 3, 4})
+		leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
 		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
@@ -984,7 +984,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 3, 4}
+		signedSSVMessage.OperatorIDs = committee
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]

@@ -42,7 +42,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	msgID := ssvMessage.GetID()
-	state := mv.consensusState(msgID)
+	state := mv.consensusState(msgID, committeeInfo.committee)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedAt, state); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, e
 	}
 
-	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer); err != nil {
+	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer, committeeInfo.committee); err != nil {
 		return nil, err
 	}
 
@@ -142,7 +142,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 	signer := signedSSVMessage.OperatorIDs[0]
-	signerStateBySlot := state.GetOrCreate(signer)
+	signerStateBySlot := state.GetOrCreate(mv.signerIndexInCommittee(signer, committeeInfo.committee))
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != types.RoleCommittee { // Rule only for validator runners
@@ -227,8 +227,9 @@ func (mv *messageValidator) updatePartialSignatureState(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
 	state *consensusState,
 	signer spectypes.OperatorID,
+	committee []spectypes.OperatorID,
 ) error {
-	stateBySlot := state.GetOrCreate(signer)
+	stateBySlot := state.GetOrCreate(mv.signerIndexInCommittee(signer, committee))
 	messageSlot := partialSignatureMessages.Slot
 	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
 
