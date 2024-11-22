@@ -36,7 +36,7 @@ type messageValidator struct {
 	logger                *zap.Logger
 	metrics               metricsreporter.MetricsReporter
 	netCfg                networkconfig.NetworkConfig
-	consensusStateIndex   map[consensusID]*consensusState
+	consensusStateIndex   map[spectypes.MessageID]*consensusState
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
 	dutyStore             *dutystore.Store
@@ -63,7 +63,7 @@ func New(
 		logger:              zap.NewNop(),
 		metrics:             metricsreporter.NewNop(),
 		netCfg:              netCfg,
-		consensusStateIndex: make(map[consensusID]*consensusState),
+		consensusStateIndex: make(map[spectypes.MessageID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
 		validatorStore:      validatorStore,
 		dutyStore:           dutyStore,
@@ -270,20 +270,15 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	mv.consensusStateIndexMu.Lock()
 	defer mv.consensusStateIndexMu.Unlock()
 
-	id := consensusID{
-		DutyExecutorID: string(messageID.GetDutyExecutorID()),
-		Role:           messageID.GetRoleType(),
-	}
-
-	if _, ok := mv.consensusStateIndex[id]; !ok {
+	if _, ok := mv.consensusStateIndex[messageID]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
 			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
 		}
-		mv.consensusStateIndex[id] = cs
+		mv.consensusStateIndex[messageID] = cs
 	}
 
-	return mv.consensusStateIndex[id]
+	return mv.consensusStateIndex[messageID]
 }
 
 func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {

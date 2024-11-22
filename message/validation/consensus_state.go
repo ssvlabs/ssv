@@ -7,12 +7,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// consensusID uniquely identifies a public key and role pair to keep track of state.
-type consensusID struct {
-	DutyExecutorID string
-	Role           spectypes.RunnerRole
-}
-
 // consensusState keeps track of the signers for a given public key and role.
 type consensusState struct {
 	state           map[spectypes.OperatorID]*OperatorState
