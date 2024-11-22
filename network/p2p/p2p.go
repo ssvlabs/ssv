@@ -354,6 +354,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
+	firstRun := true
 	for ; true; <-ticker.C {
 		start := time.Now()
 
@@ -432,8 +433,9 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 				}
 			}
 		}
-		if hasAdded || hasRemoved {
+		if hasAdded || hasRemoved || firstRun {
 			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
+			firstRun = false
 		}
 
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
