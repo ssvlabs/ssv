@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -181,6 +182,34 @@ func TestPriorityQueue_Order(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestPriorityQueue_Order tests that the queue returns the messages in the correct order.
+func TestPriorityQueue_OrderProposalVsCommit(t *testing.T) {
+	// Create the PriorityQueue and populate it with messages.
+	q := NewDefault()
+
+	state := &State{
+		HasRunningInstance: true,
+		Height:             100,
+		Slot:               64,
+		Quorum:             4,
+	}
+
+	msgA_Prop := mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType}
+	msgB_Comm := mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType}
+
+	mmA, _ := DecodeSignedSSVMessage(msgA_Prop.ssvMessage(state))
+	mmB, _ := DecodeSignedSSVMessage(msgB_Comm.ssvMessage(state))
+
+	q.Push(mmA)
+	q.Push(mmB)
+
+	// Pop messages from the queue and compare to the expected order.
+	for i, excepted := range []*SSVMessage{mmA, mmB} {
+		actual := q.TryPop(NewCommitteeQueuePrioritizer(zap.NewNop(), state), FilterAny)
+		require.Equal(t, excepted, actual, "incorrect message at index %d", i)
 	}
 }
 

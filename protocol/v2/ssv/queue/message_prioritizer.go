@@ -114,7 +114,7 @@ func (p *committeePrioritizer) Prior(a, b *SSVMessage) (ok bool) {
 		return scoreA > scoreB
 	}
 
-	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
+	scoreA, scoreB = scoreConsensusType(a), scoreConsensusType(b)
 	if scoreA != scoreB {
 		fields = append(fields, zap.String("check", "2#scoreA > scoreB"))
 		return scoreA > scoreB
@@ -138,6 +138,7 @@ func logMsg(logger *zap.Logger, msg *SSVMessage, logMsg string, lf ...zap.Field)
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		lf = append(lf, fields.MessageType(msg.MsgType))
+		lf = append(lf, zap.Uint64("signer", psm.Messages[0].Signer))
 		lf = append(lf, fields.Slot(psm.Slot))
 	}
 	logger.Debug(logMsg, lf...)
