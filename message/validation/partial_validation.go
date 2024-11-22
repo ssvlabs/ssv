@@ -167,8 +167,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Sync committee contribution
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
-		limits := maxMessageCounts()
-		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
+		if err := signerState.SeenMsgTypes.ValidatePartialSignatureMessage(partialSignatureMessages); err != nil {
 			return err
 		}
 	}
@@ -239,7 +238,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 
-	return signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
+	return signerState.SeenMsgTypes.RecordPartialSignatureMessage(partialSignatureMessages)
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

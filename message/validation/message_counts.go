@@ -9,54 +9,66 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// MessageCounts tracks the number of various message types received for validation.
-type MessageCounts struct {
-	PreConsensus  int
-	Proposal      int
-	Prepare       int
-	Commit        int
-	RoundChange   int
-	PostConsensus int
+const (
+	preConsensusIdx = iota
+	proposalIdx
+	prepareIdx
+	commitIdx
+	roundChangeIdx
+	postConsensusIdx
+)
+
+// SeenMsgTypes tracks whether various message types were received for validation.
+// It stores them as a bitset. It is enough because limit of all messages is 1.
+type SeenMsgTypes struct {
+	v uint8 // wrapped into a struct to avoid incorrect usage
 }
 
-// String provides a formatted representation of the MessageCounts.
-func (c *MessageCounts) String() string {
+// String provides a formatted representation of the SeenMsgTypes.
+func (c *SeenMsgTypes) String() string {
+	b2i := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+
 	return fmt.Sprintf("pre-consensus: %v, proposal: %v, prepare: %v, commit: %v, round change: %v, post-consensus: %v",
-		c.PreConsensus,
-		c.Proposal,
-		c.Prepare,
-		c.Commit,
-		c.RoundChange,
-		c.PostConsensus,
+		b2i(c.reachedPreConsensusLimit()),
+		b2i(c.reachedProposalLimit()),
+		b2i(c.reachedPrepareLimit()),
+		b2i(c.reachedCommitLimit()),
+		b2i(c.reachedRoundChangeLimit()),
+		b2i(c.reachedPostConsensusLimit()),
 	)
 }
 
 // ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
-func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message, limits MessageCounts) error {
+func (c *SeenMsgTypes) ValidateConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
-		if c.Proposal >= limits.Proposal {
+		if c.reachedProposalLimit() {
 			err := ErrDuplicatedMessage
 			err.got = fmt.Sprintf("proposal, having %v", c.String())
 			return err
 		}
 	case specqbft.PrepareMsgType:
-		if c.Prepare >= limits.Prepare {
+		if c.reachedPrepareLimit() {
 			err := ErrDuplicatedMessage
 			err.got = fmt.Sprintf("prepare, having %v", c.String())
 			return err
 		}
 	case specqbft.CommitMsgType:
 		if len(signedSSVMessage.OperatorIDs) == 1 {
-			if c.Commit >= limits.Commit {
+			if c.reachedCommitLimit() {
 				err := ErrDuplicatedMessage
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
 		}
 	case specqbft.RoundChangeMsgType:
-		if c.RoundChange >= limits.RoundChange {
+		if c.reachedRoundChangeLimit() {
 			err := ErrDuplicatedMessage
 
 			err.got = fmt.Sprintf("round change, having %v", c.String())
@@ -71,16 +83,16 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 
 // ValidatePartialSignatureMessage checks if the provided partial signature message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
-func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages, limits MessageCounts) error {
+func (c *SeenMsgTypes) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages) error {
 	switch m.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
-		if c.PreConsensus >= limits.PreConsensus {
+		if c.reachedPreConsensusLimit() {
 			err := ErrInvalidPartialSignatureTypeCount
 			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 			return err
 		}
 	case spectypes.PostConsensusPartialSig:
-		if c.PostConsensus >= limits.PostConsensus {
+		if c.reachedPostConsensusLimit() {
 			err := ErrInvalidPartialSignatureTypeCount
 			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
 			return err
@@ -93,18 +105,18 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.PartialSign
 }
 
 // RecordConsensusMessage updates the counts based on the provided consensus message type.
-func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
+func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
-		c.Proposal++
+		c.recordProposal()
 	case specqbft.PrepareMsgType:
-		c.Prepare++
+		c.recordPrepare()
 	case specqbft.CommitMsgType:
 		if len(signedSSVMessage.OperatorIDs) == 1 {
-			c.Commit++
+			c.recordCommit()
 		}
 	case specqbft.RoundChangeMsgType:
-		c.RoundChange++
+		c.recordRoundChange()
 	default:
 		return fmt.Errorf("unexpected signed message type") // should be checked before
 	}
@@ -112,26 +124,62 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 }
 
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
-func (c *MessageCounts) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
+func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
 	switch messages.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
-		c.PreConsensus++
+		c.recordPreConsensus()
 	case spectypes.PostConsensusPartialSig:
-		c.PostConsensus++
+		c.recordPostConsensus()
 	default:
 		return fmt.Errorf("unexpected partial signature message type") // should be checked before
 	}
 	return nil
 }
 
-// maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
-func maxMessageCounts() MessageCounts {
-	return MessageCounts{
-		PreConsensus:  1,
-		Proposal:      1,
-		Prepare:       1,
-		Commit:        1,
-		RoundChange:   1,
-		PostConsensus: 1,
-	}
+func (c *SeenMsgTypes) recordPreConsensus() {
+	c.v |= 1 << preConsensusIdx
+}
+
+func (c *SeenMsgTypes) recordProposal() {
+	c.v |= 1 << proposalIdx
+}
+
+func (c *SeenMsgTypes) recordPrepare() {
+	c.v |= 1 << prepareIdx
+}
+
+func (c *SeenMsgTypes) recordCommit() {
+	c.v |= 1 << commitIdx
+}
+
+func (c *SeenMsgTypes) recordRoundChange() {
+	c.v |= 1 << roundChangeIdx
+}
+
+func (c *SeenMsgTypes) recordPostConsensus() {
+	c.v |= 1 << postConsensusIdx
+}
+
+func (c *SeenMsgTypes) reachedPreConsensusLimit() bool {
+	return (c.v & (1 << preConsensusIdx)) != 0
+}
+
+func (c *SeenMsgTypes) reachedProposalLimit() bool {
+	return (c.v & (1 << proposalIdx)) != 0
+}
+
+func (c *SeenMsgTypes) reachedPrepareLimit() bool {
+	return (c.v & (1 << prepareIdx)) != 0
+}
+
+func (c *SeenMsgTypes) reachedCommitLimit() bool {
+	return (c.v & (1 << commitIdx)) != 0
+}
+
+func (c *SeenMsgTypes) reachedRoundChangeLimit() bool {
+	return (c.v & (1 << roundChangeIdx)) != 0
+}
+
+func (c *SeenMsgTypes) reachedPostConsensusLimit() bool {
+	return (c.v & (1 << postConsensusIdx)) != 0
 }

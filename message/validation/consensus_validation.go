@@ -218,8 +218,7 @@ func (mv *messageValidator) validateQBFTLogic(
 				}
 
 				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
-				limits := maxMessageCounts()
-				if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
+				if err := signerState.SeenMsgTypes.ValidateConsensusMessage(signedSSVMessage, consensusMessage); err != nil {
 					return err
 				}
 			}
@@ -349,7 +348,7 @@ func (mv *messageValidator) processSignerState(
 		signerState.SeenSigners[quorum.ToBitMask()] = struct{}{}
 	}
 
-	return signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
+	return signerState.SeenMsgTypes.RecordConsensusMessage(signedSSVMessage, consensusMessage)
 }
 
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {

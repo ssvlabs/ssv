@@ -10,9 +10,9 @@ import (
 // SignerState represents the state of a signer, including its start time, slot, round,
 // message counts, proposal data, and the number of duties performed in the current epoch.
 type SignerState struct {
-	Slot          phase0.Slot // index stores slot modulo, so we also need to store slot here
-	Round         specqbft.Round
-	MessageCounts MessageCounts
+	Slot         phase0.Slot // index stores slot modulo, so we also need to store slot here
+	Round        specqbft.Round
+	SeenMsgTypes SeenMsgTypes
 	// Storing pointer to byte array instead of slice to reduce memory consumption when we don't need the hash.
 	// A nil slice could be an alternative, but it'd consume more memory, and we'd need to cast [32]byte returned by sha256.Sum256() to slice.
 	HashedProposalData *[32]byte
@@ -30,7 +30,7 @@ func NewSignerState(slot phase0.Slot, round specqbft.Round) *SignerState {
 func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
 	s.Slot = slot
 	s.Round = round
-	s.MessageCounts = MessageCounts{}
+	s.SeenMsgTypes = SeenMsgTypes{}
 	s.HashedProposalData = nil
 	s.SeenSigners = nil // lazy init on demand to reduce mem consumption
 }
