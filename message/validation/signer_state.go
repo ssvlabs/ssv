@@ -32,5 +32,5 @@ func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
 	s.Round = round
 	s.MessageCounts = MessageCounts{}
 	s.ProposalData = nil
-	s.SeenSigners = make(map[[sha256.Size]byte]struct{})
+	s.SeenSigners = nil // lazy init on demand to reduce mem consumption
 }

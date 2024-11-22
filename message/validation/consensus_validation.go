@@ -230,8 +230,10 @@ func (mv *messageValidator) validateQBFTLogic(
 			}
 
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
-			if _, ok := signerState.SeenSigners[encodedOperators]; ok {
-				return ErrDecidedWithSameSigners
+			if signerState.SeenSigners != nil {
+				if _, ok := signerState.SeenSigners[encodedOperators]; ok {
+					return ErrDecidedWithSameSigners
+				}
 			}
 		}
 	}
@@ -331,6 +333,9 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 			return ErrEncodeOperators
 		}
 
+		if signerState.SeenSigners == nil {
+			signerState.SeenSigners = make(map[[sha256.Size]byte]struct{}) // lazy init on demand to reduce mem consumption
+		}
 		signerState.SeenSigners[encodedOperators] = struct{}{}
 	}
 
