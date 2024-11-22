@@ -48,9 +48,10 @@ func (ts *streamWrapper) WriteWithTimeout(data []byte, timeout time.Duration) er
 	}
 
 	n := len(data)
-	bytsWrote, err := ts.Stream.Write(data)
-	if bytsWrote != n {
-		return errors.Errorf("written bytes (%d) to sync stream doesnt match input data (%d)", bytsWrote, n)
+	bytesWrote, err := ts.Stream.Write(data)
+	if bytesWrote != n {
+		return errors.Errorf("written bytes (%d) to sync stream doesnt match input data (%d)", bytesWrote, n)
 	}
+
 	return err
 }
