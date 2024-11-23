@@ -139,6 +139,8 @@ func (c *Committee) ConsumeQueue(
 
 				if sm.Round != state.Round { // allow next round or change round messages.
 					lf = append(lf, zap.String("check", "round"))
+					lf = append(lf, zap.Uint64("sm.Round", uint64(sm.Round)))
+					lf = append(lf, zap.Uint64("state.Round", uint64(state.Round)))
 					return true
 				}
 
