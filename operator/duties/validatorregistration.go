@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 const validatorRegistrationEpochInterval = uint64(10)
@@ -66,7 +66,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 						// no need for other params
 					}})
 				} else {
-					h.dutiesExecutor.ExecuteDuties(h.logger, []*spectypes.ValidatorDuty{{
+					h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{
 						Type:           spectypes.BNRoleValidatorRegistration,
 						ValidatorIndex: share.ValidatorIndex,
 						PubKey:         pk,

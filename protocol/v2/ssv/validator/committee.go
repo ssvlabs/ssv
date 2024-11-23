@@ -123,7 +123,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 }
 
 // StartDuty starts a new duty for the given slot
-func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -189,7 +189,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	err = runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
+	err = runner.StartNewDuty(ctx, logger, duty, c.CommitteeMember.GetQuorum())
 	if err != nil {
 		return errors.Wrap(err, "runner failed to start duty")
 	}
@@ -204,13 +204,14 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 		c.logger.Warn("cannot push to non-existing queue", zap.Uint64("slot", uint64(slot)))
 		return
 	}
+
 	if pushed := queue.Q.TryPush(dec); !pushed {
 		c.logger.Warn("dropping ExecuteDuty message because the queue is full")
 	}
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) error {
+func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	// Validate message
 	if msg.GetType() != message.SSVEventMsgType {
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
@@ -242,7 +243,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if !exists {
 			return errors.New("no runner found for message's slot")
 		}
-		return runner.ProcessConsensus(logger, msg.SignedSSVMessage)
+		return runner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -265,10 +266,10 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 			if !exists {
 				return errors.New("no runner found for message's slot")
 			}
-			return runner.ProcessPostConsensus(logger, pSigMessages)
+			return runner.ProcessPostConsensus(ctx, logger, pSigMessages)
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(logger, msg)
+		return c.handleEventMessage(ctx, logger, msg)
 	default:
 		return errors.New("unknown msg")
 	}
