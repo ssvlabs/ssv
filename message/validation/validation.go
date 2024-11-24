@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,43 @@ type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
+
+// Start PeerID To version code
+
+var PeerIDtoSignerMtx sync.Mutex
+
+type OperatorInfo struct {
+	OpID    spectypes.OperatorID
+	Version string
+	Subnets string
+}
+
+var PeerIDtoSigner map[peer.ID]*OperatorInfo = make(map[peer.ID]*OperatorInfo)
+
+// End PeerID To version code
+
+// Start CommitteeInDomain Code
+
+var CommitteeInDomainMtx sync.Mutex
+var CommitteeInDomain = make(map[string]struct{})
+
+func OperatorIDsToString(operatorIDs []spectypes.OperatorID) string {
+	if len(operatorIDs) == 0 {
+		return ""
+	}
+
+	slices.Sort(operatorIDs) // to make sure no duplicates
+
+	// Convert each uint64 to string and join them
+	stringIDs := make([]string, len(operatorIDs))
+	for i, id := range operatorIDs {
+		stringIDs[i] = fmt.Sprintf("%d", id)
+	}
+
+	return strings.Join(stringIDs, ",")
+}
+
+// End CommitteeInDomain Code
 
 type messageValidator struct {
 	logger                *zap.Logger
@@ -113,6 +151,18 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 		return nil, err
 	}
 
+	pid := pMsg.GetFrom()
+	operator := signedSSVMessage.OperatorIDs[0]
+
+	PeerIDtoSignerMtx.Lock()
+	pis, e := PeerIDtoSigner[pid]
+	if !e {
+		PeerIDtoSigner[pid] = &OperatorInfo{OpID: operator}
+	} else {
+		pis.OpID = operator
+	}
+	PeerIDtoSignerMtx.Unlock()
+
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
 
@@ -136,6 +186,11 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	if err != nil {
 		return decodedMessage, err
 	}
+
+	CommitteeInDomainMtx.Lock()
+	opids := OperatorIDsToString(committeeInfo.operatorIDs)
+	CommitteeInDomain[opids] = struct{}{}
+	CommitteeInDomainMtx.Unlock()
 
 	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
 		return decodedMessage, err

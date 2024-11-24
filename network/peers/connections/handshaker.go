@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"encoding/hex"
+	"github.com/ssvlabs/ssv/message/validation"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -144,6 +145,16 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni *records.NodeInfo) error {
 	h.updateNodeSubnets(logger, sender, ni.GetNodeInfo())
+
+	validation.PeerIDtoSignerMtx.Lock()
+	pis, e := validation.PeerIDtoSigner[sender]
+	if !e {
+		validation.PeerIDtoSigner[sender] = &validation.OperatorInfo{Version: ni.Metadata.NodeVersion, Subnets: ni.Metadata.Subnets}
+	} else {
+		pis.Version = ni.Metadata.NodeVersion
+		pis.Subnets = ni.Metadata.Subnets
+	}
+	validation.PeerIDtoSignerMtx.Unlock()
 
 	if err := h.applyFilters(sender, ni); err != nil {
 		return err
