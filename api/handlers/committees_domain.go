@@ -17,7 +17,7 @@ type CommitteeDomainJSON struct {
 type CommitteDomainList struct {
 }
 
-func (c *CommitteDomainList) List(w http.ResponseWriter, r *http.Request) error {
+func (c CommitteDomainList) List(w http.ResponseWriter, r *http.Request) error {
 	opt := &CommitteeDomainJSON{make([]*CommitteInOurDomain, 0)}
 	validation.CommitteeInDomainMtx.Lock()
 	defer validation.CommitteeInDomainMtx.Unlock()
