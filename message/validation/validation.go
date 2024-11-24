@@ -155,11 +155,11 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	operator := signedSSVMessage.OperatorIDs[0]
 
 	PeerIDtoSignerMtx.Lock()
-	pis, e := PeerIDtoSigner[pid]
+	_, e := PeerIDtoSigner[pid]
 	if !e {
 		PeerIDtoSigner[pid] = &OperatorInfo{OpID: operator}
 	} else {
-		pis.OpID = operator
+		PeerIDtoSigner[pid].OpID = operator
 	}
 	PeerIDtoSignerMtx.Unlock()
 

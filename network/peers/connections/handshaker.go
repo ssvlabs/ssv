@@ -147,12 +147,12 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 	h.updateNodeSubnets(logger, sender, ni.GetNodeInfo())
 
 	validation.PeerIDtoSignerMtx.Lock()
-	pis, e := validation.PeerIDtoSigner[sender]
+	_, e := validation.PeerIDtoSigner[sender]
 	if !e {
 		validation.PeerIDtoSigner[sender] = &validation.OperatorInfo{Version: ni.Metadata.NodeVersion, Subnets: ni.Metadata.Subnets}
 	} else {
-		pis.Version = ni.Metadata.NodeVersion
-		pis.Subnets = ni.Metadata.Subnets
+		validation.PeerIDtoSigner[sender].Version = ni.Metadata.NodeVersion
+		validation.PeerIDtoSigner[sender].Subnets = ni.Metadata.Subnets
 	}
 	validation.PeerIDtoSignerMtx.Unlock()
 
