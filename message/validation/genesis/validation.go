@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/message/crawler"
 	"slices"
 	"strings"
 	"sync"
@@ -371,6 +372,18 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	mv.metrics.GenesisSSVMessageType(msg.MsgType)
 
+	pid := pMsg.GetFrom()
+	operator := signedSSVMsg.OperatorID
+
+	crawler.PeerIDtoSignerMtx.Lock()
+	_, e := crawler.PeerIDtoSigner[pid]
+	if !e {
+		crawler.PeerIDtoSigner[pid] = &crawler.OperatorInfo{OpID: operator}
+	} else {
+		crawler.PeerIDtoSigner[pid].OpID = operator
+	}
+	crawler.PeerIDtoSignerMtx.Unlock()
+
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
@@ -436,6 +449,14 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			err.got = share.BeaconMetadata.Status.String()
 			return nil, descriptor, err
 		}
+
+		crawler.CommitteeInDomainMtx.Lock()
+		cmtops := crawler.OperatorIDsToString(share.OperatorIDs())
+		_, e := crawler.CommitteeInDomain[cmtops]
+		if !e {
+			crawler.CommitteeInDomain[cmtops] = struct{}{}
+		}
+		crawler.CommitteeInDomainMtx.Unlock()
 	}
 
 	// Lock this SSV message ID to prevent concurrent access to the same state.

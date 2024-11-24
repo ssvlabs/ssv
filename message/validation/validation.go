@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/message/crawler"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -31,41 +31,6 @@ import (
 type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-}
-
-// Start PeerID To version code
-
-var PeerIDtoSignerMtx sync.Mutex
-
-type OperatorInfo struct {
-	OpID    spectypes.OperatorID
-	Version string
-	Subnets string
-}
-
-var PeerIDtoSigner map[peer.ID]*OperatorInfo = make(map[peer.ID]*OperatorInfo)
-
-// End PeerID To version code
-
-// Start CommitteeInDomain Code
-
-var CommitteeInDomainMtx sync.Mutex
-var CommitteeInDomain = make(map[string]struct{})
-
-func OperatorIDsToString(operatorIDs []spectypes.OperatorID) string {
-	if len(operatorIDs) == 0 {
-		return ""
-	}
-
-	slices.Sort(operatorIDs) // to make sure no duplicates
-
-	// Convert each uint64 to string and join them
-	stringIDs := make([]string, len(operatorIDs))
-	for i, id := range operatorIDs {
-		stringIDs[i] = fmt.Sprintf("%d", id)
-	}
-
-	return strings.Join(stringIDs, ",")
 }
 
 // End CommitteeInDomain Code
@@ -154,14 +119,14 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	pid := pMsg.GetFrom()
 	operator := signedSSVMessage.OperatorIDs[0]
 
-	PeerIDtoSignerMtx.Lock()
-	_, e := PeerIDtoSigner[pid]
+	crawler.PeerIDtoSignerMtx.Lock()
+	_, e := crawler.PeerIDtoSigner[pid]
 	if !e {
-		PeerIDtoSigner[pid] = &OperatorInfo{OpID: operator}
+		crawler.PeerIDtoSigner[pid] = &crawler.OperatorInfo{OpID: operator}
 	} else {
-		PeerIDtoSigner[pid].OpID = operator
+		crawler.PeerIDtoSigner[pid].OpID = operator
 	}
-	PeerIDtoSignerMtx.Unlock()
+	crawler.PeerIDtoSignerMtx.Unlock()
 
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
@@ -187,10 +152,10 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
-	CommitteeInDomainMtx.Lock()
-	opids := OperatorIDsToString(committeeInfo.operatorIDs)
-	CommitteeInDomain[opids] = struct{}{}
-	CommitteeInDomainMtx.Unlock()
+	crawler.CommitteeInDomainMtx.Lock()
+	opids := crawler.OperatorIDsToString(committeeInfo.operatorIDs)
+	crawler.CommitteeInDomain[opids] = struct{}{}
+	crawler.CommitteeInDomainMtx.Unlock()
 
 	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
 		return decodedMessage, err

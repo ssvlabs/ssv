@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/message/crawler"
 	"net/http"
 )
 
@@ -19,10 +19,10 @@ type CommitteDomainList struct {
 
 func (c CommitteDomainList) List(w http.ResponseWriter, r *http.Request) error {
 	opt := &CommitteeDomainJSON{make([]*CommitteInOurDomain, 0)}
-	validation.CommitteeInDomainMtx.Lock()
-	defer validation.CommitteeInDomainMtx.Unlock()
+	crawler.CommitteeInDomainMtx.Lock()
+	defer crawler.CommitteeInDomainMtx.Unlock()
 
-	for k := range validation.CommitteeInDomain {
+	for k := range crawler.CommitteeInDomain {
 		opt.Data = append(opt.Data, &CommitteInOurDomain{OperatorIDs: k})
 	}
 	return api.Render(w, r, opt)

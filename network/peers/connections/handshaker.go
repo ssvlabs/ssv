@@ -3,7 +3,7 @@ package connections
 import (
 	"context"
 	"encoding/hex"
-	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/message/crawler"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -158,15 +158,15 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 		zap.String("networkID", ni.GetNodeInfo().NetworkID),
 	)
 
-	validation.PeerIDtoSignerMtx.Lock()
-	_, e := validation.PeerIDtoSigner[sender]
+	crawler.PeerIDtoSignerMtx.Lock()
+	_, e := crawler.PeerIDtoSigner[sender]
 	if !e {
-		validation.PeerIDtoSigner[sender] = &validation.OperatorInfo{Version: ni.Metadata.NodeVersion, Subnets: ni.Metadata.Subnets}
+		crawler.PeerIDtoSigner[sender] = &crawler.OperatorInfo{Version: ni.Metadata.NodeVersion, Subnets: ni.Metadata.Subnets}
 	} else {
-		validation.PeerIDtoSigner[sender].Version = ni.Metadata.NodeVersion
-		validation.PeerIDtoSigner[sender].Subnets = ni.Metadata.Subnets
+		crawler.PeerIDtoSigner[sender].Version = ni.Metadata.NodeVersion
+		crawler.PeerIDtoSigner[sender].Subnets = ni.Metadata.Subnets
 	}
-	validation.PeerIDtoSignerMtx.Unlock()
+	crawler.PeerIDtoSignerMtx.Unlock()
 
 	return nil
 }
