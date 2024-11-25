@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -337,7 +337,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 // it protects the best peers by these rules:
 // - At least 2 peers per subnet.
 // - Prefer peers that you have more shared subents with.
-func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets, logger *zap.Logger) map[peer.ID]struct{} {
+func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets, peerSubnets func(p peer.ID)) map[peer.ID]struct{} {
 	subnetPeerCount := make(map[int]int)
 
 	for _, p := range allPeers {
@@ -354,8 +354,17 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 	for subnet, count := range subnetPeerCount {
 		if count > 0 {
 			subnetPeers := n.idx.GetSubnetPeers(subnet)
-			sort.Slice(subnetPeers, func(i, j int) bool {
-				return len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(subnetPeers[i]), 0)) > len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(subnetPeers[j]), 0))
+			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
+				// take the peers with the most shared subnets
+				aShares := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
+				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
+				if aShares < bShared {
+					return -1
+				} else if aShares > bShared {
+					return 1
+				} else {
+					return 0
+				}
 			})
 			for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)); i++ {
 				protectedPeers[subnetPeers[i]] = struct{}{}
