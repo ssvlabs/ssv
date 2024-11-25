@@ -314,7 +314,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		// A - SUBNET_1(3)
 		// B - SUBNET_2(2) // PROTECTED
 		// C - SUBNET_3(13)
-		protectedPeers := n.PeerProtection(allPeers, mySubnets, logger)
+		protectedPeers := n.PeerProtection(allPeers, mySubnets)
 
 		for p := range protectedPeers {
 			n.libConnManager.Protect(p, "subnet-protection")
@@ -337,7 +337,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 // it protects the best peers by these rules:
 // - At least 2 peers per subnet.
 // - Prefer peers that you have more shared subents with.
-func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets, peerSubnets func(p peer.ID)) map[peer.ID]struct{} {
+func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets) map[peer.ID]struct{} {
 	subnetPeerCount := make(map[int]int)
 
 	for _, p := range allPeers {
