@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -310,6 +311,48 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
+}
+
+// PeerProtection returns a map of protected peers based on the intersection of subnets.
+// it protects the best peers by these rules:
+// - At least 2 peers per subnet.
+// - Prefer peers that you have more shared subents with.
+func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets, peerSubnets func(p peer.ID)) map[peer.ID]struct{} {
+	subnetPeerCount := make(map[int]int)
+
+	for _, p := range allPeers {
+		peerSubnets := n.idx.GetPeerSubnets(p)
+		for i, a := range mySubnets {
+			if a == 1 && peerSubnets[i] == 1 {
+				subnetPeerCount[i]++
+			}
+		}
+	}
+
+	const minPeersPerSubnet = 2
+	protectedPeers := make(map[peer.ID]struct{})
+	for subnet, count := range subnetPeerCount {
+		if count > 0 {
+			subnetPeers := n.idx.GetSubnetPeers(subnet)
+			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
+				// take the peers with the most shared subnets
+				aShares := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
+				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
+				if aShares < bShared {
+					return -1
+				} else if aShares > bShared {
+					return 1
+				} else {
+					return 0
+				}
+			})
+			for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)); i++ {
+				protectedPeers[subnetPeers[i]] = struct{}{}
+			}
+		}
+	}
+
+	return protectedPeers
 }
 
 // startDiscovery starts the required services
