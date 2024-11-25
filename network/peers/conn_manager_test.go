@@ -2,6 +2,7 @@ package peers
 
 import (
 	"context"
+	"golang.org/x/exp/maps"
 	"math/rand"
 	"testing"
 
@@ -14,6 +15,59 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/records"
 )
+
+type mockNetwork struct {
+	peers map[peer.ID]struct{}
+}
+
+func (m *mockNetwork) Peers() []peer.ID {
+	return maps.Keys(m.peers)
+}
+
+func (m *mockNetwork) ClosePeer(pid peer.ID) error {
+	delete(m.peers, pid)
+	return nil
+}
+
+func TestSubnetPeers(t *testing.T) {
+
+	const N = 40
+	logger := logging.TestLogger(t)
+	connMgrMock := newConnMgr()
+	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	si := NewSubnetsIndex(len(allSubs))
+	cm := NewConnManager(zap.NewNop(), connMgrMock, si, nil).(*connManager)
+
+	pids, err := createPeerIDs(125)
+	require.NoError(t, err)
+
+	netwrk := &mockNetwork{peers: map[peer.ID]struct{}{}}
+
+	for i, pid := range pids {
+		netwrk.peers[pid] = struct{}{}
+		subs, _ := records.Subnets{}.FromString(records.ZeroSubnets)
+		subs[i] = byte(1)
+		si.UpdatePeerSubnets(pid, subs)
+	}
+
+	mySubnets := createRandomSubnets(N)
+
+	best := cm.getBestPeers(N, mySubnets, pids, 10)
+	require.Len(t, best, N)
+
+	cm.TagBestPeers(logger, N, mySubnets, pids, 10)
+	require.Equal(t, N, len(connMgrMock.tags))
+
+	cm.TrimPeers(context.Background(), logger, netwrk)
+
+	// check at least one peer per my subnets
+	for i, a := range mySubnets {
+		if a == 1 {
+			prs := cm.subnetsIdx.GetSubnetPeers(i)
+			require.GreaterOrEqual(t, len(prs), 1)
+		}
+	}
+}
 
 func TestTagBestPeers(t *testing.T) {
 	logger := logging.TestLogger(t)

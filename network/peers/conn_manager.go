@@ -29,7 +29,7 @@ type ConnManager interface {
 	// TagBestPeers tags the best n peers from the given list, based on subnets distribution scores.
 	TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
 	// TrimPeers will trim unprotected peers.
-	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
+	TrimPeers(ctx context.Context, logger *zap.Logger, net Disconencter)
 	// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int
 	// DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
@@ -56,7 +56,7 @@ func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnets
 }
 
 // Disconnects from a peer
-func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error {
+func (c connManager) disconnect(peerID peer.ID, net Disconencter) error {
 	return net.ClosePeer(peerID)
 }
 
@@ -79,8 +79,13 @@ func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.S
 	}
 }
 
+type Disconencter interface {
+	Peers() []peer.ID
+	ClosePeer(peer.ID) error
+}
+
 // Closes the connection to all peers that are not protected
-func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network) {
+func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net Disconencter) {
 	allPeers := net.Peers()
 	before := len(allPeers)
 	// TODO: use libp2p's conn manager once ready

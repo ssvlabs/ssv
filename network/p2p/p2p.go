@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -290,7 +291,12 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 
 		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
-		if currentCount < n.cfg.MaxPeers {
+
+		mySubnets := records.Subnets(n.activeSubnets).Clone()
+
+		maxpeers := max(mySubnets.Active()*2, n.cfg.MaxPeers)
+
+		if currentCount < maxpeers {
 			_ = n.idx.GetSubnetsStats() // trigger metrics update
 			return
 		}
@@ -298,18 +304,66 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerBalancingTimeout)
 		defer cancel()
 
-		mySubnets := records.Subnets(n.activeSubnets).Clone()
-
 		// Disconnect from irrelevant peers
 		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
 		if disconnectedPeers > 0 {
 			return
 		}
 
+		// PEER - SUBNET_X(PEERS)
+		// A - SUBNET_1(3)
+		// B - SUBNET_2(2) // PROTECTED
+		// C - SUBNET_3(13)
+		protectedPeers := n.PeerProtection(allPeers, mySubnets, logger)
+
+		for p := range protectedPeers {
+			n.libConnManager.Protect(p, "subnet-protection")
+		}
+
+		// Unprotect the rest of the peers
+		for _, p := range allPeers {
+			if _, ok := protectedPeers[p]; !ok {
+				n.libConnManager.Unprotect(p, "subnet-protection")
+			}
+		}
+
 		// Trim peers according to subnet participation (considering the subnet size)
-		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+		// connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
+}
+
+// PeerProtection returns a map of protected peers based on the intersection of subnets.
+// it protects the best peers by these rules:
+// - At least 2 peers per subnet.
+// - Prefer peers that you have more shared subents with.
+func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets, logger *zap.Logger) map[peer.ID]struct{} {
+	subnetPeerCount := make(map[int]int)
+
+	for _, p := range allPeers {
+		peerSubnets := n.idx.GetPeerSubnets(p)
+		for i, a := range mySubnets {
+			if a == 1 && peerSubnets[i] == 1 {
+				subnetPeerCount[i]++
+			}
+		}
+	}
+
+	const minPeersPerSubnet = 2
+	protectedPeers := make(map[peer.ID]struct{})
+	for subnet, count := range subnetPeerCount {
+		if count > 0 {
+			subnetPeers := n.idx.GetSubnetPeers(subnet)
+			sort.Slice(subnetPeers, func(i, j int) bool {
+				return len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(subnetPeers[i]), 0)) > len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(subnetPeers[j]), 0))
+			})
+			for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)); i++ {
+				protectedPeers[subnetPeers[i]] = struct{}{}
+			}
+		}
+	}
+
+	return protectedPeers
 }
 
 // startDiscovery starts the required services
