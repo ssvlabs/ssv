@@ -20,8 +20,6 @@ import (
 
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -269,7 +267,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
 	}
 
-	if err := n.subscribeToSubnets(logger); err != nil {
+	if err := n.subscribeToFixedSubnets(logger); err != nil {
 		return err
 	}
 
@@ -310,10 +308,6 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 			return
 		}
 
-		// PEER - SUBNET_X(PEERS)
-		// A - SUBNET_1(3)
-		// B - SUBNET_2(2) // PROTECTED
-		// C - SUBNET_3(13)
 		protectedPeers := n.PeerProtection(allPeers, mySubnets)
 
 		for p := range protectedPeers {
@@ -420,23 +414,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		// Compute the new subnets according to the active committees/validators.
-		updatedSubnets := make([]byte, commons.Subnets())
-		copy(updatedSubnets, n.fixedSubnets)
-
-		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
-			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
-			updatedSubnets[subnet] = byte(1)
-			return true
-		})
-
-		if !n.cfg.Network.PastAlanFork() {
-			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-				subnet := commons.ValidatorSubnet(pkHex)
-				updatedSubnets[subnet] = byte(1)
-				return true
-			})
-		}
+		updatedSubnets := n.SubscribedSubnets()
 		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
