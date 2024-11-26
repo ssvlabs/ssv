@@ -65,7 +65,7 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	networkRouterConcurrency = 256
+	networkRouterConcurrency = 2048
 )
 
 type GetRecipientDataFunc func(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
