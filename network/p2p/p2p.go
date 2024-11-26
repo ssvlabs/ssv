@@ -292,9 +292,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
 
-		maxpeers := max(mySubnets.Active()*2, n.cfg.MaxPeers)
-
-		if currentCount < maxpeers {
+		if currentCount < n.cfg.MaxPeers {
 			_ = n.idx.GetSubnetsStats() // trigger metrics update
 			return
 		}
