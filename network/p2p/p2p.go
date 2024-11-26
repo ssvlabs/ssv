@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -18,8 +19,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/utils/hashmap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -268,7 +267,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
 	}
 
-	if err := n.subscribeToSubnets(logger); err != nil {
+	if err := n.subscribeToFixedSubnets(logger); err != nil {
 		return err
 	}
 
@@ -290,7 +289,12 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 
 		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
-		if currentCount < n.cfg.MaxPeers {
+
+		mySubnets := records.Subnets(n.activeSubnets).Clone()
+
+		maxpeers := max(mySubnets.Active()*2, n.cfg.MaxPeers)
+
+		if currentCount < maxpeers {
 			_ = n.idx.GetSubnetsStats() // trigger metrics update
 			return
 		}
@@ -298,18 +302,71 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerBalancingTimeout)
 		defer cancel()
 
-		mySubnets := records.Subnets(n.activeSubnets).Clone()
-
 		// Disconnect from irrelevant peers
 		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
 		if disconnectedPeers > 0 {
 			return
 		}
 
+		protectedPeers := n.PeerProtection(allPeers, mySubnets)
+
+		for p := range protectedPeers {
+			n.libConnManager.Protect(p, "subnet-protection")
+		}
+
+		// Unprotect the rest of the peers
+		for _, p := range allPeers {
+			if _, ok := protectedPeers[p]; !ok {
+				n.libConnManager.Unprotect(p, "subnet-protection")
+			}
+		}
+
 		// Trim peers according to subnet participation (considering the subnet size)
-		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+		// connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
+}
+
+// PeerProtection returns a map of protected peers based on the intersection of subnets.
+// it protects the best peers by these rules:
+// - At least 2 peers per subnet.
+// - Prefer peers that you have more shared subents with.
+func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets) map[peer.ID]struct{} {
+	subnetPeerCount := make(map[int]int)
+
+	for _, p := range allPeers {
+		peerSubnets := n.idx.GetPeerSubnets(p)
+		for i, a := range mySubnets {
+			if a == 1 && peerSubnets[i] == 1 {
+				subnetPeerCount[i]++
+			}
+		}
+	}
+
+	const minPeersPerSubnet = 2
+	protectedPeers := make(map[peer.ID]struct{})
+	for subnet, count := range subnetPeerCount {
+		if count > 0 {
+			subnetPeers := n.idx.GetSubnetPeers(subnet)
+			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
+				// take the peers with the most shared subnets
+				aShares := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
+				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
+				if aShares < bShared {
+					return -1
+				} else if aShares > bShared {
+					return 1
+				} else {
+					return 0
+				}
+			})
+			for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)); i++ {
+				protectedPeers[subnetPeers[i]] = struct{}{}
+			}
+		}
+	}
+
+	return protectedPeers
 }
 
 // startDiscovery starts the required services
@@ -357,23 +414,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		// Compute the new subnets according to the active committees/validators.
-		updatedSubnets := make([]byte, commons.Subnets())
-		copy(updatedSubnets, n.fixedSubnets)
-
-		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
-			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
-			updatedSubnets[subnet] = byte(1)
-			return true
-		})
-
-		if !n.cfg.Network.PastAlanFork() {
-			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-				subnet := commons.ValidatorSubnet(pkHex)
-				updatedSubnets[subnet] = byte(1)
-				return true
-			})
-		}
+		updatedSubnets := n.SubscribedSubnets()
 		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
