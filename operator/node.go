@@ -171,28 +171,12 @@ func (n *operatorNode) HealthCheck() error {
 	return nil
 }
 
-// handleQueryRequests waits for incoming messages and
-func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMessage) {
-	if nm.Err != nil {
-		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
-	}
-	logger.Debug("got incoming export request",
-		zap.String("type", string(nm.Msg.Type)))
-	switch nm.Msg.Type {
-	case api.TypeDecided:
-		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.DomainType())
-	case api.TypeError:
-		api.HandleErrorQuery(logger, nm)
-	default:
-		api.HandleUnknownQuery(logger, nm)
-	}
-}
-
 func (n *operatorNode) startWSServer(logger *zap.Logger) error {
 	if n.ws != nil {
 		logger.Info("starting WS server")
 
-		n.ws.UseQueryHandler(n.handleQueryRequests)
+		handler := api.NewHandler(logger, n.qbftStorage, n.storage.Shares(), n.network.DomainType())
+		n.ws.UseQueryHandler(handler.HandleQueryRequests)
 
 		if err := n.ws.Start(logger, fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
 			return err

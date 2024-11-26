@@ -12,12 +12,12 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-const maxOperators = 13
+const maxCommitteeSize = 13 // TODO: define in ssv network config
 
 func (eh *EventHandler) validateOperators(txn basedb.Txn, operators []uint64) error {
 	operatorCount := len(operators)
 
-	if operatorCount > maxOperators {
+	if operatorCount > maxCommitteeSize {
 		return fmt.Errorf("too many operators (%d)", operatorCount)
 	}
 

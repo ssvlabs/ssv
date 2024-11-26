@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -19,9 +20,47 @@ const (
 	unknownError = "unknown error"
 )
 
+type Handler struct {
+	logger      *zap.Logger
+	qbftStorage *storage.QBFTStores
+	shares      registrystorage.Shares
+	domain      spectypes.DomainType
+}
+
+func NewHandler(
+	logger *zap.Logger,
+	qbftStorage *storage.QBFTStores,
+	shares registrystorage.Shares,
+	domain spectypes.DomainType,
+) *Handler {
+	return &Handler{
+		logger:      logger,
+		qbftStorage: qbftStorage,
+		shares:      shares,
+		domain:      domain,
+	}
+}
+
+// HandleQueryRequests handles query requests
+func (h *Handler) HandleQueryRequests(nm *NetworkMessage) {
+	if nm.Err != nil {
+		nm.Msg = Message{Type: TypeError, Data: []string{"could not parse network message"}}
+	}
+	h.logger.Debug("got incoming export request",
+		zap.String("type", string(nm.Msg.Type)))
+	switch nm.Msg.Type {
+	case TypeDecided:
+		h.HandleParticipantsQuery(nm)
+	case TypeError:
+		h.HandleErrorQuery(nm)
+	default:
+		h.HandleUnknownQuery(nm)
+	}
+}
+
 // HandleErrorQuery handles TypeError queries.
-func HandleErrorQuery(logger *zap.Logger, nm *NetworkMessage) {
-	logger.Warn("handles error message")
+func (h *Handler) HandleErrorQuery(nm *NetworkMessage) {
+	h.logger.Warn("handles error message")
 	if _, ok := nm.Msg.Data.([]string); !ok {
 		nm.Msg.Data = []string{}
 	}
@@ -39,8 +78,8 @@ func HandleErrorQuery(logger *zap.Logger, nm *NetworkMessage) {
 }
 
 // HandleUnknownQuery handles unknown queries.
-func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
-	logger.Warn("unknown message type", zap.String("messageType", string(nm.Msg.Type)))
+func (h *Handler) HandleUnknownQuery(nm *NetworkMessage) {
+	h.logger.Warn("unknown message type", zap.String("messageType", string(nm.Msg.Type)))
 	nm.Msg = Message{
 		Type: TypeError,
 		Data: []string{fmt.Sprintf("bad request - unknown message type '%s'", nm.Msg.Type)},
@@ -48,8 +87,8 @@ func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 }
 
 // HandleParticipantsQuery handles TypeParticipants queries.
-func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage, domain spectypes.DomainType) {
-	logger.Debug("handles query request",
+func (h *Handler) HandleParticipantsQuery(nm *NetworkMessage) {
+	h.logger.Debug("handles query request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("publicKey", nm.Msg.Filter.PublicKey),
@@ -60,7 +99,7 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 	}
 	pkRaw, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
 	if err != nil {
-		logger.Warn("failed to decode validator public key", zap.Error(err))
+		h.logger.Warn("failed to decode validator public key", zap.Error(err))
 		res.Data = []string{"internal error - could not read validator key"}
 		nm.Msg = res
 		return
@@ -68,26 +107,39 @@ func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores
 
 	beaconRole, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
 	if err != nil {
-		logger.Warn("failed to parse role", zap.Error(err))
+		h.logger.Warn("failed to parse role", zap.Error(err))
 		res.Data = []string{"role doesn't exist"}
 		nm.Msg = res
 		return
 	}
 	runnerRole := casts.BeaconRoleToConvertRole(beaconRole)
-	roleStorage := qbftStorage.Get(runnerRole)
+	roleStorage := h.qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))
+		h.logger.Warn("role storage doesn't exist", fields.ExporterRole(runnerRole))
 		res.Data = []string{"internal error - role storage doesn't exist", beaconRole.String()}
 		nm.Msg = res
 		return
 	}
 
-	msgID := convert.NewMsgID(domain, pkRaw, runnerRole)
+	share, ok := h.shares.Get(nil, pkRaw)
+	if !ok {
+		h.logger.Warn("share doesn't exist", fields.Validator(pkRaw))
+		res.Data = []string{"internal error - role storage doesn't exist", beaconRole.String()}
+		nm.Msg = res
+		return
+	}
+
+	msgID := convert.NewMsgID(h.domain, pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
-	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
+	operatorIDs := make([]spectypes.OperatorID, 0, len(share.Committee))
+	for _, sm := range share.Committee {
+		operatorIDs = append(operatorIDs, sm.Signer)
+	}
+
+	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to, operatorIDs)
 	if err != nil {
-		logger.Warn("failed to get participants", zap.Error(err))
+		h.logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}
 	} else {
 		data, err := ParticipantsAPIData(participantsList...)

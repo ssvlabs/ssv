@@ -5,20 +5,26 @@ import (
 	"math"
 	"testing"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/storage"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolqbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
@@ -36,7 +42,11 @@ func TestHandleUnknownQuery(t *testing.T) {
 		Conn: nil,
 	}
 
-	HandleUnknownQuery(logger, &nm)
+	h := Handler{
+		logger: logger,
+	}
+
+	h.HandleUnknownQuery(&nm)
 	errs, ok := nm.Msg.Data.([]string)
 	require.True(t, ok)
 	require.Equal(t, "bad request - unknown message type 'unknown_type'", errs[0])
@@ -73,7 +83,11 @@ func TestHandleErrorQuery(t *testing.T) {
 				Err:  test.netErr,
 				Conn: nil,
 			}
-			HandleErrorQuery(logger, &nm)
+			h := Handler{
+				logger: logger,
+			}
+
+			h.HandleErrorQuery(&nm)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
 			require.Equal(t, test.expectedErr, errs[0])
@@ -104,6 +118,28 @@ func TestHandleDecidedQuery(t *testing.T) {
 		oids = append(oids, o.OperatorID)
 	}
 
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+
+	shareStorage, _, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ks := spectestingutils.Testing4SharesSet()
+	share := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Index:  spectestingutils.TestingValidatorIndex,
+			},
+			Liquidated: false,
+		},
+	}
+	share.ValidatorPubKey = spectypes.ValidatorPK(sks[1].GetPublicKey().Serialize())
+	require.NoError(t, shareStorage.Save(nil, share))
+
 	for _, role := range roles {
 		pk := sks[1].GetPublicKey()
 		networkConfig, err := networkconfig.GetNetworkConfigByName(networkconfig.HoleskyStage.Name)
@@ -125,14 +161,24 @@ func TestHandleDecidedQuery(t *testing.T) {
 			_, err := ibftStorage.Get(role).UpdateParticipants(
 				convert.MessageID(d.DecidedMessage.SSVMessage.MsgID),
 				phase0.Slot(d.State.Height),
-				d.DecidedMessage.OperatorIDs,
+				protocolqbftstorage.Quorum{
+					Signers:   d.DecidedMessage.OperatorIDs,
+					Committee: oids,
+				},
 			)
 			require.NoError(t, err)
 		}
 
 		t.Run("valid range", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
-			HandleParticipantsQuery(l, ibftStorage, nm, networkConfig.DomainType())
+			h := Handler{
+				logger:      logger,
+				qbftStorage: ibftStorage,
+				shares:      shareStorage,
+				domain:      networkConfig.DomainType(),
+			}
+
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			msgs, ok := nm.Msg.Data.([]*ParticipantsAPI)
 
@@ -142,7 +188,14 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("invalid range", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
-			HandleParticipantsQuery(l, ibftStorage, nm, networkConfig.DomainType())
+			h := Handler{
+				logger:      logger,
+				qbftStorage: ibftStorage,
+				shares:      shareStorage,
+				domain:      networkConfig.DomainType(),
+			}
+
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			data, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
@@ -151,7 +204,14 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("non-existing validator", func(t *testing.T) {
 			nm := newParticipantsAPIMsg("xxx", spectypes.BNRoleAttester, 400, 404)
-			HandleParticipantsQuery(l, ibftStorage, nm, networkConfig.DomainType())
+			h := Handler{
+				logger:      logger,
+				qbftStorage: ibftStorage,
+				shares:      shareStorage,
+				domain:      networkConfig.DomainType(),
+			}
+
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
@@ -160,7 +220,14 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("non-existing role", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
-			HandleParticipantsQuery(l, ibftStorage, nm, networkConfig.DomainType())
+			h := Handler{
+				logger:      logger,
+				qbftStorage: ibftStorage,
+				shares:      shareStorage,
+				domain:      networkConfig.DomainType(),
+			}
+
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
@@ -169,7 +236,14 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("non-existing storage", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
-			HandleParticipantsQuery(l, ibftStorage, nm, networkConfig.DomainType())
+			h := Handler{
+				logger:      logger,
+				qbftStorage: ibftStorage,
+				shares:      shareStorage,
+				domain:      networkConfig.DomainType(),
+			}
+
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
