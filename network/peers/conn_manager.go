@@ -23,7 +23,7 @@ type PeerScore float64
 // rather than relaying on libp2p's connection manager.
 type ConnManager interface {
 	// TrimPeers will trim unprotected peers.
-	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
+	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network, maxTrims int)
 	// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int
 	// DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
@@ -55,19 +55,25 @@ func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error
 }
 
 // Closes the connection to all peers that are not protected
-func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network) {
+func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network, maxTrims int) {
 	allPeers := net.Peers()
 	before := len(allPeers)
 	// TODO: use libp2p's conn manager once ready
 	// c.connManager.TrimOpenConns(ctx)
+	trimmed := make([]peer.ID, 0)
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
-			err := c.disconnect(pid, net)
-			logger.Debug("closing peer", fields.PeerID(pid), zap.Error(err))
+			if err := c.disconnect(pid, net); err != nil {
+				logger.Debug("error closing peer", fields.PeerID(pid), zap.Error(err))
+			}
+			trimmed = append(trimmed, pid)
+			if len(trimmed) >= 2 {
+				break
+			}
 		}
 	}
 	logger.Debug("trimmed peers", zap.Int("beforeTrim", before),
-		zap.Int("afterTrim", len(net.Peers())))
+		zap.Int("afterTrim", len(net.Peers())), zap.Any("peer_ids", trimmed))
 }
 
 // DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.

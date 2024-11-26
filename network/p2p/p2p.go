@@ -319,8 +319,9 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 			}
 		}
 
+		maxTrims := 2
 		// Trim peers according to subnet participation (considering the subnet size)
-		connMgr.TrimPeers(ctx, logger, n.host.Network())
+		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxTrims)
 	}
 }
 
