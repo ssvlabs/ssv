@@ -91,12 +91,12 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 			Committee: newParticipants.Committee,
 		}
 
-		existing = quorumAdapter.ToBitMask()
+		existing = quorumAdapter.ToSignersBitMask()
 	} else if err != nil {
 		return false, fmt.Errorf("get participants bitmask: %w", err)
 	}
 
-	merged := mergeParticipantsBitMask(existing, newParticipants.ToBitMask())
+	merged := mergeParticipantsBitMask(existing, newParticipants.ToSignersBitMask())
 	if merged == existing {
 		return false, nil
 	}
@@ -160,7 +160,7 @@ func (i *ibftStorage) getParticipantsBitMask(
 	txn basedb.ReadWriter,
 	identifier convert.MessageID,
 	slot phase0.Slot,
-) (qbftstorage.OperatorsBitMask, error) {
+) (qbftstorage.SignersBitMask, error) {
 	val, found, err := i.get(txn, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return 0, err
@@ -173,7 +173,7 @@ func (i *ibftStorage) getParticipantsBitMask(
 		return 0, errNotBitmask
 	}
 
-	return qbftstorage.OperatorsBitMask(byteSliceToUInt16(val)), nil
+	return qbftstorage.SignersBitMask(byteSliceToUInt16(val)), nil
 }
 
 // DEPRECATED, left for compatibility with old data format
@@ -194,7 +194,7 @@ func (i *ibftStorage) saveParticipantsBitMask(
 	txn basedb.ReadWriter,
 	identifier convert.MessageID,
 	slot phase0.Slot,
-	operatorsBitMask qbftstorage.OperatorsBitMask,
+	operatorsBitMask qbftstorage.SignersBitMask,
 ) error {
 	b := uInt16ToByteSlice(uint16(operatorsBitMask))
 	if err := i.save(txn, b, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
@@ -205,7 +205,7 @@ func (i *ibftStorage) saveParticipantsBitMask(
 }
 
 // mergeParticipantsBitMask merges two participants bitmasks. Extracted into a method for testing.
-func mergeParticipantsBitMask(existingParticipants, newParticipants qbftstorage.OperatorsBitMask) qbftstorage.OperatorsBitMask {
+func mergeParticipantsBitMask(existingParticipants, newParticipants qbftstorage.SignersBitMask) qbftstorage.SignersBitMask {
 	return existingParticipants | newParticipants
 }
 

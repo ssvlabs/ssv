@@ -28,7 +28,7 @@ func TestQuorum_ToBitMask_NormalCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		quorum   Quorum
-		expected OperatorsBitMask
+		expected SignersBitMask
 	}{
 		{
 			name: "Single common element",
@@ -58,7 +58,7 @@ func TestQuorum_ToBitMask_NormalCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.quorum.ToBitMask()
+			result := tt.quorum.ToSignersBitMask()
 			assert.Equal(t, tt.expected, result, "Bitmask does not match expected value")
 		})
 	}
@@ -111,9 +111,9 @@ func TestQuorum_ToBitMask_InvalidSizes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.shouldPanic {
-				require.Panics(t, func() { _ = tt.quorum.ToBitMask() }, "Expected ToBitMask to panic")
+				require.Panics(t, func() { _ = tt.quorum.ToSignersBitMask() }, "Expected ToSignersBitMask to panic")
 			} else {
-				require.NotPanics(t, func() { _ = tt.quorum.ToBitMask() }, "Did not expect ToBitMask to panic")
+				require.NotPanics(t, func() { _ = tt.quorum.ToSignersBitMask() }, "Did not expect ToSignersBitMask to panic")
 			}
 		})
 	}
@@ -123,7 +123,7 @@ func TestQuorum_ToBitMask_EmptyArrays(t *testing.T) {
 	tests := []struct {
 		name     string
 		quorum   Quorum
-		expected OperatorsBitMask
+		expected SignersBitMask
 	}{
 		{
 			name: "Both Signers and Committee are empty",
@@ -145,7 +145,7 @@ func TestQuorum_ToBitMask_EmptyArrays(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.quorum.ToBitMask()
+			result := tt.quorum.ToSignersBitMask()
 			assert.Equal(t, tt.expected, result, "Bitmask should be 0 when one or both arrays are empty")
 		})
 	}
@@ -154,7 +154,7 @@ func TestQuorum_ToBitMask_EmptyArrays(t *testing.T) {
 func TestOperatorsBitMask_Signers_NormalCases(t *testing.T) {
 	tests := []struct {
 		name      string
-		bitmask   OperatorsBitMask
+		bitmask   SignersBitMask
 		committee []spectypes.OperatorID
 		expected  []spectypes.OperatorID
 	}{
@@ -201,7 +201,7 @@ func TestOperatorsBitMask_Signers_NormalCases(t *testing.T) {
 func TestOperatorsBitMask_Signers_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name      string
-		bitmask   OperatorsBitMask
+		bitmask   SignersBitMask
 		committee []spectypes.OperatorID
 		expected  []spectypes.OperatorID
 	}{
@@ -230,7 +230,7 @@ func TestOperatorsBitMask_Signers_EdgeCases(t *testing.T) {
 func TestOperatorsBitMask_Signers_InvalidSizes(t *testing.T) {
 	tests := []struct {
 		name        string
-		bitmask     OperatorsBitMask
+		bitmask     SignersBitMask
 		committee   []spectypes.OperatorID
 		shouldPanic bool
 	}{
@@ -265,7 +265,7 @@ func TestOperatorsBitMask_Signers_PartialCommittee(t *testing.T) {
 		createOperatorIDs(1, 3, 5, 7, 9),
 	)
 	// Bitmask: bits 0,2,4 set (corresponding to committee indices 0,2,4)
-	bitmask := OperatorsBitMask((1 << 0) | (1 << 2) | (1 << 4))
+	bitmask := SignersBitMask((1 << 0) | (1 << 2) | (1 << 4))
 	expected := createOperatorIDs(1, 5, 9)
 
 	result := bitmask.Signers(quorum.Committee)
@@ -275,7 +275,7 @@ func TestOperatorsBitMask_Signers_PartialCommittee(t *testing.T) {
 func TestOperatorsBitMask_Signers_LargeOperatorIDs(t *testing.T) {
 	committee := createOperatorIDs(100, 200, 300)
 	// Bitmask: bits 0 and 2 set
-	bitmask := OperatorsBitMask((1 << 0) | (1 << 2))
+	bitmask := SignersBitMask((1 << 0) | (1 << 2))
 	expected := createOperatorIDs(100, 300)
 
 	result := bitmask.Signers(committee)

@@ -42,12 +42,12 @@ type Quorum struct {
 	ValidatorPK spectypes.ValidatorPK // optional payload
 }
 
-func (q *Quorum) ToBitMask() OperatorsBitMask {
+func (q *Quorum) ToSignersBitMask() SignersBitMask {
 	if len(q.Committee) > maxCommitteeSize || len(q.Signers) > maxCommitteeSize || len(q.Signers) > len(q.Committee) {
 		panic(fmt.Sprintf("invalid signers/quorum size: %d/%d", len(q.Committee), len(q.Signers)))
 	}
 
-	bitmask := OperatorsBitMask(0)
+	bitmask := SignersBitMask(0)
 	i, j := 0, 0
 	for i < len(q.Signers) && j < len(q.Committee) {
 		if q.Signers[i] == q.Committee[j] {
@@ -56,7 +56,7 @@ func (q *Quorum) ToBitMask() OperatorsBitMask {
 			j++
 		} else if q.Signers[i] < q.Committee[j] {
 			i++
-		} else { // A[i] > B[j]
+		} else { // q.Signers[i] > q.Committee[j]
 			j++
 		}
 	}
@@ -64,9 +64,9 @@ func (q *Quorum) ToBitMask() OperatorsBitMask {
 	return bitmask
 }
 
-type OperatorsBitMask uint16
+type SignersBitMask uint16
 
-func (obm OperatorsBitMask) Signers(committee []spectypes.OperatorID) []spectypes.OperatorID {
+func (obm SignersBitMask) Signers(committee []spectypes.OperatorID) []spectypes.OperatorID {
 	if len(committee) > maxCommitteeSize {
 		panic(fmt.Sprintf("invalid committee size: %d", len(committee)))
 	}
