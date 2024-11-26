@@ -139,7 +139,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
 			}
 
-			updated, err := roleStorage.UpdateParticipants(msgID, slot, quorum)
+			updated, err := roleStorage.UpdateParticipants(msgID, slot, quorum.Quorum)
 			if err != nil {
 				return fmt.Errorf("update participants: %w", err)
 			}
@@ -203,10 +203,15 @@ type validatorIndexAndRoot struct {
 	Root           phase0.Root
 }
 
+type quorumWithValidatorPK struct {
+	qbftstorage.Quorum
+	ValidatorPK spectypes.ValidatorPK
+}
+
 func (ncv *CommitteeObserver) processMessage(
 	signedMsg *spectypes.PartialSignatureMessages,
-) (map[validatorIndexAndRoot]qbftstorage.Quorum, error) {
-	quorums := make(map[validatorIndexAndRoot]qbftstorage.Quorum)
+) (map[validatorIndexAndRoot]quorumWithValidatorPK, error) {
+	quorums := make(map[validatorIndexAndRoot]quorumWithValidatorPK)
 
 	for _, msg := range signedMsg.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
@@ -240,10 +245,12 @@ func (ncv *CommitteeObserver) processMessage(
 					newSigners = append(newSigners, signer)
 				}
 				slices.Sort(newSigners)
-				quorums[key] = qbftstorage.Quorum{
+				quorums[key] = quorumWithValidatorPK{
+					Quorum: qbftstorage.Quorum{
+						Signers:   newSigners,
+						Committee: committee,
+					},
 					ValidatorPK: validator.ValidatorPubKey,
-					Signers:     newSigners,
-					Committee:   committee,
 				}
 			}
 		}

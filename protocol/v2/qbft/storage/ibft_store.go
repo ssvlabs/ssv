@@ -37,9 +37,8 @@ type ParticipantsRangeEntry struct {
 }
 
 type Quorum struct {
-	Signers     []spectypes.OperatorID
-	Committee   []spectypes.OperatorID
-	ValidatorPK spectypes.ValidatorPK // optional payload
+	Signers   []spectypes.OperatorID
+	Committee []spectypes.OperatorID
 }
 
 func (q *Quorum) ToSignersBitMask() SignersBitMask {
