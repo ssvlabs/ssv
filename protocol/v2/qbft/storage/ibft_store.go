@@ -37,9 +37,8 @@ type ParticipantsRangeEntry struct {
 }
 
 type Quorum struct {
-	Signers     []spectypes.OperatorID
-	Committee   []spectypes.OperatorID
-	ValidatorPK spectypes.ValidatorPK // optional payload
+	Signers   []spectypes.OperatorID
+	Committee []spectypes.OperatorID
 }
 
 func (q *Quorum) ToSignersBitMask() SignersBitMask {
@@ -64,6 +63,12 @@ func (q *Quorum) ToSignersBitMask() SignersBitMask {
 	return bitmask
 }
 
+// SignersBitMask represents a bitset of committee indices of operators participated in the quorum.
+// As the maximal supported operator count is 13, it needs to be at least 13 bits long.
+// The starting bit is the least significant bit, so it represents the first operator in the committee.
+//
+// Example:
+// If committee is [1,2,3,4] and SignersBitMask is 0b0000_0000_0000_1101, it means quorum of [1,3,4].
 type SignersBitMask uint16
 
 func (obm SignersBitMask) Signers(committee []spectypes.OperatorID) []spectypes.OperatorID {
