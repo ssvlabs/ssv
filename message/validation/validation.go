@@ -201,12 +201,6 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 	return mutex
 }
 
-type CommitteeInfo struct {
-	committee   []spectypes.OperatorID
-	indices     []phase0.ValidatorIndex
-	committeeID spectypes.CommitteeID
-}
-
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
@@ -224,11 +218,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return CommitteeInfo{
-			committee:   committee.Operators,
-			indices:     committee.Indices,
-			committeeID: committeeID,
-		}, nil
+		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
 	}
 
 	validator, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
@@ -259,11 +249,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		operators = append(operators, c.Signer)
 	}
 
-	return CommitteeInfo{
-		committee:   operators,
-		indices:     []phase0.ValidatorIndex{validator.BeaconMetadata.Index},
-		committeeID: validator.CommitteeID(),
-	}, nil
+	indices := []phase0.ValidatorIndex{validator.BeaconMetadata.Index}
+	return newCommitteeInfo(validator.CommitteeID(), operators, indices), nil
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *consensusState {

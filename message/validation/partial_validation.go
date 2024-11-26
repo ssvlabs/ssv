@@ -37,7 +37,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, e
 	}
 
-	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.indices); err != nil {
+	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.validatorIndices); err != nil {
 		return nil, err
 	}
 
@@ -55,7 +55,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, e
 	}
 
-	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer, committeeInfo.committee); err != nil {
+	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer, committeeInfo); err != nil {
 		return nil, err
 	}
 
@@ -142,7 +142,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 	signer := signedSSVMessage.OperatorIDs[0]
-	signerStateBySlot := state.GetOrCreate(mv.signerIndexInCommittee(signer, committeeInfo.committee))
+	signerStateBySlot := state.GetOrCreate(committeeInfo.signerIndex(signer))
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != types.RoleCommittee { // Rule only for validator runners
@@ -155,7 +155,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		}
 	}
 
-	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.indices); err != nil {
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.validatorIndices); err != nil {
 		return err
 	}
 
@@ -183,11 +183,11 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
-	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.indices, signerStateBySlot); err != nil {
+	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.validatorIndices, signerStateBySlot); err != nil {
 		return err
 	}
 
-	clusterValidatorCount := len(committeeInfo.indices)
+	clusterValidatorCount := len(committeeInfo.validatorIndices)
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
@@ -227,9 +227,9 @@ func (mv *messageValidator) updatePartialSignatureState(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
 	state *consensusState,
 	signer spectypes.OperatorID,
-	committee []spectypes.OperatorID,
+	committeeInfo CommitteeInfo,
 ) error {
-	stateBySlot := state.GetOrCreate(mv.signerIndexInCommittee(signer, committee))
+	stateBySlot := state.GetOrCreate(committeeInfo.signerIndex(signer))
 	messageSlot := partialSignatureMessages.Slot
 	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
 
