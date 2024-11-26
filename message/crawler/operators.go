@@ -17,6 +17,7 @@ type OperatorInfo struct {
 	OpID    spectypes.OperatorID
 	Version string
 	Subnets string
+	IP      string
 }
 
 var PeerIDtoSigner map[peer.ID]*OperatorInfo = make(map[peer.ID]*OperatorInfo)

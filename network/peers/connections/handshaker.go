@@ -122,6 +122,18 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		if err != nil {
 			return errors.Wrap(err, "failed verifying their node info")
 		}
+
+		crawler.PeerIDtoSignerMtx.Lock()
+		_, e := crawler.PeerIDtoSigner[pid]
+		if !e {
+			crawler.PeerIDtoSigner[pid] = &crawler.OperatorInfo{Version: nodeInfo.Metadata.NodeVersion, Subnets: nodeInfo.Metadata.Subnets, IP: stream.Conn().RemoteMultiaddr().String()}
+		} else {
+			crawler.PeerIDtoSigner[pid].Version = nodeInfo.Metadata.NodeVersion
+			crawler.PeerIDtoSigner[pid].Subnets = nodeInfo.Metadata.Subnets
+			crawler.PeerIDtoSigner[pid].IP = stream.Conn().RemoteMultiaddr().String()
+		}
+		crawler.PeerIDtoSignerMtx.Unlock()
+
 		return nil
 	}
 
@@ -157,16 +169,6 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 		zap.Any("metadata", ni.GetNodeInfo().Metadata),
 		zap.String("networkID", ni.GetNodeInfo().NetworkID),
 	)
-
-	crawler.PeerIDtoSignerMtx.Lock()
-	_, e := crawler.PeerIDtoSigner[sender]
-	if !e {
-		crawler.PeerIDtoSigner[sender] = &crawler.OperatorInfo{Version: ni.Metadata.NodeVersion, Subnets: ni.Metadata.Subnets}
-	} else {
-		crawler.PeerIDtoSigner[sender].Version = ni.Metadata.NodeVersion
-		crawler.PeerIDtoSigner[sender].Subnets = ni.Metadata.Subnets
-	}
-	crawler.PeerIDtoSignerMtx.Unlock()
 
 	return nil
 }
