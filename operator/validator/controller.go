@@ -531,7 +531,7 @@ func (c *controller) handleCommitteeObserverMessage(msg *queue.SSVMessage, obser
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return fmt.Errorf("failed to decode partial signature messages: %v", err)
+			return fmt.Errorf("failed to decode partial signature messages: %w", err)
 		}
 
 		return observer.ProcessMessage(msg)
