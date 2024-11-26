@@ -29,6 +29,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
+const postConsensusContainerCapacity = 34
+
 type CommitteeObserver struct {
 	logger                 *zap.Logger
 	Storage                *storage.QBFTStores
@@ -39,7 +41,7 @@ type CommitteeObserver struct {
 	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache            *DomainCache
-	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
+	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
 type CommitteeObserverOptions struct {
@@ -80,7 +82,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		attesterRoots:          opts.AttesterRoots,
 		syncCommRoots:          opts.SyncCommRoots,
 		domainCache:            opts.DomainCache,
-		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
+		postConsensusContainer: make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, postConsensusContainerCapacity),
 	}
 }
 
@@ -208,6 +210,13 @@ func (ncv *CommitteeObserver) processMessage(
 ) (map[validatorIndexAndRoot]qbftstorage.Quorum, error) {
 	quorums := make(map[validatorIndexAndRoot]qbftstorage.Quorum)
 
+	currentSlot := signedMsg.Slot
+	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
+	if !exist {
+		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
+		ncv.postConsensusContainer[signedMsg.Slot] = slotValidators
+	}
+
 	for _, msg := range signedMsg.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		if !exists {
@@ -219,10 +228,10 @@ func (ncv *CommitteeObserver) processMessage(
 			committee = append(committee, sm.Signer)
 		}
 
-		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
+		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
 			container = ssv.NewPartialSigContainer(validator.Quorum())
-			ncv.postConsensusContainer[msg.ValidatorIndex] = container
+			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			ncv.resolveDuplicateSignature(container, msg, validator)
@@ -248,6 +257,17 @@ func (ncv *CommitteeObserver) processMessage(
 			}
 		}
 	}
+
+	// Remove older slots container
+	if len(ncv.postConsensusContainer) >= postConsensusContainerCapacity {
+		thresholdSlot := currentSlot - postConsensusContainerCapacity
+		for slot := range ncv.postConsensusContainer {
+			if slot < thresholdSlot {
+				delete(ncv.postConsensusContainer, slot)
+			}
+		}
+	}
+
 	return quorums, nil
 }
 
