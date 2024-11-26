@@ -23,6 +23,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
+// MinConnectivitySubnets is the minimum number of subnets a node should subscribe to
+const MinConnectivitySubnets = 5
+
 type validatorStatus int
 
 const (
@@ -95,10 +98,24 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 		numSubnets = commons.Subnets()
 	}
 
-	// Subscribe to random subnets.
-	// #nosec G404
-	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
-	randomSubnets = randomSubnets[:numSubnets]
+	var randomSubnets []int
+	existing := true
+
+	for existing {
+		// Subscribe to random subnets.
+		// #nosec G404
+		randomSubnets = rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
+		randomSubnets = randomSubnets[:numSubnets]
+
+		existing = false
+		for _, subnet := range randomSubnets {
+			if n.activeSubnets[subnet] == 1 {
+				existing = true
+				break
+			}
+		}
+	}
+
 	for _, subnet := range randomSubnets {
 		// #nosec G115
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(uint64(subnet))) // Perm slice is [0, n)
@@ -114,6 +131,37 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 		subnets[subnet] = byte(1)
 	}
 	n.fixedSubnets = subnets
+
+	return nil
+}
+
+// SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets and the active committees/validators.
+func (n *p2pNetwork) SubscribedSubnets() []byte {
+	// Compute the new subnets according to the active committees/validators.
+	updatedSubnets := make([]byte, commons.Subnets())
+	copy(updatedSubnets, n.fixedSubnets)
+
+	n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
+		subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
+		updatedSubnets[subnet] = byte(1)
+		return true
+	})
+
+	return updatedSubnets
+}
+
+// SubscribeFillerSubnets subscribes to random subnets to reach the minimum connectivity requirement.
+func (n *p2pNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+
+	actv := records.Subnets(n.SubscribedSubnets()).Active()
+
+	if actv < MinConnectivitySubnets {
+		// Subscribe to random subnets.
+		return n.SubscribeRandoms(logger, MinConnectivitySubnets-actv)
+	}
 
 	return nil
 }
@@ -247,8 +295,8 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 	}
 }
 
-// subscribeToSubnets subscribes to all the node's subnets
-func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
+// subscribeToFixedSubnets subscribes to all the node's subnets
+func (n *p2pNetwork) subscribeToFixedSubnets(logger *zap.Logger) error {
 	if len(n.fixedSubnets) == 0 {
 		return nil
 	}

@@ -24,6 +24,14 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 	if !ok {
 		return false, errors.New("network does not support subscription")
 	}
+
+	var valpk spectypes.ValidatorPK
+	copy(valpk[:], v.Share.ValidatorPubKey[:])
+
+	if err := n.Subscribe(valpk); err != nil {
+		return true, err
+	}
+
 	for role, dutyRunner := range v.DutyRunners {
 		logger := logger.With(fields.Role(role))
 		var share *spectypes.Share
@@ -57,13 +65,6 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			}
 		}
 
-		// TODO: P2P
-		var valpk spectypes.ValidatorPK
-		copy(valpk[:], share.ValidatorPubKey[:])
-
-		if err := n.Subscribe(valpk); err != nil {
-			return true, err
-		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
 	}
 	return true, nil
