@@ -47,7 +47,7 @@ const (
 )
 
 const (
-	connManagerBalancingInterval       = 3 * time.Minute
+	connManagerBalancingInterval       = 30 * time.Second
 	connManagerBalancingTimeout        = time.Minute
 	peersReportingInterval             = 60 * time.Second
 	peerIdentitiesReportingInterval    = 5 * time.Minute
@@ -319,7 +319,13 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 			}
 		}
 
-		maxTrims := 2
+		// Re-fetch peer count.
+		allPeers = n.host.Network().Peers()
+		if len(allPeers) < n.cfg.MaxPeers {
+			return
+		}
+		targetCount := n.cfg.MaxPeers - 2
+		maxTrims := len(allPeers) - targetCount
 		// Trim peers according to subnet participation (considering the subnet size)
 		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxTrims)
 	}
