@@ -462,7 +462,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	observer := c.getCommitteeObserver(ssvMsg)
 
 	if err := c.handleCommitteeObserverMessage(ssvMsg, observer); err != nil {
-		return fmt.Errorf("failed to handle committee observer message: %v", err)
+		return fmt.Errorf("failed to handle committee observer message: %w", err)
 	}
 
 	return nil
