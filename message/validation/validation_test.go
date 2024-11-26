@@ -1237,7 +1237,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
-		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, round change: 0, post-consensus: 0"
+		expectedErr.got = "prepare, having prepare"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1259,7 +1259,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
-		expectedErr.got = "commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, round change: 0, post-consensus: 0"
+		expectedErr.got = "commit, having commit"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1281,7 +1281,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
-		expectedErr.got = "round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 1, post-consensus: 0"
+		expectedErr.got = "round change, having round change"
 		require.ErrorIs(t, err, expectedErr)
 	})
 

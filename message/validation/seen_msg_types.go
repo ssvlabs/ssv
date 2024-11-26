@@ -4,6 +4,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -26,21 +27,32 @@ type SeenMsgTypes struct {
 
 // String provides a formatted representation of the SeenMsgTypes.
 func (c *SeenMsgTypes) String() string {
-	b2i := func(b bool) int {
-		if b {
-			return 1
-		}
-		return 0
+	messageTypes := []string{
+		"pre-consensus",
+		"proposal",
+		"prepare",
+		"commit",
+		"round change",
+		"post-consensus",
 	}
 
-	return fmt.Sprintf("pre-consensus: %v, proposal: %v, prepare: %v, commit: %v, round change: %v, post-consensus: %v",
-		b2i(c.reachedPreConsensusLimit()),
-		b2i(c.reachedProposalLimit()),
-		b2i(c.reachedPrepareLimit()),
-		b2i(c.reachedCommitLimit()),
-		b2i(c.reachedRoundChangeLimit()),
-		b2i(c.reachedPostConsensusLimit()),
-	)
+	getters := map[string]func() bool{
+		messageTypes[0]: c.reachedPreConsensusLimit,
+		messageTypes[1]: c.reachedProposalLimit,
+		messageTypes[2]: c.reachedPrepareLimit,
+		messageTypes[3]: c.reachedCommitLimit,
+		messageTypes[4]: c.reachedRoundChangeLimit,
+		messageTypes[5]: c.reachedPostConsensusLimit,
+	}
+
+	seen := make([]string, 0, len(getters))
+	for _, mt := range messageTypes {
+		if getters[mt]() {
+			seen = append(seen, mt)
+		}
+	}
+
+	return strings.Join(seen, ", ")
 }
 
 // ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.

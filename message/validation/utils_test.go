@@ -150,7 +150,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got proposal, having pre-consensus: 0, proposal: 1, prepare: 0, commit: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got proposal, having proposal"),
 		},
 		{
 			name: "PrepareMessage_ExceedsLimit_ReturnsError",
@@ -159,7 +159,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got prepare, having prepare"),
 		},
 		{
 			name: "CommitMessageWithSingleOperator_ExceedsLimit_ReturnsError",
@@ -168,7 +168,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1}},
 				msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got commit, having commit"),
 		},
 		{
 			name: "RoundChangeMessage_ExceedsLimit_ReturnsError",
@@ -177,7 +177,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 1, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got round change, having round change"),
 		},
 		{
 			name: "UnexpectedMessageType_ReturnsError",
