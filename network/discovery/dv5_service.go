@@ -188,15 +188,15 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
-		metricRejectedNodes.Inc()
+		peerRejectionsCounter.Add(dvs.ctx, 1)
 		return errors.New("reached limit")
 	}
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
-		metricRejectedNodes.Inc()
+		peerRejectionsCounter.Add(dvs.ctx, 1)
 		return errors.New("no shared subnets")
 	}
 
-	metricFoundNodes.Inc()
+	peerDiscoveriesCounter.Add(dvs.ctx, 1)
 	return nil
 }
 
@@ -364,7 +364,6 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 
 	// Publish ENR.
 	dvs.discover(ctx, func(e PeerEvent) {
-		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
 			errs++
@@ -375,7 +374,6 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 			logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
 			return
 		}
-		metricPublishEnrPongs.Inc()
 		pings++
 		peerIDs[e.AddrInfo.ID] = struct{}{}
 	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
