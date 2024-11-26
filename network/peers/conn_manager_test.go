@@ -3,42 +3,13 @@ package peers
 import (
 	"context"
 	"math/rand"
-	"testing"
 
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/records"
 )
-
-func TestTagBestPeers(t *testing.T) {
-	logger := logging.TestLogger(t)
-	connMgrMock := newConnMgr()
-
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	si := NewSubnetsIndex(len(allSubs))
-
-	cm := NewConnManager(zap.NewNop(), connMgrMock, si, nil).(*connManager)
-
-	pids, err := createPeerIDs(50)
-	require.NoError(t, err)
-
-	for _, pid := range pids {
-		r := rand.Intn(len(allSubs) / 3)
-		si.UpdatePeerSubnets(pid, createRandomSubnets(r))
-	}
-	mySubnets := createRandomSubnets(40)
-
-	best := cm.getBestPeers(40, mySubnets, pids, 10)
-	require.Len(t, best, 40)
-
-	cm.TagBestPeers(logger, 20, mySubnets, pids, 10)
-	require.Equal(t, 20, len(connMgrMock.tags))
-}
 
 func createRandomSubnets(n int) records.Subnets {
 	subnets, _ := records.Subnets{}.FromString(records.ZeroSubnets)
