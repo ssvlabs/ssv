@@ -150,6 +150,5 @@ func (mv *messageValidator) signerIndexInCommittee(signer spectypes.OperatorID, 
 		}
 	}
 
-	mv.logger.Panic(fmt.Sprintf("signer %v must be in committee %v", signer, committee))
-	panic("unreachable") // fix compilation issue
+	panic(fmt.Sprintf("BUG: message validation must have checked that signer %v is in committee %v", signer, committee))
 }
