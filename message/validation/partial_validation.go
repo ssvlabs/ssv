@@ -155,12 +155,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		}
 	}
 
-	if err := mv.validateBeaconDuty(
-		role,
-		messageSlot,
-		committeeInfo.indices,
-		&partialSignatureMessages.Type,
-	); err != nil {
+	if err := mv.validateBeaconDuty(role, messageSlot, committeeInfo.indices, &partialSignatureMessages.Type); err != nil {
 		return err
 	}
 

@@ -125,7 +125,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	if role == spectypes.RoleProposer {
 		if partialMessageType != nil && *partialMessageType == spectypes.RandaoPartialSig {
 			if mv.netCfg.Beacon.IsFirstSlotOfEpoch(slot) {
-				if exists := mv.dutyStore.Proposer.IsEpochSet(epoch); !exists {
+				if !mv.dutyStore.Proposer.IsEpochSet(epoch) {
 					return nil // Accept message even if duties are not set
 				}
 			}
