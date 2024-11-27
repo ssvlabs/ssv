@@ -394,7 +394,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *
 
 func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
 	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
-	return int(ncv.netCfg.SlotsPerEpoch()) + msgvalidation.LateSlotAllowance
+	return int(ncv.netCfg.SlotsPerEpoch()) + int(msgvalidation.MaxStoredSlots(ncv.netCfg))
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
