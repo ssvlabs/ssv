@@ -17,6 +17,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -230,12 +231,13 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		}
 		switch duty.Type {
 		case spectypes.BNRoleAttester:
-			validDuties++
 			attestationData := constructAttestationData(beaconVote, duty)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				spectypes.DomainAttester)
 			if err != nil {
-				return errors.Wrap(err, "failed signing attestation data")
+				logger.Error("failed signing attestation data for duty",
+					fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+				continue // Skip this duty but continue with others
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
@@ -252,15 +254,18 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
-		case spectypes.BNRoleSyncCommittee:
 			validDuties++
+		case spectypes.BNRoleSyncCommittee:
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
-				return errors.Wrap(err, "failed signing sync committee message")
+				logger.Error("failed signing sync committee message for duty",
+					fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+				continue // Skip this duty but continue with others
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+			validDuties++
 		default:
 			return fmt.Errorf("invalid duty type: %s", duty.Type)
 		}
@@ -298,7 +303,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
-
 }
 
 // TODO finish edge case where some roots may be missing
