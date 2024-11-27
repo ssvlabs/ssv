@@ -33,14 +33,14 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger                *zap.Logger
-	metrics               metricsreporter.MetricsReporter
-	netCfg                networkconfig.NetworkConfig
-	consensusStateIndex   map[spectypes.MessageID]*consensusState
-	consensusStateIndexMu sync.Mutex
-	validatorStore        storage.ValidatorStore
-	dutyStore             *dutystore.Store
-	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	logger            *zap.Logger
+	metrics           metricsreporter.MetricsReporter
+	netCfg            networkconfig.NetworkConfig
+	state             map[spectypes.MessageID]*ValidatorState
+	stateMu           sync.Mutex
+	validatorStore    storage.ValidatorStore
+	dutyStore         *dutystore.Store
+	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -60,14 +60,14 @@ func New(
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
-		logger:              zap.NewNop(),
-		metrics:             metricsreporter.NewNop(),
-		netCfg:              netCfg,
-		consensusStateIndex: make(map[spectypes.MessageID]*consensusState),
-		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
-		validatorStore:      validatorStore,
-		dutyStore:           dutyStore,
-		signatureVerifier:   signatureVerifier,
+		logger:            zap.NewNop(),
+		metrics:           metricsreporter.NewNop(),
+		netCfg:            netCfg,
+		state:             make(map[spectypes.MessageID]*ValidatorState),
+		validationLocks:   make(map[spectypes.MessageID]*sync.Mutex),
+		validatorStore:    validatorStore,
+		dutyStore:         dutyStore,
+		signatureVerifier: signatureVerifier,
 	}
 
 	for _, opt := range opts {
@@ -253,19 +253,19 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	return newCommitteeInfo(validator.CommitteeID(), operators, indices), nil
 }
 
-func (mv *messageValidator) consensusState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *consensusState {
-	mv.consensusStateIndexMu.Lock()
-	defer mv.consensusStateIndexMu.Unlock()
+func (mv *messageValidator) validatorState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *ValidatorState {
+	mv.stateMu.Lock()
+	defer mv.stateMu.Unlock()
 
-	if _, ok := mv.consensusStateIndex[messageID]; !ok {
-		cs := &consensusState{
-			state:           make([]*OperatorState, len(committee)),
+	if _, ok := mv.state[messageID]; !ok {
+		cs := &ValidatorState{
+			operators:       make([]*OperatorState, len(committee)),
 			storedSlotCount: MaxStoredSlots(mv.netCfg),
 		}
-		mv.consensusStateIndex[messageID] = cs
+		mv.state[messageID] = cs
 	}
 
-	return mv.consensusStateIndex[messageID]
+	return mv.state[messageID]
 }
 
 func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {

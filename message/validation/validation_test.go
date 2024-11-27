@@ -150,9 +150,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		msgID := committeeIdentifier
-		state := validator.consensusState(msgID, committee)
+		state := validator.validatorState(msgID, committee)
 		for i := range committee {
-			signerState := state.GetOrCreate(i)
+			signerState := state.Signer(i)
 			require.NotNil(t, signerState)
 		}
 
@@ -167,7 +167,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.GetOrCreate(0)
+		stateBySlot := state.Signer(0)
 		require.NotNil(t, stateBySlot)
 
 		storedState := stateBySlot.Get(slot)
@@ -176,7 +176,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
 		for i := 1; i < len(committee); i++ {
-			require.NotNil(t, state.GetOrCreate(i))
+			require.NotNil(t, state.Signer(i))
 		}
 
 		signedSSVMessage = generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
