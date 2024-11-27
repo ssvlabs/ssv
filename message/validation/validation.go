@@ -60,7 +60,7 @@ func New(
 	signatureVerifier signatureverifier.SignatureVerifier,
 	opts ...Option,
 ) MessageValidator {
-	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec()
+	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec() // #nosec G115 -- amount of slots cannot exceed int64
 
 	mv := &messageValidator{
 		logger:  zap.NewNop(),
