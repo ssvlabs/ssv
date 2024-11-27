@@ -123,7 +123,7 @@ func (mv *messageValidator) validateBeaconDuty(
 
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
-		if partialMessageType != nil && *partialMessageType == spectypes.PostConsensusPartialSig {
+		if partialMessageType != nil && *partialMessageType == spectypes.RandaoPartialSig {
 			if mv.netCfg.Beacon.IsFirstSlotOfEpoch(slot) {
 				if exists := mv.dutyStore.Proposer.IsEpochSet(epoch); !exists {
 					return nil // Accept message even if duties are not set
