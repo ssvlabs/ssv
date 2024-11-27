@@ -25,7 +25,7 @@ func (cs *consensusState) GetOrCreate(idx int) *OperatorState {
 }
 
 type OperatorState struct {
-	mu              sync.RWMutex
+	mu              sync.Mutex
 	state           []*SignerState // the slice index is slot % storedSlotCount
 	maxSlot         phase0.Slot
 	maxEpoch        phase0.Epoch
@@ -40,8 +40,8 @@ func newOperatorState(size phase0.Slot) *OperatorState {
 }
 
 func (os *OperatorState) Get(slot phase0.Slot) *SignerState {
-	os.mu.RLock()
-	defer os.mu.RUnlock()
+	os.mu.Lock()
+	defer os.mu.Unlock()
 
 	s := os.state[(uint64(slot) % uint64(len(os.state)))]
 	if s == nil || s.Slot != slot {
@@ -69,15 +69,15 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 }
 
 func (os *OperatorState) MaxSlot() phase0.Slot {
-	os.mu.RLock()
-	defer os.mu.RUnlock()
+	os.mu.Lock()
+	defer os.mu.Unlock()
 
 	return os.maxSlot
 }
 
 func (os *OperatorState) DutyCount(epoch phase0.Epoch) uint64 {
-	os.mu.RLock()
-	defer os.mu.RUnlock()
+	os.mu.Lock()
+	defer os.mu.Unlock()
 
 	if epoch == os.maxEpoch {
 		return os.lastEpochDuties
