@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -16,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -28,8 +28,7 @@ type AggregatorRunner struct {
 	signer         spectypes.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-
-	metrics metrics.ConsensusMetrics
+	measurements   measurementsStore
 }
 
 var _ Runner = &AggregatorRunner{}
@@ -65,8 +64,7 @@ func NewAggregatorRunner(
 		signer:         signer,
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
-
-		metrics: metrics.NewConsensusMetrics(spectypes.RoleAggregator),
+		measurements:   NewMeasurementsStore(),
 	}, nil
 }
 
@@ -106,14 +104,14 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		fields.Slot(duty.Slot),
 	)
 
-	r.metrics.PauseDutyFullFlow()
+	r.measurements.PauseDutyFlow()
 	// get block data
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
-	r.metrics.ContinueDutyFullFlow()
+	r.measurements.ContinueDutyFlow()
 
 	byts, err := res.MarshalSSZ()
 	if err != nil {
@@ -143,8 +141,10 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return nil
 	}
 
-	r.metrics.EndConsensus()
-	r.metrics.StartPostConsensus()
+	r.measurements.EndConsensus()
+	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleAggregator)))
+
+	r.measurements.StartPostConsensus()
 
 	decidedValue := encDecidedValue.(*spectypes.ValidatorConsensusData)
 
@@ -204,7 +204,9 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if !quorum {
 		return nil
 	}
-	r.metrics.EndPostConsensus()
+
+	r.measurements.EndPostConsensus()
+	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
@@ -236,15 +238,17 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		start := time.Now()
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
-			r.metrics.RoleSubmissionFailed()
+			failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleAggregator)))
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 				fields.SubmissionTime(time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
-		r.metrics.RoleSubmitted()
+		r.measurements.EndDutyFlow()
+		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
+			metric.WithAttributes(roleAttribute(spectypes.RoleAggregator), roundAttribute(r.GetState().RunningInstance.State.Round)))
+		submissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleAggregator)))
 
 		logger.Debug("✅ successful submitted aggregate",
 			fields.SubmissionTime(time.Since(start)),
@@ -281,8 +285,8 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
+	r.measurements.StartDutyFlow()
+	r.measurements.StartPreConsensus()
 
 	// sign selection proof
 	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(duty.DutySlot()), duty.DutySlot(), spectypes.DomainSelectionProof)

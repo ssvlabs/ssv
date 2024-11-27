@@ -13,6 +13,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -21,7 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -42,11 +42,10 @@ type CommitteeRunner struct {
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	DutyGuard      CommitteeDutyGuard
+	measurements   measurementsStore
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
-
-	started time.Time
-	metrics metrics.ConsensusMetrics
+	started         time.Time
 }
 
 func NewCommitteeRunner(
@@ -77,8 +76,8 @@ func NewCommitteeRunner(
 		operatorSigner:  operatorSigner,
 		valCheck:        valCheck,
 		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
-		metrics:         metrics.NewConsensusMetrics(spectypes.RoleCommittee),
 		DutyGuard:       dutyGuard,
+		measurements:    NewMeasurementsStore(),
 	}, nil
 }
 
@@ -210,8 +209,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return nil
 	}
 
-	cr.metrics.EndConsensus()
-	cr.metrics.StartPostConsensus()
+	cr.measurements.EndConsensus()
+	consensusDurationHistogram.Record(ctx, cr.measurements.ConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleCommittee)))
+
+	cr.measurements.StartPostConsensus()
 	// decided means consensus is done
 
 	duty := cr.BaseRunner.State.StartingDuty
@@ -316,7 +317,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		signers[i] = msg.Signer
 		indices[i] = uint64(msg.ValidatorIndex)
 	}
-	logger = logger.With(fields.ConsensusTime(cr.metrics.GetConsensusTime()))
+	logger = logger.With(fields.ConsensusTime(cr.measurements.ConsensusTime()))
 
 	logger.Debug("🧩 got partial signatures",
 		zap.Bool("quorum", quorum),
@@ -433,8 +434,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			}
 		}
 	}
-	cr.metrics.EndPostConsensus()
-	logger = logger.With(fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()))
+
+	cr.measurements.EndPostConsensus()
+	postConsensusDurationHistogram.Record(ctx, cr.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleCommittee)))
+
+	logger = logger.With(fields.PostConsensusTime(cr.measurements.PostConsensusTime()))
 
 	// Submit multiple attestations
 	attestations := make([]*phase0.Attestation, 0, len(attestationsToSubmit))
@@ -682,7 +686,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	)
 
 	cr.started = time.Now()
-	cr.metrics.StartConsensus()
+	cr.measurements.StartConsensus()
 
 	vote := &spectypes.BeaconVote{
 		BlockRoot: attData.BeaconBlockRoot,
