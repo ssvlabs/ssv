@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -33,14 +34,13 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger                *zap.Logger
-	metrics               metricsreporter.MetricsReporter
-	netCfg                networkconfig.NetworkConfig
-	consensusStateIndex   map[spectypes.MessageID]*consensusState
-	consensusStateIndexMu sync.Mutex
-	validatorStore        storage.ValidatorStore
-	dutyStore             *dutystore.Store
-	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	logger            *zap.Logger
+	metrics           metricsreporter.MetricsReporter
+	netCfg            networkconfig.NetworkConfig
+	state             *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
+	validatorStore    storage.ValidatorStore
+	dutyStore         *dutystore.Store
+	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -52,6 +52,7 @@ type messageValidator struct {
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
+// It starts a goroutine that cleans up the state.
 func New(
 	netCfg networkconfig.NetworkConfig,
 	validatorStore storage.ValidatorStore,
@@ -59,20 +60,26 @@ func New(
 	signatureVerifier signatureverifier.SignatureVerifier,
 	opts ...Option,
 ) MessageValidator {
+	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec()
+
 	mv := &messageValidator{
-		logger:              zap.NewNop(),
-		metrics:             metricsreporter.NewNop(),
-		netCfg:              netCfg,
-		consensusStateIndex: make(map[spectypes.MessageID]*consensusState),
-		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
-		validatorStore:      validatorStore,
-		dutyStore:           dutyStore,
-		signatureVerifier:   signatureVerifier,
+		logger:  zap.NewNop(),
+		metrics: metricsreporter.NewNop(),
+		netCfg:  netCfg,
+		state: ttlcache.New(
+			ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
+		),
+		validationLocks:   make(map[spectypes.MessageID]*sync.Mutex),
+		validatorStore:    validatorStore,
+		dutyStore:         dutyStore,
+		signatureVerifier: signatureVerifier,
 	}
 
 	for _, opt := range opts {
 		opt(mv)
 	}
+
+	go mv.state.Start()
 
 	return mv
 }
@@ -253,19 +260,17 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	return newCommitteeInfo(validator.CommitteeID(), operators, indices), nil
 }
 
-func (mv *messageValidator) consensusState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *consensusState {
-	mv.consensusStateIndexMu.Lock()
-	defer mv.consensusStateIndexMu.Unlock()
-
-	if _, ok := mv.consensusStateIndex[messageID]; !ok {
-		cs := &consensusState{
-			state:           make([]*OperatorState, len(committee)),
-			storedSlotCount: MaxStoredSlots(mv.netCfg),
-		}
-		mv.consensusStateIndex[messageID] = cs
+func (mv *messageValidator) validatorState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *ValidatorState {
+	if v := mv.state.Get(messageID); v != nil {
+		return v.Value()
 	}
 
-	return mv.consensusStateIndex[messageID]
+	cs := &ValidatorState{
+		operators:       make([]*OperatorState, len(committee)),
+		storedSlotCount: MaxStoredSlots(mv.netCfg),
+	}
+	mv.state.Set(messageID, cs, ttlcache.DefaultTTL)
+	return cs
 }
 
 func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {

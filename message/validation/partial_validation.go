@@ -41,7 +41,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	msgID := ssvMessage.GetID()
-	state := mv.consensusState(msgID, committeeInfo.committee)
+	state := mv.validatorState(msgID, committeeInfo.committee)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedAt, state); err != nil {
 		return nil, err
 	}
@@ -136,12 +136,12 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
 	committeeInfo CommitteeInfo,
 	receivedAt time.Time,
-	state *consensusState,
+	state *ValidatorState,
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 	signer := signedSSVMessage.OperatorIDs[0]
-	signerStateBySlot := state.GetOrCreate(committeeInfo.signerIndex(signer))
+	signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
@@ -224,17 +224,17 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 
 func (mv *messageValidator) updatePartialSignatureState(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
-	state *consensusState,
+	state *ValidatorState,
 	signer spectypes.OperatorID,
 	committeeInfo CommitteeInfo,
 ) error {
-	stateBySlot := state.GetOrCreate(committeeInfo.signerIndex(signer))
+	stateBySlot := state.Signer(committeeInfo.signerIndex(signer))
 	messageSlot := partialSignatureMessages.Slot
 	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
 
 	signerState := stateBySlot.Get(messageSlot)
 	if signerState == nil || signerState.Slot != messageSlot {
-		signerState = NewSignerState(messageSlot, specqbft.FirstRound)
+		signerState = newSignerState(messageSlot, specqbft.FirstRound)
 		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 

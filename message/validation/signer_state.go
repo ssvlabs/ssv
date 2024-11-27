@@ -24,7 +24,7 @@ type SignerState struct {
 	SeenSigners map[SignersBitMask]struct{}
 }
 
-func NewSignerState(slot phase0.Slot, round specqbft.Round) *SignerState {
+func newSignerState(slot phase0.Slot, round specqbft.Round) *SignerState {
 	s := &SignerState{}
 	s.Reset(slot, round)
 	return s
