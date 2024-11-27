@@ -1,8 +1,6 @@
 package validation
 
 import (
-	"fmt"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -32,11 +30,7 @@ func newCommitteeInfo(
 	}
 }
 
+// keeping the method for readability and the comment
 func (ci *CommitteeInfo) signerIndex(signer spectypes.OperatorID) int {
-	idx, ok := ci.signerIndices[signer]
-	if !ok {
-		panic(fmt.Sprintf("BUG: message validation must have checked that signer %v is in committee %v", signer, ci.committee))
-	}
-
-	return idx
+	return ci.signerIndices[signer] // existence must be checked by ErrSignerNotInCommittee
 }

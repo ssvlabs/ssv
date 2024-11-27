@@ -38,9 +38,9 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	var ttl phase0.Slot
 	switch role {
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
-		ttl = 1 + LateSlotAllowance
+		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + LateSlotAllowance
+		ttl = MaxStoredSlots(mv.netCfg)
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	}
