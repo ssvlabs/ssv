@@ -260,7 +260,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID, commit
 	if _, ok := mv.consensusStateIndex[messageID]; !ok {
 		cs := &consensusState{
 			state:           make([]*OperatorState, len(committee)),
-			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
+			storedSlotCount: MaxStoredSlots(mv.netCfg),
 		}
 		mv.consensusStateIndex[messageID] = cs
 	}
@@ -282,4 +282,10 @@ func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func
 		mv.metrics.MessageValidationDuration(sinceStart)
 		mv.metrics.ActiveMsgValidationDone(pmsg.GetTopic())
 	}
+}
+
+// MaxStoredSlots stores max amount of slots message validation stores.
+// It's exported to allow usage outside of message validation
+func MaxStoredSlots(netCfg networkconfig.NetworkConfig) phase0.Slot {
+	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
 }
