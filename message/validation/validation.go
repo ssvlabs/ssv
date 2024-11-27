@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -36,8 +37,7 @@ type messageValidator struct {
 	logger            *zap.Logger
 	metrics           metricsreporter.MetricsReporter
 	netCfg            networkconfig.NetworkConfig
-	state             map[spectypes.MessageID]*ValidatorState
-	stateMu           sync.Mutex
+	state             *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 	validatorStore    storage.ValidatorStore
 	dutyStore         *dutystore.Store
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
@@ -52,6 +52,7 @@ type messageValidator struct {
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
+// It starts a goroutine that cleans up the state.
 func New(
 	netCfg networkconfig.NetworkConfig,
 	validatorStore storage.ValidatorStore,
@@ -59,11 +60,15 @@ func New(
 	signatureVerifier signatureverifier.SignatureVerifier,
 	opts ...Option,
 ) MessageValidator {
+	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec()
+
 	mv := &messageValidator{
-		logger:            zap.NewNop(),
-		metrics:           metricsreporter.NewNop(),
-		netCfg:            netCfg,
-		state:             make(map[spectypes.MessageID]*ValidatorState),
+		logger:  zap.NewNop(),
+		metrics: metricsreporter.NewNop(),
+		netCfg:  netCfg,
+		state: ttlcache.New(
+			ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
+		),
 		validationLocks:   make(map[spectypes.MessageID]*sync.Mutex),
 		validatorStore:    validatorStore,
 		dutyStore:         dutyStore,
@@ -73,6 +78,8 @@ func New(
 	for _, opt := range opts {
 		opt(mv)
 	}
+
+	go mv.state.Start()
 
 	return mv
 }
@@ -254,18 +261,16 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 }
 
 func (mv *messageValidator) validatorState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *ValidatorState {
-	mv.stateMu.Lock()
-	defer mv.stateMu.Unlock()
-
-	if _, ok := mv.state[messageID]; !ok {
-		cs := &ValidatorState{
-			operators:       make([]*OperatorState, len(committee)),
-			storedSlotCount: MaxStoredSlots(mv.netCfg),
-		}
-		mv.state[messageID] = cs
+	if v := mv.state.Get(messageID); v != nil {
+		return v.Value()
 	}
 
-	return mv.state[messageID]
+	cs := &ValidatorState{
+		operators:       make([]*OperatorState, len(committee)),
+		storedSlotCount: MaxStoredSlots(mv.netCfg),
+	}
+	mv.state.Set(messageID, cs, ttlcache.DefaultTTL)
+	return cs
 }
 
 func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {
