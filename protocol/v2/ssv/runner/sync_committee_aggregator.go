@@ -11,6 +11,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -18,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -30,8 +30,7 @@ type SyncCommitteeAggregatorRunner struct {
 	signer         spectypes.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-
-	metrics metrics.ConsensusMetrics
+	measurements   measurementsStore
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -65,8 +64,7 @@ func NewSyncCommitteeAggregatorRunner(
 		signer:         signer,
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
-
-		metrics: metrics.NewConsensusMetrics(spectypes.RoleSyncCommitteeContribution),
+		measurements:   NewMeasurementsStore(),
 	}, nil
 }
 
@@ -134,14 +132,13 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 
+	r.measurements.PauseDutyFlow()
 	// fetch contributions
-	r.metrics.PauseDutyFullFlow()
 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.DutySlot(), selectionProofs, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee contribution")
 	}
-	r.metrics.EndBeaconData()
-	r.metrics.ContinueDutyFullFlow()
+	r.measurements.ContinueDutyFlow()
 
 	byts, err := contributions.MarshalSSZ()
 	if err != nil {
@@ -155,7 +152,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		DataSSZ: byts,
 	}
 
-	r.metrics.StartConsensus()
+	r.measurements.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input.Duty.Slot, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
@@ -173,8 +170,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		return nil
 	}
 
-	r.metrics.EndConsensus()
-	r.metrics.StartPostConsensus()
+	r.measurements.EndConsensus()
+	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+
+	r.measurements.StartPostConsensus()
 
 	cd := decidedValue.(*spectypes.ValidatorConsensusData)
 	contributions, err := cd.GetSyncCommitteeContributions()
@@ -243,7 +242,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		return nil
 	}
 
-	r.metrics.EndPostConsensus()
+	r.measurements.EndPostConsensus()
+	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
 
 	// get contributions
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
@@ -267,7 +267,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
-		r.metrics.EndPostConsensus()
 
 		for _, contribution := range contributions {
 			start := time.Now()
@@ -291,18 +290,19 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 				Signature: blsSignedContribAndProof,
 			}
 
-			submissionEnd := r.metrics.StartBeaconSubmission()
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
-				r.metrics.RoleSubmissionFailed()
+				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
 
-			submissionEnd()
-			r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
-			r.metrics.RoleSubmitted()
+			r.measurements.EndDutyFlow()
+			dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
+				metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution), roundAttribute(r.GetState().RunningInstance.State.Round)))
+			submissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+
 			logger.Debug("✅ successfully submitted sync committee aggregator",
 				fields.SubmissionTime(time.Since(start)),
 			)
@@ -378,8 +378,9 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 // 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
+	r.measurements.StartDutyFlow()
+	r.measurements.StartPreConsensus()
+
 	// sign selection proofs
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.ContributionProofs,
