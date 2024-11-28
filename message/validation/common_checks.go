@@ -117,17 +117,15 @@ func (mv *messageValidator) validateBeaconDuty(
 	role spectypes.RunnerRole,
 	slot phase0.Slot,
 	indices []phase0.ValidatorIndex,
-	partialMessageType *spectypes.PartialSigMsgType,
+	randao bool,
 ) error {
 	epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
 
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
-		if partialMessageType != nil && *partialMessageType == spectypes.RandaoPartialSig {
-			if mv.netCfg.Beacon.IsFirstSlotOfEpoch(slot) {
-				if !mv.dutyStore.Proposer.IsEpochSet(epoch) {
-					return nil // Accept message even if duties are not set
-				}
+		if randao && mv.netCfg.Beacon.IsFirstSlotOfEpoch(slot) {
+			if !mv.dutyStore.Proposer.IsEpochSet(epoch) {
+				return nil // Accept message even if duties are not set
 			}
 		}
 

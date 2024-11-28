@@ -269,7 +269,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	if err := mv.validateBeaconDuty(role, msgSlot, validatorIndices, nil); err != nil {
+	if err := mv.validateBeaconDuty(role, msgSlot, validatorIndices, false); err != nil {
 		return err
 	}
 
