@@ -88,6 +88,9 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		return nil
 	}
 
+	r.measurements.EndPreConsensus()
+	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+
 	// collect selection proofs and subnets
 	var (
 		selectionProofs []phase0.BLSSignature
