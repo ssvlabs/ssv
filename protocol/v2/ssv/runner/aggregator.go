@@ -209,7 +209,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	r.measurements.EndPostConsensus()
-	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleAggregator)))
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
@@ -242,12 +242,12 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleAggregator)))
+
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 				fields.SubmissionTime(time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
-
 		r.measurements.EndDutyFlow()
 		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
 			metric.WithAttributes(roleAttribute(spectypes.RoleAggregator), roundAttribute(r.GetState().RunningInstance.State.Round)))
