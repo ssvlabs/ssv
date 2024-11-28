@@ -62,7 +62,6 @@ func TestController_LiquidateCluster(t *testing.T) {
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
 		validatorOptions:  validator.Options{},
-		metrics:           validator.NopMetrics{},
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -131,8 +130,7 @@ func TestController_StopValidator(t *testing.T) {
 		validatorOptions: validator.Options{GenesisOptions: validator.GenesisOptions{
 			Storage: genesisStorageMap,
 		}},
-		metrics: validator.NopMetrics{},
-		signer:  signer,
+		signer: signer,
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -191,8 +189,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 				Storage: genesisStorageMap,
 			},
 		},
-		metrics: validator.NopMetrics{},
-		signer:  signer,
+		signer: signer,
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc

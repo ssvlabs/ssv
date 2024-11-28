@@ -95,7 +95,6 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	ValidatorStore             registrystorage.ValidatorStore
-	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
@@ -115,7 +114,6 @@ type GenesisControllerOptions struct {
 	KeyManager        genesisspectypes.KeyManager
 	StorageMap        *genesisstorage.QBFTStores
 	NewDecidedHandler genesisqbftcontroller.NewDecidedHandler
-	Metrics           genesisvalidator.Metrics
 }
 
 // Controller represent the validators controller,
@@ -178,8 +176,7 @@ type controller struct {
 	genesisCtx       context.Context
 	cancelGenesisCtx context.CancelFunc
 
-	logger  *zap.Logger
-	metrics validator.Metrics
+	logger *zap.Logger
 
 	networkConfig     networkconfig.NetworkConfig
 	sharesStorage     SharesStorage
@@ -250,7 +247,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
-		Metrics:           options.Metrics,
 		Graffiti:          options.Graffiti,
 		GenesisOptions: validator.GenesisOptions{
 			Network:           options.GenesisControllerOptions.Network,
@@ -274,7 +270,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
-		Metrics:           options.GenesisControllerOptions.Metrics,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -289,16 +284,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
-	metrics := validator.Metrics(validator.NopMetrics{})
-	if options.Metrics != nil {
-		metrics = options.Metrics
-	}
-
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
-		metrics:           metrics,
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
 		operatorsStorage:  options.RegistryStorage,
@@ -1112,7 +1101,7 @@ func (c *controller) startValidator(v *validators.ValidatorContainer) (bool, err
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
-		c.metrics.ValidatorError(v.Share().ValidatorPubKey[:])
+		recordValidatorStatus(c.ctx, statusError)
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {

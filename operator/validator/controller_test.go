@@ -58,7 +58,6 @@ type MockControllerOptions struct {
 	network           P2PNetwork
 	recipientsStorage Recipients
 	sharesStorage     SharesStorage
-	metrics           validator.Metrics
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
 	signer            spectypes.BeaconSigner
@@ -82,7 +81,6 @@ func TestNewController(t *testing.T) {
 	controllerOptions := ControllerOptions{
 		NetworkConfig:     networkconfig.TestNetwork,
 		Beacon:            bc,
-		Metrics:           nil,
 		FullNode:          true,
 		Network:           network,
 		OperatorDataStore: operatorDataStore,
@@ -251,7 +249,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				validatorOptions: validator.Options{
 					Exporter: true,
 				},
-				metrics: validator.NopMetrics{},
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
@@ -419,7 +416,6 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				sharesStorage:     sharesStorage,
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
-				metrics:           validator.NopMetrics{},
 			}
 
 			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
@@ -703,7 +699,6 @@ func TestSetupValidators(t *testing.T) {
 						Storage: genesisStorageMap,
 					},
 				},
-				metrics: validator.NopMetrics{},
 			}
 
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
@@ -1019,7 +1014,6 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		logger:                  logger,
 		beacon:                  opts.beacon,
 		network:                 opts.network,
-		metrics:                 opts.metrics,
 		ibftStorageMap:          opts.StorageMap,
 		operatorDataStore:       opts.operatorDataStore,
 		sharesStorage:           opts.sharesStorage,

@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -23,17 +22,6 @@ const (
 	ssvNodeNotHealthy = float64(0)
 	ssvNodeHealthy    = float64(1)
 
-	validatorNoIndex      = float64(1)
-	validatorError        = float64(2)
-	validatorReady        = float64(3)
-	validatorNotActivated = float64(4)
-	validatorExiting      = float64(5)
-	validatorSlashed      = float64(6)
-	validatorNotFound     = float64(7)
-	validatorPending      = float64(8)
-	validatorRemoved      = float64(9)
-	validatorUnknown      = float64(10)
-
 	messageAccepted = "accepted"
 	messageIgnored  = "ignored"
 	messageRejected = "rejected"
@@ -44,10 +32,6 @@ var (
 		Name: "ssv_node_status",
 		Help: "Status of the operator node",
 	})
-	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:v2:status",
-		Help: "Validator status",
-	}, []string{"pubKey"})
 	operatorIndex = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:exporter:operator_index",
 		Help: "operator footprint",
@@ -90,10 +74,6 @@ var (
 	outgoingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_queue_outgoing",
 		Help: "The amount of message outgoing from the validator's msg queue",
-	}, []string{"msg_id"})
-	droppedQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_queue_drops",
-		Help: "The amount of message dropped from the validator's msg queue",
 	}, []string{"msg_id"})
 	messageQueueSize = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv_message_queue_size",
@@ -144,16 +124,6 @@ type MetricsReporter interface {
 	SSVNodeHealthy()
 	SSVNodeNotHealthy()
 	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
-	ValidatorNoIndex(publicKey []byte)
-	ValidatorError(publicKey []byte)
-	ValidatorReady(publicKey []byte)
-	ValidatorNotActivated(publicKey []byte)
-	ValidatorExiting(publicKey []byte)
-	ValidatorSlashed(publicKey []byte)
-	ValidatorNotFound(publicKey []byte)
-	ValidatorPending(publicKey []byte)
-	ValidatorRemoved(publicKey []byte)
-	ValidatorUnknown(publicKey []byte)
 	MessagesReceivedFromPeer(peerId peer.ID)
 	MessagesReceivedTotal()
 	MessageValidationRSAVerifications()
@@ -170,7 +140,6 @@ type MetricsReporter interface {
 	ActiveMsgValidationDone(topic string)
 	IncomingQueueMessage(messageID spectypes.MessageID)
 	OutgoingQueueMessage(messageID spectypes.MessageID)
-	DroppedQueueMessage(messageID spectypes.MessageID)
 	MessageQueueSize(size int)
 	MessageQueueCapacity(size int)
 	MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration)
@@ -209,37 +178,6 @@ func (m *metricsReporter) SSVNodeNotHealthy() {
 func (m *metricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256(publicKey))
 	operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
-}
-
-func (m *metricsReporter) ValidatorNoIndex(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNoIndex)
-}
-func (m *metricsReporter) ValidatorError(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorError)
-}
-func (m *metricsReporter) ValidatorReady(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorReady)
-}
-func (m *metricsReporter) ValidatorNotActivated(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotActivated)
-}
-func (m *metricsReporter) ValidatorExiting(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorExiting)
-}
-func (m *metricsReporter) ValidatorSlashed(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorSlashed)
-}
-func (m *metricsReporter) ValidatorNotFound(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotFound)
-}
-func (m *metricsReporter) ValidatorPending(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorPending)
-}
-func (m *metricsReporter) ValidatorRemoved(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorRemoved)
-}
-func (m *metricsReporter) ValidatorUnknown(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorUnknown)
 }
 
 func (m *metricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
@@ -318,10 +256,6 @@ func (m *metricsReporter) IncomingQueueMessage(messageID spectypes.MessageID) {
 
 func (m *metricsReporter) OutgoingQueueMessage(messageID spectypes.MessageID) {
 	outgoingQueueMessages.WithLabelValues(messageID.String()).Inc()
-}
-
-func (m *metricsReporter) DroppedQueueMessage(messageID spectypes.MessageID) {
-	droppedQueueMessages.WithLabelValues(messageID.String()).Inc()
 }
 
 func (m *metricsReporter) MessageQueueSize(size int) {
