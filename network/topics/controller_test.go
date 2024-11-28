@@ -25,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/validation"
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -379,7 +378,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			return nil
 		},
 		Scoring: &ScoringConfig{
-			IPWhilelist:        nil,
+			IPWhitelist:        nil,
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
 		},
@@ -396,7 +395,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		t.Fatal(err)
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore, nil)
+	ps, tm, err := NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)
 
 	p = &P{
