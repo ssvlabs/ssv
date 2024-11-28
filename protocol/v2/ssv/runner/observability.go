@@ -42,13 +42,6 @@ var (
 			metric.WithDescription(""),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
-	beaconSubmissionDurationHistogram = observability.NewMetric(
-		meter.Float64Histogram(
-			metricName("beacon.submission.duration"),
-			metric.WithUnit("s"),
-			metric.WithDescription(""),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
-
 	dutyDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
 			metricName("duty.duration"),
