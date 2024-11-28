@@ -102,13 +102,23 @@ func (c *Committee) ConsumeQueue(
 		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
-			filter = func(m *queue.SSVMessage) bool {
+			filter = func(m *queue.SSVMessage) (ok bool) {
+				var lf = messageToLogFields(m)
+
+				defer func() {
+					lf = append(lf, zap.Bool("result", ok))
+					c.logMsg(c.logger, m, "filter", lf...)
+				}()
+
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
 				}
 
 				if sm.Round != state.Round { // allow next round or change round messages.
+					lf = append(lf, zap.String("check", "round"))
+					lf = append(lf, zap.Uint64("msg.Round", uint64(sm.Round)))
+					lf = append(lf, zap.Uint64("state.Round", uint64(state.Round)))
 					return true
 				}
 
@@ -174,6 +184,23 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)
+}
+
+func messageToLogFields(msg *queue.SSVMessage) []zap.Field {
+	var lf []zap.Field
+
+	lf = append(lf, fields.MessageType(msg.MsgType))
+	lf = append(lf, fields.Role(msg.MsgID.GetRoleType()))
+
+	cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
+	lf = append(lf, fields.CommitteeID(cid))
+
+	sm, ok := msg.Body.(*specqbft.Message)
+	if ok {
+		lf = append(lf, fields.QBFTMessageType(sm.MsgType))
+	}
+
+	return lf
 }
 
 //
