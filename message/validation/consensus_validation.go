@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -21,6 +22,7 @@ import (
 )
 
 func (mv *messageValidator) validateConsensusMessage(
+	pMsg *pubsub.Message,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
 	receivedAt time.Time,
@@ -47,7 +49,11 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	state := mv.validatorState(signedSSVMessage.SSVMessage.GetID(), committeeInfo.committee)
+	key := peerIDWithMessageID{
+		peerID:    pMsg.ReceivedFrom,
+		messageID: ssvMessage.GetID(),
+	}
+	state := mv.validatorState(key, committeeInfo.committee)
 
 	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state); err != nil {
 		return consensusMessage, err

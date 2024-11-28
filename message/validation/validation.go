@@ -33,18 +33,23 @@ type MessageValidator interface {
 	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
+type peerIDWithMessageID struct {
+	peerID    peer.ID
+	messageID spectypes.MessageID
+}
+
 type messageValidator struct {
 	logger            *zap.Logger
 	metrics           metricsreporter.MetricsReporter
 	netCfg            networkconfig.NetworkConfig
-	state             *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
+	state             *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
 	validatorStore    storage.ValidatorStore
 	dutyStore         *dutystore.Store
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
-	validationLocks map[spectypes.MessageID]*sync.Mutex
+	validationLocks map[peerIDWithMessageID]*sync.Mutex
 	validationMutex sync.Mutex
 
 	selfPID    peer.ID
@@ -67,9 +72,9 @@ func New(
 		metrics: metricsreporter.NewNop(),
 		netCfg:  netCfg,
 		state: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
+			ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
 		),
-		validationLocks:   make(map[spectypes.MessageID]*sync.Mutex),
+		validationLocks:   make(map[peerIDWithMessageID]*sync.Mutex),
 		validatorStore:    validatorStore,
 		dutyStore:         dutyStore,
 		signatureVerifier: signatureVerifier,
@@ -120,10 +125,10 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 		return nil, err
 	}
 
-	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
+	return mv.handleSignedSSVMessage(pMsg, signedSSVMessage, receivedAt)
 }
 
-func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.SSVMessage, error) {
+func (mv *messageValidator) handleSignedSSVMessage(pMsg *pubsub.Message, signedSSVMessage *spectypes.SignedSSVMessage, receivedAt time.Time) (*queue.SSVMessage, error) {
 	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
 	}
@@ -144,25 +149,30 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
-	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
+	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, pMsg.GetTopic()); err != nil {
 		return decodedMessage, err
 	}
 
-	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
+	key := peerIDWithMessageID{
+		peerID:    pMsg.ReceivedFrom,
+		messageID: signedSSVMessage.SSVMessage.GetID(),
+	}
+
+	validationMu := mv.obtainValidationLock(key)
 
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(pMsg, signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(pMsg, signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
@@ -193,14 +203,14 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	return nil
 }
 
-func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) *sync.Mutex {
+func (mv *messageValidator) obtainValidationLock(key peerIDWithMessageID) *sync.Mutex {
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
 	// TODO: make sure that we check that message ID exists in advance
-	mutex, ok := mv.validationLocks[messageID]
+	mutex, ok := mv.validationLocks[key]
 	if !ok {
 		mutex = &sync.Mutex{}
-		mv.validationLocks[messageID] = mutex
+		mv.validationLocks[key] = mutex
 		// TODO: Clean the map when mutex won't be needed anymore. Now it's a mutex leak...
 	}
 	mv.validationMutex.Unlock()
@@ -260,8 +270,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	return newCommitteeInfo(validator.CommitteeID(), operators, indices), nil
 }
 
-func (mv *messageValidator) validatorState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *ValidatorState {
-	if v := mv.state.Get(messageID); v != nil {
+func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {
+	if v := mv.state.Get(key); v != nil {
 		return v.Value()
 	}
 
@@ -269,7 +279,7 @@ func (mv *messageValidator) validatorState(messageID spectypes.MessageID, commit
 		operators:       make([]*OperatorState, len(committee)),
 		storedSlotCount: MaxStoredSlots(mv.netCfg),
 	}
-	mv.state.Set(messageID, cs, ttlcache.DefaultTTL)
+	mv.state.Set(key, cs, ttlcache.DefaultTTL)
 	return cs
 }
 
