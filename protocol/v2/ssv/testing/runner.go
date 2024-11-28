@@ -10,6 +10,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -82,7 +83,7 @@ var ConstructBaseRunner = func(
 	var valCheck specqbft.ProposedValueCheckF
 	switch role {
 	case spectypes.RoleCommittee:
-		valCheck = ssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
+		valCheck = ssv.BeaconVoteValueCheckF(logger, km, spectestingutils.TestingDutySlot,
 			[]spectypes.ShareValidatorPK{share.SharePubKey}, spectestingutils.TestingDutyEpoch)
 	case spectypes.RoleProposer:
 		valCheck = ssv.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
@@ -337,7 +338,7 @@ var ConstructBaseRunnerWithShareMap = func(
 
 		switch role {
 		case spectypes.RoleCommittee:
-			valCheck = ssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
+			valCheck = ssv.BeaconVoteValueCheckF(logger, km, spectestingutils.TestingDutySlot,
 				sharePubKeys, spectestingutils.TestingDutyEpoch)
 		case spectypes.RoleProposer:
 			valCheck = ssv.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,

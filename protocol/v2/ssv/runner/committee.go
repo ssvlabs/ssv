@@ -235,7 +235,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				spectypes.DomainAttester)
 			if err != nil {
-				logger.Error("failed signing attestation data for duty",
+				logger.Warn("failed signing attestation data for duty, skipping",
 					fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
 				continue // Skip this duty but continue with others
 			}
@@ -260,7 +260,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
-				logger.Error("failed signing sync committee message for duty",
+				logger.Warn("failed signing sync committee message for duty, skipping",
 					fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
 				continue // Skip this duty but continue with others
 			}

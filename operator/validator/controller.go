@@ -21,6 +21,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -985,7 +986,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
 		}...)
 
-		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
+		committeeRunnerFunc := SetupCommitteeRunners(ctx, c.logger, opts)
 
 		vc = validator.NewCommittee(
 			ctx,
@@ -1260,6 +1261,7 @@ func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIn
 
 func SetupCommitteeRunners(
 	ctx context.Context,
+	logger *zap.Logger,
 	options validator.Options,
 ) validator.CommitteeRunnerFunc {
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
@@ -1284,7 +1286,7 @@ func SetupCommitteeRunners(
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
+		valCheck := ssv.BeaconVoteValueCheckF(logger, options.Signer, slot, attestingValidators, epoch)
 		crunner, err := runner.NewCommitteeRunner(
 			options.NetworkConfig,
 			shares,
