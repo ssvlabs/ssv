@@ -6,7 +6,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/peers/connections"
-	"github.com/ssvlabs/ssv/network/topics"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
@@ -18,7 +17,6 @@ import (
 
 type Metrics interface {
 	connections.Metrics
-	topics.Metrics
 }
 
 var (
