@@ -2,6 +2,7 @@ package ssv
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -68,11 +69,20 @@ func BeaconVoteValueCheckF(
 			Target:          bv.Target,
 		}
 
+		var slashableValidatorPubKeys []spectypes.ShareValidatorPK
 		for _, sharePublicKey := range sharePublicKeys {
 			if err := signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
-				return err
+				slashableValidatorPubKeys = append(slashableValidatorPubKeys, sharePublicKey)
+				continue
 			}
 		}
+
+		// If all validators are slashable, return an error
+		if len(slashableValidatorPubKeys) == len(sharePublicKeys) {
+			return fmt.Errorf("all validators are slashable, attestation cannot proceed")
+		}
+
+		//If at least one validator is not slashable, return nil
 		return nil
 	}
 }
