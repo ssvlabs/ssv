@@ -56,7 +56,8 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
-	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
+	recordAttestationDataRequest(gc.ctx, time.Since(scDataReqStart), spectypes.BNRoleSyncCommittee)
+
 	blockRoot := beaconBlockRootResp.Data
 
 	gc.waitToSlotTwoThirds(slot)
@@ -96,7 +97,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, err
 	}
 
-	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
+	recordAttestationDataRequest(gc.ctx, time.Since(sccDataReqStart), spectypes.BNRoleSyncCommitteeContribution)
 
 	return &contributions, spec.DataVersionAltair, nil
 }
