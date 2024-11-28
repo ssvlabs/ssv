@@ -87,6 +87,9 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
+	r.measurements.EndPreConsensus()
+	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleAggregator)))
+
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
 	// reconstruct selection proof sig
