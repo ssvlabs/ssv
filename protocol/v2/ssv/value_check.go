@@ -2,13 +2,17 @@ package ssv
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 func dutyValueCheck(
@@ -38,6 +42,7 @@ func dutyValueCheck(
 }
 
 func BeaconVoteValueCheckF(
+	logger *zap.Logger,
 	signer spectypes.BeaconSigner,
 	slot phase0.Slot,
 	sharePublicKeys []spectypes.ShareValidatorPK,
@@ -68,11 +73,22 @@ func BeaconVoteValueCheckF(
 			Target:          bv.Target,
 		}
 
+		var slashableValidatorPubKeys []spectypes.ShareValidatorPK
 		for _, sharePublicKey := range sharePublicKeys {
 			if err := signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
-				return err
+				logger.Warn("attestation is slashable, skipping",
+					fields.Validator(sharePublicKey[:]), fields.Slot(slot), zap.Error(err))
+				slashableValidatorPubKeys = append(slashableValidatorPubKeys, sharePublicKey)
+				continue
 			}
 		}
+
+		// If all validators are slashable, return an error
+		if len(slashableValidatorPubKeys) == len(sharePublicKeys) {
+			return fmt.Errorf("all validators are slashable, attestation cannot proceed")
+		}
+
+		//If at least one validator is not slashable, return nil
 		return nil
 	}
 }

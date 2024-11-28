@@ -229,12 +229,13 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 		}
 		switch duty.Type {
 		case spectypes.BNRoleAttester:
-			validDuties++
 			attestationData := constructAttestationData(beaconVote, duty)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				spectypes.DomainAttester)
 			if err != nil {
-				return errors.Wrap(err, "failed signing attestation data")
+				logger.Error("failed signing attestation data for duty",
+					fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+				continue // Skip this duty but continue with others
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
@@ -250,15 +251,18 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
-		case spectypes.BNRoleSyncCommittee:
 			validDuties++
+		case spectypes.BNRoleSyncCommittee:
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
-				return errors.Wrap(err, "failed signing sync committee message")
+				logger.Warn("failed signing sync committee message for duty, skipping",
+					fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+				continue // Skip this duty but continue with others
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+			validDuties++
 		default:
 			return fmt.Errorf("invalid duty type: %s", duty.Type)
 		}
@@ -296,7 +300,6 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
-
 }
 
 // TODO finish edge case where some roots may be missing

@@ -962,7 +962,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
 		}...)
 
-		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
+		committeeRunnerFunc := SetupCommitteeRunners(ctx, c.logger, opts)
 
 		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc, nil)
 		vc.AddShare(&share.Share)
@@ -1228,6 +1228,7 @@ func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIn
 
 func SetupCommitteeRunners(
 	ctx context.Context,
+	logger *zap.Logger,
 	options validator.Options,
 ) validator.CommitteeRunnerFunc {
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
