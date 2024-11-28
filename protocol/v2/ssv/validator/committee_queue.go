@@ -123,7 +123,7 @@ func (c *Committee) ConsumeQueue(
 
 		// Pop the highest priority message for the current state.
 		// TODO: (Alan) bring back filter
-		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		if ctx.Err() != nil {
 			break
 		}
