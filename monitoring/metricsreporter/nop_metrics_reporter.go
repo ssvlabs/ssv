@@ -17,16 +17,6 @@ func NewNop() MetricsReporter {
 func (n *nopMetrics) SSVNodeHealthy()                                                     {}
 func (n *nopMetrics) SSVNodeNotHealthy()                                                  {}
 func (n *nopMetrics) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {}
-func (n *nopMetrics) ValidatorNoIndex(publicKey []byte)                                   {}
-func (n *nopMetrics) ValidatorError(publicKey []byte)                                     {}
-func (n *nopMetrics) ValidatorReady(publicKey []byte)                                     {}
-func (n *nopMetrics) ValidatorNotActivated(publicKey []byte)                              {}
-func (n *nopMetrics) ValidatorExiting(publicKey []byte)                                   {}
-func (n *nopMetrics) ValidatorSlashed(publicKey []byte)                                   {}
-func (n *nopMetrics) ValidatorNotFound(publicKey []byte)                                  {}
-func (n *nopMetrics) ValidatorPending(publicKey []byte)                                   {}
-func (n *nopMetrics) ValidatorRemoved(publicKey []byte)                                   {}
-func (n *nopMetrics) ValidatorUnknown(publicKey []byte)                                   {}
 func (n *nopMetrics) MessagesReceivedFromPeer(peerId peer.ID)                             {}
 func (n *nopMetrics) MessagesReceivedTotal()                                              {}
 func (n *nopMetrics) MessageValidationRSAVerifications()                                  {}
@@ -49,7 +39,6 @@ func (n *nopMetrics) ActiveMsgValidation(topic string)                          
 func (n *nopMetrics) ActiveMsgValidationDone(topic string)                                 {}
 func (n *nopMetrics) IncomingQueueMessage(messageID spectypes.MessageID)                   {}
 func (n *nopMetrics) OutgoingQueueMessage(messageID spectypes.MessageID)                   {}
-func (n *nopMetrics) DroppedQueueMessage(messageID spectypes.MessageID)                    {}
 func (n *nopMetrics) MessageQueueSize(size int)                                            {}
 func (n *nopMetrics) MessageQueueCapacity(size int)                                        {}
 func (n *nopMetrics) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration)    {}
