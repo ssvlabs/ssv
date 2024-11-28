@@ -24,7 +24,7 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
-	c.metrics.ValidatorRemoved(pubKey[:])
+	recordValidatorStatus(c.ctx, statusRemoved)
 	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
