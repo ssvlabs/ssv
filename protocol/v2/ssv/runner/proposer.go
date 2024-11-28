@@ -102,6 +102,9 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return nil
 	}
 
+	r.measurements.EndPreConsensus()
+	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	// randao is relevant only for block proposals, no need to check type
