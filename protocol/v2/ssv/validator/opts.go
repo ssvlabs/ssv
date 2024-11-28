@@ -41,7 +41,6 @@ type Options struct {
 	QueueSize         int
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator
-	Metrics           Metrics
 	Graffiti          []byte
 	GenesisOptions
 }
