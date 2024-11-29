@@ -23,7 +23,7 @@ var (
 	ErrNotFound = errors.New("peer not found")
 )
 
-// NodeScore is a wrapping objet for scores
+// NodeScore is a wrapping object for scores
 type NodeScore struct {
 	Name  string
 	Value float64

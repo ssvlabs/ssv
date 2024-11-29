@@ -37,7 +37,7 @@ const (
 	defaultReqTimeout = 10 * time.Second
 	// backoffLow is when we start the backoff exponent interval
 	backoffLow = 10 * time.Second
-	// backoffLow is when we stop the backoff exponent interval
+	// backoffHigh is when we stop the backoff exponent interval
 	backoffHigh = 30 * time.Minute
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
@@ -107,7 +107,7 @@ func (n *p2pNetwork) initCfg() error {
 	return nil
 }
 
-// Returns whetehr a peer is bad
+// Returns whether a peer is bad
 func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
 	if n.idx == nil {
 		return false

@@ -54,7 +54,7 @@ func EncodeGenesisSignedSSVMessage(message []byte, operatorID genesisspectypes.O
 	return b
 }
 
-// DecodeGenesisSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
+// DecodeGenesisSignedSSVMessage deserializes signed message bytes message, op id and a signature
 // DEPRECATED, TODO: remove post-fork
 func DecodeGenesisSignedSSVMessage(encoded []byte) ([]byte, genesisspectypes.OperatorID, []byte, error) {
 	if len(encoded) < MessageOffset {

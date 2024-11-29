@@ -107,7 +107,7 @@ func (b *BaseRunner) resolveDuplicateSignature(container *genesisspecssv.Partial
 	if err == nil {
 		err = b.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot)
 		if err == nil {
-			// Keep the previous sigature since it's correct
+			// Keep the previous signature since it's correct
 			return
 		}
 	}

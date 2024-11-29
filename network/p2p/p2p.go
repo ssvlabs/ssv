@@ -276,7 +276,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 }
 
 // Returns a function that balances the peers.
-// Balancing is peformed by:
+// Balancing is performed by:
 // - Dropping peers with bad Gossip score.
 // - Dropping irrelevant peers that don't have any subnet in common.
 // - Tagging the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removing the worst peer.

@@ -209,7 +209,7 @@ func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSi
 	if err == nil {
 		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)
 		if err == nil {
-			// Keep the previous sigature since it's correct
+			// Keep the previous signature since it's correct
 			return
 		}
 	}

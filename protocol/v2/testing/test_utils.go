@@ -296,7 +296,7 @@ func ExtractTarGz(gzipStream io.Reader) {
 			}
 			err = outFile.Close()
 			if err != nil {
-				log.Fatalf("faild to close file: %s", err.Error())
+				log.Fatalf("failed to close file: %s", err.Error())
 			}
 
 		default:
