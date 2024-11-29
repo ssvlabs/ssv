@@ -243,7 +243,6 @@ var StartNodeCmd = &cobra.Command{
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
