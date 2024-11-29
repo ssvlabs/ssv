@@ -4,30 +4,19 @@
 
 ## Table of Contents
 
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Build](#build)
 - [Usage](#usage)
   - [Flags](#flags)
 - [Examples](#examples)
 - [Configuration](#configuration)
 
-## Build
-
-```bash
-go build -o ./bin/cfggen ./cmd/cfggen
-```
-
-This command compiles the CLI tool and generates an executable named `cfggen` in the current directory.
-
 ## Usage
 
-The `cfggen` CLI allows you to generate a YAML configuration file by specifying various parameters through command-line flags.
+The `generate-config` command allows you to generate a YAML configuration file by specifying various parameters through command-line flags.
 
 ### Syntax
 
 ```bash
-cfggen [flags]
+ssvnode generate-config [flags]
 ```
 
 ### Flags
@@ -63,7 +52,7 @@ cfggen [flags]
 Generate a configuration file with default settings, specifying only the mandatory flags:
 
 ```bash
-cfggen \
+ssvnode generate-config \
   --consensus-client "http://localhost:9000" \
   --execution-client "http://localhost:8545"
 ```
@@ -75,7 +64,7 @@ This command generates a `config.local.yaml` file in the `./config` directory wi
 Generate a configuration file with a custom output path and set the log level to `debug`:
 
 ```bash
-cfggen \
+ssvnode generate-config \
   --consensus-client "http://consensus.example.com:9000" \
   --execution-client "http://execution.example.com:8545" \
   --output-path "/etc/ssv/config.yaml" \
@@ -87,7 +76,7 @@ cfggen \
 Generate a configuration with an operator's private key and enable the Metrics API on port `8080`:
 
 ```bash
-cfggen \
+ssvnode generate-config \
   --consensus-client "http://consensus.example.com:9000" \
   --execution-client "http://execution.example.com:8545" \
   --operator-private-key "your-operator-private-key" \
@@ -99,7 +88,7 @@ cfggen \
 Customize network settings such as bootnodes, discovery protocol ID, fork epoch, etc:
 
 ```bash
-cfggen \
+ssvnode generate-config \
   --consensus-client "http://consensus.example.com:9000" \
   --execution-client "http://execution.example.com:8545" \
   --ssv-network-name "CustomNet" \
@@ -110,11 +99,9 @@ cfggen \
   --ssv-bootnodes "enode://bootnode1@127.0.0.1:30303,enode://bootnode2@127.0.0.1:30304" \
   --ssv-discovery-protocol-id "0x1234567890ab" \
   --ssv-alan-fork-epoch 200 \
-  --ssv-ssv-max-validators-per-committee 560 \
+  --ssv-max-validators-per-committee 560 \
   --ssv-total-ethereum-validators 1000000
 ```
-
-This command sets up a custom network with specified domains, epochs, registry settings, and bootnodes.
 
 ## Configuration
 
