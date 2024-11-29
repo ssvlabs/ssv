@@ -43,6 +43,13 @@ var (
 			metricName("rejected"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total count of messages that failed validation and were rejected")))
+
+	messageValidationDurationHistogram = observability.NewMetric(
+		meter.Float64Histogram(
+			metricName("duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("message validation duration"),
+			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
 
 func metricName(name string) string {

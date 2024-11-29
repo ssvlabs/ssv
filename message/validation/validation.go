@@ -87,6 +87,11 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 		return mv.validateSelf(pmsg)
 	}
 
+	validationStart := time.Now()
+	defer func() {
+		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
+	}()
+
 	recordMessage(ctx)
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
