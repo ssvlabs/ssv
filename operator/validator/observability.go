@@ -34,10 +34,10 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	validatorStatusGauge = observability.NewMetric(
-		meter.Int64Gauge(
-			metricName("status"),
-			metric.WithDescription("validator status")))
+	validatorStatusCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("validators"),
+			metric.WithDescription("total number of validators by status")))
 )
 
 func metricName(name string) string {
@@ -50,27 +50,7 @@ func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
 }
 
 func recordValidatorStatus(ctx context.Context, status validatorStatus) {
-	resetExecutionClientStatusGauge(ctx)
-
-	validatorStatusGauge.Record(ctx, 1,
+	validatorStatusCounter.Add(ctx, 1,
 		metric.WithAttributes(validatorStatusAttribute(status)),
 	)
-}
-
-func resetExecutionClientStatusGauge(ctx context.Context) {
-	for _, status := range []validatorStatus{
-		statusError,
-		statusNotFound,
-		statusReady,
-		statusSlashed,
-		statusExiting,
-		statusNotActivated,
-		statusPending,
-		statusNoIndex,
-		statusRemoved,
-		statusUnknown} {
-		validatorStatusGauge.Record(ctx, 0,
-			metric.WithAttributes(validatorStatusAttribute(status)),
-		)
-	}
 }
