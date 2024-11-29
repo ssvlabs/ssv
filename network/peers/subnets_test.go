@@ -28,24 +28,32 @@ func TestSubnetsIndex(t *testing.T) {
 		pids = append(pids, pid)
 	}
 
-	sAll, err := records.Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
-	require.NoError(t, err)
-	sNone, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
-	require.NoError(t, err)
-	sPartial, err := records.Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
+	sPartial, err := records.SubnetsFromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
-	subnetsIdx := NewSubnetsIndex(128)
+	subnetsIdx := NewSubnetsIndex()
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sAll.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[1], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[2], sPartial.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[3], sPartial.Clone())
+	initialMapping := map[peer.ID]records.Subnets{
+		pids[0]: records.AllSubnets,
+		pids[1]: records.ZeroSubnets,
+		pids[2]: sPartial,
+		pids[3]: sPartial,
+	}
+
+	for pid, subnets := range initialMapping {
+		subnetsIdx.UpdatePeerSubnets(pid, subnets)
+	}
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 1)
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sPartial.Clone())
+	for _, pid := range pids {
+		subnets, ok := subnetsIdx.GetPeerSubnets(pid)
+		require.True(t, ok)
+		require.Equal(t, initialMapping[pid], subnets)
+	}
+
+	subnetsIdx.UpdatePeerSubnets(pids[0], sPartial)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
@@ -53,41 +61,38 @@ func TestSubnetsIndex(t *testing.T) {
 	stats := subnetsIdx.GetSubnetsStats()
 	require.Equal(t, 3, stats.PeersCount[0])
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[2], sNone.Clone())
-	subnetsIdx.UpdatePeerSubnets(pids[3], sNone.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[0], records.ZeroSubnets)
+	subnetsIdx.UpdatePeerSubnets(pids[2], records.ZeroSubnets)
+	subnetsIdx.UpdatePeerSubnets(pids[3], records.ZeroSubnets)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 0)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
 }
 
 func TestSubnetsDistributionScores(t *testing.T) {
-	nsubnets := 128
-	mysubnets := make(records.Subnets, nsubnets)
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	for sub := range allSubs {
-		if sub%2 == 0 {
-			mysubnets[sub] = byte(0)
-		} else {
-			mysubnets[sub] = byte(1)
+	mySubnets := records.Subnets{}
+	for i := 0; i < commons.Subnets(); i++ {
+		if i%2 != 0 {
+			mySubnets.Set(i)
 		}
 	}
-	stats := &SubnetsStats{
-		PeersCount: make([]int, len(mysubnets)),
-		Connected:  make([]int, len(mysubnets)),
-	}
-	for sub := range mysubnets {
+
+	t.Logf("my subnets: %v", mySubnets.String())
+
+	stats := &SubnetsStats{}
+	for sub := 0; sub < commons.Subnets(); sub++ {
 		stats.Connected[sub] = 1 + rand.Intn(20)
 		stats.PeersCount[sub] = stats.Connected[sub] + rand.Intn(10)
 	}
+
 	stats.Connected[1] = 0
 	stats.Connected[3] = 1
 	stats.Connected[5] = 30
 	stats.PeersCount[5] = 30
 
-	distScores := GetSubnetsDistributionScores(stats, 3, mysubnets, 5)
+	distScores := GetSubnetsDistributionScores(stats, 3, mySubnets, 5)
 
-	require.Len(t, distScores, len(mysubnets))
+	require.Len(t, distScores, records.SubnetsCount)
 	require.Equal(t, float64(0), distScores[0])
 	require.Equal(t, float64(4.2), distScores[1])
 	require.Equal(t, float64(2.533333333333333), distScores[3])
@@ -141,7 +146,7 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 
 	getSubnet := func(t *testing.T, subnetHex string) records.Subnets {
 		require.Len(t, subnetHex, 32, "subnetHex must be 32 characters long, got %d", len(subnetHex))
-		s, err := records.Subnets{}.FromString(subnetHex)
+		s, err := records.SubnetsFromString(subnetHex)
 		require.NoError(t, err)
 		return s
 	}
@@ -195,7 +200,7 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			subnetsIdx := NewSubnetsIndex(128)
+			subnetsIdx := NewSubnetsIndex()
 			pids := generateTestPeers(t, tt.numPeers)
 			subnetID := 0
 			sInitial := getSubnet(t, tt.initialSubnets)

@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
@@ -83,10 +82,11 @@ func TestCheckPeer(t *testing.T) {
 				expectedError:  nil,
 			},
 			{
-				name:          "missing subnets",
-				domainType:    &myDomainType,
-				subnets:       nil,
-				expectedError: errors.New("could not read subnets"),
+				name:           "missing subnets",
+				domainType:     &myDomainType,
+				subnets:        records.Subnets{},
+				missingSubnets: true,
+				expectedError:  errors.New("could not read subnets"),
 			},
 			{
 				name:          "inactive subnets",
@@ -138,7 +138,7 @@ func TestCheckPeer(t *testing.T) {
 				err := records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, *test.nextDomainType)
 				require.NoError(t, err)
 			}
-			if test.subnets != nil {
+			if !test.missingSubnets {
 				err := records.SetSubnetsEntry(localNode, test.subnets)
 				require.NoError(t, err)
 			}
@@ -148,7 +148,7 @@ func TestCheckPeer(t *testing.T) {
 	}
 
 	// Run the tests.
-	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
+	subnetIndex := peers.NewSubnetsIndex()
 	dvs := &DiscV5Service{
 		ctx:           ctx,
 		conns:         &mock.MockConnectionIndex{LimitValue: false},
@@ -176,15 +176,16 @@ type checkPeerTest struct {
 	name           string
 	domainType     *spectypes.DomainType
 	nextDomainType *spectypes.DomainType
-	subnets        []byte
+	subnets        records.Subnets
+	missingSubnets bool
 	localNode      *enode.LocalNode
 	expectedError  error
 }
 
-func mockSubnets(active ...int) []byte {
-	subnets := make([]byte, commons.Subnets())
+func mockSubnets(active ...int) records.Subnets {
+	subnets := records.Subnets{}
 	for _, subnet := range active {
-		subnets[subnet] = 1
+		subnets.Set(subnet)
 	}
 	return subnets
 }

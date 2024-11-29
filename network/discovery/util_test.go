@@ -19,11 +19,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 var (
@@ -58,8 +59,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
+	subnetsIndex := peers.NewSubnetsIndex()
 	connectionIndex := NewMockConnection()
 
 	return &Options{
@@ -160,7 +160,7 @@ func NodeWithoutNextDomain(t *testing.T) *enode.Node {
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), false, records.Subnets{})
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
@@ -168,17 +168,17 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, records.ZeroSubnets)
 }
 
-func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
+func NodeWithCustomSubnets(t *testing.T, subnets records.Subnets) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, subnets)
 }
 
 func CustomNode(t *testing.T,
 	setDomainType bool, domainType spectypes.DomainType,
 	setNextDomainType bool, nextDomainType spectypes.DomainType,
-	setSubnets bool, subnets []byte) *enode.Node {
+	setSubnets bool, subnets records.Subnets) *enode.Node {
 
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -210,8 +210,9 @@ func CustomNode(t *testing.T,
 	}
 	if setSubnets {
 		subnetsVec := bitfield.NewBitvector128()
-		for i, subnet := range subnets {
-			subnetsVec.SetBitAt(uint64(i), subnet > 0)
+
+		for i := 0; i < records.SubnetsCount; i++ {
+			subnetsVec.SetBitAt(uint64(i), subnets.IsSet(i))
 		}
 		record.Set(enr.WithEntry("subnets", &subnetsVec))
 	}
@@ -321,7 +322,7 @@ func (mc *MockConnection) AtLimit(dir network.Direction) bool {
 	return mc.atLimit
 }
 
-func (mc *MockConnection) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (mc *MockConnection) IsBad(id peer.ID) bool {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 	if bad, ok := mc.isBad[id]; ok {

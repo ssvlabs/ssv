@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -116,9 +117,9 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	// Compute the score for each peer according to peer's subnets and subnets' score
 	var peerLogs []peerLog
 	for _, pid := range allPeers {
-		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
+		peerSubnets, ok := c.subnetsIdx.GetPeerSubnets(pid)
 		var score PeerScore
-		if len(peerSubnets) == 0 {
+		if !ok {
 			// TODO: shouldn't we not connect to peers with no subnets?
 			c.logger.Debug("peer has no subnets", zap.String("peer", pid.String()))
 			score = -1000
@@ -129,7 +130,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		peerLogs = append(peerLogs, peerLog{
 			Peer:          pid,
 			Score:         score,
-			SharedSubnets: len(records.SharedSubnets(peerSubnets, mySubnets, len(mySubnets))),
+			SharedSubnets: len(peerSubnets.SharedSubnets(mySubnets)),
 		})
 	}
 
@@ -145,16 +146,16 @@ type peerLog struct {
 	SharedSubnets int
 }
 
-func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets, subnetConnections []int) {
+func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets, subnetConnections [commons.SubnetsCount]int) {
 	sort.Slice(peerLogs, func(i, j int) bool {
 		return peerLogs[i].Score < peerLogs[j].Score
 	})
 
 	// Calculate min & max of the active subnet connections.
-	activeSubnetConnections := make([]int, 0, mySubnets.Active())
+	activeSubnetConnections := make([]int, 0, mySubnets.ActiveCount())
 	var min, max = math.MaxInt32, math.MinInt32
 	for subnet, n := range subnetConnections {
-		if mySubnets[subnet] <= 0 {
+		if !mySubnets.IsSet(subnet) {
 			continue
 		}
 		activeSubnetConnections = append(activeSubnetConnections, n)
@@ -195,10 +196,10 @@ func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets
 	)
 }
 
-func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
+func scorePeer(peerSubnets records.Subnets, subnetsScores [commons.SubnetsCount]float64) PeerScore {
 	var score float64
 	for subnet, subnetScore := range subnetsScores {
-		connected := peerSubnets[subnet] > 0
+		connected := peerSubnets.IsSet(subnet)
 		if connected {
 			score += subnetScore
 		} else {
@@ -231,8 +232,11 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int {
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
-		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
-		sharedSubnets := records.SharedSubnets(mySubnets, peerSubnets, len(mySubnets))
+		var sharedSubnets []int
+		peerSubnets, ok := c.subnetsIdx.GetPeerSubnets(peerID)
+		if ok {
+			sharedSubnets = mySubnets.SharedSubnets(peerSubnets)
+		}
 
 		// If there's no common subnet, disconnect from peer.
 		if len(sharedSubnets) == 0 {

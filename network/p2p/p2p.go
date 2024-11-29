@@ -95,8 +95,11 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
-	fixedSubnets  []byte
-	activeSubnets []byte
+	// persistentSubnets holds subnets on node startup,
+	// these subnets should not be unsubscribed from even if all validators associated with them are removed
+	persistentSubnets records.Subnets
+	// currentSubnets holds current subnets which depend on current active validators and committees
+	currentSubnets records.Subnets
 
 	libConnManager connmgrcore.ConnManager
 
@@ -298,16 +301,14 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerBalancingTimeout)
 		defer cancel()
 
-		mySubnets := records.Subnets(n.activeSubnets).Clone()
-
 		// Disconnect from irrelevant peers
-		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
+		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, n.currentSubnets)
 		if disconnectedPeers > 0 {
 			return
 		}
 
 		// Trim peers according to subnet participation (considering the subnet size)
-		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, n.currentSubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
 	}
 }
@@ -350,44 +351,44 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(time.Second)
-	registeredSubnets := make([]byte, commons.Subnets())
+	registeredSubnets := records.Subnets{}
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		// Compute the new subnets according to the active committees/validators.
-		updatedSubnets := make([]byte, commons.Subnets())
-		copy(updatedSubnets, n.fixedSubnets)
+		updatedSubnets := n.persistentSubnets
 
 		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
-			updatedSubnets[subnet] = byte(1)
+			updatedSubnets.Set(int(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			return true
 		})
 
 		if !n.cfg.Network.PastAlanFork() {
 			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 				subnet := commons.ValidatorSubnet(pkHex)
-				updatedSubnets[subnet] = byte(1)
+				updatedSubnets.Set(int(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 				return true
 			})
 		}
-		n.activeSubnets = updatedSubnets
+		n.currentSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]uint64, 0)
-		for subnet, active := range updatedSubnets {
-			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
+		subnetList := updatedSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !registeredSubnets.IsSet(subnet) {
 				addedSubnets = append(addedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]uint64, 0)
-		for subnet, active := range registeredSubnets {
-			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
+		subnetList = registeredSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !updatedSubnets.IsSet(subnet) {
 				removedSubnets = append(removedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
 			}
 		}
@@ -399,7 +400,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = records.Subnets(n.activeSubnets).String()
+			self.Metadata.Subnets = n.currentSubnets.String()
 			return self
 		})
 
@@ -436,8 +437,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
 		}
 
-		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		subnetsList := records.SharedSubnets(allSubs, n.activeSubnets, 0)
+		subnetsList := records.AllSubnets.SharedSubnets(n.currentSubnets)
 		logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),

@@ -69,31 +69,33 @@ func GetDomainTypeEntry(record *enr.Record, key ENRKey) (spectypes.DomainType, e
 }
 
 // SetSubnetsEntry adds subnets entry to our enode.LocalNode
-func SetSubnetsEntry(node *enode.LocalNode, subnets []byte) error {
+func SetSubnetsEntry(node *enode.LocalNode, subnets Subnets) error {
 	subnetsVec := bitfield.NewBitvector128()
-	for i, subnet := range subnets { // #nosec G115 -- subnets has a constant len of 128
-		subnetsVec.SetBitAt(uint64(i), subnet > 0)
+
+	for i := 0; i < SubnetsCount; i++ {
+		subnetsVec.SetBitAt(uint64(i), subnets.IsSet(i)) // #nosec G115 -- subnets has a constant max len of 128
 	}
 	node.Set(enr.WithEntry("subnets", &subnetsVec))
 	return nil
 }
 
 // GetSubnetsEntry extracts the value of subnets entry from some record
-func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
+func GetSubnetsEntry(record *enr.Record) (Subnets, error) {
 	subnetsVec := bitfield.NewBitvector128()
 	if err := record.Load(enr.WithEntry("subnets", &subnetsVec)); err != nil {
 		if enr.IsNotFound(err) {
-			return nil, ErrEntryNotFound
+			return Subnets{}, ErrEntryNotFound
 		}
-		return nil, err
+		return Subnets{}, err
 	}
-	res := make([]byte, 0, subnetsVec.Len())
-	for i := uint64(0); i < subnetsVec.Len(); i++ {
-		val := byte(0)
-		if subnetsVec.BitAt(i) {
-			val = 1
+	res := Subnets{}
+	for i := 0; i < SubnetsCount; i++ {
+		// #nosec G115 -- subnets has a constant max len of 128
+		if subnetsVec.BitAt(uint64(i)) {
+			res.Set(i)
+		} else {
+			res.Clear(i)
 		}
-		res = append(res, val)
 	}
 	return res, nil
 }

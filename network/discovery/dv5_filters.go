@@ -4,8 +4,9 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 // limitNodeFilter returns true if the limit is exceeded
@@ -31,7 +32,7 @@ func (dvs *DiscV5Service) badNodeFilter(logger *zap.Logger) func(node *enode.Nod
 			logger.Warn("could not get peer ID from node record", zap.Error(err))
 			return false
 		}
-		return !dvs.conns.IsBad(logger, pid)
+		return !dvs.conns.IsBad(pid)
 	}
 }
 
@@ -56,7 +57,8 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 			return false
 		}
 		for _, subnet := range subnets {
-			if fromEntry[subnet] > 0 {
+			// #nosec G115 -- subnets has a constant max len of 128
+			if fromEntry.IsSet(int(subnet)) {
 				return true
 			}
 		}
@@ -71,14 +73,11 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 		if n == 0 {
 			return true
 		}
-		if len(dvs.subnets) == 0 {
-			return true
-		}
 		nodeSubnets, err := records.GetSubnetsEntry(node.Record())
 		if err != nil {
 			return false
 		}
-		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
+		shared := dvs.subnets.SharedSubnetsN(nodeSubnets, n)
 		// logger.Debug("shared subnets", zap.Ints("shared", shared),
 		//	zap.String("node", node.String()))
 

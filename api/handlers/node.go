@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	networkpeers "github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
@@ -169,10 +170,15 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) peers(peers []peer.ID) []peerJSON {
 	resp := make([]peerJSON, len(peers))
 	for i, id := range peers {
+		subnets, ok := h.PeersIndex.GetPeerSubnets(id)
+		if !ok {
+			subnets = records.ZeroSubnets
+		}
+
 		resp[i] = peerJSON{
 			ID:            id,
 			Connectedness: h.Network.Connectedness(id).String(),
-			Subnets:       h.PeersIndex.GetPeerSubnets(id).String(),
+			Subnets:       subnets.String(),
 		}
 
 		for _, addr := range h.Network.Peerstore().Addrs(id) {

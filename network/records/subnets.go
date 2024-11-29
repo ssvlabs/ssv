@@ -4,149 +4,171 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"strconv"
+	"math/bits"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 const (
-	// ZeroSubnets is the representation of no subnets
-	ZeroSubnets = "00000000000000000000000000000000"
-	// AllSubnets is the representation of all subnets
-	AllSubnets = "ffffffffffffffffffffffffffffffff"
+	SubnetsCount = int(commons.SubnetsCount)
+	byteCnt      = SubnetsCount / 8
 )
 
-// UpdateSubnets updates subnets entry according to the given changes.
-// count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
-func UpdateSubnets(node *enode.LocalNode, count int, added []uint64, removed []uint64) ([]byte, error) {
-	subnets, err := GetSubnetsEntry(node.Node().Record())
-	if err != nil && !errors.Is(err, ErrEntryNotFound) {
-		return nil, errors.Wrap(err, "could not read subnets entry")
+var (
+	// ZeroSubnets is the representation of no subnets
+	ZeroSubnets = Subnets{v: [byteCnt]byte(bytes.Repeat([]byte{0x00}, byteCnt))}
+	// AllSubnets is the representation of all subnets
+	AllSubnets = Subnets{v: [byteCnt]byte(bytes.Repeat([]byte{0xFF}, byteCnt))}
+)
+
+// Subnets holds all the subscribed subnets of a specific node.
+// The array index represents a subnet number,
+// the value holds either 0 or 1 representing if the node is subscribed to the subnet number.
+type Subnets struct {
+	v [byteCnt]byte // wrapped by a struct to forbid indexing outsize of this package
+}
+
+// SubnetsFromString parses a given subnet string
+func SubnetsFromString(subnetsStr string) (Subnets, error) {
+	subnetsStr = strings.TrimPrefix(subnetsStr, "0x")
+	data, err := hex.DecodeString(subnetsStr)
+	if err != nil {
+		return Subnets{}, err
 	}
-	orig := make([]byte, len(subnets))
-	if len(subnets) == 0 { // not exist, creating slice
-		subnets = make([]byte, count)
-	} else {
-		copy(orig, subnets)
+
+	if len(data) != byteCnt {
+		return Subnets{}, fmt.Errorf("invalid subnets length %d, expected %d", len(data), byteCnt)
 	}
-	for _, i := range added {
-		subnets[i] = 1
-	}
-	for _, i := range removed {
-		subnets[i] = 0
-	}
-	if bytes.Equal(orig, subnets) {
-		return nil, nil
-	}
-	if err := SetSubnetsEntry(node, subnets); err != nil {
-		return nil, errors.Wrap(err, "could not update subnets entry")
-	}
+
+	var subnets Subnets
+	copy(subnets.v[:], data)
 	return subnets, nil
 }
 
-// Subnets holds all the subscribed subnets of a specific node
-type Subnets []byte
-
-// Clone clones the independent byte slice
-func (s Subnets) Clone() Subnets {
-	cp := make([]byte, len(s))
-	copy(cp, s)
-	return cp
-}
-
-func (s Subnets) String() string {
-	subnetsVec := bitfield.NewBitvector128()
-	subnet := uint64(0)
-	for _, val := range s {
-		subnetsVec.SetBitAt(subnet, val > uint8(0))
-		subnet++
+// IsSet checks if the i-th subnet is set.
+func (s *Subnets) IsSet(i int) bool {
+	if i < 0 || i >= SubnetsCount {
+		return false
 	}
-	return hex.EncodeToString(subnetsVec.Bytes())
+	byteIndex := i / 8
+	bitIndex := uint(i % 8) // #nosec G115 -- subnets has a constant max len of 128
+	return (s.v[byteIndex] & (1 << bitIndex)) != 0
 }
 
-// FromString parses a given subnet string
-func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
-	subnetsStr = strings.Replace(subnetsStr, "0x", "", 1)
-	var data []byte
-	for i := 0; i+1 < len(subnetsStr); i += 2 {
-		maskData1, err := getCharMask(string(subnetsStr[i]))
-		if err != nil {
-			return nil, err
-		}
-		maskData2, err := getCharMask(string(subnetsStr[i+1]))
-		if err != nil {
-			return nil, err
-		}
-		data = append(data, maskData2...)
-		data = append(data, maskData1...)
+// Set marks the i-th subnet as set.
+func (s *Subnets) Set(i int) {
+	if i < 0 || i >= SubnetsCount {
+		return
 	}
-	return data, nil
+	byteIndex := i / 8
+	bitIndex := uint(i % 8) // #nosec G115 -- subnets has a constant max len of 128
+	s.v[byteIndex] |= (1 << bitIndex)
 }
 
-func (s Subnets) Active() int {
-	var active int
-	for _, val := range s {
-		if val > 0 {
-			active++
+// Clear marks the i-th subnet as not set.
+func (s *Subnets) Clear(i int) {
+	if i < 0 || i >= SubnetsCount {
+		return
+	}
+	byteIndex := i / 8
+	bitIndex := uint(i % 8) // #nosec G115 -- subnets has a constant max len of 128
+	s.v[byteIndex] &^= (1 << bitIndex)
+}
+
+func (s *Subnets) String() string {
+	return hex.EncodeToString(s.v[:])
+}
+
+func (s *Subnets) SubnetList() []int {
+	indices := make([]int, 0)
+	for byteIdx, b := range s.v {
+		if byteIdx >= SubnetsCount {
+			break
 		}
+		for bitIdx := 0; bitIdx < 8; bitIdx++ {
+			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of 128
+			if b&bit == bit {
+				subnet := byteIdx*8 + bitIdx
+				indices = append(indices, subnet)
+			}
+		}
+	}
+
+	return indices
+}
+
+func (s *Subnets) ActiveCount() int {
+	active := 0
+	for _, b := range s.v {
+		active += bits.OnesCount8(b)
 	}
 	return active
 }
 
+// ToMap returns a map with all subnets and their values
+func (s *Subnets) ToMap() map[int]bool {
+	m := make(map[int]bool)
+	for i := 0; i < SubnetsCount; i++ {
+		m[i] = s.IsSet(i)
+	}
+	return m
+}
+
 // SharedSubnets returns the shared subnets
-func SharedSubnets(a, b []byte, maxLen int) []int {
+func (s *Subnets) SharedSubnets(other Subnets) []int {
+	return s.SharedSubnetsN(other, 0)
+}
+
+func (s *Subnets) SharedSubnetsN(other Subnets, n int) []int {
 	var shared []int
-	if maxLen == 0 {
-		maxLen = len(a)
+	if n <= 0 {
+		n = SubnetsCount
 	}
-	if len(a) == 0 || len(b) == 0 {
-		return shared
-	}
-	for subnet, aval := range a {
-		if aval == 0 {
-			continue
-		}
-		if b[subnet] == 0 {
-			continue
-		}
-		shared = append(shared, subnet)
-		if len(shared) == maxLen {
-			break
+	for i := 0; i < SubnetsCount; i++ {
+		if s.IsSet(i) && other.IsSet(i) {
+			shared = append(shared, i)
+			if len(shared) == n {
+				break
+			}
 		}
 	}
 	return shared
 }
 
-// DiffSubnets returns a diff of the two given subnets.
-// returns a map with all the different entries and their post change value
-func DiffSubnets(a, b []byte) map[int]byte {
-	diff := make(map[int]byte)
-	for subnet, bval := range b {
-		if subnet >= len(a) {
-			diff[subnet] = bval
-		} else if aval := a[subnet]; aval != bval {
-			diff[subnet] = bval
-		}
+func (s *Subnets) DiffSubnets(other Subnets) (added Subnets, removed Subnets) {
+	for i := 0; i < byteCnt; i++ {
+		// Bits to add: set in 'other' but not in 's'
+		added.v[i] = other.v[i] &^ s.v[i]
+		// Bits to remove: set in 's' but not in 'other'
+		removed.v[i] = s.v[i] &^ other.v[i]
 	}
-	return diff
+	return added, removed
 }
 
-func getCharMask(str string) ([]byte, error) {
-	val, err := strconv.ParseUint(str, 16, 8)
-	if err != nil {
-		return nil, err
+// UpdateSubnets updates subnets entry according to the given changes.
+// count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
+func UpdateSubnets(node *enode.LocalNode, added []uint64, removed []uint64) (Subnets, bool, error) {
+	subnets, err := GetSubnetsEntry(node.Node().Record())
+	if err != nil && !errors.Is(err, ErrEntryNotFound) {
+		return Subnets{}, false, fmt.Errorf("could not read subnets entry: %w", err)
 	}
-	mask := fmt.Sprintf("%04b", val)
-	var maskData []byte
-	for j := 0; j < len(mask); j++ {
-		val, err := strconv.ParseUint(string(mask[len(mask)-1-j]), 2, 8)
-		if err != nil {
-			return nil, err
-		}
-		maskData = append(maskData, uint8(val)) // nolint:gosec
+
+	orig := subnets
+	for _, i := range added {
+		subnets.Set(int(i)) // #nosec G115 -- subnets has a constant max len of 128
 	}
-	return maskData, nil
+	for _, i := range removed {
+		subnets.Clear(int(i)) // #nosec G115 -- subnets has a constant max len of 128
+	}
+	if orig == subnets {
+		return Subnets{}, false, nil
+	}
+	if err := SetSubnetsEntry(node, subnets); err != nil {
+		return Subnets{}, false, fmt.Errorf("could not update subnets entry: %w", err)
+	}
+	return subnets, true, nil
 }
