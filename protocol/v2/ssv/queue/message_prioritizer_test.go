@@ -16,6 +16,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -152,6 +153,53 @@ func TestMessagePrioritizer(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCommitteeQueuePrioritizer(t *testing.T) {
+	testMessages := []mockMessage{
+		mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
+		// 1.3.2. Consensus/Prepare
+		mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
+		// 1.3.3. Consensus/Commit
+		mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
+		// 1.3.4. Consensus/<Other>
+		mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
+	}
+
+	state := &State{
+		HasRunningInstance: false,
+		Height:             100,
+		Slot:               64,
+		Quorum:             4,
+	}
+
+	messages := make(messageSlice, len(testMessages))
+	for i, m := range testMessages {
+		var err error
+		messages[i], err = DecodeSignedSSVMessage(m.ssvMessage(state))
+		require.NoError(t, err)
+	}
+
+	var shuffles []messageSlice
+	for {
+		shuffledMessages := messages.shuffle()
+		if shuffledMessages.equal(messages) {
+			continue
+		}
+		shuffles = append(shuffles, shuffledMessages)
+		if len(shuffles) == 10 {
+			break
+		}
+	}
+
+	prioritizer := NewCommitteeQueuePrioritizer(zap.NewNop(), state)
+	for _, shuffle := range shuffles {
+		shuffle.sort(prioritizer)
+		correctOrder := messages.equal(shuffle)
+		if !correctOrder {
+			require.Fail(t, "incorrect order:\n"+shuffle.dump(state))
+		}
 	}
 }
 
@@ -356,7 +404,7 @@ func (m messageSlice) dump(s *State) string {
 	for i, msg := range m {
 		var (
 			kind         string
-			typ          interface{}
+			typ          string
 			heightOrSlot interface{}
 			relation     string
 		)
@@ -373,8 +421,9 @@ func (m messageSlice) dump(s *State) string {
 		switch mm := msg.Body.(type) {
 		case *spectypes.PartialSignatureMessages:
 			// heightOrSlot = mm.Message.Messages[0].Slot
-			typ = mm.Type
-			if typ == spectypes.PostConsensusPartialSig {
+			typ = message.MsgTypeToString(spectypes.MsgType(mm.Type))
+
+			if mm.Type == spectypes.PostConsensusPartialSig {
 				kind = "post-consensus"
 			} else {
 				kind = "pre-consensus"
@@ -382,7 +431,7 @@ func (m messageSlice) dump(s *State) string {
 		case *qbft.Message:
 			kind = "consensus"
 			heightOrSlot = mm.Height
-			typ = mm.MsgType
+			typ = message.QBFTMsgTypeToString(mm.MsgType)
 		}
 
 		decided := false
@@ -393,7 +442,7 @@ func (m messageSlice) dump(s *State) string {
 			fmt.Sprint(i),
 			kind,
 			fmt.Sprintf("%d (%s)", heightOrSlot, relation),
-			fmt.Sprint(typ),
+			typ,
 			fmt.Sprintf("%t", decided),
 		)
 	}
