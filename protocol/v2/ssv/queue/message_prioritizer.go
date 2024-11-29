@@ -114,7 +114,7 @@ func (p *committeePrioritizer) Prior(a, b *SSVMessage) (ok bool) {
 		return scoreA > scoreB
 	}
 
-	scoreA, scoreB = scoreConsensusType(a), scoreConsensusType(b)
+	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
 	if scoreA != scoreB {
 		fields = append(fields, zap.String("check", "2#scoreA > scoreB"))
 		return scoreA > scoreB
