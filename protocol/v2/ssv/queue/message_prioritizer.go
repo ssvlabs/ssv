@@ -1,11 +1,14 @@
 package queue
 
 import (
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"go.uber.org/zap"
 )
 
@@ -89,38 +92,33 @@ func (p *committeePrioritizer) Prior(a, b *SSVMessage) (ok bool) {
 	var fields []zap.Field
 
 	defer func() {
-		fields = append(fields, zap.Bool("result", ok))
-		logMsg(p.logger, a, "resultonly", fields...)
+		logMsg(p.logger, a, "committeePrioritizer.Prior", fields...)
 	}()
-
-	logMsg(p.logger, a, "messageA")
-	logMsg(p.logger, b, "messageB")
 
 	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
 	if msgScoreA != msgScoreB {
-		fields = append(fields, zap.String("check", "msgScoreA > msgScoreB"))
 		return msgScoreA > msgScoreB
 	}
 
 	relativeHeightA, relativeHeightB := compareHeightOrSlot(p.state, a), compareHeightOrSlot(p.state, b)
 	if relativeHeightA != relativeHeightB {
-		fields = append(fields, zap.String("check", "scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)"))
 		return scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)
 	}
 
 	scoreA, scoreB := scoreCommitteeMessageSubtype(p.state, a, relativeHeightA), scoreCommitteeMessageSubtype(p.state, b, relativeHeightB)
 	if scoreA != scoreB {
-		fields = append(fields, zap.String("check", "1#scoreA > scoreB"))
 		return scoreA > scoreB
 	}
 
 	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
 	if scoreA != scoreB {
-		fields = append(fields, zap.String("check", "2#scoreA > scoreB"))
+		s := fmt.Sprintf("scoreA(%s(%d)) > scoreB(%s(%d)) is %t",
+			message.QBFTMsgTypeToString(specqbft.MessageType(a.MsgType)), scoreA,
+			message.QBFTMsgTypeToString(specqbft.MessageType(b.MsgType)), scoreB, scoreA > scoreB)
+		fields = append(fields, zap.String("scoreCommitteeConsensusType", s))
 		return scoreA > scoreB
 	}
 
-	fields = append(fields, zap.String("check", "return true"))
 	return true
 }
 

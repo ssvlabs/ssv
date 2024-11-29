@@ -299,6 +299,13 @@ func (m mockNonConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMe
 	}
 }
 
+func Test1(t *testing.T) {
+	s := fmt.Sprintf("scoreA(%s(%d)) > scoreB(%s(%d)) is %t",
+		message.QBFTMsgTypeToString(specqbft.MessageType(2)), 2,
+		message.QBFTMsgTypeToString(specqbft.MessageType(3)), 3, 2 > 3)
+	t.Log(s)
+}
+
 type mockExecuteDutyMessage struct {
 	Role spectypes.BeaconRole
 	Slot phase0.Slot
