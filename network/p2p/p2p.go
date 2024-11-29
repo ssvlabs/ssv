@@ -357,9 +357,9 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 				aShares := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
 				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
 				if aShares < bShared {
-					return -1
-				} else if aShares > bShared {
 					return 1
+				} else if aShares > bShared {
+					return -1
 				} else {
 					return 0
 				}
