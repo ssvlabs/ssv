@@ -11,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -36,8 +35,6 @@ func (mv *messageValidator) validateConsensusMessage(
 		Signers:         signedMsg.Signers,
 		Committee:       share.Committee,
 	}
-
-	mv.metrics.ConsensusMsgType(alanspecqbft.MessageType(signedMsg.Message.MsgType), len(signedMsg.Signers))
 
 	switch messageID.GetRoleType() {
 	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:

@@ -233,19 +233,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 		return pubsub.ValidationAccept
 	}
 
-	start := time.Now()
-	var validationDurationLabels []string // TODO: implement
-
-	defer func() {
-		sinceStart := time.Since(start)
-		mv.metrics.MessageValidationDuration(sinceStart, validationDurationLabels...)
-	}()
-
 	decodedMessage, descriptor, err := mv.validateP2PMessage(pmsg, time.Now())
-	round := specqbft.Round(0)
-	if descriptor.Consensus != nil {
-		round = descriptor.Consensus.Round
-	}
 
 	f := append(descriptor.Fields(), fields.PeerID(peerID))
 
@@ -258,7 +246,6 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 					mv.logger.Debug("rejecting invalid message", f...)
 				}
 
-				mv.metrics.GenesisMessageRejected(valErr.Text(), descriptor.Role, round)
 				return pubsub.ValidationReject
 			}
 
@@ -266,19 +253,15 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 				f = append(f, zap.Error(err))
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
-			mv.metrics.GenesisMessageIgnored(valErr.Text(), descriptor.Role, round)
 			return pubsub.ValidationIgnore
 		}
 
-		mv.metrics.GenesisMessageIgnored(err.Error(), descriptor.Role, round)
 		f = append(f, zap.Error(err))
 		mv.logger.Debug("ignoring invalid message", f...)
 		return pubsub.ValidationIgnore
 	}
 
 	pmsg.ValidatorData = decodedMessage
-
-	mv.metrics.GenesisMessageAccepted(descriptor.Role, round)
 
 	return pubsub.ValidationAccept
 }
@@ -290,14 +273,6 @@ func (mv *messageValidator) ValidateSSVMessage(ssvMessage *genesisqueue.GenesisS
 }
 
 func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*genesisqueue.GenesisSSVMessage, Descriptor, error) {
-	topic := pMsg.GetTopic()
-
-	mv.metrics.ActiveMsgValidation(topic)
-	mv.metrics.MessagesReceivedFromPeer(pMsg.ReceivedFrom)
-	mv.metrics.MessagesReceivedTotal()
-
-	defer mv.metrics.ActiveMsgValidationDone(topic)
-
 	encMessageData := pMsg.GetData()
 
 	if len(encMessageData) == 0 {
@@ -320,8 +295,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		mv.metrics.MessageValidationRSAVerifications()
 		return mv.verifySignature(signedSSVMsg)
 	}
-
-	mv.metrics.MessageSize(len(messageData))
 
 	// Max possible MsgType + MsgID + Data plus 10% for encoding overhead
 	const maxMsgSize = 4 + 56 + 8388668
@@ -368,8 +341,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	if !topicFound {
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
-
-	mv.metrics.GenesisSSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
