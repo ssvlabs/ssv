@@ -1,0 +1,74 @@
+package validation
+
+import (
+	"context"
+	"fmt"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
+	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
+)
+
+const (
+	observabilityName      = "github.com/ssvlabs/ssv/message/validation"
+	observabilityNamespace = "ssv.p2p.message.validations"
+)
+
+var (
+	meter = otel.Meter(observabilityName)
+
+	messageValidationsCounter = observability.NewMetric(
+		meter.Int64Counter(
+			observabilityNamespace,
+			metric.WithUnit("{message_validation}"),
+			metric.WithDescription("total count of messages validated")))
+
+	messageValidationsAcceptedCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("accepted"),
+			metric.WithUnit("{message_validation}"),
+			metric.WithDescription("total count of messages successfully validated and accepted")))
+
+	messageValidationsIgnoredCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("ignored"),
+			metric.WithUnit("{message_validation}"),
+			metric.WithDescription("total count of messages that failed validation and were ignored")))
+
+	messageValidationsRejectedCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("rejected"),
+			metric.WithUnit("{message_validation}"),
+			metric.WithDescription("total count of messages that failed validation and were rejected")))
+)
+
+func metricName(name string) string {
+	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
+}
+
+func reasonAttribute(reason string) attribute.KeyValue {
+	return attribute.String("ssv.p2p.message.validation.discard_reason", reason)
+}
+
+func roleAttribute(role types.RunnerRole) attribute.KeyValue {
+	return attribute.String("ssv.runner.role", role.String())
+}
+
+func recordMessage(ctx context.Context) {
+	messageValidationsCounter.Add(ctx, 1)
+}
+
+func recordAcceptedMessage(ctx context.Context, role types.RunnerRole) {
+	messageValidationsAcceptedCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(role)))
+}
+
+func recordRejectedMessage(ctx context.Context, role types.RunnerRole, reason string) {
+	messageValidationsRejectedCounter.Add(ctx, 1, metric.WithAttributes(reasonAttribute(reason), roleAttribute(role)))
+}
+
+func recordIgnoredMessage(ctx context.Context, role types.RunnerRole, reason string) {
+	messageValidationsIgnoredCounter.Add(ctx, 1, metric.WithAttributes(reasonAttribute(reason), roleAttribute(role)))
+}

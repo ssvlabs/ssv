@@ -9,7 +9,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -19,10 +18,6 @@ import (
 const (
 	ssvNodeNotHealthy = float64(0)
 	ssvNodeHealthy    = float64(1)
-
-	messageAccepted = "accepted"
-	messageIgnored  = "ignored"
-	messageRejected = "rejected"
 )
 
 var (
@@ -34,37 +29,11 @@ var (
 		Name: "ssv:exporter:operator_index",
 		Help: "operator footprint",
 	}, []string{"pubKey", "index"})
-	messageValidationResult = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_validation",
-		Help: "Message validation result",
-	}, []string{"status", "reason", "role", "round"})
-	messageValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_validation_ssv_type",
-		Help: "SSV message type",
-	}, []string{"type"})
-	messageValidationConsensusType = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_validation_consensus_type",
-		Help: "Consensus message type",
-	}, []string{"type", "signers"})
-	messageValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_message_validation_duration_seconds",
-		Help:    "Message validation duration (seconds)",
-		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
-	}, []string{})
 	signatureValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_signature_validation_duration_seconds",
 		Help:    "Signature validation duration (seconds)",
 		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
 	}, []string{})
-	messageSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_message_size",
-		Help:    "Message size",
-		Buckets: []float64{100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000},
-	}, []string{})
-	activeMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:msg:val:active",
-		Help: "Count active message validation",
-	}, []string{"topic"})
 	incomingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_queue_incoming",
 		Help: "The amount of message incoming to the validator's msg queue",
@@ -94,14 +63,6 @@ var (
 		Name: "ssv_message_non_committee",
 		Help: "The amount of messages not in committee",
 	}, []string{"ssv_msg_type", "decided"})
-	messagesReceivedFromPeer = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_messages_received_from_peer",
-		Help: "The amount of messages received from the specific peer",
-	}, []string{"peer_id"})
-	messagesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_messages_received_total",
-		Help: "The amount of messages total received",
-	}, []string{})
 	messageValidationRSAVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_rsa_checks",
 		Help: "The amount message validations",
@@ -120,19 +81,8 @@ type MetricsReporter interface {
 	SSVNodeHealthy()
 	SSVNodeNotHealthy()
 	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
-	MessagesReceivedFromPeer(peerId peer.ID)
-	MessagesReceivedTotal()
 	MessageValidationRSAVerifications()
-	MessageAccepted(role spectypes.RunnerRole, round specqbft.Round)
-	MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round)
-	MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round)
-	SSVMessageType(msgType spectypes.MsgType)
-	ConsensusMsgType(msgType specqbft.MessageType, signers int)
-	MessageValidationDuration(duration time.Duration, labels ...string)
 	SignatureValidationDuration(duration time.Duration, labels ...string)
-	MessageSize(size int)
-	ActiveMsgValidation(topic string)
-	ActiveMsgValidationDone(topic string)
 	IncomingQueueMessage(messageID spectypes.MessageID)
 	OutgoingQueueMessage(messageID spectypes.MessageID)
 	MessageQueueSize(size int)
@@ -175,71 +125,12 @@ func (m *metricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, pub
 	operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
 }
 
-func (m *metricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
-	messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
-}
-
-func (m *metricsReporter) MessagesReceivedTotal() {
-	messagesReceivedTotal.WithLabelValues().Inc()
-}
-
 func (m *metricsReporter) MessageValidationRSAVerifications() {
 	messageValidationRSAVerifications.WithLabelValues().Inc()
 }
 
-func (m *metricsReporter) MessageAccepted(role spectypes.RunnerRole, round specqbft.Round) {
-	messageValidationResult.WithLabelValues(
-		messageAccepted,
-		"",
-		role.String(),
-		strconv.FormatUint(uint64(round), 10),
-	).Inc()
-}
-
-func (m *metricsReporter) MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round) {
-	messageValidationResult.WithLabelValues(
-		messageIgnored,
-		reason,
-		role.String(),
-		strconv.FormatUint(uint64(round), 10),
-	).Inc()
-}
-
-func (m *metricsReporter) MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round) {
-	messageValidationResult.WithLabelValues(
-		messageRejected,
-		reason,
-		role.String(),
-		strconv.FormatUint(uint64(round), 10),
-	).Inc()
-}
-
-func (m *metricsReporter) SSVMessageType(msgType spectypes.MsgType) {
-	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
-}
-
-func (m *metricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
-	messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()
-}
-
-func (m *metricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
-	messageValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
-}
-
 func (m *metricsReporter) SignatureValidationDuration(duration time.Duration, labels ...string) {
 	signatureValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
-}
-
-func (m *metricsReporter) MessageSize(size int) {
-	messageSize.WithLabelValues().Observe(float64(size))
-}
-
-func (m *metricsReporter) ActiveMsgValidation(topic string) {
-	activeMsgValidation.WithLabelValues(topic).Inc()
-}
-
-func (m *metricsReporter) ActiveMsgValidationDone(topic string) {
-	activeMsgValidation.WithLabelValues(topic).Dec()
 }
 
 func (m *metricsReporter) IncomingQueueMessage(messageID spectypes.MessageID) {
@@ -293,5 +184,4 @@ func (m *metricsReporter) ResetPeerScores() {
 
 // PeerDisconnected deletes all data about peers which connections have been closed by the current node
 func (m *metricsReporter) PeerDisconnected(peerId peer.ID) {
-	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
 }

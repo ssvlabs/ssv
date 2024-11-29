@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -17,8 +16,6 @@ func NewNop() MetricsReporter {
 func (n *nopMetrics) SSVNodeHealthy()                                                     {}
 func (n *nopMetrics) SSVNodeNotHealthy()                                                  {}
 func (n *nopMetrics) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {}
-func (n *nopMetrics) MessagesReceivedFromPeer(peerId peer.ID)                             {}
-func (n *nopMetrics) MessagesReceivedTotal()                                              {}
 func (n *nopMetrics) MessageValidationRSAVerifications()                                  {}
 func (n *nopMetrics) GenesisMessageAccepted(role genesisspectypes.BeaconRole, round genesisspecqbft.Round) {
 }
@@ -26,17 +23,7 @@ func (n *nopMetrics) GenesisMessageIgnored(reason string, role genesisspectypes.
 }
 func (n *nopMetrics) GenesisMessageRejected(reason string, role genesisspectypes.BeaconRole, round genesisspecqbft.Round) {
 }
-func (n *nopMetrics) MessageAccepted(role spectypes.RunnerRole, round specqbft.Round)               {}
-func (n *nopMetrics) MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round) {}
-func (n *nopMetrics) MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round) {
-}
-func (n *nopMetrics) SSVMessageType(msgType spectypes.MsgType)                             {}
-func (n *nopMetrics) ConsensusMsgType(msgType specqbft.MessageType, signers int)           {}
-func (n *nopMetrics) MessageValidationDuration(duration time.Duration, labels ...string)   {}
 func (n *nopMetrics) SignatureValidationDuration(duration time.Duration, labels ...string) {}
-func (n *nopMetrics) MessageSize(size int)                                                 {}
-func (n *nopMetrics) ActiveMsgValidation(topic string)                                     {}
-func (n *nopMetrics) ActiveMsgValidationDone(topic string)                                 {}
 func (n *nopMetrics) IncomingQueueMessage(messageID spectypes.MessageID)                   {}
 func (n *nopMetrics) OutgoingQueueMessage(messageID spectypes.MessageID)                   {}
 func (n *nopMetrics) MessageQueueSize(size int)                                            {}
