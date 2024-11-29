@@ -92,8 +92,6 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 }
 
 func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage) error {
-	mv.metrics.SSVMessageType(ssvMessage.MsgType)
-
 	// Rule: SSVMessage.Data must not be empty
 	if len(ssvMessage.Data) == 0 {
 		return ErrEmptyData

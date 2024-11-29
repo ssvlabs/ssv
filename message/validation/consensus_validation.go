@@ -42,8 +42,6 @@ func (mv *messageValidator) validateConsensusMessage(
 		return nil, e
 	}
 
-	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.OperatorIDs))
-
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.operatorIDs); err != nil {
 		return consensusMessage, err
 	}
