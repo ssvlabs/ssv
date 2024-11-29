@@ -21,6 +21,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -28,7 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -75,12 +76,12 @@ type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                    context.Context
+	NetworkConfig              networkconfig.NetworkConfig
 	DB                         basedb.Database
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
-	BeaconNetwork              beaconprotocol.Network
 	Network                    P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
 	GenesisBeacon              genesisbeaconprotocol.BeaconNode
@@ -98,7 +99,6 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
-	NetworkConfig              networkconfig.NetworkConfig
 	Graffiti                   []byte
 
 	// worker flags
@@ -260,12 +260,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		},
 	}
 
-	beaconNetwork := options.NetworkConfig.Beacon
-
 	genesisValidatorOptions := genesisvalidator.Options{
-		Network:       options.GenesisControllerOptions.Network,
-		BeaconNetwork: beaconNetwork,
-		Storage:       options.GenesisControllerOptions.StorageMap,
+		Network: options.GenesisControllerOptions.Network,
+		Storage: options.GenesisControllerOptions.StorageMap,
 		// SSVShare:   nil,  // set per validator
 		Signer:            options.GenesisControllerOptions.KeyManager,
 		DutyRunners:       nil, // set per validator
@@ -294,7 +291,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		metrics = options.Metrics
 	}
 
-	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
+	cacheTTL := options.NetworkConfig.SlotDuration() * time.Duration(options.NetworkConfig.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -378,7 +375,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+		if s.IsParticipating(c.networkConfig.Beacon.EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
@@ -483,7 +480,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		c.committeesObservers.Set(
 			ssvMsg.GetID(),
 			ncv,
-			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+			time.Duration(ttlSlots)*c.networkConfig.Beacon.SlotDuration,
 		)
 	} else {
 		ncv = item
@@ -991,7 +988,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 			ctx,
 			cancel,
 			logger,
-			c.beacon.GetBeaconNetwork(),
+			c.networkConfig,
 			operator,
 			committeeRunnerFunc,
 			nil,
@@ -1129,8 +1126,8 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 
 	go func() {
 		slotTicker := slotticker.New(c.logger, slotticker.Config{
-			SlotDuration: c.networkConfig.SlotDurationSec(),
-			GenesisTime:  c.networkConfig.GetGenesisTime(),
+			SlotDuration: c.networkConfig.SlotDuration(),
+			GenesisTime:  c.networkConfig.GenesisTime(),
 		})
 
 		next := slotTicker.Next()
@@ -1221,7 +1218,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks [][]byte, beacon beaconprotocol.BeaconNode) error {
 	// Fetch metadata for all validators.
 	c.recentlyStartedValidators = 0
-	beforeUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
+	beforeUpdate := c.AllActiveIndices(c.networkConfig.Beacon.EstimatedCurrentEpoch(), false)
 
 	err := beaconprotocol.UpdateValidatorsMetadata(logger, pks, beacon, c.UpdateValidatorsMetadata)
 	if err != nil {
@@ -1229,7 +1226,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 	}
 
 	// Refresh duties if there are any new active validators.
-	afterUpdate := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
+	afterUpdate := c.AllActiveIndices(c.networkConfig.Beacon.EstimatedCurrentEpoch(), false)
 	if c.recentlyStartedValidators > 0 || hasNewValidators(beforeUpdate, afterUpdate) {
 		c.logger.Debug("new validators found after metadata update",
 			zap.Int("before", len(beforeUpdate)),
@@ -1238,7 +1235,7 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 		)
 		select {
 		case c.indicesChange <- struct{}{}:
-		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration):
 			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
 		}
 	}
@@ -1283,7 +1280,7 @@ func SetupCommitteeRunners(
 
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
-		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
+		epoch := options.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot)
 		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
 		crunner, err := runner.NewCommitteeRunner(
 			options.NetworkConfig,
@@ -1355,30 +1352,22 @@ func SetupRunners(
 	var err error
 	for _, role := range runnersType {
 		switch role {
-		//case spectypes.BNRoleAttester:
-		//	valCheck := specssv.AttesterValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
-		//	qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
-		//	runners[role] = runner.NewAttesterRunner(options.NetworkConfig.Beacon.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, valCheck, 0)
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
-			runners[role], err = runner.NewProposerRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
+			runners[role], err = runner.NewProposerRunner(alanDomainType, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
-			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
-			runners[role], err = runner.NewAggregatorRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
-		//case spectypes.BNRoleSyncCommittee:
-		//syncCommitteeValueCheckF := specssv.SyncCommitteeValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-		//qbftCtrl := buildController(spectypes.BNRoleSyncCommittee, syncCommitteeValueCheckF)
-		//runners[role] = runner.NewSyncCommitteeRunner(options.NetworkConfig, options.NetworkConfig.Beacon.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeValueCheckF, 0)
+			runners[role], err = runner.NewAggregatorRunner(alanDomainType, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
 		case spectypes.RoleSyncCommitteeContribution:
-			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
-			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
+			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(alanDomainType, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role], err = runner.NewValidatorRegistrationRunner(alanDomainType, options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		case spectypes.RoleVoluntaryExit:
-			runners[role], err = runner.NewVoluntaryExitRunner(alanDomainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role], err = runner.NewVoluntaryExitRunner(alanDomainType, options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		}
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create duty runner")
@@ -1426,7 +1415,7 @@ func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options valida
 		return qbftCtrl
 	}
 
-	genesisBeaconNetwork := genesisspectypes.BeaconNetwork(options.NetworkConfig.Beacon.GetBeaconNetwork())
+	genesisBeaconNetwork := genesisspectypes.BeaconNetwork(options.NetworkConfig.Beacon.ConfigName)
 
 	runners := genesisrunner.DutyRunners{}
 	genesisDomainType := options.NetworkConfig.GenesisDomainType

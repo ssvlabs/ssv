@@ -14,6 +14,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
@@ -36,7 +37,7 @@ var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
 	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
@@ -54,7 +55,7 @@ func NewAggregatorRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleAggregator,
 			DomainType:         domainType,
-			BeaconNetwork:      beaconNetwork,
+			NetworkConfig:      networkConfig,
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
@@ -164,7 +165,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {

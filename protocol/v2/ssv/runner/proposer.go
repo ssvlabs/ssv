@@ -21,6 +21,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
@@ -41,7 +42,7 @@ type ProposerRunner struct {
 
 func NewProposerRunner(
 	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
@@ -60,7 +61,7 @@ func NewProposerRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
 			DomainType:         domainType,
-			BeaconNetwork:      beaconNetwork,
+			NetworkConfig:      networkConfig,
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
@@ -346,7 +347,7 @@ func (r *ProposerRunner) decidedBlindedBlock() bool {
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
@@ -384,7 +385,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	r.metrics.StartPreConsensus()
 
 	// sign partial randao
-	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(duty.DutySlot())
 	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")

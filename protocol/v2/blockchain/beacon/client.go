@@ -2,7 +2,6 @@ package beacon
 
 import (
 	"context"
-	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -41,29 +40,21 @@ type proposer interface {
 	SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error
 }
 
-// TODO need to handle differently (by spec)
-type signer interface {
-	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
-}
-
 // TODO: remove temp spec intefaces once spec is settled
 
 // BeaconNode interface for all beacon duty calls
 type BeaconNode interface {
-	specssv.BeaconNode // spec beacon interface
+	// TODO: add BeaconConfig method?
+	specssv.AttesterCalls
+	specssv.ProposerCalls
+	specssv.AggregatorCalls
+	specssv.SyncCommitteeCalls
+	specssv.SyncCommitteeContributionCalls
+	specssv.ValidatorRegistrationCalls
+	specssv.VoluntaryExitCalls
+	specssv.DomainCalls
 	beaconDuties
 	beaconSubscriber
 	beaconValidator
-	signer // TODO need to handle differently
 	proposer
-}
-
-// Options for controller struct creation
-type Options struct {
-	Context        context.Context
-	Network        Network
-	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	GasLimit       uint64
-	CommonTimeout  time.Duration // Optional.
-	LongTimeout    time.Duration // Optional.
 }

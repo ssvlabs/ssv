@@ -8,12 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer/mocks"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 func TestTimeoutForRound(t *testing.T) {
@@ -49,21 +48,8 @@ func TestTimeoutForRound(t *testing.T) {
 	}
 }
 
-func setupMockBeaconNetwork(t *testing.T) *mocks.MockBeaconNetwork {
-	ctrl := gomock.NewController(t)
-	mockBeaconNetwork := mocks.NewMockBeaconNetwork(ctrl)
-
-	mockBeaconNetwork.EXPECT().SlotDurationSec().Return(120 * time.Millisecond).AnyTimes()
-	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
-			return time.Now()
-		},
-	).AnyTimes()
-	return mockBeaconNetwork
-}
-
-func setupTimer(mockBeaconNetwork *mocks.MockBeaconNetwork, onTimeout OnRoundTimeoutF, role spectypes.RunnerRole, round specqbft.Round) *RoundTimer {
-	timer := New(context.Background(), mockBeaconNetwork, role, onTimeout)
+func setupTimer(beaconConfig networkconfig.Beacon, onTimeout OnRoundTimeoutF, role spectypes.RunnerRole, round specqbft.Round) *RoundTimer {
+	timer := New(context.Background(), beaconConfig, role, onTimeout)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: round,
 		quick:          100 * time.Millisecond,
@@ -74,67 +60,65 @@ func setupTimer(mockBeaconNetwork *mocks.MockBeaconNetwork, onTimeout OnRoundTim
 }
 
 func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconNetwork := setupMockBeaconNetwork(t)
+	beaconConfig := networkconfig.TestingBeaconConfig
+	beaconConfig.SlotDuration = 120 * time.Millisecond
+	beaconConfig.Genesis.GenesisTime = time.Now().Add(500 * time.Millisecond)
 
-	count := int32(0)
+	count := atomic.Int32{}
 	onTimeout := func(round specqbft.Round) {
-		atomic.AddInt32(&count, 1)
+		count.Add(1)
 	}
 
-	timer := setupTimer(mockBeaconNetwork, onTimeout, role, threshold)
+	timer := setupTimer(beaconConfig, onTimeout, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
-	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + time.Millisecond*10)
-	require.Equal(t, int32(1), atomic.LoadInt32(&count))
+	require.Equal(t, int32(0), count.Load())
+	untilTimeout := timer.RoundTimeout(specqbft.FirstHeight, threshold)
+	<-time.After(untilTimeout + time.Millisecond*10)
+	require.Equal(t, int32(1), count.Load())
 }
 
 func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconNetwork := setupMockBeaconNetwork(t)
+	beaconConfig := networkconfig.TestingBeaconConfig
+	beaconConfig.SlotDuration = 120 * time.Millisecond
+	beaconConfig.Genesis.GenesisTime = time.Now().Add(500 * time.Millisecond)
 
-	count := int32(0)
+	count := atomic.Int32{}
 	onTimeout := func(round specqbft.Round) {
-		atomic.AddInt32(&count, 1)
+		count.Add(1)
 	}
 
-	timer := setupTimer(mockBeaconNetwork, onTimeout, role, threshold)
+	timer := setupTimer(beaconConfig, onTimeout, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2)) // reset before elapsed
-	require.Equal(t, int32(0), atomic.LoadInt32(&count))
+	require.Equal(t, int32(0), count.Load())
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + time.Millisecond*10)
-	require.Equal(t, int32(1), atomic.LoadInt32(&count))
+	require.Equal(t, int32(1), count.Load())
 }
 
 func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	ctrl := gomock.NewController(t)
-	mockBeaconNetwork := mocks.NewMockBeaconNetwork(ctrl)
-
-	var count int32
+	var count atomic.Int32
 	var timestamps = make([]int64, 4)
 	var mu sync.Mutex
 
 	onTimeout := func(index int) {
-		atomic.AddInt32(&count, 1)
+		count.Add(1)
 		mu.Lock()
 		timestamps[index] = time.Now().UnixNano()
 		mu.Unlock()
 	}
 
-	timeNow := time.Now()
-	mockBeaconNetwork.EXPECT().SlotDurationSec().Return(100 * time.Millisecond).AnyTimes()
-	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
-			return timeNow
-		},
-	).AnyTimes()
+	beaconConfig := networkconfig.TestingBeaconConfig
+	beaconConfig.SlotDuration = 100 * time.Millisecond
+	beaconConfig.Genesis.GenesisTime = time.Now().Add(500 * time.Millisecond)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(index int) {
-			timer := New(context.Background(), mockBeaconNetwork, role, func(round specqbft.Round) { onTimeout(index) })
+			timer := New(context.Background(), beaconConfig, role, func(round specqbft.Round) { onTimeout(index) })
 			timer.timeoutOptions = TimeoutOptions{
 				quickThreshold: threshold,
 				quick:          100 * time.Millisecond,
@@ -147,7 +131,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 
 	wg.Wait() // Wait for all go-routines to finish
 
-	timer := New(context.Background(), mockBeaconNetwork, role, nil)
+	timer := New(context.Background(), beaconConfig, role, nil)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          100 * time.Millisecond,
@@ -156,7 +140,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 	// Wait a bit more than the expected timeout to ensure all timers have triggered
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + time.Millisecond*100)
 
-	require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
+	require.Equal(t, int32(4), count.Load(), "All four timers should have triggered")
 
 	mu.Lock()
 	for i := 1; i < 4; i++ {

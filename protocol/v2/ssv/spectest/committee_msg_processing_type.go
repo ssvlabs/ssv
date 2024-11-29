@@ -10,16 +10,17 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -182,9 +183,9 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	//for _, r := range committee.Runners {
-	//	r.BaseRunner.BeaconNetwork = spectypes.BeaconTestNetwork
-	//}
+	for _, r := range committee.Runners {
+		r.BaseRunner.NetworkConfig = networkconfig.TestingNetworkConfig
+	}
 
 	root, err := committee.GetRoot()
 	require.NoError(t, err)

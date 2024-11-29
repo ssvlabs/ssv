@@ -20,7 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -278,7 +278,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.Beacon.SlotsPerEpoch * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

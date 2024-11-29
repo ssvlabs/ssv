@@ -8,12 +8,12 @@ import (
 
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 const (

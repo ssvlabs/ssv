@@ -40,7 +40,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
+		ttl = mv.netCfg.Beacon.SlotsPerEpoch + lateSlotAllowance
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	}
@@ -90,23 +90,23 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 	case spectypes.RoleCommittee:
 		validatorIndexCount := uint64(len(validatorIndices))
-		slotsPerEpoch := mv.netCfg.Beacon.SlotsPerEpoch()
+		slotsPerEpoch := mv.netCfg.Beacon.SlotsPerEpoch
 
 		// Skip duty search if validators * 2 exceeds slots per epoch,
 		// as the maximum duties per epoch is capped at the number of slots.
 		// This avoids unnecessary checks.
-		if validatorIndexCount < slotsPerEpoch/2 {
+		if validatorIndexCount < uint64(slotsPerEpoch)/2 {
 			// Check if there is at least one validator in the sync committee.
 			// If so, the duty limit is equal to the number of slots per epoch.
 			period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
 			for _, i := range validatorIndices {
 				if mv.dutyStore.SyncCommittee.Duty(period, i) != nil {
-					return slotsPerEpoch, true
+					return uint64(slotsPerEpoch), true
 				}
 			}
 		}
 
-		return min(slotsPerEpoch, 2*validatorIndexCount), true
+		return min(uint64(slotsPerEpoch), 2*validatorIndexCount), true
 
 	default:
 		return 0, false

@@ -16,9 +16,9 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -76,7 +76,6 @@ type PubSubConfig struct {
 type ScoringConfig struct {
 	IPWhilelist        []*net.IPNet
 	IPColocationWeight float64
-	OneEpochDuration   time.Duration
 }
 
 // PubsubBundle includes the pubsub router, plus involved components
@@ -170,7 +169,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		}
 
 		// Get overall score params
-		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
+		peerScoreParams := params.PeerScoreParams(cfg.NetworkConfig, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
 
 		// Define score inspector
 		if inspector == nil {

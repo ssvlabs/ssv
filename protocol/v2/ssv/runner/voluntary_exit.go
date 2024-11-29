@@ -14,6 +14,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -36,7 +37,7 @@ type VoluntaryExitRunner struct {
 
 func NewVoluntaryExitRunner(
 	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
@@ -52,7 +53,7 @@ func NewVoluntaryExitRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
 			DomainType:     domainType,
-			BeaconNetwork:  beaconNetwork,
+			NetworkConfig:  networkConfig,
 			Share:          share,
 		},
 
@@ -195,7 +196,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
 	validatorIndex := r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,

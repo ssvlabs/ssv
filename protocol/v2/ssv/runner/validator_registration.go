@@ -15,6 +15,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -34,7 +35,7 @@ type ValidatorRegistrationRunner struct {
 
 func NewValidatorRegistrationRunner(
 	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
@@ -49,7 +50,7 @@ func NewValidatorRegistrationRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
 			DomainType:     domainType,
-			BeaconNetwork:  beaconNetwork,
+			NetworkConfig:  networkConfig,
 			Share:          share,
 		},
 
@@ -201,12 +202,12 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(duty specty
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], share.ValidatorPubKey[:])
 
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(duty.DutySlot())
 
 	return &v1.ValidatorRegistration{
 		FeeRecipient: share.FeeRecipientAddress,
 		GasLimit:     spectypes.DefaultGasLimit,
-		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
+		Timestamp:    r.BaseRunner.NetworkConfig.Beacon.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
 }

@@ -13,12 +13,12 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
@@ -67,7 +67,7 @@ func NewCommitteeRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
 			DomainType:     networkConfig.AlanDomainType,
-			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
+			NetworkConfig:  networkConfig,
 			Share:          share,
 			QBFTController: qbftController,
 		},
@@ -601,7 +601,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
 		slot := validatorDuty.DutySlot()
-		epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+		epoch := cr.GetBaseRunner().NetworkConfig.Beacon.EstimatedEpochAtSlot(slot)
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object

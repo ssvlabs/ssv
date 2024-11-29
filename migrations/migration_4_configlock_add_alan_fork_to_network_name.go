@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -27,7 +27,7 @@ var migration_4_configlock_add_alan_fork_to_network_name = Migration{
 
 			// If config is not found, it means the node is not initialized yet
 			if found {
-				networkConfig, err := networkconfig.GetNetworkConfigByName(config.NetworkName)
+				networkConfig, err := networkconfig.GetSSVConfigByName(config.NetworkName)
 				if err != nil {
 					return fmt.Errorf("failed to get network config by name: %w", err)
 				}

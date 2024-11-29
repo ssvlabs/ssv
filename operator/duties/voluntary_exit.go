@@ -2,7 +2,10 @@ package duties
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"math/big"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
@@ -115,9 +118,9 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingDuties
-	h.duties.RemoveSlot(slot - phase0.Slot(h.network.SlotsPerEpoch()))
+	h.duties.RemoveSlot(slot - h.network.SlotsPerEpoch())
 
-	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
+	if !h.network.PastAlanForkAtEpoch(h.network.EstimatedEpochAtSlot(slot)) {
 		toExecute := make([]*genesisspectypes.Duty, 0, len(dutiesForExecution))
 		for _, d := range dutiesForExecution {
 			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleVoluntaryExit))
@@ -162,7 +165,10 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, err
 	}
 
-	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
+	if block.Time() > math.MaxInt64 {
+		return 0, fmt.Errorf("block time is higher than math.MaxInt64")
+	}
+	blockSlot = h.network.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0)) // #nosec G115: block.Time() cannot be higher than math.MaxInt64
 
 	h.blockSlots[blockNumber] = blockSlot
 	for k, v := range h.blockSlots {

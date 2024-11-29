@@ -63,7 +63,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 		go func() {
 			select {
 			case c.indicesChange <- struct{}{}:
-			case <-time.After(12 * time.Second):
+			case <-time.After(c.networkConfig.SlotDuration()):
 				logger.Error("failed to notify indices change")
 			}
 		}()
@@ -116,7 +116,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		select {
 		case c.validatorExitCh <- exitDesc:
 			logger.Debug("added voluntary exit task to pipeline")
-		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+		case <-time.After(2 * c.networkConfig.Beacon.SlotDuration):
 			logger.Error("failed to schedule ExitValidator duty!")
 		}
 	}()

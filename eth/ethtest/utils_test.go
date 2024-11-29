@@ -21,13 +21,12 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -162,7 +161,7 @@ func setupEventHandler(
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	operatorDataStore := operatordatastore.New(operatorData)
-	testNetworkConfig := networkconfig.TestNetwork
+	testNetworkConfig := networkconfig.TestingNetworkConfig
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {
@@ -170,7 +169,6 @@ func setupEventHandler(
 	}
 
 	ctrl := gomock.NewController(t)
-	bc := beacon.NewMockBeaconNode(ctrl)
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
@@ -190,7 +188,6 @@ func setupEventHandler(
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
-			bc,
 			eventhandler.WithFullNode(),
 			eventhandler.WithLogger(logger),
 		)
@@ -221,7 +218,6 @@ func setupEventHandler(
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
-		bc,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)

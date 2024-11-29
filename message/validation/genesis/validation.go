@@ -24,18 +24,17 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 const (
@@ -541,7 +540,7 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 }
 
 func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
-	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
+	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt)).
 		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
 }
 
@@ -559,8 +558,7 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin).Add(clockErrorTolerance)
 
-	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Sub(deadline)
+	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt)).Sub(deadline)
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {

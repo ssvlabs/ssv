@@ -8,15 +8,15 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -106,8 +106,10 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	for _, role := range roles {
 		pk := sks[1].GetPublicKey()
-		networkConfig, err := networkconfig.GetNetworkConfigByName(networkconfig.HoleskyStage.Name)
-		require.NoError(t, err)
+		networkConfig := networkconfig.NetworkConfig{
+			SSV:    networkconfig.HoleskyStageSSV,
+			Beacon: networkconfig.HoleskyBeaconConfig,
+		}
 		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 			id := convert.NewMsgID(networkConfig.DomainType(), pk.Serialize(), role)
 			return oids, &specqbft.Message{

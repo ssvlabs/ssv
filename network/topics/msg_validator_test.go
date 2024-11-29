@@ -19,7 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -55,10 +55,10 @@ func TestMsgValidator(t *testing.T) {
 	committeeID := share.CommitteeID()
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
-	mv := validation.New(networkconfig.TestNetwork, ns.ValidatorStore(), dutystore.New(), signatureVerifier)
+	mv := validation.New(networkconfig.TestingNetworkConfig, ns.ValidatorStore(), dutystore.New(), signatureVerifier)
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
+	slot := networkconfig.TestingNetworkConfig.Beacon.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]
@@ -180,7 +180,7 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(dutyExecutorID []byte, height qbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), dutyExecutorID, spectypes.RoleCommittee)
+	id := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleCommittee)
 	qbftMsg := &qbft.Message{
 		MsgType:    qbft.RoundChangeMsgType,
 		Height:     height,

@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -74,7 +74,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 		<-ticker.Next()
 		slot := ticker.Slot()
 		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(slot)%rc.network.SlotsPerEpoch() != (rc.network.SlotsPerEpoch()/2) {
+		if firstTimeSubmitted && slot%rc.network.SlotsPerEpoch() != rc.network.SlotsPerEpoch()/2 {
 			continue
 		}
 		firstTimeSubmitted = true

@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/fee_recipient"
@@ -32,8 +32,9 @@ type Node interface {
 // Options contains options to create the node
 type Options struct {
 	// NetworkName is the network name of this node
-	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
-	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override the SSV domain type. This is used to isolate the node from the rest of the network. Do not set unless you know what you are doing. This would be incremented by 1 for Alan, for example: 0x01020304 becomes 0x01020305 post-fork."`
+	NetworkName         string             `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node. For backwards compatibility it's ignored if CustomNetwork is set"`
+	CustomNetwork       *networkconfig.SSV `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
+	CustomDomainType    string             `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override the SSV domain type. This is used to isolate the node from the rest of the network. Do not set unless you know what you are doing. This would be incremented by 1 for Alan, for example: 0x01020304 becomes 0x01020305 post-fork."` // TODO: deprecate it
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     *executionclient.ExecutionClient
@@ -70,7 +71,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
+func New(opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
 	node := &operatorNode{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,

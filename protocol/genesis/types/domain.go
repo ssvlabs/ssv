@@ -3,12 +3,12 @@ package types
 import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 // TODO: get rid of singleton, pass domain as a parameter
 var (
-	domain = genesisspectypes.DomainType(networkconfig.Mainnet.DomainType())
+	domain = genesisspectypes.DomainType(networkconfig.MainnetSSV.GenesisDomainType)
 )
 
 // GetDefaultDomain returns the global domain used across the system

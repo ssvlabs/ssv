@@ -14,7 +14,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -72,7 +71,7 @@ func TestScheduler_Proposer_Genesis_Same_Slot(t *testing.T) {
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	currentSlot.Set(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerGenesisDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -105,7 +104,7 @@ func TestScheduler_Proposer_Genesis_Diff_Slots(t *testing.T) {
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	currentSlot.Set(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerGenesisDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -148,7 +147,7 @@ func TestScheduler_Proposer_Genesis_Indices_Changed(t *testing.T) {
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	currentSlot.Set(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerGenesisDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -211,7 +210,7 @@ func TestScheduler_Proposer_Genesis_Multiple_Indices_Changed_Same_Slot(t *testin
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	currentSlot.Set(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerGenesisDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -292,7 +291,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current(t *testing.T) {
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	currentSlot.Set(phase0.Slot(34))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerGenesisDutiesMock(scheduler, dutiesMap)
 	startFn()
 
@@ -368,7 +367,7 @@ func TestScheduler_Proposer_Genesis_Reorg_Current_Indices_Changed(t *testing.T) 
 		dutiesMap   = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	currentSlot.Set(phase0.Slot(34))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, goclient.FarFutureEpoch)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, FarFutureEpoch)
 	fetchDutiesCall, executeDutiesCall := setupProposerGenesisDutiesMock(scheduler, dutiesMap)
 	startFn()
 

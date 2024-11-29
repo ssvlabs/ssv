@@ -14,19 +14,22 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
 )
 
 var TestNetwork = networkconfig.NetworkConfig{
-	Beacon:            beacon.NewNetwork(spectypes.BeaconTestNetwork),
-	GenesisDomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-	AlanDomainType:    spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-	AlanForkEpoch:     math.MaxUint64,
+	Beacon: networkconfig.TestingBeaconConfig,
+	SSV: networkconfig.SSV{
+		GenesisDomainType:         spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		AlanDomainType:            spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
+		AlanForkEpoch:             math.MaxUint64,
+		MaxValidatorsPerCommittee: networkconfig.TestingSSVConfig.MaxValidatorsPerCommittee,
+		TotalEthereumValidators:   networkconfig.TestingSSVConfig.TotalEthereumValidators,
+	},
 }
 
 func TestCheckPeer(t *testing.T) {

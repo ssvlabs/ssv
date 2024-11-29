@@ -27,7 +27,7 @@ import (
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -50,7 +50,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	ns, err := storage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	netCfg := networkconfig.TestNetwork
+	netCfg := networkconfig.TestingNetworkConfig
 	netCfg.AlanForkEpoch = math.MaxUint64 // use genesis domain to be able to use message templates from spec
 
 	ks := spectestingutils.Testing4SharesSet()
@@ -201,7 +201,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			message.MsgType = specqbft.CommitMsgType
 		})
 		signedSSVMessage.FullData = nil
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDuration))
 		require.NoError(t, err)
 
 		storedState = stateBySlot.Get(phase0.Slot(height) + 1)
@@ -209,11 +209,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, MessageCounts{Commit: 1}, storedState.MessageCounts)
 
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDuration))
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		signedSSVMessage = generateMultiSignedMessage(ks, msgID, slot+1)
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDuration))
 		require.NoError(t, err)
 		require.NotNil(t, stateBySlot)
 		require.EqualValues(t, 1, storedState.Round)
@@ -504,7 +504,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, nonUpdatedMetadataNextEpochIdentifier, slot)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.ValidatorTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())[0]
+		topicID := commons.CommitteeTopicID(shares.nonUpdatedMetadataNextEpoch.CommitteeID())[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrValidatorNotAttesting
 		expectedErr.got = eth2apiv1.ValidatorStatePendingQueued.String()
@@ -1009,7 +1009,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrDecidedNotEnoughSigners.Error())
 	})
 
-	// Get error when receiving a non decided message with multiple signers
+	// Get error when receiving a non-decided message with multiple signers
 	t.Run("non decided with multiple signers", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 
@@ -1424,7 +1424,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
 
-	// Receive a unknown message type from an operator that is not myself should receive an error
+	// Receive an unknown message type from an operator that is not myself should receive an error
 	t.Run("unknown type message", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 

@@ -11,10 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func setupAttesterDutiesMock(
@@ -869,7 +868,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

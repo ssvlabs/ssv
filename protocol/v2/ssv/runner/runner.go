@@ -12,6 +12,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -57,8 +59,8 @@ type BaseRunner struct {
 	State          *State
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
-	DomainType     spectypes.DomainType
-	BeaconNetwork  spectypes.BeaconNetwork
+	DomainType     spectypes.DomainType // TODO: remove, use NetworkConfig
+	NetworkConfig  networkconfig.NetworkConfig
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
@@ -82,7 +84,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State              *State
 		Share              map[phase0.ValidatorIndex]*spectypes.Share
 		QBFTController     *controller.Controller
-		BeaconNetwork      spectypes.BeaconNetwork
+		NetworkConfig      networkconfig.NetworkConfig
 		RunnerRoleType     spectypes.RunnerRole
 		highestDecidedSlot phase0.Slot
 	}
@@ -92,7 +94,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State:              b.State,
 		Share:              b.Share,
 		QBFTController:     b.QBFTController,
-		BeaconNetwork:      b.BeaconNetwork,
+		NetworkConfig:      b.NetworkConfig,
 		RunnerRoleType:     b.RunnerRoleType,
 		highestDecidedSlot: b.highestDecidedSlot,
 	}
@@ -126,7 +128,7 @@ func NewBaseRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
 	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
 ) *BaseRunner {
@@ -134,7 +136,7 @@ func NewBaseRunner(
 		State:              state,
 		Share:              share,
 		QBFTController:     controller,
-		BeaconNetwork:      beaconNetwork,
+		NetworkConfig:      networkConfig,
 		DomainType:         domainType,
 		RunnerRoleType:     runnerRoleType,
 		highestDecidedSlot: highestDecidedSlot,

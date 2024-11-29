@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
@@ -266,7 +266,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
 	base := &runner.BaseRunner{
-		DomainType: networkconfig.TestNetwork.GenesisDomainType,
+		DomainType: networkconfig.TestingNetworkConfig.GenesisDomainType,
 	}
 
 	byts, _ := json.Marshal(baseRunnerMap)

@@ -11,16 +11,16 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -234,6 +234,8 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
+	r.GetBaseRunner().NetworkConfig = networkconfig.TestingNetworkConfig
+
 	// override
 	test.PostDutyRunnerState = r
 
@@ -264,7 +266,7 @@ var baseCommitteeWithRunnerSample = func(
 
 	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
+			networkconfig.TestingNetworkConfig,
 			shareMap,
 			controller.NewController(
 				runnerSample.BaseRunner.QBFTController.Identifier,
@@ -288,7 +290,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().BeaconNetwork,
+		networkconfig.TestingNetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

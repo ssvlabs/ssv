@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
@@ -17,7 +17,7 @@ type dutyHandler interface {
 		logger *zap.Logger,
 		beaconNode BeaconNode,
 		executionClient ExecutionClient,
-		network networkconfig.NetworkConfig,
+		network networkconfig.Interface,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
@@ -34,7 +34,7 @@ type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
+	network             networkconfig.Interface
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	dutiesExecutor      DutiesExecutor
@@ -51,7 +51,7 @@ func (h *baseHandler) Setup(
 	logger *zap.Logger,
 	beaconNode BeaconNode,
 	executionClient ExecutionClient,
-	network networkconfig.NetworkConfig,
+	network networkconfig.Interface,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,

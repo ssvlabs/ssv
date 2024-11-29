@@ -27,8 +27,8 @@ import (
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/networkconfig"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -73,7 +73,7 @@ func TestTopicManager(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		validator := genesisvalidation.New(networkconfig.TestNetwork)
+		validator := genesisvalidation.New(networkconfig.TestingNetworkConfig)
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
@@ -367,7 +367,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = NewMsgIDHandler(ctx, networkconfig.TestingNetworkConfig, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &PubSubConfig{
@@ -381,7 +381,6 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		Scoring: &ScoringConfig{
 			IPWhilelist:        nil,
 			IPColocationWeight: 0,
-			OneEpochDuration:   time.Minute,
 		},
 		MsgValidator:           msgValidator,
 		ScoreInspector:         scoreInspector,
@@ -440,7 +439,7 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), pk, spectypes.RoleCommittee)
+	id := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err

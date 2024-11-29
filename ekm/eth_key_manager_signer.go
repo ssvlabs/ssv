@@ -22,11 +22,10 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -46,7 +45,7 @@ type ethKeyManagerSigner struct {
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
 	storage           Storage
-	domain            spectypes.DomainType
+	netCfg            networkconfig.Interface
 	slashingProtector core.SlashingProtector
 }
 
@@ -70,8 +69,8 @@ type KeyManager interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (KeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon, logger)
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, networkConfig networkconfig.Interface, encryptionKey string) (KeyManager, error) {
+	signerStore := NewSignerStorage(db, networkConfig, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
 		if err != nil {
@@ -98,14 +97,14 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.Beacon.GetBeaconNetwork()))
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(networkConfig.BeaconNetwork()))
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            network.DomainType(),
+		netCfg:            networkConfig,
 		slashingProtector: slashingProtector,
 	}, nil
 }
@@ -265,7 +264,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 		return nil, errors.Wrap(err, "could not get signing account")
 	}
 
-	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, sigType))
+	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.netCfg.DomainType(), sigType))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}
@@ -326,7 +325,7 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 
 // BumpSlashingProtection updates the slashing protection data for a given public key.
 func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
-	currentSlot := km.storage.BeaconNetwork().EstimatedCurrentSlot()
+	currentSlot := km.netCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
 	if err := km.updateHighestAttestation(pubKey, currentSlot); err != nil {
@@ -349,7 +348,7 @@ func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phas
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	currentEpoch := km.storage.BeaconNetwork().EstimatedEpochAtSlot(slot)
+	currentEpoch := km.netCfg.EstimatedEpochAtSlot(slot)
 	minimalSP := km.computeMinimalAttestationSP(currentEpoch)
 
 	// Check if the retrieved highest attestation data is valid and not outdated.

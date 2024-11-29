@@ -7,6 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
@@ -79,7 +80,8 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			msgRate := calculateMessageRateForTopic(tt.args.committees)
+			rc := newRateCalculator(networkconfig.TestingNetworkConfig)
+			msgRate := rc.calculateMessageRateForTopic(tt.args.committees)
 			require.InDelta(t, tt.want, msgRate, tt.want*0.001)
 		})
 	}

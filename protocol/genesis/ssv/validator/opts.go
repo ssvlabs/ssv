@@ -9,7 +9,6 @@ import (
 	qbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/genesis/types"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -19,7 +18,6 @@ const (
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           genesisspecqbft.Network
-	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *genesisibftstorage.QBFTStores
 	SSVShare          *types.SSVShare
 	Signer            genesisspectypes.KeyManager

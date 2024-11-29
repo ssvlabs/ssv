@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/storage/kv"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -40,7 +40,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 		return nil, func() {}
 	}
 
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	s := NewSignerStorage(db, networkconfig.TestingNetworkConfig, logger)
 	return s, func() {
 		db.Close()
 	}

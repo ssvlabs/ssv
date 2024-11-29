@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/mock/gomock"
 
-	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 )
 
 type SlotValue struct {
@@ -29,7 +29,7 @@ func (sv *SlotValue) GetSlot() phase0.Slot {
 	return sv.slot
 }
 
-func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.MockBeaconNetwork {
+func SetupMockNetworkConfig(t *testing.T, currentSlot *SlotValue) *networkconfig.MockInterface {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -38,10 +38,13 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 		currentSlot.SetSlot(32)
 	}
 
-	beaconNetwork := spectypes.HoleskyNetwork // it must be something known by ekm
+	mockBeaconNetwork := networkconfig.NewMockInterface(ctrl)
 
-	mockBeaconNetwork := mocknetwork.NewMockBeaconNetwork(ctrl)
-	mockBeaconNetwork.EXPECT().GetBeaconNetwork().Return(beaconNetwork).AnyTimes()
+	mockBeaconNetwork.EXPECT().BeaconNetwork().DoAndReturn(
+		func() string {
+			return networkconfig.HoleskyBeaconConfig.ConfigName
+		},
+	).AnyTimes()
 
 	mockBeaconNetwork.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
@@ -61,7 +64,7 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 		},
 	).AnyTimes()
 
-	mockBeaconNetwork.EXPECT().SlotDurationSec().DoAndReturn(
+	mockBeaconNetwork.EXPECT().SlotDuration().DoAndReturn(
 		func() time.Duration {
 			return 12 * time.Second
 		},
@@ -70,6 +73,12 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 	mockBeaconNetwork.EXPECT().SlotsPerEpoch().DoAndReturn(
 		func() uint64 {
 			return 32
+		},
+	).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().DomainType().DoAndReturn(
+		func() spectypes.DomainType {
+			return networkconfig.TestingNetworkConfig.DomainType()
 		},
 	).AnyTimes()
 

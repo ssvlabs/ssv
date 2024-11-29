@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
@@ -253,7 +254,7 @@ func (gc *GoClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 			Message: &eth2apiv1.ValidatorRegistration{
 				FeeRecipient: feeRecipient,
 				GasLimit:     gc.gasLimit,
-				Timestamp:    gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
+				Timestamp:    gc.BeaconConfig().EstimatedCurrentEpochStartTime(),
 				Pubkey:       pk,
 			},
 			Signature: sig,
@@ -262,10 +263,14 @@ func (gc *GoClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
-	operatorID := gc.operatorDataStore.AwaitOperatorID()
+func (gc *GoClient) RegistrationSubmitter(operatorDataStore operatordatastore.OperatorDataStore) {
+	operatorID := operatorDataStore.AwaitOperatorID()
 
-	ticker := slotTickerProvider()
+	ticker := slotticker.New(gc.log, slotticker.Config{
+		SlotDuration: gc.BeaconConfig().SlotDuration,
+		GenesisTime:  gc.BeaconConfig().GenesisTime(),
+	})
+
 	for {
 		select {
 		case <-gc.ctx.Done():
@@ -277,7 +282,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 }
 
 func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operatorID spectypes.OperatorID) {
-	slotsPerEpoch := gc.network.SlotsPerEpoch()
+	slotsPerEpoch := gc.BeaconConfig().SlotsPerEpoch
 
 	// Lock:
 	// - getting and updating last slot to avoid multiple submission (both should be an atomic action but cannot be done with CAS)
@@ -285,12 +290,12 @@ func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operat
 	gc.registrationMu.Lock()
 
 	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := operatorID % slotsPerEpoch
+	operatorSubmissionSlotModulo := phase0.Slot(operatorID) % (slotsPerEpoch)
 
 	hasRegistrations := len(gc.registrationCache) != 0
-	operatorSubmissionSlot := uint64(currentSlot)%slotsPerEpoch == operatorSubmissionSlotModulo
-	oneEpochPassed := slotsSinceLastRegistration >= phase0.Slot(slotsPerEpoch)
-	twoEpochsAndOperatorDelayPassed := uint64(slotsSinceLastRegistration) >= slotsPerEpoch*2+operatorSubmissionSlotModulo
+	operatorSubmissionSlot := currentSlot%slotsPerEpoch == operatorSubmissionSlotModulo
+	oneEpochPassed := slotsSinceLastRegistration >= slotsPerEpoch
+	twoEpochsAndOperatorDelayPassed := slotsSinceLastRegistration >= slotsPerEpoch*2+operatorSubmissionSlotModulo
 
 	if hasRegistrations && (oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed) {
 		gc.registrationLastSlot = currentSlot

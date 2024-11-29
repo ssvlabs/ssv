@@ -7,12 +7,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
-	genesisqbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
-
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	genesisbeacon "github.com/ssvlabs/ssv/protocol/genesis/blockchain/beacon"
+	genesisqbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"

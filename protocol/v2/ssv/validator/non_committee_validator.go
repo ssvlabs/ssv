@@ -9,16 +9,15 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"go.uber.org/zap"
-
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -34,7 +33,7 @@ import (
 type CommitteeObserver struct {
 	logger                 *zap.Logger
 	Storage                *storage.QBFTStores
-	beaconNetwork          beacon.BeaconNetwork
+	beaconConfig           networkconfig.Beacon
 	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
@@ -76,7 +75,7 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 		qbftController:         ctrl,
 		logger:                 opts.Logger,
 		Storage:                opts.Storage,
-		beaconNetwork:          opts.NetworkConfig.Beacon,
+		beaconConfig:           opts.NetworkConfig.Beacon,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
 		attesterRoots:          opts.AttesterRoots,
@@ -313,7 +312,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
-	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+	epoch := ncv.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
 	if err := ncv.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
 		return err

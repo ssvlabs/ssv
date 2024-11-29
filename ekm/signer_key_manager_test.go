@@ -27,7 +27,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
@@ -41,7 +41,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManager {
+func testKeyManager(t *testing.T, network networkconfig.Interface) KeyManager {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -50,14 +50,10 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 	require.NoError(t, err)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{
-			Beacon:            utils.SetupMockBeaconNetwork(t, nil),
-			GenesisDomainType: networkconfig.TestNetwork.DomainType(),
-			AlanDomainType:    networkconfig.TestNetwork.DomainType(),
-		}
+		network = utils.SetupMockNetworkConfig(t, nil)
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
+	km, err := NewETHKeyManagerSigner(logger, db, network, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -89,7 +85,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestingNetworkConfig, logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 
@@ -718,7 +714,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
+			genesisspectypes.DomainType(networkconfig.TestingNetworkConfig.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)
@@ -750,7 +746,7 @@ func TestSignRoot(t *testing.T) {
 
 		err = signed.Signature.VerifyByOperators(
 			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
+			genesisspectypes.DomainType(networkconfig.TestingNetworkConfig.DomainType()),
 			genesisspectypes.QBFTSignatureType,
 			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
 		)

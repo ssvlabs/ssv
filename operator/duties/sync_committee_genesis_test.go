@@ -8,17 +8,14 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/beacon/goclient"
+	networkconfig "github.com/ssvlabs/ssv/network/config"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func setupSyncCommitteeGenesisDutiesMock(
@@ -30,30 +27,30 @@ func setupSyncCommitteeGenesisDutiesMock(
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*genesisspectypes.Duty)
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
+	s.network.(*networkconfig.MockInterface).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
-			return uint64(epoch) / s.network.Beacon.EpochsPerSyncCommitteePeriod()
+			return uint64(epoch / 256)
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
+	s.network.(*networkconfig.MockInterface).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Epoch {
-			return phase0.Epoch(period * s.network.Beacon.EpochsPerSyncCommitteePeriod())
+			return phase0.Epoch(period) * 256
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
+	s.network.(*networkconfig.MockInterface).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Slot {
-			lastEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
+			lastEpoch := s.network.FirstEpochOfSyncPeriod(period+1) - 1
 			// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 			// as it will never be included, hence -1.
-			return s.network.Beacon.GetEpochFirstSlot(lastEpoch+1) - 2
+			return s.network.GetEpochFirstSlot(lastEpoch+1) - 2
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
+	s.network.(*networkconfig.MockInterface).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
-			return phase0.Slot(uint64(epoch) * s.network.Beacon.SlotsPerEpoch())
+			return phase0.Slot(epoch) * s.network.SlotsPerEpoch()
 		},
 	).AnyTimes()
 
@@ -62,7 +59,7 @@ func setupSyncCommitteeGenesisDutiesMock(
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
 			}
-			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			period := s.network.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
 		}).AnyTimes()
@@ -94,7 +91,7 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
+		forkEpoch     = FarFutureEpoch
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{{
 			Share: spectypes.Share{
@@ -136,7 +133,7 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
-	currentSlot.Set(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
+	currentSlot.Set(scheduler.network.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedGenesisSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteGenesisDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -145,7 +142,7 @@ func TestScheduler_SyncCommittee_Genesis_Same_Period(t *testing.T) {
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.network.Beacon.GetEpochFirstSlot(scheduler.network.Beacon.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.network.GetEpochFirstSlot(scheduler.network.FirstEpochOfSyncPeriod(1))
 	currentSlot.Set(firstSlotOfNextPeriod)
 	ticker.Send(currentSlot.Get())
 	waitForNoActionGenesis(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -160,7 +157,7 @@ func TestScheduler_SyncCommittee_Genesis_Current_Next_Periods(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
+		forkEpoch     = FarFutureEpoch
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -246,7 +243,7 @@ func TestScheduler_SyncCommittee_Genesis_Indices_Changed(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
+		forkEpoch     = FarFutureEpoch
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -323,7 +320,7 @@ func TestScheduler_SyncCommittee_Genesis_Multiple_Indices_Changed_Same_Slot(t *t
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
+		forkEpoch     = FarFutureEpoch
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -404,7 +401,7 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
+		forkEpoch     = FarFutureEpoch
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -498,7 +495,7 @@ func TestScheduler_SyncCommittee_Genesis_Reorg_Current_Indices_Changed(t *testin
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
+		forkEpoch     = FarFutureEpoch
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
 			{
@@ -609,7 +606,7 @@ func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
-		forkEpoch     = goclient.FarFutureEpoch
+		forkEpoch     = FarFutureEpoch
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{{
 			Share: spectypes.Share{
@@ -666,7 +663,7 @@ func TestScheduler_SyncCommittee_Genesis_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForGenesisDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
