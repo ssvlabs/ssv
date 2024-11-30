@@ -8,7 +8,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"go.uber.org/zap"
 )
 
@@ -112,14 +111,32 @@ func (p *committeePrioritizer) Prior(a, b *SSVMessage) (ok bool) {
 
 	scoreA, scoreB = scoreCommitteeConsensusType(a), scoreCommitteeConsensusType(b)
 	if scoreA != scoreB {
-		s := fmt.Sprintf("scoreA(%s(%d)) > scoreB(%s(%d)) is %t",
-			message.QBFTMsgTypeToString(specqbft.MessageType(a.MsgType)), scoreA,
-			message.QBFTMsgTypeToString(specqbft.MessageType(b.MsgType)), scoreB, scoreA > scoreB)
+		s := fmt.Sprintf("scoreA(%s(%d)) > scoreB(%s(%d)) is '%t'",
+			toString(a), scoreA,
+			toString(b), scoreB, scoreA > scoreB)
 		fields = append(fields, zap.String("scoreCommitteeConsensusType", s))
 		return scoreA > scoreB
 	}
 
 	return true
+}
+
+func toString(m *SSVMessage) string {
+	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
+		switch qbftMsg.MsgType {
+		case specqbft.ProposalMsgType:
+			return "proposal"
+		case specqbft.PrepareMsgType:
+			return "prepare"
+		case specqbft.CommitMsgType:
+			return "commit"
+		case specqbft.RoundChangeMsgType:
+			return "round_change"
+		default:
+			return fmt.Sprintf("unknown(%d)", qbftMsg.MsgType)
+		}
+	}
+	return "notQBFT"
 }
 
 func logMsg(logger *zap.Logger, msg *SSVMessage, logMsg string, lf ...zap.Field) {

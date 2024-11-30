@@ -301,8 +301,8 @@ func (m mockNonConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMe
 
 func Test1(t *testing.T) {
 	s := fmt.Sprintf("scoreA(%s(%d)) > scoreB(%s(%d)) is %t",
-		message.QBFTMsgTypeToString(specqbft.MessageType(2)), 2,
-		message.QBFTMsgTypeToString(specqbft.MessageType(3)), 3, 2 > 3)
+		message.QBFTMsgTypeToString(specqbft.MessageType(1)), 1,
+		message.QBFTMsgTypeToString(specqbft.MessageType(4)), 4, 1 > 4)
 	t.Log(s)
 }
 
