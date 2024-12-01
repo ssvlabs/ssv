@@ -167,6 +167,7 @@ type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeFillerSubnets(logger *zap.Logger) error
 }
 
 // controller implements Controller
@@ -542,6 +543,9 @@ func (c *controller) StartValidators() {
 
 		// Start validators.
 		c.startValidators(inited, committees)
+		if err := c.network.SubscribeFillerSubnets(c.logger); err != nil {
+			c.logger.Error("failed to subscribe to filler subnets", zap.Error(err))
+		}
 	}
 
 	// Fetch metadata now if there is none. Otherwise, UpdateValidatorsMetadataLoop will handle it.
