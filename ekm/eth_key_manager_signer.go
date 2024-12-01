@@ -343,8 +343,10 @@ func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
 	epoch := km.networkConfig.Beacon.EstimatedEpochAtSlot(currentSlot)
 	epochLastSlot := km.networkConfig.Beacon.GetEpochLastSlot(epoch)
 
-	if err := km.dutyGuard.StartDuty(spectypes.BNRoleAttester, pk, epochLastSlot); err != nil {
-		return fmt.Errorf("could not start duty guard for attester (pk: %s): %w", hex.EncodeToString(pubKey), err)
+	if validErr := km.dutyGuard.ValidDuty(spectypes.BNRoleAttester, pk, epochLastSlot); validErr != nil {
+		if err := km.dutyGuard.StartDuty(spectypes.BNRoleAttester, pk, epochLastSlot); err != nil {
+			return fmt.Errorf("could not start duty guard for attester (pk: %s): %w", hex.EncodeToString(pubKey), err)
+		}
 	}
 
 	// Update highest attestation data for slashing protection.
