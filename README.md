@@ -9,7 +9,7 @@
 ![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml/badge.svg?branch=main)
 ![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml/badge.svg?branch=main)
 ![Test Coverage](./docs/resources/cov-badge.svg)
-[![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/eDXSP9R)
+[![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/ssvnetworkofficial)
 
 [comment]: <> ([![Go Report Card]&#40;https://goreportcard.com/badge/github.com/ssvlabs/ssv&#41;]&#40;https://goreportcard.com/report/github.com/ssvlabs/ssv&#41;)
 
@@ -56,7 +56,7 @@ Thank you for considering a contribution to the source code.
 
 In order to contribute to `ssv`, please fork, add your code, commit and send a pull request
 for the maintainers to review and merge into the main code base.\
-If you wish to submit more complex changes though, please check up with the core devs first on [our discord](https://discord.gg/eDXSP9R)
+If you wish to submit more complex changes though, please check up with the core devs first on [our discord](https://discord.gg/ssvnetworkofficial)
 to ensure those changes are in line with the general philosophy of the project and/or get
 some early feedback which can make both your efforts much lighter as well as our review
 and merge procedures quick and simple.
