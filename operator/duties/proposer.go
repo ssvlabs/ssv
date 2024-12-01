@@ -125,6 +125,9 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	defer cancel()
 
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
+		// Set empty duties to inform DutyStore that fetch for this epoch is done.
+		h.duties.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{})
+
 		h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 		return
 	}
