@@ -117,14 +117,15 @@ func (mv *messageValidator) validateBeaconDuty(
 	role spectypes.RunnerRole,
 	slot phase0.Slot,
 	indices []phase0.ValidatorIndex,
+	randaoMsg bool,
 ) error {
 	epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
 
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
-		// Tolerate missing duties in the first slot of an epoch, while
-		// they're still being fetched from the Beacon node.
-		if mv.netCfg.Beacon.IsFirstSlotOfEpoch(slot) {
+		// Tolerate missing duties for RANDAO signatures during the first slot of an epoch,
+		// while duties are still being fetched from the Beacon node.
+		if randaoMsg && mv.netCfg.Beacon.IsFirstSlotOfEpoch(slot) {
 			if !mv.dutyStore.Proposer.IsEpochSet(epoch) {
 				return nil
 			}
