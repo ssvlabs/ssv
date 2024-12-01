@@ -292,5 +292,5 @@ func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func
 // MaxStoredSlots stores max amount of slots message validation stores.
 // It's exported to allow usage outside of message validation
 func MaxStoredSlots(netCfg networkconfig.NetworkConfig) phase0.Slot {
-	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
+	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + LateSlotAllowance
 }
