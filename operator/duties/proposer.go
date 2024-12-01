@@ -178,8 +178,6 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
 
-	h.duties.ResetEpoch(epoch)
-
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0, len(duties))
 	for _, d := range duties {
