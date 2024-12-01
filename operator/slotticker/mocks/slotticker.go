@@ -41,7 +41,7 @@ func (m *MockSlotTicker) EXPECT() *MockSlotTickerMockRecorder {
 }
 
 // Next mocks base method.
-func (m *MockSlotTicker) Next() <-chan time.Time {
+func (m *MockSlotTicker) NextWait() <-chan time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next")
 	ret0, _ := ret[0].(<-chan time.Time)
@@ -51,11 +51,11 @@ func (m *MockSlotTicker) Next() <-chan time.Time {
 // Next indicates an expected call of Next.
 func (mr *MockSlotTickerMockRecorder) Next() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockSlotTicker)(nil).Next))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockSlotTicker)(nil).NextWait))
 }
 
 // Slot mocks base method.
-func (m *MockSlotTicker) Slot() phase0.Slot {
+func (m *MockSlotTicker) NextSlot() phase0.Slot {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Slot")
 	ret0, _ := ret[0].(phase0.Slot)
@@ -65,5 +65,5 @@ func (m *MockSlotTicker) Slot() phase0.Slot {
 // Slot indicates an expected call of Slot.
 func (mr *MockSlotTickerMockRecorder) Slot() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Slot", reflect.TypeOf((*MockSlotTicker)(nil).Slot))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Slot", reflect.TypeOf((*MockSlotTicker)(nil).NextSlot))
 }

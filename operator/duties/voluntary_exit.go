@@ -5,12 +5,11 @@ import (
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"go.uber.org/zap"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
@@ -47,15 +46,15 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
-	next := h.ticker.Next()
+	next := h.ticker.NextWait()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-next:
-			currentSlot := h.ticker.Slot()
-			next = h.ticker.Next()
+			currentSlot := h.ticker.NextSlot()
+			next = h.ticker.NextWait()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
 			h.processExecution(ctx, currentSlot)
@@ -95,10 +94,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			)
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }
