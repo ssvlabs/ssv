@@ -29,7 +29,7 @@ type Options struct {
 	Network           specqbft.Network
 	Beacon            beacon.BeaconNode
 	GenesisBeacon     genesisbeacon.BeaconNode
-	Storage           *storage.QBFTStores
+	Storage           *storage.ParticipantStores
 	SSVShare          *ssvtypes.SSVShare
 	Operator          *spectypes.CommitteeMember
 	Signer            spectypes.BeaconSigner

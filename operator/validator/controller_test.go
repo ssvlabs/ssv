@@ -62,7 +62,7 @@ type MockControllerOptions struct {
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
 	signer            spectypes.BeaconSigner
-	StorageMap        *ibftstorage.QBFTStores
+	StorageMap        *ibftstorage.ParticipantStores
 	validatorsMap     *validators.ValidatorsMap
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorStorage   registrystorage.Operators
