@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // TODO: use queues
@@ -112,7 +112,7 @@ func (vm *ValidatorsMap) ForEachCommittee(iterator committeeIterator) bool {
 	defer vm.mlock.RUnlock()
 
 	for _, val := range vm.committees {
-		if !iterator(val) {
+		if !val.Stopped() && !iterator(val) {
 			return false
 		}
 	}
@@ -126,6 +126,9 @@ func (vm *ValidatorsMap) GetAllCommittees() []*validator.Committee {
 
 	var committees []*validator.Committee
 	for _, val := range vm.committees {
+		if val.Stopped() {
+			continue
+		}
 		committees = append(committees, val)
 	}
 
@@ -139,6 +142,10 @@ func (vm *ValidatorsMap) GetCommittee(pubKey spectypes.CommitteeID) (*validator.
 
 	v, ok := vm.committees[pubKey]
 
+	if !ok || v.Stopped() {
+		return nil, false
+	}
+
 	return v, ok
 }
 
@@ -150,16 +157,39 @@ func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.CommitteeID, v *validator
 	vm.committees[pubKey] = v
 }
 
-// Remove removes a committee instance from the map
-func (vm *ValidatorsMap) RemoveCommittee(pubKey spectypes.CommitteeID) *validator.Committee {
-	if v, found := vm.GetCommittee(pubKey); found {
-		vm.mlock.Lock()
-		defer vm.mlock.Unlock()
+// RemoveShareFromCommittee removes the share from its committee
+func (vm *ValidatorsMap) RemoveShareFromCommittee(share *types.SSVShare) (*validator.Committee, bool) {
+	vm.mlock.Lock()
+	defer vm.mlock.Unlock()
 
-		delete(vm.committees, pubKey)
-		return v
+	vc, found := vm.committees[share.CommitteeID()]
+	if !found || vc.Stopped() {
+		return nil, false
 	}
-	return nil
+
+	vc.RemoveShare(share.Share.ValidatorIndex)
+
+	// if committee was stopped, trigger cleanup
+	if vc.Stopped() {
+		delete(vm.committees, share.CommitteeID())
+	}
+
+	return vc, true
+}
+
+// AddShareToCommittee adds share to its committee
+func (vm *ValidatorsMap) AddShareToCommittee(share *types.SSVShare) (*validator.Committee, bool) {
+	vm.mlock.Lock()
+	defer vm.mlock.Unlock()
+
+	vc, found := vm.committees[share.CommitteeID()]
+	if !found || vc.Stopped() {
+		return nil, false
+	}
+
+	vc.AddShare(&share.Share)
+
+	return vc, true
 }
 
 // SizeCommittees returns the number of committees in the map

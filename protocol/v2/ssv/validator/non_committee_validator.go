@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
-	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -35,9 +34,9 @@ type CommitteeObserver struct {
 	logger                 *zap.Logger
 	Storage                *storage.QBFTStores
 	beaconNetwork          beacon.BeaconNetwork
-	qbftController         *qbftcontroller.Controller
+	qbftController         *qbftctrl.Controller
 	ValidatorStore         registrystorage.ValidatorStore
-	newDecidedHandler      qbftcontroller.NewDecidedHandler
+	newDecidedHandler      qbftctrl.NewDecidedHandler
 	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots          *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache            *DomainCache
@@ -69,8 +68,8 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 
 	// TODO: does the specific operator matters?
 
-	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
-	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
+	ctrl := qbftctrl.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
+	ctrl.StoredInstances = make(qbftctrl.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 
 	return &CommitteeObserver{
 		qbftController:         ctrl,
