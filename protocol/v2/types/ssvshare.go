@@ -59,7 +59,7 @@ func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 }
 
 func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
-	activeOnContract := s.minParticipationEpoch == 0 || s.minParticipationEpoch < epoch
+	activeOnContract := s.minParticipationEpoch == 0 || s.minParticipationEpoch <= epoch
 	return !s.Liquidated && s.IsAttesting(epoch) && activeOnContract
 }
 
