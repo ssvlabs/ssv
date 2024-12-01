@@ -57,6 +57,7 @@ func NewCommittee(
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
+	dutyGuard *CommitteeDutyGuard,
 ) *Committee {
 	if shares == nil {
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
@@ -71,7 +72,7 @@ func NewCommittee(
 		Shares:          shares,
 		CommitteeMember: committeeMember,
 		CreateRunnerFn:  createRunnerFn,
-		dutyGuard:       NewCommitteeDutyGuard(),
+		dutyGuard:       dutyGuard,
 	}
 }
 
@@ -148,7 +149,9 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		filteredDuty.ValidatorDuties = append(filteredDuty.ValidatorDuties, beaconDuty)
 
 		if beaconDuty.Type == spectypes.BNRoleAttester {
-			attesters = append(attesters, share.SharePubKey)
+			if c.dutyGuard.ValidDuty(spectypes.BNRoleAttester, share.ValidatorPubKey, duty.Slot) != nil {
+				attesters = append(attesters, share.SharePubKey)
+			}
 		}
 	}
 	if len(shares) == 0 {

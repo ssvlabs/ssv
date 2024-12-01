@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
@@ -54,7 +55,9 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 		}
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
+	dutyGuard := validator.NewCommitteeDutyGuard()
+
+	km, err := NewETHKeyManagerSigner(logger, db, *network, "", dutyGuard)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

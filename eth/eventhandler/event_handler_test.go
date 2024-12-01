@@ -40,6 +40,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	validator2 "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -1365,7 +1366,9 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		}
 	}
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, "")
+	dutyGuard := validator2.NewCommitteeDutyGuard()
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, "", dutyGuard)
 	if err != nil {
 		return nil, nil, err
 	}

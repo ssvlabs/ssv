@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	validator2 "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -163,8 +164,9 @@ func setupEventHandler(
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
+	dutyGuard := validator2.NewCommitteeDutyGuard()
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "", dutyGuard)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

@@ -248,7 +248,7 @@ var baseCommitteeWithRunnerSample = func(
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
-	committeeDutyGuard runner.CommitteeDutyGuard,
+	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
 
 	var keySetSample *spectestingutils.TestKeySet
@@ -292,6 +292,7 @@ var baseCommitteeWithRunnerSample = func(
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
+		committeeDutyGuard,
 	)
 
 	return c

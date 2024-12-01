@@ -100,6 +100,7 @@ type ControllerOptions struct {
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
 	Graffiti                   []byte
+	DutyGuard                  *validator.CommitteeDutyGuard
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -199,6 +200,7 @@ type controller struct {
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
+	dutyGuard               *validator.CommitteeDutyGuard
 
 	metadataUpdateInterval time.Duration
 
@@ -323,6 +325,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
+		dutyGuard:               options.DutyGuard,
 
 		messageValidator: options.MessageValidator,
 	}
@@ -964,7 +967,16 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
-		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc, nil)
+		vc = validator.NewCommittee(
+			ctx,
+			cancel,
+			logger,
+			c.beacon.GetBeaconNetwork(),
+			operator,
+			committeeRunnerFunc,
+			nil,
+			c.dutyGuard,
+		)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 

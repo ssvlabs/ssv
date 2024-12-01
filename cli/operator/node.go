@@ -61,6 +61,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validators"
 	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	validator2 "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -173,12 +174,14 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
+		dutyGuard := validator2.NewCommitteeDutyGuard()
+
 		ekmHashedKey, err := operatorPrivKey.EKMHash()
 		if err != nil {
 			logger.Fatal("could not get operator private key hash", zap.Error(err))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey, dutyGuard)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -332,6 +335,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
+		cfg.SSVOptions.ValidatorOptions.DutyGuard = dutyGuard
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap

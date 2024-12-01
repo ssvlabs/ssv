@@ -27,6 +27,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -46,8 +47,9 @@ type ethKeyManagerSigner struct {
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
 	storage           Storage
-	domain            spectypes.DomainType
+	networkConfig     networkconfig.NetworkConfig
 	slashingProtector core.SlashingProtector
+	dutyGuard         *validator.CommitteeDutyGuard
 }
 
 // StorageProvider provides the underlying KeyManager storage.
@@ -70,7 +72,13 @@ type KeyManager interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (KeyManager, error) {
+func NewETHKeyManagerSigner(
+	logger *zap.Logger,
+	db basedb.Database,
+	network networkconfig.NetworkConfig,
+	encryptionKey string,
+	dutyGuard *validator.CommitteeDutyGuard,
+) (KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
@@ -105,8 +113,9 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            network.DomainType(),
+		networkConfig:     network,
 		slashingProtector: slashingProtector,
+		dutyGuard:         dutyGuard,
 	}, nil
 }
 
@@ -265,7 +274,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 		return nil, errors.Wrap(err, "could not get signing account")
 	}
 
-	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, sigType))
+	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.networkConfig.DomainType(), sigType))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}
@@ -327,6 +336,16 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 // BumpSlashingProtection updates the slashing protection data for a given public key.
 func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
 	currentSlot := km.storage.BeaconNetwork().EstimatedCurrentSlot()
+
+	var pk spectypes.ValidatorPK
+	copy(pk[:], pubKey)
+
+	epoch := km.networkConfig.Beacon.EstimatedEpochAtSlot(currentSlot)
+	epochLastSlot := km.networkConfig.Beacon.GetEpochLastSlot(epoch)
+
+	if err := km.dutyGuard.StartDuty(spectypes.BNRoleAttester, pk, epochLastSlot); err != nil {
+		return fmt.Errorf("could not start duty guard for attester (pk: %s): %w", hex.EncodeToString(pubKey), err)
+	}
 
 	// Update highest attestation data for slashing protection.
 	if err := km.updateHighestAttestation(pubKey, currentSlot); err != nil {

@@ -1,6 +1,7 @@
 package beacon
 
 import (
+	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -32,6 +33,7 @@ type BeaconNetwork interface {
 	GetSlotEndTime(slot phase0.Slot) time.Time
 	IsFirstSlotOfEpoch(slot phase0.Slot) bool
 	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
+	GetEpochLastSlot(epoch phase0.Epoch) phase0.Slot
 
 	EpochsPerSyncCommitteePeriod() uint64
 	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
@@ -121,6 +123,16 @@ func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 // GetEpochFirstSlot returns the beacon node first slot in epoch
 func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	return phase0.Slot(uint64(epoch) * n.SlotsPerEpoch())
+}
+
+// GetEpochLastSlot returns the beacon node last slot in the given epoch.
+// It safely handles the edge case for math.MaxUint64.
+func (n Network) GetEpochLastSlot(epoch phase0.Epoch) phase0.Slot {
+	if uint64(epoch) == math.MaxUint64 {
+		// The last possible slot for the max epoch is the maximum value a Slot can hold
+		return phase0.Slot(math.MaxUint64)
+	}
+	return phase0.Slot(uint64(epoch+1)*n.SlotsPerEpoch() - 1)
 }
 
 // EpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.

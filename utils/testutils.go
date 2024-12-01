@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"math"
 	"sync"
 	"testing"
 
@@ -57,6 +58,15 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
 			return phase0.Epoch(slot / 32)
+		},
+	).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().GetEpochLastSlot(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) phase0.Slot {
+			if uint64(epoch) == math.MaxUint64 {
+				return phase0.Slot(math.MaxUint64)
+			}
+			return phase0.Slot(uint64(epoch+1)*32 - 1)
 		},
 	).AnyTimes()
 

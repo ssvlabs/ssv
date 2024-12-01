@@ -564,6 +564,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 			return r.(*runner.CommitteeRunner), nil
 		},
 		specCommittee.Share,
+		validator.NewCommitteeDutyGuard(),
 	)
 	tmpSsvCommittee := &validator.Committee{}
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
