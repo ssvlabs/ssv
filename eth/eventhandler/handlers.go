@@ -24,6 +24,10 @@ import (
 // b64 encrypted key length is 256
 const encryptedKeyLength = 256
 
+// contractParticipationDelay is the number of epochs after which the validator can start participating
+// on the contract after registration or reactivation.
+const contractParticipationDelay phase0.Epoch = 1
+
 var (
 	ErrOperatorPubkeyAlreadyExists  = fmt.Errorf("operator public key already exists")
 	ErrOperatorIDAlreadyExists      = fmt.Errorf("operator ID already exists")
@@ -243,6 +247,9 @@ func (eh *EventHandler) handleShareCreation(
 		if err := eh.keyManager.AddShare(shareSecret); err != nil {
 			return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
 		}
+
+		// Set the minimum participation epoch to match slashing protection.
+		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	// Save share.
@@ -424,6 +431,9 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		if err := eh.keyManager.(ekm.StorageProvider).BumpSlashingProtection(share.SharePubKey); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
+
+		// Set the minimum participation epoch to match slashing protection.
+		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	if len(enabledPubKeys) > 0 {

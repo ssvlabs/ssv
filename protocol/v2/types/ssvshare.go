@@ -29,6 +29,12 @@ type SSVShare struct {
 	Metadata
 
 	committeeID atomic.Pointer[spectypes.CommitteeID]
+
+	// minParticipationEpoch is the epoch at which the validator can start participating
+	// after a recent registration or reactivation.
+	//
+	// TODO: this is not persistent yet, so we should assume zero values are already participating for now.
+	minParticipationEpoch phase0.Epoch
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
@@ -53,7 +59,8 @@ func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 }
 
 func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
-	return !s.Liquidated && s.IsAttesting(epoch)
+	activeOnContract := s.minParticipationEpoch == 0 || s.minParticipationEpoch < epoch
+	return !s.Liquidated && s.IsAttesting(epoch) && activeOnContract
 }
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
@@ -77,6 +84,10 @@ func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 	// Create a new pointer and store it atomically.
 	s.committeeID.Store(&id)
 	return id
+}
+
+func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {
+	s.minParticipationEpoch = epoch
 }
 
 func (s *SSVShare) OperatorIDs() []spectypes.OperatorID {
