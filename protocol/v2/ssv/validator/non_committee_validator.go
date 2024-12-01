@@ -9,14 +9,15 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"go.uber.org/zap"
-
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
+	msgvalidation "github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
@@ -32,16 +33,18 @@ import (
 )
 
 type CommitteeObserver struct {
-	logger                 *zap.Logger
-	Storage                *storage.QBFTStores
-	beaconNetwork          beacon.BeaconNetwork
-	qbftController         *qbftcontroller.Controller
-	ValidatorStore         registrystorage.ValidatorStore
-	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots          *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache            *DomainCache
-	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
+	logger            *zap.Logger
+	netCfg            networkconfig.NetworkConfig
+	Storage           *storage.QBFTStores
+	beaconNetwork     beacon.BeaconNetwork
+	qbftController    *qbftcontroller.Controller
+	ValidatorStore    registrystorage.ValidatorStore
+	newDecidedHandler qbftcontroller.NewDecidedHandler
+	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache       *DomainCache
+	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
+	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
 type CommitteeObserverOptions struct {
@@ -72,18 +75,21 @@ func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOp
 	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 
-	return &CommitteeObserver{
-		qbftController:         ctrl,
-		logger:                 opts.Logger,
-		Storage:                opts.Storage,
-		beaconNetwork:          opts.NetworkConfig.Beacon,
-		ValidatorStore:         opts.ValidatorStore,
-		newDecidedHandler:      opts.NewDecidedHandler,
-		attesterRoots:          opts.AttesterRoots,
-		syncCommRoots:          opts.SyncCommRoots,
-		domainCache:            opts.DomainCache,
-		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
+	co := &CommitteeObserver{
+		qbftController:    ctrl,
+		logger:            opts.Logger,
+		netCfg:            opts.NetworkConfig,
+		Storage:           opts.Storage,
+		beaconNetwork:     opts.NetworkConfig.Beacon,
+		ValidatorStore:    opts.ValidatorStore,
+		newDecidedHandler: opts.NewDecidedHandler,
+		attesterRoots:     opts.AttesterRoots,
+		syncCommRoots:     opts.SyncCommRoots,
+		domainCache:       opts.DomainCache,
 	}
+	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
+
+	return co
 }
 
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
@@ -220,15 +226,22 @@ func (ncv *CommitteeObserver) processMessage(
 ) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
 
+	currentSlot := signedMsg.Slot
+	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
+	if !exist {
+		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
+		ncv.postConsensusContainer[signedMsg.Slot] = slotValidators
+	}
+
 	for _, msg := range signedMsg.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		if !exists {
 			return nil, fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
 		}
-		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
+		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
 			container = ssv.NewPartialSigContainer(validator.Quorum())
-			ncv.postConsensusContainer[msg.ValidatorIndex] = container
+			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			ncv.resolveDuplicateSignature(container, msg, validator)
@@ -250,6 +263,18 @@ func (ncv *CommitteeObserver) processMessage(
 			}
 		}
 	}
+
+	// Remove older slots container
+	if len(ncv.postConsensusContainer) >= ncv.postConsensusContainerCapacity() {
+		// #nosec G115 -- capacity must be low epoch not to cause overflow
+		thresholdSlot := currentSlot - phase0.Slot(ncv.postConsensusContainerCapacity())
+		for slot := range ncv.postConsensusContainer {
+			if slot < thresholdSlot {
+				delete(ncv.postConsensusContainer, slot)
+			}
+		}
+	}
+
 	return quorums, nil
 }
 
@@ -360,6 +385,11 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *
 	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
 
 	return nil
+}
+
+func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
+	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
+	return int(ncv.netCfg.SlotsPerEpoch()) + msgvalidation.LateSlotAllowance
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
