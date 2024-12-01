@@ -30,8 +30,8 @@ type SSVShare struct {
 
 	committeeID atomic.Pointer[spectypes.CommitteeID]
 
-	// minParticipationEpoch is the epoch at which the validator can start participating
-	// after a recent registration or reactivation.
+	// minParticipationEpoch is the epoch at which the validator can start participating.
+	// This is set on registration and on every reactivation.
 	//
 	// TODO: this is not persistent yet, so we should assume zero values are already participating for now.
 	minParticipationEpoch phase0.Epoch
