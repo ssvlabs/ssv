@@ -155,8 +155,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		}
 	}
 
-	randao := partialSignatureMessages.Type == spectypes.RandaoPartialSig
-	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.indices, randao); err != nil {
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.indices); err != nil {
 		return err
 	}
 
