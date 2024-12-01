@@ -149,7 +149,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		filteredDuty.ValidatorDuties = append(filteredDuty.ValidatorDuties, beaconDuty)
 
 		if beaconDuty.Type == spectypes.BNRoleAttester {
-			if c.dutyGuard.ValidDuty(spectypes.BNRoleAttester, share.ValidatorPubKey, duty.Slot) != nil {
+			if c.dutyGuard.ValidDuty(spectypes.BNRoleAttester, share.ValidatorPubKey, duty.Slot) == nil {
 				attesters = append(attesters, share.SharePubKey)
 			}
 		}
