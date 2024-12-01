@@ -151,6 +151,10 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 		if beaconDuty.Type == spectypes.BNRoleAttester {
 			if c.dutyGuard.ValidDuty(spectypes.BNRoleAttester, share.ValidatorPubKey, duty.Slot) == nil {
 				attesters = append(attesters, share.SharePubKey)
+			} else {
+				logger.Warn("committee validator duty is not valid, skipping",
+					fields.Validator(share.ValidatorPubKey[:]),
+					zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
 			}
 		}
 	}
