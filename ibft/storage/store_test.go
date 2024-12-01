@@ -105,7 +105,9 @@ func Test_mergeParticipantsBitMask(t *testing.T) {
 			}
 
 			result := mergeParticipantsBitMask(q1.ToSignersBitMask(), q2.ToSignersBitMask())
-			require.Equal(t, tt.expected, result.Signers(committee))
+			signers, err := result.Signers(committee)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, signers)
 		})
 	}
 }
