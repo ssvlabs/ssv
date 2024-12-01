@@ -192,7 +192,8 @@ func TestOperatorsBitMask_Signers_NormalCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.bitmask.Signers(tt.committee)
+			result, err := tt.bitmask.Signers(tt.committee)
+			require.NoError(t, err, "Signers should not return an error")
 			assert.Equal(t, tt.expected, result, "Signers do not match expected values")
 		})
 	}
@@ -221,7 +222,8 @@ func TestOperatorsBitMask_Signers_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.bitmask.Signers(tt.committee)
+			result, err := tt.bitmask.Signers(tt.committee)
+			require.NoError(t, err, "Signers should not return an error")
 			assert.Equal(t, tt.expected, result, "Signers do not match expected values")
 		})
 	}
@@ -232,7 +234,7 @@ func TestOperatorsBitMask_Signers_InvalidSizes(t *testing.T) {
 		name        string
 		bitmask     SignersBitMask
 		committee   []spectypes.OperatorID
-		shouldPanic bool
+		shouldError bool
 	}{
 		{
 			name:    "Committee size exceeds maxCommitteeSize",
@@ -244,16 +246,18 @@ func TestOperatorsBitMask_Signers_InvalidSizes(t *testing.T) {
 				}
 				return committee
 			}(),
-			shouldPanic: true,
+			shouldError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.shouldPanic {
-				require.Panics(t, func() { _ = tt.bitmask.Signers(tt.committee) }, "Expected Signers to panic")
+			if tt.shouldError {
+				_, err := tt.bitmask.Signers(tt.committee)
+				require.Error(t, err, "Expected Signers to return an error")
 			} else {
-				require.NotPanics(t, func() { _ = tt.bitmask.Signers(tt.committee) }, "Did not expect Signers to panic")
+				_, err := tt.bitmask.Signers(tt.committee)
+				require.NoError(t, err, "Did not expect Signers to panic")
 			}
 		})
 	}
@@ -268,16 +272,18 @@ func TestOperatorsBitMask_Signers_PartialCommittee(t *testing.T) {
 	bitmask := SignersBitMask((1 << 0) | (1 << 2) | (1 << 4))
 	expected := createOperatorIDs(1, 5, 9)
 
-	result := bitmask.Signers(quorum.Committee)
+	result, err := bitmask.Signers(quorum.Committee)
+	require.NoError(t, err, "Signers should not return an error")
 	assert.Equal(t, expected, result, "Expected signers do not match the bitmask")
 }
 
 func TestOperatorsBitMask_Signers_LargeOperatorIDs(t *testing.T) {
-	committee := createOperatorIDs(100, 200, 300)
+	committee := createOperatorIDs(100, 200, 2000)
 	// Bitmask: bits 0 and 2 set
 	bitmask := SignersBitMask((1 << 0) | (1 << 2))
-	expected := createOperatorIDs(100, 300)
+	expected := createOperatorIDs(100, 2000)
 
-	result := bitmask.Signers(committee)
+	result, err := bitmask.Signers(committee)
+	require.NoError(t, err, "Signers should not return an error")
 	assert.Equal(t, expected, result, "Signers with large OperatorIDs should be correctly returned")
 }

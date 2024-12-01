@@ -86,9 +86,9 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 			return false, fmt.Errorf("get participants: %w", err)
 		}
 
-		quorumAdapter := qbftstorage.Quorum{
-			Signers:   existingList,
-			Committee: newParticipants.Committee,
+		quorumAdapter, err := qbftstorage.NewQuroum(existingList, newParticipants.Committee)
+		if err != nil {
+			return false, fmt.Errorf("create quorum adapter: %w", err)
 		}
 
 		existing = quorumAdapter.ToSignersBitMask()
@@ -153,7 +153,7 @@ func (i *ibftStorage) GetParticipants(
 		return nil, fmt.Errorf("get participants bit mask: %w", err)
 	}
 
-	return bm.Signers(committee), nil
+	return bm.Signers(committee)
 }
 
 func (i *ibftStorage) getParticipantsBitMask(

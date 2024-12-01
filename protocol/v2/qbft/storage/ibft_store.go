@@ -41,10 +41,17 @@ type Quorum struct {
 	Committee []spectypes.OperatorID
 }
 
-func (q *Quorum) ToSignersBitMask() SignersBitMask {
-	if len(q.Committee) > maxCommitteeSize || len(q.Signers) > maxCommitteeSize || len(q.Signers) > len(q.Committee) {
-		panic(fmt.Sprintf("invalid signers/quorum size: %d/%d", len(q.Committee), len(q.Signers)))
+func NewQuroum(signers, committee []spectypes.OperatorID) (Quorum, error) {
+	if len(committee) > maxCommitteeSize || len(signers) > maxCommitteeSize || len(signers) > len(committee) {
+		return Quorum{}, fmt.Errorf("invalid signers/quorum size: %d/%d", len(committee), len(signers))
 	}
+	return Quorum{
+		Signers:   signers,
+		Committee: committee,
+	}, nil
+}
+
+func (q *Quorum) ToSignersBitMask() SignersBitMask {
 
 	bitmask := SignersBitMask(0)
 	i, j := 0, 0
@@ -71,9 +78,9 @@ func (q *Quorum) ToSignersBitMask() SignersBitMask {
 // If committee is [1,2,3,4] and SignersBitMask is 0b0000_0000_0000_1101, it means quorum of [1,3,4].
 type SignersBitMask uint16
 
-func (obm SignersBitMask) Signers(committee []spectypes.OperatorID) []spectypes.OperatorID {
+func (obm SignersBitMask) Signers(committee []spectypes.OperatorID) ([]spectypes.OperatorID, error) {
 	if len(committee) > maxCommitteeSize {
-		panic(fmt.Sprintf("invalid committee size: %d", len(committee)))
+		return nil, fmt.Errorf("invalid committee size: %d", len(committee))
 	}
 
 	signers := make([]spectypes.OperatorID, 0, bits.OnesCount16(uint16(obm)))
@@ -84,7 +91,7 @@ func (obm SignersBitMask) Signers(committee []spectypes.OperatorID) []spectypes.
 		}
 	}
 
-	return signers
+	return signers, nil
 }
 
 // QBFTStore is the store used by QBFT components
