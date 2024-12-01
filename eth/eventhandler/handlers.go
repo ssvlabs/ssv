@@ -24,8 +24,8 @@ import (
 // b64 encrypted key length is 256
 const encryptedKeyLength = 256
 
-// contractParticipationDelay is the number of epochs after which the validator can start participating
-// on the contract after registration or reactivation.
+// contractParticipationDelay is the number of epochs after contract registration or reactivation
+// in which the validator can start participating.
 const contractParticipationDelay phase0.Epoch = 1
 
 var (
