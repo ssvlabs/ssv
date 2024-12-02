@@ -45,7 +45,6 @@ import (
 	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -114,10 +113,6 @@ var StartNodeCmd = &cobra.Command{
 		defer logging.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
-
-		metricsReporter := metricsreporter.New(
-			metricsreporter.WithLogger(logger),
-		)
 
 		observabilityShutdown, err := observability.Initialize(
 			cmd.Parent().Short,
@@ -268,7 +263,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db, metricsReporter)
+		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -378,7 +373,6 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			executionClient,
 			validatorCtrl,
-			metricsReporter,
 			networkConfig,
 			nodeStorage,
 			operatorDataStore,
@@ -655,7 +649,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2P) {
+func setupP2P(logger *zap.Logger, db basedb.Database) (network.P2PNetwork, p2pv1.GenesisP2P) {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -689,7 +683,6 @@ func setupEventHandling(
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
 	validatorCtrl validator.Controller,
-	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
