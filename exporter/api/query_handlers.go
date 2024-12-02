@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -49,6 +50,9 @@ func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 
 // HandleParticipantsQuery handles TypeParticipants queries.
 func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage, domain spectypes.DomainType) {
+	sinceStart := time.Since(time.Now())
+	defer metricHandleParticipantsQueryReq.WithLabelValues(nm.Msg.Filter.Role).Observe(sinceStart.Seconds())
+
 	logger.Debug("handles query request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
