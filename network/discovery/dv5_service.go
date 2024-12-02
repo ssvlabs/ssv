@@ -22,11 +22,12 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
+// metrics to keep track of discovered/connected/disconnected peers (per subnet)
 var (
-	Discovered1stSubnets = hashmap.New[int, int64]()
-	DiscoveredSubnets    = hashmap.New[int, []peer.ID]()
-	Connected1stSubnets  = hashmap.New[int, int64]()
-	ConnectedSubnets     = hashmap.New[int, []peer.ID]()
+	Discovered1stTimeSubnets = hashmap.New[int, int64]()
+	Connected1stTimeSubnets  = hashmap.New[int, int64]()
+	DiscoveredSubnets        = hashmap.New[int, []peer.ID]()
+	ConnectedSubnets         = hashmap.New[int, []peer.ID]()
 )
 
 var (
@@ -197,33 +198,47 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		return errors.New("zero subnets")
 	}
 
-	// TODO - maybe get subnetsBefore and only look at the diff
+	subnetsBefore := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 	subnetsAfter := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
-	for subnet := range subnetsAfter {
-		_, ok := Discovered1stSubnets.Get(subnet)
+	for subnet, subnetActive := range subnetsAfter {
+		if subnetActive != 1 {
+			continue // not interested in subnet that's not active (or no longer active)
+		}
+		subnetActiveBefore := subnetsBefore[subnet]
+		if subnetActiveBefore == 1 {
+			continue // not interested in subnet that we've discovered & recorded as such for this peer previously
+		}
+
+		_, ok := Discovered1stTimeSubnets.Get(subnet)
 		if !ok {
 			logger.Debug(
 				"discovered subnet 1st time!",
 				zap.Int("subnet_id", subnet),
 				zap.String("peer_id", string(e.AddrInfo.ID)),
 			)
-			Discovered1stSubnets.Set(subnet, 1)
+			Discovered1stTimeSubnets.Set(subnet, 1)
 		}
-		peerIDs, ok := DiscoveredSubnets.Get(subnet)
-		if ok {
-			for _, pID := range peerIDs {
-				if pID == e.AddrInfo.ID {
-					logger.Debug(
-						"already discovered this subnet through this peer",
-						zap.Int("subnet_id", subnet),
-						zap.String("peer_id", string(pID)),
-					)
-					break
-				}
+		peerIDs, _ := DiscoveredSubnets.Get(subnet)
+		peerAlreadyDiscoveredForSubnet := false
+		for _, peerID := range peerIDs {
+			if peerID == e.AddrInfo.ID {
+				// TODO - it's fine to get this warning occasionally, I guess ? Not sure what
+				// it would mean though ... a peer who has advertised he has a subnet, but then
+				// we discovered that he doesn't, and then peer says (still/again) that does
+				// work with that subnet ...
+				logger.Debug(
+					"already discovered this subnet through this peer",
+					zap.Int("subnet_id", subnet),
+					zap.String("peer_id", string(peerID)),
+				)
+				peerAlreadyDiscoveredForSubnet = true
+				break
 			}
 		}
-		DiscoveredSubnets.Set(subnet, append(peerIDs, e.AddrInfo.ID))
+		if !peerAlreadyDiscoveredForSubnet {
+			DiscoveredSubnets.Set(subnet, append(peerIDs, e.AddrInfo.ID))
+		}
 	}
 
 	// Filters

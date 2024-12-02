@@ -258,10 +258,42 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger, connector)
 
 	async.Interval(n.ctx, 1*time.Minute, func() {
-		logger.Info("discovered subnets 1st", zap.Int("length", discovery.Discovered1stSubnets.SlowLen()))
-		logger.Info("discovered subnets", zap.Int("length", discovery.DiscoveredSubnets.SlowLen()))
-		logger.Info("connected subnets 1st", zap.Int("length", discovery.Connected1stSubnets.SlowLen()))
-		logger.Info("connected subnets", zap.Int("length", discovery.ConnectedSubnets.SlowLen()))
+		logger.Debug("discovered subnets 1st", zap.Int("total", discovery.Discovered1stTimeSubnets.SlowLen()))
+		logger.Debug("connected subnets 1st", zap.Int("total", discovery.Connected1stTimeSubnets.SlowLen()))
+
+		// check how peer-discovery is doing
+		discovery.DiscoveredSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+			const warningThresholdTooManyDiscoveredPeers = 10
+			if len(peerIDs) >= warningThresholdTooManyDiscoveredPeers {
+				// this means we are discovering peers, but not actually connecting to them,
+				// it's fine for this value to grow over time - but it shouldn't grow too fast,
+				// for now just warn
+				logger.Debug(
+					fmt.Sprintf("got >= %d discovered peers for subnet", warningThresholdTooManyDiscoveredPeers),
+					zap.Int("subnet", subnet),
+					zap.Int("discovered_peers_total", len(peerIDs)),
+				)
+			}
+			return true
+		})
+
+		// check how peer-connecting is doing
+		deadSubnetsCnt := 0
+		soloSubnetsCnt := 0
+		discovery.ConnectedSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+			if len(peerIDs) == 1 {
+				soloSubnetsCnt++
+			}
+			if len(peerIDs) == 0 {
+				deadSubnetsCnt++
+			}
+			return true
+		})
+		logger.Debug(
+			"dead/solo subnets report",
+			zap.Int("solo_subnets_total", soloSubnetsCnt),
+			zap.Int("dead_subnets_total", deadSubnetsCnt),
+		)
 	})
 
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))

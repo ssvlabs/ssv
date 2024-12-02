@@ -194,8 +194,10 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
 
-				// see if this peer is already connected (we probably shouldn't encounter this often
-				// if at all)
+				// see if this peer is already connected, we probably shouldn't encounter this often
+				// if at all because this means we are creating duplicate (unnecessary) peer connections
+				// and effectively reduce overall peer diversity (because we can't exceed pre-configured
+				// max peer limit)
 				discovery.ConnectedSubnets.Range(func(subnet int, ids []peer.ID) bool {
 					for _, id := range ids {
 						if id == conn.RemotePeer() {
@@ -210,35 +212,72 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					return true
 				})
 				// see if we can upgrade any `discovered` subnets to `connected` through this peer
-				discovery.DiscoveredSubnets.Range(func(subnet int, ids []peer.ID) bool {
-					otherPeers := make([]peer.ID, 0, len(ids))
-					for _, id := range ids {
-						if id == conn.RemotePeer() {
-							discovery.Connected1stSubnets.Get(subnet)
-							_, ok := discovery.Connected1stSubnets.Get(subnet)
+				//
+				// unexpectedPeer helps us track whether the peer connection we are making is due
+				// to us discovering this peer previously (due to looking for peers with subnets
+				// we are interested in), or whether we are connecting to some "unexpected" peer
+				unexpectedPeer := true
+				discovery.DiscoveredSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+					otherPeers := make([]peer.ID, 0, len(peerIDs))
+					for _, peerID := range peerIDs {
+						if peerID == conn.RemotePeer() {
+							discovery.Connected1stTimeSubnets.Get(subnet)
+							_, ok := discovery.Connected1stTimeSubnets.Get(subnet)
 							if !ok {
 								logger.Debug(
 									"connected subnet 1st time!",
 									zap.Int("subnet_id", subnet),
-									zap.String("peer_id", string(id)),
+									zap.String("peer_id", string(peerID)),
 								)
-								discovery.Connected1stSubnets.Set(subnet, 1)
+								discovery.Connected1stTimeSubnets.Set(subnet, 1)
 							}
-							logger.Debug(
-								"connecting peer through a subnet discovered previously",
-								zap.Int("subnet_id", subnet),
-								zap.String("peer_id", string(id)),
-							)
+
+							connectedPeers, _ := discovery.ConnectedSubnets.Get(subnet)
+							// peerAlreadyContributesToSubnet helps us track and not double-count peer
+							// contributions to subnets (discovery.ConnectedSubnets contains unique
+							// list of peers per subnet)
+							peerAlreadyContributesToSubnet := false
+							for _, connectedPeer := range connectedPeers {
+								if connectedPeer == peerID {
+									peerAlreadyContributesToSubnet = true
+									break
+								}
+							}
+							if !peerAlreadyContributesToSubnet {
+								logger.Debug(
+									"connecting subnet peer (since he has a subnet we are interested in - as we discovered previously)",
+									zap.Int("subnet_id", subnet),
+									zap.String("peer_id", string(peerID)),
+								)
+								connectedPeers = append(connectedPeers, peerID)
+								discovery.ConnectedSubnets.Set(subnet, connectedPeers)
+							}
 							continue
 						}
-						otherPeers = append(otherPeers, id)
+						otherPeers = append(otherPeers, peerID)
 					}
-					// exclude this peer from discovered since we've just connected to him, this
-					// limits DiscoveredSubnets map to only those peers whom we didn't/couldn't
-					// connect to
+
+					if len(otherPeers) == len(peerIDs) {
+						return true // this discovered subnet is not related to connected peer
+					}
+
+					unexpectedPeer = false // this peer connection is happening due to our subnet discovery process
+
+					// exclude this peer from discovered list since we've just connected to him, this
+					// limits DiscoveredSubnets map to only those discovered peers whom we didn't/couldn't
+					// connect to yet - this means DiscoveredSubnets map shouldn't grow big for ANY of the
+					// subnets it contains because that would mean (for such a subnet) we are discovering
+					// peers but don't connect to them for some reason.
 					discovery.DiscoveredSubnets.Set(subnet, otherPeers)
+
 					return true
 				})
+				if unexpectedPeer {
+					logger.Debug(
+						"connected peer that doesn't belong to ANY of recently discovered subnets",
+						zap.String("peer_id", string(conn.RemotePeer())),
+					)
+				}
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
@@ -257,6 +296,56 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 			logger := connLogger(conn)
 			logger.Debug("peer disconnected")
+
+			// unexpectedPeer helps us track whether the peer we've disconnected is a peer
+			// that's been connected previously through the process of subnet-discovery,
+			// it's just a sanity check
+			unexpectedPeer := true
+			discovery.ConnectedSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+				otherPeers := make([]peer.ID, 0, len(peerIDs))
+				for _, peerID := range peerIDs {
+					if peerID == conn.RemotePeer() {
+						continue
+					}
+					otherPeers = append(otherPeers, peerID)
+				}
+
+				if len(otherPeers) == len(peerIDs) {
+					return true // this subnet was not affected by disconnected peer
+				}
+
+				unexpectedPeer = false // this peer disconnect is happening due to our subnet discovery process
+
+				// exclude this peer from connected list since we've just disconnected him, this
+				// limits ConnectedSubnets map to only those peers whom we still have active connection
+				// with - this means ConnectedSubnets map shouldn't grow small for ANY of the
+				// subnets it contains because that would mean (for such a subnet) we are getting
+				// close to killing previously alive subnet.
+				discovery.ConnectedSubnets.Set(subnet, otherPeers)
+
+				if len(otherPeers) == 1 {
+					logger.Debug(
+						"disconnecting peer resulted in Solo subnet",
+						zap.Int("subnet_id", subnet),
+						zap.String("peer_id", string(conn.RemotePeer())),
+					)
+				}
+				if len(otherPeers) == 0 {
+					logger.Debug(
+						"disconnecting peer resulted in Dead subnet",
+						zap.Int("subnet_id", subnet),
+						zap.String("peer_id", string(conn.RemotePeer())),
+					)
+				}
+
+				return true
+			})
+			if unexpectedPeer {
+				logger.Debug(
+					"disconnected peer that doesn't belong to ANY of connected subnets",
+					zap.String("peer_id", string(conn.RemotePeer())),
+				)
+			}
 		},
 	}
 }

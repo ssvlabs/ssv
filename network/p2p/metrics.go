@@ -79,10 +79,10 @@ func (n *p2pNetwork) reportPeerIdentities(logger *zap.Logger) func() {
 
 func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 	return func() {
-		topics := n.topicsCtrl.Topics()
-		nTopics := len(topics)
+		subscribedTopics := n.topicsCtrl.Topics()
+		nTopics := len(subscribedTopics)
 		logger.Debug("connected topics", fields.Count(nTopics))
-		for _, name := range topics {
+		for _, name := range subscribedTopics {
 			n.reportTopicPeers(logger, name)
 		}
 	}

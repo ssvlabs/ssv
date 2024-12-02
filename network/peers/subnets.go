@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"github.com/ssvlabs/ssv/network/commons"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -110,7 +111,7 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 
 	subnets, ok := si.peerSubnets[id]
 	if !ok {
-		return nil
+		return make(records.Subnets, commons.SubnetsCount)
 	}
 	cp := make(records.Subnets, len(subnets))
 	copy(cp, subnets)
