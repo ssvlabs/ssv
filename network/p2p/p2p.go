@@ -258,8 +258,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger, connector)
 
 	async.Interval(n.ctx, 1*time.Minute, func() {
-		logger.Debug("discovered subnets 1st", zap.Int("total", discovery.Discovered1stTimeSubnets.SlowLen()))
-		logger.Debug("connected subnets 1st", zap.Int("total", discovery.Connected1stTimeSubnets.SlowLen()))
+		logger.Debug("discovered subnets 1st time", zap.Int("total", discovery.Discovered1stTimeSubnets.SlowLen()))
+		logger.Debug("connected subnets 1st time", zap.Int("total", discovery.Connected1stTimeSubnets.SlowLen()))
 
 		// check how peer-discovery is doing
 		discovery.DiscoveredSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
@@ -282,6 +282,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				//   internet not working on the routes we are trying to use)
 				// - us deliberately choosing peers we connect to in suboptimal manner due to max peer limit
 				//   we have (dropping those that are needed for this subnet to work)
+				// - if (assuming peer handshake happens before a connection is considered "established") peer
+				//   no longer has subnets we are interested in as per the check done during handshake (even
+				//   though he advertised)
 				connectedPeerIDs, ok := discovery.ConnectedSubnets.Get(subnet)
 				if !ok || len(connectedPeerIDs) < 2 {
 					logger.Debug(

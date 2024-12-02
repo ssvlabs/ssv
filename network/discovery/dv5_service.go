@@ -22,7 +22,11 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-// metrics to keep track of discovered/connected/disconnected peers (per subnet)
+// metrics to keep track of discovered/connected/disconnected peers (per subnet), note
+// these hold stats across all 128 subnets (not just the ones we are interested in).
+// For example, if ConnectedSubnets will contain/maintain a list of peers even for subnets
+// that are irrelevant for us (they are just there to reflect what subnets each peer
+// we connected to offers)
 var (
 	Discovered1stTimeSubnets = hashmap.New[int, int64]()
 	Connected1stTimeSubnets  = hashmap.New[int, int64]()

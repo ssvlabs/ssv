@@ -216,6 +216,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				// unexpectedPeer helps us track whether the peer connection we are making is due
 				// to us discovering this peer previously (due to looking for peers with subnets
 				// we are interested in), or whether we are connecting to some "unexpected" peer
+				// TODO - we should also account for `trustedPeers` here, I need to check how this
+				// list is derived - but it seems to always be 0 (based on what logs report)
 				unexpectedPeer := true
 				discovery.DiscoveredSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
 					otherPeers := make([]peer.ID, 0, len(peerIDs))
@@ -301,6 +303,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			// unexpectedPeer helps us track whether the peer we've disconnected is a peer
 			// that's been connected previously through the process of subnet-discovery,
 			// it's just a sanity check
+			// TODO - we should also account for `trustedPeers` here, I need to check how this
+			// list is derived - but it seems to always be 0 (based on what logs report)
 			unexpectedPeer := true
 			discovery.ConnectedSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
 				otherPeers := make([]peer.ID, 0, len(peerIDs))
