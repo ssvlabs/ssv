@@ -361,11 +361,11 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 			subnetPeers := n.idx.GetSubnetPeers(subnet)
 			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
 				// take the peers with the most shared subnets
-				aShares := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
+				aShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
 				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
-				if aShares < bShared {
+				if aShared < bShared {
 					return 1
-				} else if aShares > bShared {
+				} else if aShared > bShared {
 					return -1
 				} else {
 					return 0
