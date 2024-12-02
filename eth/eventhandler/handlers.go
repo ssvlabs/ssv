@@ -249,6 +249,8 @@ func (eh *EventHandler) handleShareCreation(
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
+		// Note: The current epoch can differ from the epoch set in slashing protection
+		// due to the passage of time during the non-atomic update process.
 		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
