@@ -27,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -63,7 +62,6 @@ type MessageValidator interface {
 
 type messageValidator struct {
 	logger                  *zap.Logger
-	metrics                 metricsreporter.MetricsReporter
 	netCfg                  networkconfig.NetworkConfig
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
@@ -83,7 +81,6 @@ type messageValidator struct {
 func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
 		logger:                  zap.NewNop(),
-		metrics:                 metricsreporter.NewNop(),
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, keys.OperatorPublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
@@ -103,13 +100,6 @@ type Option func(validator *messageValidator)
 func WithLogger(logger *zap.Logger) Option {
 	return func(mv *messageValidator) {
 		mv.logger = logger
-	}
-}
-
-// WithMetrics sets the metrics for the messageValidator.
-func WithMetrics(metrics metricsreporter.MetricsReporter) Option {
-	return func(mv *messageValidator) {
-		mv.metrics = metrics
 	}
 }
 
@@ -292,7 +282,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	}
 
 	signatureVerifier := func() error {
-		mv.metrics.MessageValidationRSAVerifications()
 		return mv.verifySignature(signedSSVMsg)
 	}
 
