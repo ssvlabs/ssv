@@ -202,7 +202,6 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
 			decodedMsg = m
-			metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(m.MsgType)).Inc()
 		case nil:
 			return errors.New("message was not decoded")
 		default:
