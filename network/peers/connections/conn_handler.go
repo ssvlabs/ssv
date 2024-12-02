@@ -202,7 +202,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					for _, id := range ids {
 						if id == conn.RemotePeer() {
 							logger.Debug(
-								"peer is already connected through subnet discovered previously",
+								"peer is already connected (through some subnet discovered previously)",
 								zap.Int("subnet_id", subnet),
 								zap.String("peer_id", string(id)),
 							)
@@ -211,7 +211,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					}
 					return true
 				})
-				// see if we can upgrade any `discovered` subnets to `connected` through this peer
+				// see if we should upgrade any `discovered` subnets to `connected` through this peer
 				//
 				// unexpectedPeer helps us track whether the peer connection we are making is due
 				// to us discovering this peer previously (due to looking for peers with subnets
@@ -234,8 +234,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 							connectedPeers, _ := discovery.ConnectedSubnets.Get(subnet)
 							// peerAlreadyContributesToSubnet helps us track and not double-count peer
-							// contributions to subnets (discovery.ConnectedSubnets contains unique
-							// list of peers per subnet)
+							// contributions to subnets (discovery.ConnectedSubnets must contain unique
+							// list of peers per subnet at any moment in time)
 							peerAlreadyContributesToSubnet := false
 							for _, connectedPeer := range connectedPeers {
 								if connectedPeer == peerID {
@@ -245,7 +245,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 							}
 							if !peerAlreadyContributesToSubnet {
 								logger.Debug(
-									"connecting subnet peer (since he has a subnet we are interested in - as we discovered previously)",
+									"connected contributing peer (since he has a subnet we are interested in - as we discovered previously)",
 									zap.Int("subnet_id", subnet),
 									zap.String("peer_id", string(peerID)),
 								)
@@ -258,7 +258,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					}
 
 					if len(otherPeers) == len(peerIDs) {
-						return true // this discovered subnet is not related to connected peer
+						// this discovered subnet is not related to connected peer
+						return true
 					}
 
 					unexpectedPeer = false // this peer connection is happening due to our subnet discovery process
@@ -311,7 +312,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				}
 
 				if len(otherPeers) == len(peerIDs) {
-					return true // this subnet was not affected by disconnected peer
+					// this subnet was not affected by disconnected peer
+					return true
 				}
 
 				unexpectedPeer = false // this peer disconnect is happening due to our subnet discovery process

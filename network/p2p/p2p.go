@@ -265,14 +265,32 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		discovery.DiscoveredSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
 			const warningThresholdTooManyDiscoveredPeers = 10
 			if len(peerIDs) >= warningThresholdTooManyDiscoveredPeers {
-				// this means we are discovering peers, but not actually connecting to them,
-				// it's fine for this value to grow over time - but it shouldn't grow too fast,
-				// for now just warn
+				// (per subnet) this means we are discovering peers, but not actually connecting
+				// to them, it's fine for this value to grow over time (in fact, it should grow over
+				// time since we won't be connecting to every peer we discover) - but it must stop
+				// growing at some point, and the resulting value (per subnet) essentially will tell
+				// us "(per subnet) roughly, how many peers we discovered but didn't/couldn't connect to".
 				logger.Debug(
 					fmt.Sprintf("got >= %d discovered peers for subnet", warningThresholdTooManyDiscoveredPeers),
 					zap.Int("subnet", subnet),
 					zap.Int("discovered_peers_total", len(peerIDs)),
 				)
+				// This means if (for some subnet) it's a large value and subnet is dead or solo - there
+				// is some peer-connectivity issue going on (for this specific subnet). This "starving" could
+				// happen due to many reasons:
+				// - networking issue, when we are physically unable to connect to peer node (due to
+				//   internet not working on the routes we are trying to use)
+				// - us deliberately choosing peers we connect to in suboptimal manner due to max peer limit
+				//   we have (dropping those that are needed for this subnet to work)
+				connectedPeerIDs, ok := discovery.ConnectedSubnets.Get(subnet)
+				if !ok || len(connectedPeerIDs) < 2 {
+					logger.Debug(
+						"found starving subnet",
+						zap.Int("subnet", subnet),
+						zap.Int("discovered_peers_total", len(peerIDs)),
+						zap.Int("connected_peers_total", len(connectedPeerIDs)),
+					)
+				}
 			}
 			return true
 		})
