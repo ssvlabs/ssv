@@ -59,8 +59,7 @@ func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 }
 
 func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
-	participating := s.minParticipationEpoch == 0 || s.minParticipationEpoch <= epoch
-	return !s.Liquidated && s.IsAttesting(epoch) && participating
+	return !s.Liquidated && s.IsAttesting(epoch)
 }
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
@@ -88,6 +87,10 @@ func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 
 func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {
 	s.minParticipationEpoch = epoch
+}
+
+func (s *SSVShare) MinParticipationEpoch() phase0.Epoch {
+	return s.minParticipationEpoch
 }
 
 func (s *SSVShare) OperatorIDs() []spectypes.OperatorID {
