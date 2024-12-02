@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 	"net"
 	"time"
 
@@ -19,6 +20,13 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+)
+
+var (
+	Discovered1stSubnets = hashmap.New[int, int64]()
+	DiscoveredSubnets    = hashmap.New[int, []peer.ID]()
+	Connected1stSubnets  = hashmap.New[int, int64]()
+	ConnectedSubnets     = hashmap.New[int, []peer.ID]()
 )
 
 var (
@@ -70,13 +78,12 @@ type DiscV5Service struct {
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:           ctx,
-		cancel:        cancel,
-		conns:         discOpts.ConnIndex,
-		subnetsIdx:    discOpts.SubnetsIdx,
-		networkConfig: discOpts.NetworkConfig,
-		subnets:       discOpts.DiscV5Opts.Subnets,
-		publishLock:   make(chan struct{}, 1),
+		ctx:         ctx,
+		cancel:      cancel,
+		conns:       discOpts.ConnIndex,
+		subnetsIdx:  discOpts.SubnetsIdx,
+		subnets:     discOpts.DiscV5Opts.Subnets,
+		publishLock: make(chan struct{}, 1),
 	}
 
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
@@ -189,7 +196,34 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		return errors.New("zero subnets")
 	}
 
+	// TODO - maybe get subnetsBefore and only look at the diff
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	subnetsAfter := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
+	for subnet := range subnetsAfter {
+		_, ok := Discovered1stSubnets.Get(subnet)
+		if !ok {
+			logger.Debug(
+				"discovered subnet 1st time!",
+				zap.Int("subnet_id", subnet),
+				zap.String("peer_id", string(e.AddrInfo.ID)),
+			)
+			Discovered1stSubnets.Set(subnet, 1)
+		}
+		peerIDs, ok := DiscoveredSubnets.Get(subnet)
+		if ok {
+			for _, pID := range peerIDs {
+				if pID == e.AddrInfo.ID {
+					logger.Debug(
+						"already discovered this subnet through this peer",
+						zap.Int("subnet_id", subnet),
+						zap.String("peer_id", string(pID)),
+					)
+					break
+				}
+			}
+		}
+		DiscoveredSubnets.Set(subnet, append(peerIDs, e.AddrInfo.ID))
+	}
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {

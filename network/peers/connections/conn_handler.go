@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/network/discovery"
 	"sync"
 	"time"
 
@@ -192,6 +193,52 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				metricsConnections.Inc()
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
+
+				// see if this peer is already connected (we probably shouldn't encounter this often
+				// if at all)
+				discovery.ConnectedSubnets.Range(func(subnet int, ids []peer.ID) bool {
+					for _, id := range ids {
+						if id == conn.RemotePeer() {
+							logger.Debug(
+								"peer is already connected through subnet discovered previously",
+								zap.Int("subnet_id", subnet),
+								zap.String("peer_id", string(id)),
+							)
+							return false // stop iteration, found what we are looking for
+						}
+					}
+					return true
+				})
+				// see if we can upgrade any `discovered` subnets to `connected` through this peer
+				discovery.DiscoveredSubnets.Range(func(subnet int, ids []peer.ID) bool {
+					otherPeers := make([]peer.ID, 0, len(ids))
+					for _, id := range ids {
+						if id == conn.RemotePeer() {
+							discovery.Connected1stSubnets.Get(subnet)
+							_, ok := discovery.Connected1stSubnets.Get(subnet)
+							if !ok {
+								logger.Debug(
+									"connected subnet 1st time!",
+									zap.Int("subnet_id", subnet),
+									zap.String("peer_id", string(id)),
+								)
+								discovery.Connected1stSubnets.Set(subnet, 1)
+							}
+							logger.Debug(
+								"connecting peer through a subnet discovered previously",
+								zap.Int("subnet_id", subnet),
+								zap.String("peer_id", string(id)),
+							)
+							continue
+						}
+						otherPeers = append(otherPeers, id)
+					}
+					// exclude this peer from discovered since we've just connected to him, this
+					// limits DiscoveredSubnets map to only those peers whom we didn't/couldn't
+					// connect to
+					discovery.DiscoveredSubnets.Set(subnet, otherPeers)
+					return true
+				})
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {

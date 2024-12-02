@@ -257,6 +257,13 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 	go n.startDiscovery(logger, connector)
 
+	async.Interval(n.ctx, 1*time.Minute, func() {
+		logger.Info("discovered subnets 1st", zap.Int("length", discovery.Discovered1stSubnets.SlowLen()))
+		logger.Info("discovered subnets", zap.Int("length", discovery.DiscoveredSubnets.SlowLen()))
+		logger.Info("connected subnets 1st", zap.Int("length", discovery.Connected1stSubnets.SlowLen()))
+		logger.Info("connected subnets", zap.Int("length", discovery.ConnectedSubnets.SlowLen()))
+	})
+
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
 	// don't report metrics in tests
 	if n.cfg.Metrics != nil {
@@ -377,12 +384,6 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
-	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
-	go func() {
-		ctx, cancel := context.WithCancel(n.ctx)
-		defer cancel()
-		n.backoffConnector.Connect(ctx, discoveredPeers)
-	}()
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
