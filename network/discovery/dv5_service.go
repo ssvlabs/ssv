@@ -78,12 +78,13 @@ type DiscV5Service struct {
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:         ctx,
-		cancel:      cancel,
-		conns:       discOpts.ConnIndex,
-		subnetsIdx:  discOpts.SubnetsIdx,
-		subnets:     discOpts.DiscV5Opts.Subnets,
-		publishLock: make(chan struct{}, 1),
+		ctx:           ctx,
+		cancel:        cancel,
+		conns:         discOpts.ConnIndex,
+		subnetsIdx:    discOpts.SubnetsIdx,
+		networkConfig: discOpts.NetworkConfig,
+		subnets:       discOpts.DiscV5Opts.Subnets,
+		publishLock:   make(chan struct{}, 1),
 	}
 
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
