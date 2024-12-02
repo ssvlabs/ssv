@@ -39,6 +39,7 @@ import (
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -632,27 +633,32 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
+		currentSlot := &utils.SlotValue{}
+		mockNetworkConfig := networkconfig.NetworkConfig{
+			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
+		}
+
 		const epoch = 1
-		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
+		currentSlot.SetSlot(netCfg.Beacon.FirstSlotAtEpoch(epoch))
 
 		ds := dutystore.New()
 
-		validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
+		validator := New(mockNetworkConfig, validatorStore, ds, signatureVerifier).(*messageValidator)
 
-		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, slot)
+		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
 		encodedMessages, err := messages.Encode()
 		require.NoError(t, err)
 
 		dutyExecutorID := shares.active.ValidatorPubKey[:]
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, dutyExecutorID, spectypes.RoleProposer),
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleProposer),
 			Data:    encodedMessages,
 		}
 
 		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
+		receivedAt := mockNetworkConfig.Beacon.GetSlotStartTime(currentSlot.GetSlot())
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 
 		require.False(t, ds.Proposer.IsEpochSet(epoch))
@@ -662,28 +668,33 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
+		currentSlot := &utils.SlotValue{}
+		mockNetworkConfig := networkconfig.NetworkConfig{
+			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
+		}
+
 		const epoch = 1
-		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
+		currentSlot.SetSlot(mockNetworkConfig.Beacon.FirstSlotAtEpoch(epoch))
 
 		ds := dutystore.New()
 		ds.Proposer.Set(epoch, make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0))
 
-		validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
+		validator := New(mockNetworkConfig, validatorStore, ds, signatureVerifier).(*messageValidator)
 
-		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, slot)
+		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
 		encodedMessages, err := messages.Encode()
 		require.NoError(t, err)
 
 		dutyExecutorID := shares.active.ValidatorPubKey[:]
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, dutyExecutorID, spectypes.RoleProposer),
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleProposer),
 			Data:    encodedMessages,
 		}
 
 		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
+		receivedAt := mockNetworkConfig.Beacon.GetSlotStartTime(currentSlot.GetSlot())
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 
 		require.True(t, ds.Proposer.IsEpochSet(epoch))
