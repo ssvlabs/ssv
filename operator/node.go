@@ -24,11 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// Node represents the behavior of SSV node
-type Node interface {
-	Start(logger *zap.Logger) error
-}
-
 // Options contains options to create the node
 type Options struct {
 	// NetworkName is the network name of this node
@@ -46,11 +41,9 @@ type Options struct {
 	DutyStore           *dutystore.Store
 	WS                  api.WebSocketServer
 	WsAPIPort           int
-	Metrics             nodeMetrics
 }
 
-// operatorNode implements Node interface
-type operatorNode struct {
+type Node struct {
 	network          networkconfig.NetworkConfig
 	context          context.Context
 	validatorsCtrl   validator.Controller
@@ -65,13 +58,11 @@ type operatorNode struct {
 
 	ws        api.WebSocketServer
 	wsAPIPort int
-
-	metrics nodeMetrics
 }
 
-// New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
-	node := &operatorNode{
+// New is the constructor of Node
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) *Node {
+	node := &Node{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
@@ -107,19 +98,13 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 
 		ws:        opts.WS,
 		wsAPIPort: opts.WsAPIPort,
-
-		metrics: opts.Metrics,
-	}
-
-	if node.metrics == nil {
-		node.metrics = nopMetrics{}
 	}
 
 	return node
 }
 
 // Start starts to stream duties and run IBFT instances
-func (n *operatorNode) Start(logger *zap.Logger) error {
+func (n *Node) Start(logger *zap.Logger) error {
 	logger.Named(logging.NameOperator)
 
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
@@ -163,7 +148,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 }
 
 // HealthCheck returns a list of issues regards the state of the operator node
-func (n *operatorNode) HealthCheck() error {
+func (n *Node) HealthCheck() error {
 	// TODO: previously this checked availability of consensus & execution clients.
 	// However, currently the node crashes when those clients are down,
 	// so this health check is currently a positive no-op.
@@ -171,7 +156,7 @@ func (n *operatorNode) HealthCheck() error {
 }
 
 // handleQueryRequests waits for incoming messages and
-func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMessage) {
+func (n *Node) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMessage) {
 	if nm.Err != nil {
 		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
 	}
@@ -187,7 +172,7 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 	}
 }
 
-func (n *operatorNode) startWSServer(logger *zap.Logger) error {
+func (n *Node) startWSServer(logger *zap.Logger) error {
 	if n.ws != nil {
 		logger.Info("starting WS server")
 
@@ -201,7 +186,7 @@ func (n *operatorNode) startWSServer(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *operatorNode) reportOperators(logger *zap.Logger) {
+func (n *Node) reportOperators(logger *zap.Logger) {
 	operators, err := n.storage.ListOperators(nil, 0, 1000) // TODO more than 1000?
 	if err != nil {
 		logger.Warn("failed to get all operators for reporting", zap.Error(err))
@@ -209,7 +194,6 @@ func (n *operatorNode) reportOperators(logger *zap.Logger) {
 	}
 	logger.Debug("reporting operators", zap.Int("count", len(operators)))
 	for i := range operators {
-		n.metrics.OperatorPublicKey(operators[i].ID, operators[i].PublicKey)
 		logger.Debug("report operator public key",
 			fields.OperatorID(operators[i].ID),
 			fields.PubKey(operators[i].PublicKey))

@@ -15,16 +15,7 @@ import (
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
-const (
-	ssvNodeNotHealthy = float64(0)
-	ssvNodeHealthy    = float64(1)
-)
-
 var (
-	ssvNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_node_status",
-		Help: "Status of the operator node",
-	})
 	operatorIndex = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:exporter:operator_index",
 		Help: "operator footprint",
@@ -78,8 +69,6 @@ var (
 )
 
 type MetricsReporter interface {
-	SSVNodeHealthy()
-	SSVNodeNotHealthy()
 	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
 	MessageValidationRSAVerifications()
 	SignatureValidationDuration(duration time.Duration, labels ...string)
@@ -110,14 +99,6 @@ func New(opts ...Option) MetricsReporter {
 	}
 
 	return &metricsReporter{}
-}
-
-func (m *metricsReporter) SSVNodeHealthy() {
-	ssvNodeStatus.Set(ssvNodeHealthy)
-}
-
-func (m *metricsReporter) SSVNodeNotHealthy() {
-	ssvNodeStatus.Set(ssvNodeNotHealthy)
 }
 
 func (m *metricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
