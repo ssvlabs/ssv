@@ -68,5 +68,6 @@ func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, networkCfg
 			Bootnodes:  []string{},
 		},
 	}
-	return newDiscV5Service(ctx, logger, discOpts)
+	// TODO - ! this breaks Boot-node, don't merge until fully addressed !
+	return newDiscV5Service(ctx, logger, nil, discOpts)
 }

@@ -329,6 +329,32 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				// close to killing previously alive subnet.
 				discovery.ConnectedSubnets.Set(subnet, otherPeers)
 
+				// also, put this peer back into DiscoveredSubnets because he is a potential candidate
+				// we might consider connecting to in the future.
+				// TODO - this means DiscoveredSubnets might not be 100% accurate (it might claim that
+				// certain peers are connected to subnets they no longer are, but it should be a rare
+				// case - for peer to advertise a subnet and no longer is interested in it)
+				discoveredPeers, _ := discovery.DiscoveredSubnets.Get(subnet)
+				peerAlreadyDiscoveredForSubnet := false
+				for _, peerID := range discoveredPeers {
+					if peerID == conn.RemotePeer() {
+						// TODO - it's fine to get this warning occasionally, I guess ? Not sure what
+						// it would mean though ... a peer who has advertised he has a subnet, but then
+						// we discovered that he doesn't, and then peer says (still/again) that does
+						// work with that subnet ...
+						logger.Debug(
+							"already discovered this subnet through this peer",
+							zap.Int("subnet_id", subnet),
+							zap.String("peer_id", string(peerID)),
+						)
+						peerAlreadyDiscoveredForSubnet = true
+						break
+					}
+				}
+				if !peerAlreadyDiscoveredForSubnet {
+					discovery.DiscoveredSubnets.Set(subnet, append(discoveredPeers, conn.RemotePeer()))
+				}
+
 				if len(otherPeers) == 1 {
 					logger.Debug(
 						"disconnecting peer resulted in Solo subnet",

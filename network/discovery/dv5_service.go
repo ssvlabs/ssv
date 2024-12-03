@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -67,6 +69,7 @@ type DiscV5Service struct {
 
 	dv5Listener Listener
 	bootnodes   []*enode.Node
+	topicsCtrl  topics.Controller
 
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
@@ -80,11 +83,17 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(
+	pctx context.Context,
+	logger *zap.Logger,
+	topicsController topics.Controller,
+	discOpts *Options,
+) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:           ctx,
 		cancel:        cancel,
+		topicsCtrl:    topicsController,
 		conns:         discOpts.ConnIndex,
 		subnetsIdx:    discOpts.SubnetsIdx,
 		networkConfig: discOpts.NetworkConfig,
@@ -150,6 +159,9 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
 
+	// TODO - test if discovery is the only place to "discover" peers
+	return nil
+
 	// Log every 10th skipped peer.
 	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
 	const logFrequency = 10
@@ -203,7 +215,9 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	}
 
 	subnetsBefore := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
+
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+
 	subnetsAfter := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
 	for subnet, subnetActive := range subnetsAfter {
 		if subnetActive != 1 {
@@ -213,6 +227,9 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		if subnetActiveBefore == 1 {
 			continue // not interested in subnet that we've discovered & recorded as such for this peer previously
 		}
+		// TODO - ^ this means DiscoveredSubnets might not be 100% accurate (it might claim that
+		// certain peers are connected to subnets they no longer are, but it should be a rare
+		// case - for peer to advertise a subnet and no longer is interested in it)
 
 		_, ok := Discovered1stTimeSubnets.Get(subnet)
 		if !ok {
@@ -253,6 +270,44 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
 		metricRejectedNodes.Inc()
 		return errors.New("no shared subnets")
+	}
+
+	// TODO - need a better (smart) way to do it, but for now try to connect only
+	// peers that help with getting rid of dead subnets
+	helpfulPeer := false
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	if err != nil {
+		return errors.Wrap(err, "could not get peer subnets")
+	}
+	subscribedTopics := dvs.topicsCtrl.Topics()
+	for _, topic := range subscribedTopics {
+		topicPeers, err := dvs.topicsCtrl.Peers(topic)
+		if err != nil {
+			return errors.Wrap(err, "could not get subscribed topic peers")
+		}
+
+		//if len(topicPeers) >= 1 {
+		//	continue // this topic has enough peers - TODO (1 is not enough tho)
+		//}
+		// TODO - testing 0 to see if this even works
+		if len(topicPeers) >= 0 {
+			continue // this topic has enough peers - TODO (1 is not enough tho)
+		}
+
+		// we've got a dead subnet here, see if this peer can help with that
+		subnet, err := strconv.Atoi(topic)
+		if err != nil {
+			return errors.Wrap(err, "could not convert topic name to subnet id")
+		}
+		peerSubnet := peerSubnets[subnet]
+		if peerSubnet != 1 {
+			continue // peer doesn't have this subnet either, lets check other dead subnets we have
+		}
+		helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+		break
+	}
+	if !helpfulPeer {
+		return errors.New("this peer doesn't help with dead subnets")
 	}
 
 	metricFoundNodes.Inc()

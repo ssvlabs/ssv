@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -21,7 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -327,9 +327,10 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
 	}
 
-	if err := n.subscribeToFixedSubnets(logger); err != nil {
-		return err
-	}
+	// TODO - don't connect to fixed (to not interfere with discovery)
+	//if err := n.subscribeToFixedSubnets(logger); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
