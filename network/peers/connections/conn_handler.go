@@ -2,7 +2,10 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/topics"
+	"strconv"
 	"sync"
 	"time"
 
@@ -32,6 +35,7 @@ type connHandler struct {
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
 	peerInfos       peers.PeerInfoIndex
+	topicsCtrl      topics.Controller
 	metrics         Metrics
 }
 
@@ -43,6 +47,7 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
+	topicsController topics.Controller,
 	mr Metrics,
 ) ConnHandler {
 	return &connHandler{
@@ -52,6 +57,7 @@ func NewConnHandler(
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
 		peerInfos:       peerInfos,
+		topicsCtrl:      topicsController,
 		metrics:         mr,
 	}
 }
@@ -145,6 +151,10 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
+			if !ch.helpfulPeer(logger, conn) {
+				return errors.New("peer doesn't help us much (with dead/solo subnets)")
+			}
+
 			return nil
 		}
 
@@ -400,4 +410,50 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
 	return len(shared) == 1
+}
+
+// TODO - need a better (smart) way to do it, but for now try to connect only
+// peers that help with getting rid of dead subnets
+func (ch *connHandler) helpfulPeer(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
+	pid := conn.RemotePeer()
+
+	helpfulPeer := false
+	peerSubnets := ch.subnetsIndex.GetPeerSubnets(pid)
+	if len(peerSubnets) == 0 {
+		// no subnets for this peer
+		return false
+	}
+
+	subscribedTopics := ch.topicsCtrl.Topics()
+	for _, topic := range subscribedTopics {
+		topicPeers, err := ch.topicsCtrl.Peers(topic)
+		if err != nil {
+			panic(fmt.Sprintf("could not get subscribed topic peers: %s", err)) // TODO
+		}
+
+		//if len(topicPeers) >= 1 {
+		//	continue // this topic has enough peers - TODO (1 is not enough tho)
+		//}
+		// TODO - testing 0 to see if this even works
+		if len(topicPeers) >= 0 {
+			continue // this topic has enough peers - TODO (1 is not enough tho)
+		}
+
+		// we've got a dead subnet here, see if this peer can help with that
+		subnet, err := strconv.Atoi(topic)
+		if err != nil {
+			panic(fmt.Sprintf("could not convert topic name to subnet id: %s", err)) // TODO
+		}
+		peerSubnet := peerSubnets[subnet]
+		if peerSubnet != 1 {
+			continue // peer doesn't have this subnet either, lets check other dead subnets we have
+		}
+		helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+		break
+	}
+	if !helpfulPeer {
+		return false
+	}
+
+	return true
 }
