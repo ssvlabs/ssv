@@ -204,6 +204,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
 
+				discovery.CountersMtx.Lock()
 				// see if this peer is already connected, we probably shouldn't encounter this often
 				// if at all because this means we are creating duplicate (unnecessary) peer connections
 				// and effectively reduce overall peer diversity (because we can't exceed pre-configured
@@ -285,6 +286,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 					return true
 				})
+				discovery.CountersMtx.Unlock()
 				if unexpectedPeer {
 					logger.Debug(
 						"connected peer that doesn't belong to ANY of recently discovered subnets",
@@ -316,6 +318,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			// TODO - we should also account for `trustedPeers` here, I need to check how this
 			// list is derived - but it seems to always be 0 (based on what logs report)
 			unexpectedPeer := true
+			discovery.CountersMtx.Lock()
 			discovery.ConnectedSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
 				if len(peerIDs) == 0 {
 					// this subnet was not affected by disconnected peer because it has 0 peers right now
@@ -387,6 +390,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 				return true
 			})
+			discovery.CountersMtx.Unlock()
 			if unexpectedPeer {
 				logger.Debug(
 					"disconnected peer that doesn't belong to ANY of connected subnets",

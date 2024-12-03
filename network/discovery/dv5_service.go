@@ -8,6 +8,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -29,10 +30,13 @@ import (
 // For example, if ConnectedSubnets will contain/maintain a list of peers even for subnets
 // that are irrelevant for us (they are just there to reflect what subnets each peer
 // we connected to offers)
-// TODO - for these counters to be accurate `hashmap` won't suffice, I'd need to do
-// mutex locking to enforce some large operations (like updating ConnectedSubnets while
-// iterating DiscoveredSubnets map) to happen atomically
 var (
+	// CountersMtx helps with updating counters related to peer discovery/connecting in
+	// atomic fashion (like updating ConnectedSubnets while iterating DiscoveredSubnets map)
+	// to happen atomically.
+	// TODO - we don't need hashmap then, use plain simple golang map.
+	CountersMtx sync.Mutex
+
 	Discovered1stTimeSubnets = hashmap.New[int, int64]()
 	Connected1stTimeSubnets  = hashmap.New[int, int64]()
 	// DiscoveredSubnets contains subnet->peerIDs mapping for peers discovery service found.
@@ -224,6 +228,8 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 
 	subnetsAfter := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
+
+	CountersMtx.Lock()
 	for subnet, subnetActive := range subnetsAfter {
 		if subnetActive != 1 {
 			continue // not interested in subnet that's not active (or no longer active)
@@ -266,6 +272,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 			DiscoveredSubnets.Set(subnet, append(peerIDs, e.AddrInfo.ID))
 		}
 	}
+	CountersMtx.Unlock()
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {

@@ -258,6 +258,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger, connector)
 
 	async.Interval(n.ctx, 1*time.Minute, func() {
+		discovery.CountersMtx.Lock()
+		defer discovery.CountersMtx.Unlock()
+
 		logger.Debug("discovered subnets 1st time", zap.Int("total", discovery.Discovered1stTimeSubnets.SlowLen()))
 		logger.Debug("connected subnets 1st time", zap.Int("total", discovery.Connected1stTimeSubnets.SlowLen()))
 
