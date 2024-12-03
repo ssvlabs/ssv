@@ -694,7 +694,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Target:    attData.Target,
 	}
 
-	if err := cr.BaseRunner.decide(logger, cr, duty.DutySlot(), vote); err != nil {
+	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil

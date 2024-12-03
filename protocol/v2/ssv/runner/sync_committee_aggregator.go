@@ -156,7 +156,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	r.measurements.StartConsensus()
-	if err := r.BaseRunner.decide(logger, r, input.Duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, input.Duty.Slot, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil

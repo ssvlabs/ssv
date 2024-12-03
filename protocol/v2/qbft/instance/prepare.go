@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -15,7 +16,7 @@ import (
 
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
-func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessage, prepareMsgContainer *specqbft.MsgContainer) error {
+func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage, prepareMsgContainer *specqbft.MsgContainer) error {
 	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(msg)
@@ -43,7 +44,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, msg *specqbft.ProcessingMessa
 	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData
 	i.State.LastPreparedRound = i.State.Round
 
-	i.metrics.EndStagePrepare()
+	i.metrics.EndStagePrepare(ctx)
 
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(i.State.Round),

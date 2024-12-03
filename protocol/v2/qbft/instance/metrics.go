@@ -1,75 +1,56 @@
 package instance
 
 import (
+	"context"
+	"math"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
+	"go.opentelemetry.io/otel/metric"
 )
-
-var (
-	metricsStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_instance_stage_duration_seconds",
-		Help:    "Instance stage duration (seconds)",
-		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 5},
-	}, []string{"stage"})
-	metricsRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv_qbft_instance_round",
-		Help: "QBFT instance round",
-	}, []string{"roleType"})
-)
-
-func init() {
-	allMetrics := []prometheus.Collector{
-		metricsStageDuration,
-		metricsRound,
-	}
-	logger := zap.L()
-	for _, c := range allMetrics {
-		if err := prometheus.Register(c); err != nil {
-			logger.Debug("could not register prometheus collector")
-		}
-	}
-}
 
 type metrics struct {
-	StageStart       time.Time
-	proposalDuration prometheus.Observer
-	prepareDuration  prometheus.Observer
-	commitDuration   prometheus.Observer
-	round            prometheus.Gauge
+	stageStart time.Time
+	role       string
 }
 
 func newMetrics(role string) *metrics {
 	return &metrics{
-		proposalDuration: metricsStageDuration.WithLabelValues("proposal"),
-		prepareDuration:  metricsStageDuration.WithLabelValues("prepare"),
-		commitDuration:   metricsStageDuration.WithLabelValues("commit"),
-		round:            metricsRound.WithLabelValues(role),
+		role: role,
 	}
 }
 
 func (m *metrics) StartStage() {
-	m.StageStart = time.Now()
+	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStageProposal() {
-	m.proposalDuration.Observe(time.Since(m.StageStart).Seconds())
-	m.StageStart = time.Now()
+func (m *metrics) EndStageProposal(ctx context.Context) {
+	validatorStageDurationHistogram.Record(
+		ctx,
+		time.Since(m.stageStart).Seconds(),
+		metric.WithAttributes(stageAttribute(proposalStage)))
+	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStagePrepare() {
-	m.prepareDuration.Observe(time.Since(m.StageStart).Seconds())
-	m.StageStart = time.Now()
+func (m *metrics) EndStagePrepare(ctx context.Context) {
+	validatorStageDurationHistogram.Record(
+		ctx,
+		time.Since(m.stageStart).Seconds(),
+		metric.WithAttributes(stageAttribute(prepareStage)))
+	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStageCommit() {
-	m.commitDuration.Observe(time.Since(m.StageStart).Seconds())
-	m.StageStart = time.Now()
+func (m *metrics) EndStageCommit(ctx context.Context) {
+	validatorStageDurationHistogram.Record(
+		ctx,
+		time.Since(m.stageStart).Seconds(),
+		metric.WithAttributes(stageAttribute(commitStage)))
+	m.stageStart = time.Now()
 }
 
-func (m *metrics) SetRound(round specqbft.Round) {
-	m.round.Set(float64(round))
+func (m *metrics) SetRound(ctx context.Context, round specqbft.Round) {
+	convertedRound := uint64(round)
+	if convertedRound <= math.MaxInt64 {
+		roundGauge.Record(ctx, int64(convertedRound), metric.WithAttributes(roleAttribute(m.role)))
+	}
 }
