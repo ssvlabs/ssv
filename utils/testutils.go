@@ -77,5 +77,17 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 		},
 	).AnyTimes()
 
+	mockBeaconNetwork.EXPECT().SlotDurationSec().DoAndReturn(
+		func() time.Duration {
+			return 12 * time.Second
+		},
+	).AnyTimes()
+
+	mockBeaconNetwork.EXPECT().SlotsPerEpoch().DoAndReturn(
+		func() uint64 {
+			return 32
+		},
+	).AnyTimes()
+
 	return mockBeaconNetwork
 }

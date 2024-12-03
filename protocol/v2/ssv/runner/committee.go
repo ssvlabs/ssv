@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,10 +13,10 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -81,7 +82,7 @@ func NewCommitteeRunner(
 	}, nil
 }
 
-func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
 	d, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
 		return errors.New("duty is not a CommitteeDuty")
@@ -93,7 +94,7 @@ func (cr *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty,
 				validatorDuty.Type, d.DutySlot(), validatorDuty.PubKey, err)
 		}
 	}
-	err := cr.BaseRunner.baseStartNewDuty(logger, cr, duty, quorum)
+	err := cr.BaseRunner.baseStartNewDuty(ctx, logger, cr, duty, quorum)
 	if err != nil {
 		return err
 	}
@@ -194,12 +195,12 @@ func (cr *CommitteeRunner) HasRunningDuty() bool {
 	return cr.BaseRunner.hasRunningDuty()
 }
 
-func (cr *CommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	return errors.New("no pre consensus phase for committee runner")
 }
 
-func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
-	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(logger, cr, msg, &spectypes.BeaconVote{})
+func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr, msg, &spectypes.BeaconVote{})
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
 	}
@@ -243,7 +244,8 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 			if err != nil {
 				return errors.Wrap(err, "failed to hash attestation data")
 			}
-			logger.Debug("signed attestation data", zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
+			logger.Debug("signed attestation data",
+				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
 				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
 				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
@@ -300,7 +302,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *spectypes.S
 }
 
 // TODO finish edge case where some roots may be missing
-func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -617,6 +619,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 				logger.Debug("failed to get attester domain", zap.Error(err))
 				continue
 			}
+
 			root, err := spectypes.ComputeETHSigningRoot(attestationData, domain)
 			if err != nil {
 				logger.Debug("failed to compute attester root", zap.Error(err))
@@ -664,14 +667,15 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 	return attestationMap, syncCommitteeMap, beaconObjects, nil
 }
 
-func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
+func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	start := time.Now()
 	slot := duty.DutySlot()
+	// We set committeeIndex to 0 for simplicity, there is no need to specify it exactly because
+	// all 64 Ethereum committees assigned to this slot will get the same data to attest for.
 	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot, 0)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
-	//TODO committeeIndex is 0, is this correct?
 	logger = logger.With(
 		zap.Duration("attestation_data_time", time.Since(start)),
 		fields.Slot(slot),

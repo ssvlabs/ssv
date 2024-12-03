@@ -14,13 +14,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/genesisstorage"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -199,6 +199,7 @@ type controller struct {
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validators.ValidatorContainer) (bool, error)
 	committeeValidatorSetup chan struct{}
+	dutyGuard               *validator.CommitteeDutyGuard
 
 	metadataUpdateInterval time.Duration
 
@@ -212,6 +213,9 @@ type controller struct {
 	// nonCommittees is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
+	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache              *validator.DomainCache
 
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
@@ -256,10 +260,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		},
 	}
 
-	//TODO
+	beaconNetwork := options.NetworkConfig.Beacon
+
 	genesisValidatorOptions := genesisvalidator.Options{
 		Network:       options.GenesisControllerOptions.Network,
-		BeaconNetwork: options.NetworkConfig.Beacon,
+		BeaconNetwork: beaconNetwork,
 		Storage:       options.GenesisControllerOptions.StorageMap,
 		// SSVShare:   nil,  // set per validator
 		Signer:            options.GenesisControllerOptions.KeyManager,
@@ -288,6 +293,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	if options.Metrics != nil {
 		metrics = options.Metrics
 	}
+
+	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
@@ -318,11 +325,20 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
 		committeesObservers: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](time.Minute * 13),
+			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](cacheTTL),
 		),
+		attesterRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
+		syncCommRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
+		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
+
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
+		dutyGuard:               validator.NewCommitteeDutyGuard(),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -330,6 +346,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
+	// Delete old root and domain entries.
+	go ctrl.attesterRoots.Start()
+	go ctrl.syncCommRoots.Start()
+	go ctrl.domainCache.Start()
 
 	return &ctrl
 }
@@ -408,9 +428,9 @@ func (c *controller) handleRouterMessages() {
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.Validator().HandleMessage(c.logger, m)
+					v.Validator().HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.HandleMessage(c.logger, m)
+					vc.HandleMessage(ctx, c.logger, m)
 				} else if c.validatorOptions.Exporter {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
@@ -452,6 +472,9 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			Operator:          c.validatorOptions.Operator,
 			OperatorSigner:    c.validatorOptions.OperatorSigner,
 			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+			AttesterRoots:     c.attesterRoots,
+			SyncCommRoots:     c.syncCommRoots,
+			DomainCache:       c.domainCache,
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
@@ -728,7 +751,7 @@ func (c *controller) ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectyp
 	}
 }
 
-func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDuty) {
+func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	pk := make([]byte, 48)
@@ -754,7 +777,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDu
 	}
 }
 
-func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType())
 		if err != nil {
@@ -766,7 +789,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if err := cm.OnExecuteDuty(logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
+		if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
 			logger.Error("could not execute committee duty", zap.Error(err))
 		}
 	} else {
@@ -964,7 +987,16 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validators.Validato
 
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
-		vc = validator.NewCommittee(ctx, cancel, logger, c.beacon.GetBeaconNetwork(), operator, committeeRunnerFunc, nil)
+		vc = validator.NewCommittee(
+			ctx,
+			cancel,
+			logger,
+			c.beacon.GetBeaconNetwork(),
+			operator,
+			committeeRunnerFunc,
+			nil,
+			c.dutyGuard,
+		)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 
@@ -1239,7 +1271,6 @@ func SetupCommitteeRunners(
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
@@ -1303,7 +1334,6 @@ func SetupRunners(
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:     options.Storage.Get(convert.RunnerRole(role)),
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,

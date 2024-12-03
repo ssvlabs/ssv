@@ -133,6 +133,30 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return e
 	}
 
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+
+	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
+	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
+		e := ErrUnexpectedConsensusMessage
+		e.got = role
+		return e
+	}
+
+	// Rule: Round cut-offs for roles:
+	// - 12 (committee and aggregation)
+	// - 6 (other types)
+	maxRound, err := mv.maxRound(role)
+	if err != nil {
+		return fmt.Errorf("failed to get max round: %w", err)
+	}
+
+	if consensusMessage.Round > maxRound {
+		err := ErrRoundTooHigh
+		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
+		return err
+	}
+
 	// Rule: consensus message must have the same identifier as the ssv message's identifier
 	if !bytes.Equal(consensusMessage.Identifier, signedSSVMessage.SSVMessage.MsgID[:]) {
 		e := ErrMismatchedIdentifier
@@ -229,8 +253,10 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
+	if role != spectypes.RoleCommittee { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.OperatorIDs {
 			signerStateBySlot := state.GetOrCreate(signer)
 			if maxSlot := signerStateBySlot.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
@@ -240,15 +266,6 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 				return e
 			}
 		}
-	}
-
-	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
-
-	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
-	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
-		e := ErrUnexpectedConsensusMessage
-		e.got = role
-		return e
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
@@ -273,20 +290,6 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, validatorIndices, signerStateBySlot); err != nil {
 			return err
 		}
-	}
-
-	// Rule: Round cut-offs for roles:
-	// - 12 (committee and aggregation)
-	// - 6 (other types)
-	maxRound, err := mv.maxRound(role)
-	if err != nil {
-		return fmt.Errorf("failed to get max round: %w", err)
-	}
-	if consensusMessage.Round > maxRound {
-		err := ErrRoundTooHigh
-		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
-		err.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
-		return err
 	}
 
 	return nil

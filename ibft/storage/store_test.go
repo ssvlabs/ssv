@@ -1,185 +1,13 @@
 package storage
 
 import (
-	"crypto/rsa"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
-
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
-
-func TestCleanInstances(t *testing.T) {
-	ks := testingutils.Testing4SharesSet()
-	logger := logging.TestLogger(t)
-	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
-	storage, err := newTestIbftStorage(logger, "test")
-	require.NoError(t, err)
-
-	generateInstance := func(id spectypes.MessageID, h specqbft.Height) *qbftstorage.StoredInstance {
-		return &qbftstorage.StoredInstance{
-			State: &specqbft.State{
-				ID:                   id[:],
-				Round:                1,
-				Height:               h,
-				LastPreparedRound:    1,
-				LastPreparedValue:    []byte("value"),
-				Decided:              true,
-				DecidedValue:         []byte("value"),
-				ProposeContainer:     specqbft.NewMsgContainer(),
-				PrepareContainer:     specqbft.NewMsgContainer(),
-				CommitContainer:      specqbft.NewMsgContainer(),
-				RoundChangeContainer: specqbft.NewMsgContainer(),
-			},
-			DecidedMessage: testingutils.TestingCommitMultiSignerMessageWithHeightAndIdentifier(
-				[]*rsa.PrivateKey{ks.OperatorKeys[1], ks.OperatorKeys[2], ks.OperatorKeys[3]},
-				[]spectypes.OperatorID{1, 2, 3},
-				h,
-				msgID[:],
-			),
-		}
-	}
-
-	msgsCount := 10
-	for i := 0; i < msgsCount; i++ {
-		require.NoError(t, storage.SaveInstance(generateInstance(msgID, specqbft.Height(i))))
-	}
-	require.NoError(t, storage.SaveHighestInstance(generateInstance(msgID, specqbft.Height(msgsCount))))
-
-	// add different msgID
-	differMsgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("differ_pk"), spectypes.RoleCommittee)
-	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
-	require.NoError(t, storage.SaveHighestInstance(generateInstance(differMsgID, specqbft.Height(msgsCount))))
-	require.NoError(t, storage.SaveHighestAndHistoricalInstance(generateInstance(differMsgID, specqbft.Height(1))))
-
-	res, err := storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
-	require.NoError(t, err)
-	require.Equal(t, msgsCount, len(res))
-
-	last, err := storage.GetHighestInstance(msgID[:])
-	require.NoError(t, err)
-	require.NotNil(t, last)
-	require.Equal(t, specqbft.Height(msgsCount), last.State.Height)
-
-	// remove all instances
-	require.NoError(t, storage.CleanAllInstances(logger, msgID[:]))
-	res, err = storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
-	require.NoError(t, err)
-	require.Equal(t, 0, len(res))
-
-	last, err = storage.GetHighestInstance(msgID[:])
-	require.NoError(t, err)
-	require.Nil(t, last)
-
-	// check other msgID
-	res, err = storage.GetInstancesInRange(differMsgID[:], 0, specqbft.Height(msgsCount))
-	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
-
-	last, err = storage.GetHighestInstance(differMsgID[:])
-	require.NoError(t, err)
-	require.NotNil(t, last)
-}
-
-func TestSaveAndFetchLastState(t *testing.T) {
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
-
-	instance := &qbftstorage.StoredInstance{
-		State: &specqbft.State{
-			CommitteeMember:                 nil,
-			ID:                              identifier[:],
-			Round:                           1,
-			Height:                          1,
-			LastPreparedRound:               1,
-			LastPreparedValue:               []byte("value"),
-			ProposalAcceptedForCurrentRound: nil,
-			Decided:                         true,
-			DecidedValue:                    []byte("value"),
-			ProposeContainer:                specqbft.NewMsgContainer(),
-			PrepareContainer:                specqbft.NewMsgContainer(),
-			CommitContainer:                 specqbft.NewMsgContainer(),
-			RoundChangeContainer:            specqbft.NewMsgContainer(),
-		},
-	}
-
-	storage, err := newTestIbftStorage(logging.TestLogger(t), "test")
-	require.NoError(t, err)
-
-	require.NoError(t, storage.SaveHighestInstance(instance))
-
-	savedInstance, err := storage.GetHighestInstance(identifier[:])
-	require.NoError(t, err)
-	require.NotNil(t, savedInstance)
-	require.Equal(t, specqbft.Height(1), savedInstance.State.Height)
-	require.Equal(t, specqbft.Round(1), savedInstance.State.Round)
-	require.Equal(t, identifier.String(), specqbft.ControllerIdToMessageID(savedInstance.State.ID).String())
-	require.Equal(t, specqbft.Round(1), savedInstance.State.LastPreparedRound)
-	require.Equal(t, true, savedInstance.State.Decided)
-	require.Equal(t, []byte("value"), savedInstance.State.LastPreparedValue)
-	require.Equal(t, []byte("value"), savedInstance.State.DecidedValue)
-}
-
-func TestSaveAndFetchState(t *testing.T) {
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
-
-	instance := &qbftstorage.StoredInstance{
-		State: &specqbft.State{
-			CommitteeMember:                 nil,
-			ID:                              identifier[:],
-			Round:                           1,
-			Height:                          1,
-			LastPreparedRound:               1,
-			LastPreparedValue:               []byte("value"),
-			ProposalAcceptedForCurrentRound: nil,
-			Decided:                         true,
-			DecidedValue:                    []byte("value"),
-			ProposeContainer:                specqbft.NewMsgContainer(),
-			PrepareContainer:                specqbft.NewMsgContainer(),
-			CommitContainer:                 specqbft.NewMsgContainer(),
-			RoundChangeContainer:            specqbft.NewMsgContainer(),
-		},
-	}
-
-	storage, err := newTestIbftStorage(logging.TestLogger(t), "test")
-	require.NoError(t, err)
-
-	require.NoError(t, storage.SaveInstance(instance))
-
-	savedInstances, err := storage.GetInstancesInRange(identifier[:], 1, 1)
-	require.NoError(t, err)
-	require.NotNil(t, savedInstances)
-	require.Len(t, savedInstances, 1)
-	savedInstance := savedInstances[0]
-
-	require.Equal(t, specqbft.Height(1), savedInstance.State.Height)
-	require.Equal(t, specqbft.Round(1), savedInstance.State.Round)
-	require.Equal(t, identifier.String(), specqbft.ControllerIdToMessageID(savedInstance.State.ID).String())
-	require.Equal(t, specqbft.Round(1), savedInstance.State.LastPreparedRound)
-	require.Equal(t, true, savedInstance.State.Decided)
-	require.Equal(t, []byte("value"), savedInstance.State.LastPreparedValue)
-	require.Equal(t, []byte("value"), savedInstance.State.DecidedValue)
-}
-
-func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStore, error) {
-	db, err := kv.NewInMemory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
-		Reporting: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return New(db, prefix), nil
-}
 
 func TestEncodeDecodeOperators(t *testing.T) {
 	testCases := []struct {
@@ -205,6 +33,71 @@ func TestEncodeDecodeOperators(t *testing.T) {
 
 			decoded := decodeOperators(encoded)
 			require.Equal(t, tc.input, decoded)
+		})
+	}
+}
+
+func Test_mergeQuorums(t *testing.T) {
+	tests := []struct {
+		name          string
+		participants1 []spectypes.OperatorID
+		participants2 []spectypes.OperatorID
+		expected      []spectypes.OperatorID
+	}{
+		{
+			name:          "Both participants empty",
+			participants1: []spectypes.OperatorID{},
+			participants2: []spectypes.OperatorID{},
+			expected:      nil,
+		},
+		{
+			name:          "First participants empty",
+			participants1: []spectypes.OperatorID{},
+			participants2: []spectypes.OperatorID{1, 2, 3},
+			expected:      []spectypes.OperatorID{1, 2, 3},
+		},
+		{
+			name:          "Second participants empty",
+			participants1: []spectypes.OperatorID{1, 2, 3},
+			participants2: []spectypes.OperatorID{},
+			expected:      []spectypes.OperatorID{1, 2, 3},
+		},
+		{
+			name:          "No duplicates",
+			participants1: []spectypes.OperatorID{1, 3, 5},
+			participants2: []spectypes.OperatorID{2, 4, 6},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			name:          "With duplicates",
+			participants1: []spectypes.OperatorID{1, 2, 3, 5},
+			participants2: []spectypes.OperatorID{3, 4, 5, 6},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			name:          "All duplicates",
+			participants1: []spectypes.OperatorID{1, 2, 3},
+			participants2: []spectypes.OperatorID{1, 2, 3},
+			expected:      []spectypes.OperatorID{1, 2, 3},
+		},
+		{
+			name:          "Unsorted input participants",
+			participants1: []spectypes.OperatorID{5, 1, 3},
+			participants2: []spectypes.OperatorID{4, 2, 6},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			name:          "Large participants size",
+			participants1: []spectypes.OperatorID{1, 3, 5, 7, 9, 11, 13},
+			participants2: []spectypes.OperatorID{2, 4, 6, 8, 10, 12, 14},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeParticipants(tt.participants1, tt.participants2)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }
