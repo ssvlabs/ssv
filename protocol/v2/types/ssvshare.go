@@ -62,6 +62,14 @@ func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
 	return !s.Liquidated && s.IsAttesting(epoch)
 }
 
+func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {
+	s.minParticipationEpoch = epoch
+}
+
+func (s *SSVShare) MinParticipationEpoch() phase0.Epoch {
+	return s.minParticipationEpoch
+}
+
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipientAddress = feeRecipient
 }

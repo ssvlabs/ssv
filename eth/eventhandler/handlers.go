@@ -436,6 +436,9 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
+		// Note: The current epoch can differ from the epoch set in slashing protection
+		// due to the passage of time between saving slashing protection data and setting
+		// the minimum participation epoch
 		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
