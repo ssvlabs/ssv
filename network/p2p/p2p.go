@@ -265,11 +265,29 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		logger.Debug("discovered subnets 1st time", zap.Int("total", discovery.Discovered1stTimeSubnetsCounter.SlowLen()))
 		logger.Debug("connected subnets 1st time", zap.Int("total", discovery.Connected1stTimeSubnetsCounter.SlowLen()))
 
+		subscribedTopics := n.topicsCtrl.Topics()
+		subscribedTopicsIdx := make(map[int]struct{}, len(subscribedTopics))
+		for _, topic := range subscribedTopics {
+			subnet, err := strconv.Atoi(topic)
+			if err != nil {
+				panic(fmt.Sprintf("could not convert topic name to subnet id: %v", err)) // TODO - panic here ?
+			}
+			subscribedTopicsIdx[subnet] = struct{}{}
+		}
+
 		// check how peer-discovery is doing,
 		// note, computing/counting it this way - it doesn't reflect whole dead/solo subnet data
 		// accurately at all (mostly because ConnectedSubnetsCounter doesn't represent all active
-		// peer connections, see its description for details)
+		// peer connections but rather only those peers we connected through discovery mechanism,
+		// see its description for details)
 		discovery.DiscoveredSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
+			// skip subnets our SSV node isn't interested in (ConnectedSubnetsCounter contains a bunch
+			// of extra subnets that are just there because peers we've connected to have/offer
+			// those subnets as well)
+			if _, ok := subscribedTopicsIdx[subnet]; !ok {
+				return true
+			}
+
 			const warningThresholdTooManyDiscoveredPeers = 10
 			if len(peerIDs) >= warningThresholdTooManyDiscoveredPeers {
 				// (per subnet) this means we are discovering peers, but not actually connecting
@@ -308,16 +326,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// check how peer-connecting is doing (through discovery only!),
 		// note, computing/counting it this way - it doesn't reflect whole dead/solo subnet data
 		// accurately at all (mostly because ConnectedSubnetsCounter doesn't represent all active
-		// peer connections, see its description for details)
-		subscribedTopics := n.topicsCtrl.Topics()
-		subscribedTopicsIdx := make(map[int]struct{}, len(subscribedTopics))
-		for _, topic := range subscribedTopics {
-			subnet, err := strconv.Atoi(topic)
-			if err != nil {
-				panic(fmt.Sprintf("could not convert topic name to subnet id: %v", err)) // TODO - panic here ?
-			}
-			subscribedTopicsIdx[subnet] = struct{}{}
-		}
+		// peer connections but rather only those peers we connected through discovery mechanism,
+		// see its description for details)
 		totalDiscoverySubnetsCnt := 0
 		deadDiscoverySubnetsCnt := 0
 		soloDiscoverySubnetsCnt := 0
