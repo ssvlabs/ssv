@@ -342,6 +342,21 @@ func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfParticipatingValidators), epoch)
 }
 
+// Validator mocks base method.
+func (m *MockValidatorProvider) Validator(pubKey []byte) (*types2.SSVShare, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validator", pubKey)
+	ret0, _ := ret[0].(*types2.SSVShare)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Validator indicates an expected call of Validator.
+func (mr *MockValidatorProviderMockRecorder) Validator(pubKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockValidatorProvider)(nil).Validator), pubKey)
+}
+
 // MockValidatorController is a mock of ValidatorController interface.
 type MockValidatorController struct {
 	ctrl     *gomock.Controller
