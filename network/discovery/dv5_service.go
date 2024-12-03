@@ -29,11 +29,19 @@ import (
 // For example, if ConnectedSubnets will contain/maintain a list of peers even for subnets
 // that are irrelevant for us (they are just there to reflect what subnets each peer
 // we connected to offers)
+// TODO - for these counters to be accurate `hashmap` won't suffice, I'd need to do
+// mutex locking to enforce some large operations (like updating ConnectedSubnets while
+// iterating DiscoveredSubnets map) to happen atomically
 var (
 	Discovered1stTimeSubnets = hashmap.New[int, int64]()
 	Connected1stTimeSubnets  = hashmap.New[int, int64]()
-	DiscoveredSubnets        = hashmap.New[int, []peer.ID]()
-	ConnectedSubnets         = hashmap.New[int, []peer.ID]()
+	// DiscoveredSubnets contains subnet->peerIDs mapping for peers discovery service found.
+	DiscoveredSubnets = hashmap.New[int, []peer.ID]()
+	// ConnectedSubnets contains subnet->peerIDs mapping for peers previously added to
+	// DiscoveredSubnets map. This means ConnectedSubnets doesn't actually reflect/count all the
+	// active peer connections we have, but rather only those we've made with the help of
+	// discovery service (which is more like a half of all connections SSV node typically makes).
+	ConnectedSubnets = hashmap.New[int, []peer.ID]()
 )
 
 var (
@@ -159,9 +167,6 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
 
-	// TODO - test if discovery is the only place to "discover" peers
-	return nil
-
 	// Log every 10th skipped peer.
 	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
 	const logFrequency = 10
@@ -286,11 +291,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 			return errors.Wrap(err, "could not get subscribed topic peers")
 		}
 
-		//if len(topicPeers) >= 1 {
-		//	continue // this topic has enough peers - TODO (1 is not enough tho)
-		//}
-		// TODO - testing 0 to see if this even works
-		if len(topicPeers) >= 0 {
+		if len(topicPeers) >= 1 {
 			continue // this topic has enough peers - TODO (1 is not enough tho)
 		}
 

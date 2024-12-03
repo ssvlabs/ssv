@@ -151,7 +151,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
-			if !ch.helpfulPeer(logger, conn) {
+			if !ch.essentialPeer(logger, conn) {
 				return errors.New("peer doesn't help us much (with dead/solo subnets)")
 			}
 
@@ -317,6 +317,11 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			// list is derived - but it seems to always be 0 (based on what logs report)
 			unexpectedPeer := true
 			discovery.ConnectedSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+				if len(peerIDs) == 0 {
+					// this subnet was not affected by disconnected peer because it has 0 peers right now
+					return true
+				}
+
 				otherPeers := make([]peer.ID, 0, len(peerIDs))
 				for _, peerID := range peerIDs {
 					if peerID == conn.RemotePeer() {
@@ -414,7 +419,7 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 
 // TODO - need a better (smart) way to do it, but for now try to connect only
 // peers that help with getting rid of dead subnets
-func (ch *connHandler) helpfulPeer(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
+func (ch *connHandler) essentialPeer(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
 
 	helpfulPeer := false

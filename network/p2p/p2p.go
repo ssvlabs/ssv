@@ -205,24 +205,24 @@ func (n *p2pNetwork) Close() error {
 }
 
 func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
-	connector := make(chan peer.AddrInfo, connectorQueueSize)
+	candidatePeers := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
 		// Wait for own subnets to be subscribed to and updated.
 		// TODO: wait more intelligently with a channel.
 		time.Sleep(8 * time.Second)
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
-		n.backoffConnector.Connect(ctx, connector)
+		n.backoffConnector.Connect(ctx, candidatePeers)
 	}()
 
 	// Connect to trusted peers first.
 	go func() {
 		for _, addrInfo := range n.trustedPeers {
-			connector <- *addrInfo
+			candidatePeers <- *addrInfo
 		}
 	}()
 
-	return connector, nil
+	return candidatePeers, nil
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
@@ -297,6 +297,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 			return true
 		})
+		// TODO ^ note, computing/counting it this way - it doesn't reflect the data accurately at all
+		// (namely ConnectedSubnets doesn't represent all active peer connections, see its description
+		// for details)
 
 		// check how peer-connecting is doing
 		deadSubnetsCnt := 0
@@ -315,6 +318,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			zap.Int("solo_subnets_total", soloSubnetsCnt),
 			zap.Int("dead_subnets_total", deadSubnetsCnt),
 		)
+		// TODO ^ note, computing/counting it this way - it doesn't reflect the data accurately at all
+		// (namely ConnectedSubnets doesn't represent all active peer connections, see its description
+		// for details)
 	})
 
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
@@ -327,10 +333,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
 	}
 
-	// TODO - don't connect to fixed (to not interfere with discovery)
-	//if err := n.subscribeToFixedSubnets(logger); err != nil {
-	//	return err
-	//}
+	if err := n.subscribeToFixedSubnets(logger); err != nil {
+		return err
+	}
 
 	return nil
 }
