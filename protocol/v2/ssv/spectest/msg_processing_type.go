@@ -11,6 +11,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -24,8 +27,6 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 type MsgProcessingSpecTest struct {
@@ -99,7 +100,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				}
 			}
 		} else {
-			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
+			lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
 
 		for _, msg := range test.Messages {
@@ -108,7 +109,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.ProcessMessage(logger, dmsg)
+			err = c.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -125,7 +126,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		v.Network = test.Runner.GetNetwork()
 
 		if !test.DontStartDuty {
-			lastErr = v.StartDuty(logger, test.Duty)
+			lastErr = v.StartDuty(ctx, logger, test.Duty)
 		}
 		for _, msg := range test.Messages {
 			dmsg, err := wrapSignedSSVMessageToDecodedSSVMessage(msg)
@@ -133,7 +134,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = v.ProcessMessage(logger, dmsg)
+			err = v.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}

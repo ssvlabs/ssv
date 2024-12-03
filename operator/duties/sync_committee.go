@@ -86,7 +86,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			h.processExecution(period, slot)
+			h.processExecution(ctx, period, slot)
 			h.processFetching(ctx, period, true)
 			cancel()
 
@@ -161,7 +161,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	}
 }
 
-func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot) {
+func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
 	// range over duties and execute
 	duties := h.duties.CommitteePeriodDuties(period)
 	if duties == nil {
@@ -175,7 +175,7 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
