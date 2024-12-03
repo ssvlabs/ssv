@@ -99,8 +99,6 @@ var cfg config
 
 var globalArgs global_config.Args
 
-var operatorNode operator.Node
-
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -262,7 +260,6 @@ var StartNodeCmd = &cobra.Command{
 					networkConfig,
 					genesisvalidation.WithNodeStorage(nodeStorage),
 					genesisvalidation.WithLogger(logger),
-					genesisvalidation.WithMetrics(metricsReporter),
 					genesisvalidation.WithDutyStore(dutyStore),
 				),
 			}
@@ -343,7 +340,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
-		cfg.SSVOptions.Metrics = metricsReporter
 
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
 		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
@@ -352,10 +348,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = validatorStore
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
+		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
 		}
 
 		nodeProber := nodeprobe.NewProber(
@@ -376,8 +372,6 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
 		logger.Info("ethereum node(s) are healthy")
-
-		metricsReporter.SSVNodeHealthy()
 
 		eventSyncer := setupEventHandling(
 			cmd.Context(),
@@ -811,10 +805,10 @@ func setupEventHandling(
 	return eventSyncer
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter metricsreporter.MetricsReporter, port int, enableProf bool) {
+func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
+	metricsHandler := metrics.NewHandler(db, enableProf, opNode)
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
