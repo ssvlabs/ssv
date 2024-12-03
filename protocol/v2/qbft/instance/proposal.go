@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -15,7 +16,7 @@ import (
 
 // uponProposal process proposal message
 // Assumes proposal message is valid!
-func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMessage, proposeMsgContainer *specqbft.MsgContainer) error {
+func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage, proposeMsgContainer *specqbft.MsgContainer) error {
 	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not add proposal msg to container")
@@ -35,9 +36,9 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 	if msg.QBFTMessage.Round > i.State.Round {
 		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, msg.QBFTMessage.Round)
 	}
-	i.bumpToRound(newRound)
+	i.bumpToRound(ctx, newRound)
 
-	i.metrics.EndStageProposal()
+	i.metrics.EndStageProposal(ctx)
 
 	// value root
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)

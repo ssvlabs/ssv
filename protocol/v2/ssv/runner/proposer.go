@@ -149,7 +149,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	r.measurements.StartConsensus()
 
-	if err := r.BaseRunner.decide(logger, r, duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 
