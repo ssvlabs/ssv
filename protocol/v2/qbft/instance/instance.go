@@ -252,7 +252,6 @@ func (i *Instance) Decode(data []byte) error {
 // bumpToRound sets round and sends current round metrics.
 func (i *Instance) bumpToRound(ctx context.Context, round specqbft.Round) {
 	i.State.Round = round
-	i.metrics.SetRound(ctx, round)
 }
 
 // CanProcessMessages will return true if instance can process messages
