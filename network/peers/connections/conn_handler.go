@@ -209,7 +209,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				// if at all because this means we are creating duplicate (unnecessary) peer connections
 				// and effectively reduce overall peer diversity (because we can't exceed pre-configured
 				// max peer limit)
-				discovery.ConnectedSubnets.Range(func(subnet int, ids []peer.ID) bool {
+				discovery.ConnectedSubnetsCounter.Range(func(subnet int, ids []peer.ID) bool {
 					for _, id := range ids {
 						if id == conn.RemotePeer() {
 							logger.Debug(
@@ -230,24 +230,24 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				// TODO - we should also account for `trustedPeers` here, I need to check how this
 				// list is derived - but it seems to always be 0 (based on what logs report)
 				unexpectedPeer := true
-				discovery.DiscoveredSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+				discovery.DiscoveredSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
 					otherPeers := make([]peer.ID, 0, len(peerIDs))
 					for _, peerID := range peerIDs {
 						if peerID == conn.RemotePeer() {
-							discovery.Connected1stTimeSubnets.Get(subnet)
-							_, ok := discovery.Connected1stTimeSubnets.Get(subnet)
+							discovery.Connected1stTimeSubnetsCounter.Get(subnet)
+							_, ok := discovery.Connected1stTimeSubnetsCounter.Get(subnet)
 							if !ok {
 								logger.Debug(
 									"connected subnet 1st time!",
 									zap.Int("subnet_id", subnet),
 									zap.String("peer_id", string(peerID)),
 								)
-								discovery.Connected1stTimeSubnets.Set(subnet, 1)
+								discovery.Connected1stTimeSubnetsCounter.Set(subnet, 1)
 							}
 
-							connectedPeers, _ := discovery.ConnectedSubnets.Get(subnet)
+							connectedPeers, _ := discovery.ConnectedSubnetsCounter.Get(subnet)
 							// peerAlreadyContributesToSubnet helps us track and not double-count peer
-							// contributions to subnets (discovery.ConnectedSubnets must contain unique
+							// contributions to subnets (discovery.ConnectedSubnetsCounter must contain unique
 							// list of peers per subnet at any moment in time)
 							peerAlreadyContributesToSubnet := false
 							for _, connectedPeer := range connectedPeers {
@@ -263,7 +263,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 									zap.String("peer_id", string(peerID)),
 								)
 								connectedPeers = append(connectedPeers, peerID)
-								discovery.ConnectedSubnets.Set(subnet, connectedPeers)
+								discovery.ConnectedSubnetsCounter.Set(subnet, connectedPeers)
 							}
 							continue
 						}
@@ -278,11 +278,11 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					unexpectedPeer = false // this peer connection is happening due to our subnet discovery process
 
 					// exclude this peer from discovered list since we've just connected to him, this
-					// limits DiscoveredSubnets map to only those discovered peers whom we didn't/couldn't
-					// connect to yet - this means DiscoveredSubnets map shouldn't grow big for ANY of the
+					// limits DiscoveredSubnetsCounter map to only those discovered peers whom we didn't/couldn't
+					// connect to yet - this means DiscoveredSubnetsCounter map shouldn't grow big for ANY of the
 					// subnets it contains because that would mean (for such a subnet) we are discovering
 					// peers but don't connect to them for some reason.
-					discovery.DiscoveredSubnets.Set(subnet, otherPeers)
+					discovery.DiscoveredSubnetsCounter.Set(subnet, otherPeers)
 
 					return true
 				})
@@ -319,7 +319,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			// list is derived - but it seems to always be 0 (based on what logs report)
 			unexpectedPeer := true
 			discovery.CountersMtx.Lock()
-			discovery.ConnectedSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+			discovery.ConnectedSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
 				if len(peerIDs) == 0 {
 					// this subnet was not affected by disconnected peer because it has 0 peers right now
 					return true
@@ -341,18 +341,18 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				unexpectedPeer = false // this peer disconnect is happening due to our subnet discovery process
 
 				// exclude this peer from connected list since we've just disconnected him, this
-				// limits ConnectedSubnets map to only those peers whom we still have active connection
-				// with - this means ConnectedSubnets map shouldn't grow small for ANY of the
+				// limits ConnectedSubnetsCounter map to only those peers whom we still have active connection
+				// with - this means ConnectedSubnetsCounter map shouldn't grow small for ANY of the
 				// subnets it contains because that would mean (for such a subnet) we are getting
 				// close to killing previously alive subnet.
-				discovery.ConnectedSubnets.Set(subnet, otherPeers)
+				discovery.ConnectedSubnetsCounter.Set(subnet, otherPeers)
 
-				// also, put this peer back into DiscoveredSubnets because he is a potential candidate
+				// also, put this peer back into DiscoveredSubnetsCounter because he is a potential candidate
 				// we might consider connecting to in the future.
-				// TODO - this means DiscoveredSubnets might not be 100% accurate (it might claim that
+				// TODO - this means DiscoveredSubnetsCounter might not be 100% accurate (it might claim that
 				// certain peers are connected to subnets they no longer are, but it should be a rare
 				// case - for peer to advertise a subnet and no longer is interested in it)
-				discoveredPeers, _ := discovery.DiscoveredSubnets.Get(subnet)
+				discoveredPeers, _ := discovery.DiscoveredSubnetsCounter.Get(subnet)
 				peerAlreadyDiscoveredForSubnet := false
 				for _, peerID := range discoveredPeers {
 					if peerID == conn.RemotePeer() {
@@ -370,7 +370,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					}
 				}
 				if !peerAlreadyDiscoveredForSubnet {
-					discovery.DiscoveredSubnets.Set(subnet, append(discoveredPeers, conn.RemotePeer()))
+					discovery.DiscoveredSubnetsCounter.Set(subnet, append(discoveredPeers, conn.RemotePeer()))
 				}
 
 				if len(otherPeers) == 1 {

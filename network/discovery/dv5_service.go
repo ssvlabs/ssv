@@ -25,27 +25,33 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-// metrics to keep track of discovered/connected/disconnected peers (per subnet), note
-// these hold stats across all 128 subnets (not just the ones we are interested in).
-// For example, if ConnectedSubnets will contain/maintain a list of peers even for subnets
-// that are irrelevant for us (they are just there to reflect what subnets each peer
-// we connected to offers)
+// counters to keep track of discovered/connected peers (per subnet) through discovery mechanism ONLY,
+// this means there might be other peers (we've connected to before/outside-of the means of discovery
+// mechanism) who contribute to some subnets our SSV node is interested in - we just don't track these
+// contributions with these counters below.
+// Note also, these counters hold stats across all 128 subnets (not just the ones we are interested in).
+// For example, ConnectedSubnetsCounter will contain/maintain a list of peers even for subnets
+// that are irrelevant for our own SSV node (they are just there to reflect what subnets
+// each peer we connected to offers).
 var (
 	// CountersMtx helps with updating counters related to peer discovery/connecting in
-	// atomic fashion (like updating ConnectedSubnets while iterating DiscoveredSubnets map)
-	// to happen atomically.
+	// atomic fashion (like updating ConnectedSubnetsCounter while iterating DiscoveredSubnetsCounter
+	// map) to happen atomically.
 	// TODO - we don't need hashmap then, use plain simple golang map.
 	CountersMtx sync.Mutex
-
-	Discovered1stTimeSubnets = hashmap.New[int, int64]()
-	Connected1stTimeSubnets  = hashmap.New[int, int64]()
-	// DiscoveredSubnets contains subnet->peerIDs mapping for peers discovery service found.
-	DiscoveredSubnets = hashmap.New[int, []peer.ID]()
-	// ConnectedSubnets contains subnet->peerIDs mapping for peers previously added to
-	// DiscoveredSubnets map. This means ConnectedSubnets doesn't actually reflect/count all the
-	// active peer connections we have, but rather only those we've made with the help of
+	// DiscoveredSubnetsCounter contains subnet->peerIDs mapping for peers discovery service found.
+	DiscoveredSubnetsCounter = hashmap.New[int, []peer.ID]()
+	// ConnectedSubnetsCounter contains subnet->peerIDs mapping for peers previously added to
+	// DiscoveredSubnetsCounter map. This means ConnectedSubnetsCounter doesn't actually reflect/count
+	// all the active peer connections we have, but rather only those we've made with the help of
 	// discovery service (which is more like a half of all connections SSV node typically makes).
-	ConnectedSubnets = hashmap.New[int, []peer.ID]()
+	ConnectedSubnetsCounter = hashmap.New[int, []peer.ID]()
+	// Discovered1stTimeSubnetsCounter is subnet set that represents those subnets we've discovered a
+	// peer for (we add subnet to this set the very first time it happened).
+	Discovered1stTimeSubnetsCounter = hashmap.New[int, int64]()
+	// Connected1stTimeSubnetsCounter is subnet set that represents those subnets we've connected a
+	// peer for (we add subnet to this set the very first time it happened).
+	Connected1stTimeSubnetsCounter = hashmap.New[int, int64]()
 )
 
 var (
@@ -215,43 +221,33 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	}
 
 	// Get the peer's subnets, skipping if it has none.
-	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
+	if bytes.Equal(zeroSubnets, peerSubnets) {
 		return errors.New("zero subnets")
 	}
 
-	subnetsBefore := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
-
-	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
-
-	subnetsAfter := dvs.subnetsIdx.GetPeerSubnets(e.AddrInfo.ID)
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
 
 	CountersMtx.Lock()
-	for subnet, subnetActive := range subnetsAfter {
+	for subnet, subnetActive := range peerSubnets {
 		if subnetActive != 1 {
 			continue // not interested in subnet that's not active (or no longer active)
 		}
-		subnetActiveBefore := subnetsBefore[subnet]
-		if subnetActiveBefore == 1 {
-			continue // not interested in subnet that we've discovered & recorded as such for this peer previously
-		}
-		// TODO - ^ this means DiscoveredSubnets might not be 100% accurate (it might claim that
-		// certain peers are connected to subnets they no longer are, but it should be a rare
-		// case - for peer to advertise a subnet and no longer is interested in it)
 
-		_, ok := Discovered1stTimeSubnets.Get(subnet)
+		_, ok := Discovered1stTimeSubnetsCounter.Get(subnet)
 		if !ok {
 			logger.Debug(
 				"discovered subnet 1st time!",
 				zap.Int("subnet_id", subnet),
 				zap.String("peer_id", string(e.AddrInfo.ID)),
 			)
-			Discovered1stTimeSubnets.Set(subnet, 1)
+			Discovered1stTimeSubnetsCounter.Set(subnet, 1)
 		}
-		peerIDs, _ := DiscoveredSubnets.Get(subnet)
+
+		peerIDs, _ := DiscoveredSubnetsCounter.Get(subnet)
 		peerAlreadyDiscoveredForSubnet := false
 		for _, peerID := range peerIDs {
 			if peerID == e.AddrInfo.ID {
@@ -269,7 +265,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 			}
 		}
 		if !peerAlreadyDiscoveredForSubnet {
-			DiscoveredSubnets.Set(subnet, append(peerIDs, e.AddrInfo.ID))
+			DiscoveredSubnetsCounter.Set(subnet, append(peerIDs, e.AddrInfo.ID))
 		}
 	}
 	CountersMtx.Unlock()
@@ -287,10 +283,6 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	// TODO - need a better (smart) way to do it, but for now try to connect only
 	// peers that help with getting rid of dead subnets
 	helpfulPeer := false
-	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
-	if err != nil {
-		return errors.Wrap(err, "could not get peer subnets")
-	}
 	subscribedTopics := dvs.topicsCtrl.Topics()
 	for _, topic := range subscribedTopics {
 		topicPeers, err := dvs.topicsCtrl.Peers(topic)

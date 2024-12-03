@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -261,11 +262,14 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		discovery.CountersMtx.Lock()
 		defer discovery.CountersMtx.Unlock()
 
-		logger.Debug("discovered subnets 1st time", zap.Int("total", discovery.Discovered1stTimeSubnets.SlowLen()))
-		logger.Debug("connected subnets 1st time", zap.Int("total", discovery.Connected1stTimeSubnets.SlowLen()))
+		logger.Debug("discovered subnets 1st time", zap.Int("total", discovery.Discovered1stTimeSubnetsCounter.SlowLen()))
+		logger.Debug("connected subnets 1st time", zap.Int("total", discovery.Connected1stTimeSubnetsCounter.SlowLen()))
 
-		// check how peer-discovery is doing
-		discovery.DiscoveredSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+		// check how peer-discovery is doing,
+		// note, computing/counting it this way - it doesn't reflect whole dead/solo subnet data
+		// accurately at all (mostly because ConnectedSubnetsCounter doesn't represent all active
+		// peer connections, see its description for details)
+		discovery.DiscoveredSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
 			const warningThresholdTooManyDiscoveredPeers = 10
 			if len(peerIDs) >= warningThresholdTooManyDiscoveredPeers {
 				// (per subnet) this means we are discovering peers, but not actually connecting
@@ -288,7 +292,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				// - if (assuming peer handshake happens before a connection is considered "established") peer
 				//   no longer has subnets we are interested in as per the check done during handshake (even
 				//   though he advertised)
-				connectedPeerIDs, ok := discovery.ConnectedSubnets.Get(subnet)
+				connectedPeerIDs, ok := discovery.ConnectedSubnetsCounter.Get(subnet)
 				if !ok || len(connectedPeerIDs) < 2 {
 					logger.Debug(
 						"found starving subnet",
@@ -300,30 +304,54 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 			return true
 		})
-		// TODO ^ note, computing/counting it this way - it doesn't reflect the data accurately at all
-		// (namely ConnectedSubnets doesn't represent all active peer connections, see its description
-		// for details)
 
-		// check how peer-connecting is doing
-		deadSubnetsCnt := 0
-		soloSubnetsCnt := 0
-		discovery.ConnectedSubnets.Range(func(subnet int, peerIDs []peer.ID) bool {
+		// check how peer-connecting is doing (through discovery only!),
+		// note, computing/counting it this way - it doesn't reflect whole dead/solo subnet data
+		// accurately at all (mostly because ConnectedSubnetsCounter doesn't represent all active
+		// peer connections, see its description for details)
+		subscribedTopics := n.topicsCtrl.Topics()
+		subscribedTopicsIdx := make(map[int]struct{}, len(subscribedTopics))
+		for _, topic := range subscribedTopics {
+			subnet, err := strconv.Atoi(topic)
+			if err != nil {
+				panic(fmt.Sprintf("could not convert topic name to subnet id: %v", err)) // TODO - panic here ?
+			}
+			subscribedTopicsIdx[subnet] = struct{}{}
+		}
+		totalDiscoverySubnetsCnt := 0
+		deadDiscoverySubnetsCnt := 0
+		soloDiscoverySubnetsCnt := 0
+		discovery.ConnectedSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
+			// skip subnets our SSV node isn't interested in (ConnectedSubnetsCounter contains a bunch
+			// of extra subnets that are just there because peers we've connected to have/offer
+			// those subnets as well)
+			if _, ok := subscribedTopicsIdx[subnet]; !ok {
+				return true
+			}
+
+			totalDiscoverySubnetsCnt++
+
 			if len(peerIDs) == 1 {
-				soloSubnetsCnt++
+				soloDiscoverySubnetsCnt++
 			}
 			if len(peerIDs) == 0 {
-				deadSubnetsCnt++
+				deadDiscoverySubnetsCnt++
 			}
 			return true
 		})
 		logger.Debug(
-			"dead/solo subnets report",
-			zap.Int("solo_subnets_total", soloSubnetsCnt),
-			zap.Int("dead_subnets_total", deadSubnetsCnt),
+			"dead/solo subnets report (contribution of discovery peers)",
+			// total_contributed_subnets is how many subnets peers connected through discovery
+			// mechanism contribute to (at the moment)
+			zap.Int("total_contributed_subnets", totalDiscoverySubnetsCnt),
+			// solo_contributed_subnets is how many solo contributions peers connected through
+			// discovery mechanism have (at the moment)
+			zap.Int("solo_contributed_subnets", soloDiscoverySubnetsCnt),
+			// solo_contributed_subnets is how many dead contributions peers connected through
+			// discovery mechanism have (at the moment), means discovery-based peer(s) contributed
+			// to these subnets in the past - but currently they don't anymore
+			zap.Int("dead_contributed_subnets", deadDiscoverySubnetsCnt),
 		)
-		// TODO ^ note, computing/counting it this way - it doesn't reflect the data accurately at all
-		// (namely ConnectedSubnets doesn't represent all active peer connections, see its description
-		// for details)
 	})
 
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
