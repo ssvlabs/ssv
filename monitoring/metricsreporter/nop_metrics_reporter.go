@@ -13,8 +13,6 @@ func NewNop() MetricsReporter {
 	return &nopMetrics{}
 }
 
-func (n *nopMetrics) SSVNodeHealthy()                                                     {}
-func (n *nopMetrics) SSVNodeNotHealthy()                                                  {}
 func (n *nopMetrics) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {}
 func (n *nopMetrics) MessageValidationRSAVerifications()                                  {}
 func (n *nopMetrics) GenesisMessageAccepted(role genesisspectypes.BeaconRole, round genesisspecqbft.Round) {
