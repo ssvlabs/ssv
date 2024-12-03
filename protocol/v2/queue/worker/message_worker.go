@@ -3,27 +3,11 @@ package worker
 import (
 	"context"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
-
-var (
-	metricsMsgProcessing = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:worker:msg:process",
-		Help: "Count decided messages",
-	}, []string{"prefix"})
-)
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(metricsMsgProcessing); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
 
 // MsgHandler func that receive message.SSVMessage to handle
 type MsgHandler func(msg network.DecodedSSVMessage) error
@@ -138,5 +122,4 @@ func (w *Worker) process(logger *zap.Logger, msg *queue.SSVMessage) {
 			return
 		}
 	}
-	metricsMsgProcessing.WithLabelValues(w.metricsPrefix).Inc()
 }
