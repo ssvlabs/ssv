@@ -313,7 +313,7 @@ func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, 
 		)
 		return false
 	}
-	
+
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == slot {
 		return true

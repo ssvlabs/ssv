@@ -292,7 +292,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 		)
 		return false
 	}
-	
+
 	// execute task if slot already began and not pass 1 epoch
 	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
