@@ -2,11 +2,13 @@ package instance
 
 import (
 	"fmt"
+	"math"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv/observability"
 )
 
@@ -32,12 +34,6 @@ var (
 			metric.WithUnit("s"),
 			metric.WithDescription("validator stage(proposal, prepare, commit) duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
-
-	roundGauge = observability.NewMetric(
-		meter.Int64Gauge(
-			metricName("round"),
-			metric.WithUnit("{round}"),
-			metric.WithDescription("QBFT instance round")))
 )
 
 func metricName(name string) string {
@@ -50,4 +46,15 @@ func stageAttribute(stage stage) attribute.KeyValue {
 
 func roleAttribute(role string) attribute.KeyValue {
 	return attribute.String("ssv.runner.role", role)
+}
+
+func roundAttribute(round qbft.Round) attribute.KeyValue {
+	var convertedRound int64 = -1
+
+	uintRound := uint64(round)
+	if uintRound <= math.MaxInt64 {
+		convertedRound = int64(uintRound)
+	}
+
+	return attribute.Int64("ssv.validator.duty.round", convertedRound)
 }

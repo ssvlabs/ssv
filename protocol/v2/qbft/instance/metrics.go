@@ -2,10 +2,9 @@ package instance
 
 import (
 	"context"
-	"math"
 	"time"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/qbft"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -24,33 +23,35 @@ func (m *metrics) StartStage() {
 	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStageProposal(ctx context.Context) {
+func (m *metrics) EndStageProposal(ctx context.Context, round qbft.Round) {
 	validatorStageDurationHistogram.Record(
 		ctx,
 		time.Since(m.stageStart).Seconds(),
-		metric.WithAttributes(stageAttribute(proposalStage)))
+		metric.WithAttributes(
+			stageAttribute(proposalStage),
+			roleAttribute(m.role),
+			roundAttribute(round)))
 	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStagePrepare(ctx context.Context) {
+func (m *metrics) EndStagePrepare(ctx context.Context, round qbft.Round) {
 	validatorStageDurationHistogram.Record(
 		ctx,
 		time.Since(m.stageStart).Seconds(),
-		metric.WithAttributes(stageAttribute(prepareStage)))
+		metric.WithAttributes(
+			stageAttribute(prepareStage),
+			roleAttribute(m.role),
+			roundAttribute(round)))
 	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStageCommit(ctx context.Context) {
+func (m *metrics) EndStageCommit(ctx context.Context, round qbft.Round) {
 	validatorStageDurationHistogram.Record(
 		ctx,
 		time.Since(m.stageStart).Seconds(),
-		metric.WithAttributes(stageAttribute(commitStage)))
+		metric.WithAttributes(
+			stageAttribute(commitStage),
+			roleAttribute(m.role),
+			roundAttribute(round)))
 	m.stageStart = time.Now()
-}
-
-func (m *metrics) SetRound(ctx context.Context, round specqbft.Round) {
-	convertedRound := uint64(round)
-	if convertedRound <= math.MaxInt64 {
-		roundGauge.Record(ctx, int64(convertedRound), metric.WithAttributes(roleAttribute(m.role)))
-	}
 }
