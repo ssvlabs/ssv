@@ -348,12 +348,12 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 			subnetPeers := n.idx.GetSubnetPeers(subnet)
 			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
 				// take the peers with the most shared subnets
-				aShares := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
+				aShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
 				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
-				if aShares < bShared {
-					return -1
-				} else if aShares > bShared {
+				if aShared < bShared {
 					return 1
+				} else if aShared > bShared {
+					return -1
 				} else {
 					return 0
 				}
@@ -371,12 +371,6 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
-	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
-	go func() {
-		ctx, cancel := context.WithCancel(n.ctx)
-		defer cancel()
-		n.backoffConnector.Connect(ctx, discoveredPeers)
-	}()
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
