@@ -44,9 +44,11 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		Data []*ParticipantResponse `json:"data"`
 	}
 
+	bindStart := time.Now()
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
 	}
+	bind := time.Since(bindStart)
 
 	if request.From > request.To {
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
@@ -64,7 +66,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	dbTime := time.Duration(0)
 
 	defer func() {
-		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime))
+		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("bind", bind))
 	}()
 
 	response.Data = []*ParticipantResponse{}
