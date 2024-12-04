@@ -197,6 +197,8 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 		return errors.New("no shared subnets")
 	}
 
+	peerAcceptedCounter.Add(ctx, 1)
+
 	return nil
 }
 
