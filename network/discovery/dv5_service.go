@@ -293,6 +293,10 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		if len(topicPeers) >= 1 {
 			continue // this topic has enough peers - TODO (1 is not enough tho)
 		}
+		//// TODO - testing 0 to see if this even works
+		//if len(topicPeers) >= 0 {
+		//	continue // this topic has enough peers - TODO (1 is not enough tho)
+		//}
 
 		// we've got a dead subnet here, see if this peer can help with that
 		subnet, err := strconv.Atoi(topic)

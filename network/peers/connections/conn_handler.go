@@ -426,7 +426,7 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 func (ch *connHandler) essentialPeer(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
 
-	helpfulPeer := false
+	essentialPeer := false
 	peerSubnets := ch.subnetsIndex.GetPeerSubnets(pid)
 	if len(peerSubnets) == 0 {
 		// no subnets for this peer
@@ -440,13 +440,13 @@ func (ch *connHandler) essentialPeer(logger *zap.Logger, conn libp2pnetwork.Conn
 			panic(fmt.Sprintf("could not get subscribed topic peers: %s", err)) // TODO
 		}
 
-		//if len(topicPeers) >= 1 {
-		//	continue // this topic has enough peers - TODO (1 is not enough tho)
-		//}
-		// TODO - testing 0 to see if this even works
-		if len(topicPeers) >= 0 {
+		if len(topicPeers) >= 1 {
 			continue // this topic has enough peers - TODO (1 is not enough tho)
 		}
+		//// TODO - testing 0 to see if this even works
+		//if len(topicPeers) >= 0 {
+		//	continue // this topic has enough peers - TODO (1 is not enough tho)
+		//}
 
 		// we've got a dead subnet here, see if this peer can help with that
 		subnet, err := strconv.Atoi(topic)
@@ -457,10 +457,10 @@ func (ch *connHandler) essentialPeer(logger *zap.Logger, conn libp2pnetwork.Conn
 		if peerSubnet != 1 {
 			continue // peer doesn't have this subnet either, lets check other dead subnets we have
 		}
-		helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+		essentialPeer = true // this peer helps with at least 1 dead subnet for us
 		break
 	}
-	if !helpfulPeer {
+	if !essentialPeer {
 		return false
 	}
 
