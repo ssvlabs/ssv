@@ -38,6 +38,12 @@ var (
 			metricName("peers.rejected"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers rejected during discovery")))
+
+	peerAcceptedCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("peers.accepted"),
+			metric.WithUnit("{peer}"),
+			metric.WithDescription("total number of peers accepted during discovery")))
 )
 
 func metricName(name string) string {
