@@ -160,7 +160,7 @@ func TestCheckPeer(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name+":run", func(t *testing.T) {
-			err := dvs.checkPeer(logger, PeerEvent{
+			err := dvs.checkPeer(context.TODO(), logger, PeerEvent{
 				Node: test.localNode.Node(),
 			})
 			if test.expectedError != nil {
