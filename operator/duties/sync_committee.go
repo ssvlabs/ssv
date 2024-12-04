@@ -297,6 +297,23 @@ func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 
 func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+
+	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
+	if !exists {
+		h.logger.Warn("validator not found", fields.Validator(duty.PubKey[:]))
+		return false
+	}
+
+	if v.MinParticipationEpoch() > currentEpoch {
+		h.logger.Debug("validator not yet participating",
+			fields.Validator(duty.PubKey[:]),
+			zap.Uint64("min_participation_epoch", uint64(v.MinParticipationEpoch())),
+			zap.Uint64("current_epoch", uint64(currentEpoch)),
+		)
+		return false
+	}
+
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == slot {
 		return true

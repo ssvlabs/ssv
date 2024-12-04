@@ -1,6 +1,7 @@
 package duties
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -69,6 +70,36 @@ func setupSyncCommitteeGenesisDutiesMock(
 
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			var ssvShare *ssvtypes.SSVShare
+			var minEpoch phase0.Epoch
+			dutiesMap.Range(func(period uint64, duties []*v1.SyncCommitteeDuty) bool {
+				for _, duty := range duties {
+					if bytes.Equal(duty.PubKey[:], pubKey) {
+						ssvShare = &ssvtypes.SSVShare{
+							Share: spectypes.Share{
+								ValidatorIndex: duty.ValidatorIndex,
+							},
+						}
+						firstEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period)
+						if firstEpoch < minEpoch {
+							minEpoch = firstEpoch
+							ssvShare.SetMinParticipationEpoch(firstEpoch)
+						}
+						return true
+					}
+				}
+				return true
+			})
+
+			if ssvShare != nil {
+				return ssvShare, true
+			}
+
+			return nil, false
+		},
+	).AnyTimes()
 
 	s.validatorController.(*MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {

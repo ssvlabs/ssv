@@ -96,3 +96,11 @@ func (d *Duties[D]) ResetEpoch(epoch phase0.Epoch) {
 
 	delete(d.m, epoch)
 }
+
+func (d *Duties[D]) IsEpochSet(epoch phase0.Epoch) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	_, exists := d.m[epoch]
+	return exists
+}

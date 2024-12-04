@@ -1,6 +1,7 @@
 package duties
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -56,6 +57,35 @@ func setupAttesterDutiesMock(
 	}
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
+		func(pubKey []byte) (*types.SSVShare, bool) {
+			var ssvShare *types.SSVShare
+			var minEpoch phase0.Epoch
+			dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.AttesterDuty) bool {
+				for _, duty := range duties {
+					if bytes.Equal(duty.PubKey[:], pubKey) {
+						ssvShare = &types.SSVShare{
+							Share: spectypes.Share{
+								ValidatorIndex: duty.ValidatorIndex,
+							},
+						}
+						if epoch < minEpoch {
+							minEpoch = epoch
+							ssvShare.SetMinParticipationEpoch(epoch)
+						}
+						return true
+					}
+				}
+				return true
+			})
+
+			if ssvShare != nil {
+				return ssvShare, true
+			}
+
+			return nil, false
+		},
+	).AnyTimes()
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
