@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -50,6 +51,15 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	}
 	bind := time.Since(bindStart)
 
+	decodeStart := time.Now()
+	if r.Header.Get("Content-Type") == "application/json" {
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&request); err != nil {
+			return err
+		}
+	}
+	decode := time.Since(decodeStart)
+
 	if request.From > request.To {
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
@@ -66,7 +76,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	dbTime := time.Duration(0)
 
 	defer func() {
-		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("bind", bind))
+		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("bind", bind), zap.Duration("decode", decode))
 	}()
 
 	response.Data = []*ParticipantResponse{}

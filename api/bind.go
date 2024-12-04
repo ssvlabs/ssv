@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -88,13 +87,6 @@ func Bind(r *http.Request, dest interface{}) error {
 			fieldValue.SetBool(v)
 		default:
 			return fmt.Errorf("%w: %s", errInvalidType, fieldType.Name)
-		}
-	}
-
-	if r.Header.Get("Content-Type") == "application/json" {
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(dest); err != nil {
-			return err
 		}
 	}
 
