@@ -1286,3 +1286,91 @@ func TestScheduler_Committee_On_Fork(t *testing.T) {
 	cancel()
 	require.NoError(t, schedulerPool.Wait())
 }
+
+// The purpose of the test is to ensure that the scheduler can handle the case where the indices change
+// at the last slot of the epoch, and it does not affect the execution of the duties for the next epoch first slot.
+func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
+	var (
+		dutyStore     = dutystore.New()
+		attHandler    = NewAttesterHandler(dutyStore.Attester)
+		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		alanForkEpoch = phase0.Epoch(0)
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		waitForDuties = &SafeValue[bool]{}
+		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares  = []*ssvtypes.SSVShare{
+			{
+				Share: spectypes.Share{
+					Committee: []*spectypes.ShareMember{
+						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+					},
+					ValidatorIndex: 1,
+				},
+			},
+			{
+				Share: spectypes.Share{
+					Committee: []*spectypes.ShareMember{
+						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+					},
+					ValidatorIndex: 2,
+				},
+			},
+			{
+				Share: spectypes.Share{
+					Committee: []*spectypes.ShareMember{
+						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+					},
+					ValidatorIndex: 3,
+				},
+			},
+		}
+	)
+	attDuties.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(32),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 4},
+			Slot:           phase0.Slot(32),
+			ValidatorIndex: phase0.ValidatorIndex(2),
+		},
+	})
+
+	// STEP 1: wait for attester duties to be fetched using handle initial duties
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot, alanForkEpoch)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	startFn()
+
+	// STEP 1: wait for no action to be taken
+	ticker.Send(currentSlot.Get())
+	// no execution should happen in slot 0
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 2: wait for no action to be taken
+	currentSlot.Set(phase0.Slot(31))
+	ticker.Send(currentSlot.Get())
+	// no execution should happen in slot 31
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 3: trigger a change in active indices at the last slot of the epoch
+	scheduler.indicesChg <- struct{}{}
+	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 4: the first slot of the next epoch duties should be executed as expected
+	currentSlot.Set(phase0.Slot(32))
+
+	aDuties, _ := attDuties.Get(1)
+	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 1, currentSlot.Get())
+	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+
+	ticker.Send(currentSlot.Get())
+	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
+
+	// Stop scheduler & wait for graceful exit.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}

@@ -7,10 +7,10 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
@@ -129,7 +129,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset next epoch duties if in appropriate slot range
 			if h.shouldFetchNexEpoch(slot) {
-				h.duties.ResetEpoch(currentEpoch + 1)
 				h.fetchNextEpoch = true
 			}
 		}
