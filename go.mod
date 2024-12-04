@@ -3,6 +3,7 @@ module github.com/ssvlabs/ssv
 go 1.22.6
 
 require (
+	github.com/NYTimes/gziphandler v1.1.1
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.21.7
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4

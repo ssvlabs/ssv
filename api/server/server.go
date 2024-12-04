@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/NYTimes/gziphandler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
@@ -56,11 +57,13 @@ func (s *Server) Run() error {
 	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 
+	gzipRouter := gziphandler.GzipHandler(router)
+
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
 	server := &http.Server{
 		Addr:              s.addr,
-		Handler:           router,
+		Handler:           gzipRouter,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       12 * time.Second,
 		WriteTimeout:      12 * time.Second,
