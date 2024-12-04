@@ -163,10 +163,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		}
 
 		topicScoreFactory = func(t string) *pubsub.TopicScoreParams {
-			if cfg.NetworkConfig.PastAlanFork() {
-				return topicScoreParams(logger, cfg, committeesProvider)(t)
-			}
-			return validatorTopicScoreParams(logger, cfg)(t)
+			return topicScoreParams(logger, cfg, committeesProvider)(t)
 		}
 
 		// Get overall score params

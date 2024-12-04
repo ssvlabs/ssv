@@ -14,15 +14,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -89,18 +88,6 @@ func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
 }
 
-// ExecuteGenesisDuty mocks base method.
-func (m *MockController) ExecuteGenesisDuty(logger *zap.Logger, duty *types.Duty) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteGenesisDuty", logger, duty)
-}
-
-// ExecuteGenesisDuty indicates an expected call of ExecuteGenesisDuty.
-func (mr *MockControllerMockRecorder) ExecuteGenesisDuty(logger, duty any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuty", reflect.TypeOf((*MockController)(nil).ExecuteGenesisDuty), logger, duty)
-}
-
 // ExitValidator mocks base method.
 func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
 	m.ctrl.T.Helper()
@@ -113,18 +100,6 @@ func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint
 func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex, ownValidator any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex, ownValidator)
-}
-
-// ForkListener mocks base method.
-func (m *MockController) ForkListener(logger *zap.Logger) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ForkListener", logger)
-}
-
-// ForkListener indicates an expected call of ForkListener.
-func (mr *MockControllerMockRecorder) ForkListener(logger any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkListener", reflect.TypeOf((*MockController)(nil).ForkListener), logger)
 }
 
 // GetOperatorShares mocks base method.
@@ -142,10 +117,10 @@ func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
 }
 
 // GetValidator mocks base method.
-func (m *MockController) GetValidator(pubKey types0.ValidatorPK) (*validators.ValidatorContainer, bool) {
+func (m *MockController) GetValidator(pubKey types0.ValidatorPK) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidator", pubKey)
-	ret0, _ := ret[0].(*validators.ValidatorContainer)
+	ret0, _ := ret[0].(*validator.Validator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
