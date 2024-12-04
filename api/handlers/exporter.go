@@ -3,9 +3,11 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
@@ -18,6 +20,7 @@ import (
 type Exporter struct {
 	DomainType spectypes.DomainType
 	QBFTStores *ibftstorage.QBFTStores
+	Log        *zap.Logger
 }
 
 type ParticipantResponse struct {
@@ -57,6 +60,13 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
+	start := time.Now()
+	dbTime := time.Duration(0)
+
+	defer func() {
+		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime))
+	}()
+
 	response.Data = []*ParticipantResponse{}
 
 	qbftStores := make(map[convert.RunnerRole]qbftstorage.QBFTStore, len(request.Roles))
@@ -70,19 +80,22 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		qbftStores[runnerRole] = storage
 	}
 
+	from := phase0.Slot(request.From)
+	to := phase0.Slot(request.To)
+
 	for _, role := range request.Roles {
 		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
 		qbftStore := qbftStores[runnerRole]
 
 		for _, pubKey := range request.PubKeys {
 			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
-			from := phase0.Slot(request.From)
-			to := phase0.Slot(request.To)
 
+			dbStart := time.Now()
 			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
+			dbTime += time.Since(dbStart)
 
 			if len(participantsList) == 0 {
 				continue
@@ -93,12 +106,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
 			}
 
-			apiData, ok := data.([]*exporterapi.ParticipantsAPI)
-			if !ok {
-				return api.Error(fmt.Errorf("invalid type for participants API data"))
-			}
-
-			for _, apiMsg := range apiData {
+			for _, apiMsg := range data {
 				response.Data = append(response.Data, transformToParticipantResponse(apiMsg))
 			}
 		}
