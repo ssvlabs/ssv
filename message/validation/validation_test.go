@@ -654,7 +654,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		dutyExecutorID := shares.active.ValidatorPubKey[:]
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleProposer),
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType, dutyExecutorID, spectypes.RoleProposer),
 			Data:    encodedMessages,
 		}
 
@@ -690,7 +690,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		dutyExecutorID := shares.active.ValidatorPubKey[:]
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleProposer),
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType, dutyExecutorID, spectypes.RoleProposer),
 			Data:    encodedMessages,
 		}
 
