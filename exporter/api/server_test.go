@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
@@ -22,7 +20,7 @@ func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, func(logger *zap.Logger, nm *NetworkMessage) {
+	ws := NewWsServer(ctx, func(nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: []byte(fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From))},
 		}

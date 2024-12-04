@@ -140,7 +140,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 			networkMessage = NetworkMessage{incoming, nil, conn}
 		}
 		// handler is processing the request and updates msg
-		ws.handler(logger, &networkMessage)
+		ws.handler(&networkMessage)
 
 		err = tasks.Retry(func() error {
 			return conn.WriteJSON(&networkMessage.Msg)

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 // Connection is an interface to abstract the actual websocket connection implementation
@@ -22,7 +20,7 @@ type NetworkMessage struct {
 }
 
 // QueryMessageHandler handles the given message
-type QueryMessageHandler func(logger *zap.Logger, nm *NetworkMessage)
+type QueryMessageHandler func(nm *NetworkMessage)
 
 // ConnectionID calculates the id of the given Connection
 func ConnectionID(conn Connection) string {
