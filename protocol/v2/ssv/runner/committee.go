@@ -66,7 +66,7 @@ func NewCommitteeRunner(
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
-			DomainType:     networkConfig.AlanDomainType,
+			DomainType:     networkConfig.DomainType,
 			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
 			Share:          share,
 			QBFTController: qbftController,

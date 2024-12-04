@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -19,11 +18,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 var (
@@ -88,59 +88,9 @@ func testingDiscovery(t *testing.T) *DiscV5Service {
 	return testingDiscoveryWithNetworkConfig(t, testNetConfig)
 }
 
-// NetworkConfig with fork epoch
-func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
-	n := networkconfig.HoleskyStage
-	return networkconfig.NetworkConfig{
-		Name:                 n.Name,
-		Beacon:               n.Beacon,
-		GenesisDomainType:    n.GenesisDomainType,
-		AlanDomainType:       n.AlanDomainType,
-		GenesisEpoch:         n.GenesisEpoch,
-		RegistrySyncOffset:   n.RegistrySyncOffset,
-		RegistryContractAddr: n.RegistryContractAddr,
-		Bootnodes:            n.Bootnodes,
-		// Fork epoch
-		AlanForkEpoch: forkEpoch,
-	}
-}
-
-// NetworkConfig for staying in pre-fork
-func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
-}
-
-// NetworkConfig for staying in post-fork
-func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
-}
-
-// Testing LocalNode
-func NewLocalNode(t *testing.T) *enode.LocalNode {
-	// Generate key
-	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
-	// Create local node
-	localNode, err := records.CreateLocalNode(nodeKey, t.TempDir(), net.IP(testIP), testPort, testTCPPort)
-	require.NoError(t, err)
-
-	// Set entries
-	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType())
-	require.NoError(t, err)
-	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.NextDomainType())
-	require.NoError(t, err)
-	err = records.SetSubnetsEntry(localNode, mockSubnets(1))
-	require.NoError(t, err)
-
-	return localNode
-}
-
 // Testing node
 func NewTestingNode(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, mockSubnets(1))
+	return CustomNode(t, true, testNetConfig.DomainType, true, mockSubnets(1))
 }
 
 func NewTestingNodes(t *testing.T, count int) []*enode.Node {
@@ -152,33 +102,32 @@ func NewTestingNodes(t *testing.T, count int) []*enode.Node {
 }
 
 func NodeWithoutDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.NextDomainType(), true, mockSubnets(1))
-}
-
-func NodeWithoutNextDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), false, spectypes.DomainType{}, true, mockSubnets(1))
+	return CustomNode(t, false, spectypes.DomainType{}, true, mockSubnets(1))
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType, false, nil)
 }
 
-func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
-	return CustomNode(t, true, domainType, true, nextDomainType, true, mockSubnets(1))
+func NodeWithCustomDomain(t *testing.T, domainType spectypes.DomainType) *enode.Node {
+	return CustomNode(t, true, domainType, true, mockSubnets(1))
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, zeroSubnets)
 }
 
 func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, subnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, subnets)
 }
 
-func CustomNode(t *testing.T,
-	setDomainType bool, domainType spectypes.DomainType,
-	setNextDomainType bool, nextDomainType spectypes.DomainType,
-	setSubnets bool, subnets []byte) *enode.Node {
+func CustomNode(
+	t *testing.T,
+	setDomainType bool,
+	domainType spectypes.DomainType,
+	setSubnets bool,
+	subnets []byte,
+) *enode.Node {
 
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -200,12 +149,6 @@ func CustomNode(t *testing.T,
 		record.Set(records.DomainTypeEntry{
 			Key:        records.KeyDomainType,
 			DomainType: domainType,
-		})
-	}
-	if setNextDomainType {
-		record.Set(records.DomainTypeEntry{
-			Key:        records.KeyNextDomainType,
-			DomainType: nextDomainType,
 		})
 	}
 	if setSubnets {

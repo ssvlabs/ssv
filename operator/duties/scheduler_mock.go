@@ -18,7 +18,6 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ethereum/go-ethereum/core/types"
-	types0 "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	types1 "github.com/ssvlabs/ssv-spec/types"
 	types2 "github.com/ssvlabs/ssv/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
@@ -72,18 +71,6 @@ func (mr *MockDutiesExecutorMockRecorder) ExecuteDuties(ctx, logger, duties any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteDuties), ctx, logger, duties)
 }
 
-// ExecuteGenesisDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteGenesisDuties(logger *zap.Logger, duties []*types0.Duty) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteGenesisDuties", logger, duties)
-}
-
-// ExecuteGenesisDuties indicates an expected call of ExecuteGenesisDuties.
-func (mr *MockDutiesExecutorMockRecorder) ExecuteGenesisDuties(logger, duties any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteGenesisDuties), logger, duties)
-}
-
 // MockDutyExecutor is a mock of DutyExecutor interface.
 type MockDutyExecutor struct {
 	ctrl     *gomock.Controller
@@ -129,18 +116,6 @@ func (m *MockDutyExecutor) ExecuteDuty(ctx context.Context, logger *zap.Logger, 
 func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(ctx, logger, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteDuty), ctx, logger, duty)
-}
-
-// ExecuteGenesisDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteGenesisDuty(logger *zap.Logger, duty *types0.Duty) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteGenesisDuty", logger, duty)
-}
-
-// ExecuteGenesisDuty indicates an expected call of ExecuteGenesisDuty.
-func (mr *MockDutyExecutorMockRecorder) ExecuteGenesisDuty(logger, duty any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteGenesisDuty), logger, duty)
 }
 
 // MockBeaconNode is a mock of BeaconNode interface.
