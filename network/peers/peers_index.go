@@ -90,7 +90,7 @@ func (pi *peersIndex) CanConnect(id peer.ID) bool {
 	cntd := pi.network.Connectedness(id)
 	switch cntd {
 	case libp2pnetwork.Connected:
-		fallthrough
+		return false
 	default:
 	}
 	return true

@@ -2,6 +2,10 @@ package connections
 
 import (
 	"context"
+	"fmt"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/topics"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,6 +35,7 @@ type connHandler struct {
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
 	peerInfos       peers.PeerInfoIndex
+	topicsCtrl      topics.Controller
 	metrics         Metrics
 }
 
@@ -42,6 +47,7 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
+	topicsController topics.Controller,
 	mr Metrics,
 ) ConnHandler {
 	return &connHandler{
@@ -51,6 +57,7 @@ func NewConnHandler(
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
 		peerInfos:       peerInfos,
+		topicsCtrl:      topicsController,
 		metrics:         mr,
 	}
 }
@@ -144,6 +151,10 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
+			if !ch.essentialPeer(logger, conn) {
+				return errors.New("peer doesn't help us much (with dead/solo subnets)")
+			}
+
 			return nil
 		}
 
@@ -192,6 +203,96 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				metricsConnections.Inc()
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
+
+				discovery.CountersMtx.Lock()
+				// see if this peer is already connected, we probably shouldn't encounter this often
+				// if at all because this means we are creating duplicate (unnecessary) peer connections
+				// and effectively reduce overall peer diversity (because we can't exceed pre-configured
+				// max peer limit)
+				discovery.ConnectedSubnetsCounter.Range(func(subnet int, ids []peer.ID) bool {
+					for _, id := range ids {
+						if id == conn.RemotePeer() {
+							logger.Debug(
+								"peer is already connected (through some subnet discovered previously)",
+								zap.Int("subnet_id", subnet),
+								zap.String("peer_id", string(id)),
+							)
+							return false // stop iteration, found what we are looking for
+						}
+					}
+					return true
+				})
+				// see if we should upgrade any `discovered` subnets to `connected` through this peer
+				//
+				// unexpectedPeer helps us track whether the peer connection we are making is due
+				// to us discovering this peer previously (due to looking for peers with subnets
+				// we are interested in), or whether we are connecting to some "unexpected" peer
+				// TODO - we should also account for `trustedPeers` here, I need to check how this
+				// list is derived - but it seems to always be 0 (based on what logs report)
+				unexpectedPeer := true
+				discovery.DiscoveredSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
+					otherPeers := make([]peer.ID, 0, len(peerIDs))
+					for _, peerID := range peerIDs {
+						if peerID == conn.RemotePeer() {
+							discovery.Connected1stTimeSubnetsCounter.Get(subnet)
+							_, ok := discovery.Connected1stTimeSubnetsCounter.Get(subnet)
+							if !ok {
+								logger.Debug(
+									"connected subnet 1st time!",
+									zap.Int("subnet_id", subnet),
+									zap.String("peer_id", string(peerID)),
+								)
+								discovery.Connected1stTimeSubnetsCounter.Set(subnet, 1)
+							}
+
+							connectedPeers, _ := discovery.ConnectedSubnetsCounter.Get(subnet)
+							// peerAlreadyContributesToSubnet helps us track and not double-count peer
+							// contributions to subnets (discovery.ConnectedSubnetsCounter must contain unique
+							// list of peers per subnet at any moment in time)
+							peerAlreadyContributesToSubnet := false
+							for _, connectedPeer := range connectedPeers {
+								if connectedPeer == peerID {
+									peerAlreadyContributesToSubnet = true
+									break
+								}
+							}
+							if !peerAlreadyContributesToSubnet {
+								logger.Debug(
+									"connected contributing peer (since he has a subnet we are interested in - as we discovered previously)",
+									zap.Int("subnet_id", subnet),
+									zap.String("peer_id", string(peerID)),
+								)
+								connectedPeers = append(connectedPeers, peerID)
+								discovery.ConnectedSubnetsCounter.Set(subnet, connectedPeers)
+							}
+							continue
+						}
+						otherPeers = append(otherPeers, peerID)
+					}
+
+					if len(otherPeers) == len(peerIDs) {
+						// this discovered subnet is not related to connected peer
+						return true
+					}
+
+					unexpectedPeer = false // this peer connection is happening due to our subnet discovery process
+
+					// exclude this peer from discovered list since we've just connected to him, this
+					// limits DiscoveredSubnetsCounter map to only those discovered peers whom we didn't/couldn't
+					// connect to yet - this means DiscoveredSubnetsCounter map shouldn't grow big for ANY of the
+					// subnets it contains because that would mean (for such a subnet) we are discovering
+					// peers but don't connect to them for some reason.
+					discovery.DiscoveredSubnetsCounter.Set(subnet, otherPeers)
+
+					return true
+				})
+				discovery.CountersMtx.Unlock()
+				if unexpectedPeer {
+					logger.Debug(
+						"connected peer that doesn't belong to ANY of recently discovered subnets",
+						zap.String("peer_id", string(conn.RemotePeer())),
+					)
+				}
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
@@ -210,6 +311,92 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 			logger := connLogger(conn)
 			logger.Debug("peer disconnected")
+
+			// unexpectedPeer helps us track whether the peer we've disconnected is a peer
+			// that's been connected previously through the process of subnet-discovery,
+			// it's just a sanity check
+			// TODO - we should also account for `trustedPeers` here, I need to check how this
+			// list is derived - but it seems to always be 0 (based on what logs report)
+			unexpectedPeer := true
+			discovery.CountersMtx.Lock()
+			discovery.ConnectedSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
+				if len(peerIDs) == 0 {
+					// this subnet was not affected by disconnected peer because it has 0 peers right now
+					return true
+				}
+
+				otherPeers := make([]peer.ID, 0, len(peerIDs))
+				for _, peerID := range peerIDs {
+					if peerID == conn.RemotePeer() {
+						continue
+					}
+					otherPeers = append(otherPeers, peerID)
+				}
+
+				if len(otherPeers) == len(peerIDs) {
+					// this subnet was not affected by disconnected peer
+					return true
+				}
+
+				unexpectedPeer = false // this peer disconnect is happening due to our subnet discovery process
+
+				// exclude this peer from connected list since we've just disconnected him, this
+				// limits ConnectedSubnetsCounter map to only those peers whom we still have active connection
+				// with - this means ConnectedSubnetsCounter map shouldn't grow small for ANY of the
+				// subnets it contains because that would mean (for such a subnet) we are getting
+				// close to killing previously alive subnet.
+				discovery.ConnectedSubnetsCounter.Set(subnet, otherPeers)
+
+				// also, put this peer back into DiscoveredSubnetsCounter because he is a potential candidate
+				// we might consider connecting to in the future.
+				// TODO - this means DiscoveredSubnetsCounter might not be 100% accurate (it might claim that
+				// certain peers are connected to subnets they no longer are, but it should be a rare
+				// case - for peer to advertise a subnet and no longer is interested in it)
+				discoveredPeers, _ := discovery.DiscoveredSubnetsCounter.Get(subnet)
+				peerAlreadyDiscoveredForSubnet := false
+				for _, peerID := range discoveredPeers {
+					if peerID == conn.RemotePeer() {
+						// TODO - it's fine to get this warning occasionally, I guess ? Not sure what
+						// it would mean though ... a peer who has advertised he has a subnet, but then
+						// we discovered that he doesn't, and then peer says (still/again) that does
+						// work with that subnet ...
+						logger.Debug(
+							"already discovered this subnet through this peer",
+							zap.Int("subnet_id", subnet),
+							zap.String("peer_id", string(peerID)),
+						)
+						peerAlreadyDiscoveredForSubnet = true
+						break
+					}
+				}
+				if !peerAlreadyDiscoveredForSubnet {
+					discovery.DiscoveredSubnetsCounter.Set(subnet, append(discoveredPeers, conn.RemotePeer()))
+				}
+
+				if len(otherPeers) == 1 {
+					logger.Debug(
+						"disconnecting peer resulted in Solo subnet",
+						zap.Int("subnet_id", subnet),
+						zap.String("peer_id", string(conn.RemotePeer())),
+					)
+				}
+				if len(otherPeers) == 0 {
+					logger.Debug(
+						"disconnecting peer resulted in Dead subnet",
+						zap.Int("subnet_id", subnet),
+						zap.String("peer_id", string(conn.RemotePeer())),
+					)
+				}
+
+				return true
+			})
+			discovery.CountersMtx.Unlock()
+			if unexpectedPeer {
+				logger.Debug(
+					"disconnected peer that doesn't belong to ANY of connected subnets",
+					zap.String("peer_id", string(conn.RemotePeer())),
+				)
+			}
 		},
 	}
 }
@@ -232,4 +419,50 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
 	return len(shared) == 1
+}
+
+// TODO - need a better (smart) way to do it, but for now try to connect only
+// peers that help with getting rid of dead subnets
+func (ch *connHandler) essentialPeer(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
+	pid := conn.RemotePeer()
+
+	essentialPeer := false
+	peerSubnets := ch.subnetsIndex.GetPeerSubnets(pid)
+	if len(peerSubnets) == 0 {
+		// no subnets for this peer
+		return false
+	}
+
+	subscribedTopics := ch.topicsCtrl.Topics()
+	for _, topic := range subscribedTopics {
+		topicPeers, err := ch.topicsCtrl.Peers(topic)
+		if err != nil {
+			panic(fmt.Sprintf("could not get subscribed topic peers: %s", err)) // TODO
+		}
+
+		if len(topicPeers) >= 1 {
+			continue // this topic has enough peers - TODO (1 is not enough tho)
+		}
+		//// TODO - testing 0 to see if this even works
+		//if len(topicPeers) >= 0 {
+		//	continue // this topic has enough peers - TODO (1 is not enough tho)
+		//}
+
+		// we've got a dead subnet here, see if this peer can help with that
+		subnet, err := strconv.Atoi(topic)
+		if err != nil {
+			panic(fmt.Sprintf("could not convert topic name to subnet id: %s", err)) // TODO
+		}
+		peerSubnet := peerSubnets[subnet]
+		if peerSubnet != 1 {
+			continue // peer doesn't have this subnet either, lets check other dead subnets we have
+		}
+		essentialPeer = true // this peer helps with at least 1 dead subnet for us
+		break
+	}
+	if !essentialPeer {
+		return false
+	}
+
+	return true
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -21,7 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -205,24 +206,24 @@ func (n *p2pNetwork) Close() error {
 }
 
 func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
-	connector := make(chan peer.AddrInfo, connectorQueueSize)
+	candidatePeers := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
 		// Wait for own subnets to be subscribed to and updated.
 		// TODO: wait more intelligently with a channel.
 		time.Sleep(8 * time.Second)
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
-		n.backoffConnector.Connect(ctx, connector)
+		n.backoffConnector.Connect(ctx, candidatePeers)
 	}()
 
 	// Connect to trusted peers first.
 	go func() {
 		for _, addrInfo := range n.trustedPeers {
-			connector <- *addrInfo
+			candidatePeers <- *addrInfo
 		}
 	}()
 
-	return connector, nil
+	return candidatePeers, nil
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
@@ -256,6 +257,112 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	)
 
 	go n.startDiscovery(logger, connector)
+
+	async.Interval(n.ctx, 1*time.Minute, func() {
+		discovery.CountersMtx.Lock()
+		defer discovery.CountersMtx.Unlock()
+
+		logger.Debug("discovered subnets 1st time", zap.Int("total", discovery.Discovered1stTimeSubnetsCounter.SlowLen()))
+		logger.Debug("connected subnets 1st time", zap.Int("total", discovery.Connected1stTimeSubnetsCounter.SlowLen()))
+
+		subscribedTopics := n.topicsCtrl.Topics()
+		subscribedTopicsIdx := make(map[int]struct{}, len(subscribedTopics))
+		for _, topic := range subscribedTopics {
+			subnet, err := strconv.Atoi(topic)
+			if err != nil {
+				panic(fmt.Sprintf("could not convert topic name to subnet id: %v", err)) // TODO - panic here ?
+			}
+			subscribedTopicsIdx[subnet] = struct{}{}
+		}
+
+		// check how peer-discovery is doing,
+		// note, computing/counting it this way - it doesn't reflect whole dead/solo subnet data
+		// accurately at all (mostly because ConnectedSubnetsCounter doesn't represent all active
+		// peer connections but rather only those peers we connected through discovery mechanism,
+		// see its description for details)
+		discovery.DiscoveredSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
+			// skip subnets our SSV node isn't interested in (ConnectedSubnetsCounter contains a bunch
+			// of extra subnets that are just there because peers we've connected to have/offer
+			// those subnets as well)
+			if _, ok := subscribedTopicsIdx[subnet]; !ok {
+				return true
+			}
+
+			const warningThresholdTooManyDiscoveredPeers = 10
+			if len(peerIDs) >= warningThresholdTooManyDiscoveredPeers {
+				// (per subnet) this means we are discovering peers, but not actually connecting
+				// to them, it's fine for this value to grow over time (in fact, it should grow over
+				// time since we won't be connecting to every peer we discover) - but it must stop
+				// growing at some point, and the resulting value (per subnet) essentially will tell
+				// us "(per subnet) roughly, how many peers we discovered but didn't/couldn't connect to".
+				logger.Debug(
+					fmt.Sprintf("got >= %d discovered peers for subnet", warningThresholdTooManyDiscoveredPeers),
+					zap.Int("subnet", subnet),
+					zap.Int("discovered_peers_total", len(peerIDs)),
+				)
+				// This means if (for some subnet) it's a large value and subnet is dead or solo - there
+				// is some peer-connectivity issue going on (for this specific subnet). This "starving" could
+				// happen due to many reasons:
+				// - networking issue, when we are physically unable to connect to peer node (due to
+				//   internet not working on the routes we are trying to use)
+				// - us deliberately choosing peers we connect to in suboptimal manner due to max peer limit
+				//   we have (dropping those that are needed for this subnet to work)
+				// - if (assuming peer handshake happens before a connection is considered "established") peer
+				//   no longer has subnets we are interested in as per the check done during handshake (even
+				//   though he advertised)
+				connectedPeerIDs, ok := discovery.ConnectedSubnetsCounter.Get(subnet)
+				if !ok || len(connectedPeerIDs) < 2 {
+					logger.Debug(
+						"found starving subnet",
+						zap.Int("subnet", subnet),
+						zap.Int("discovered_peers_total", len(peerIDs)),
+						zap.Int("connected_peers_total", len(connectedPeerIDs)),
+					)
+				}
+			}
+			return true
+		})
+
+		// check how peer-connecting is doing (through discovery only!),
+		// note, computing/counting it this way - it doesn't reflect whole dead/solo subnet data
+		// accurately at all (mostly because ConnectedSubnetsCounter doesn't represent all active
+		// peer connections but rather only those peers we connected through discovery mechanism,
+		// see its description for details)
+		totalDiscoverySubnetsCnt := 0
+		deadDiscoverySubnetsCnt := 0
+		soloDiscoverySubnetsCnt := 0
+		discovery.ConnectedSubnetsCounter.Range(func(subnet int, peerIDs []peer.ID) bool {
+			// skip subnets our SSV node isn't interested in (ConnectedSubnetsCounter contains a bunch
+			// of extra subnets that are just there because peers we've connected to have/offer
+			// those subnets as well)
+			if _, ok := subscribedTopicsIdx[subnet]; !ok {
+				return true
+			}
+
+			totalDiscoverySubnetsCnt++
+
+			if len(peerIDs) == 1 {
+				soloDiscoverySubnetsCnt++
+			}
+			if len(peerIDs) == 0 {
+				deadDiscoverySubnetsCnt++
+			}
+			return true
+		})
+		logger.Debug(
+			"dead/solo subnets report (contribution of discovery peers)",
+			// total_contributed_subnets is how many subnets peers connected through discovery
+			// mechanism contribute to (at the moment)
+			zap.Int("total_contributed_subnets", totalDiscoverySubnetsCnt),
+			// solo_contributed_subnets is how many solo contributions peers connected through
+			// discovery mechanism have (at the moment)
+			zap.Int("solo_contributed_subnets", soloDiscoverySubnetsCnt),
+			// solo_contributed_subnets is how many dead contributions peers connected through
+			// discovery mechanism have (at the moment), means discovery-based peer(s) contributed
+			// to these subnets in the past - but currently they don't anymore
+			zap.Int("dead_contributed_subnets", deadDiscoverySubnetsCnt),
+		)
+	})
 
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
 	// don't report metrics in tests
@@ -354,12 +461,12 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 			subnetPeers := n.idx.GetSubnetPeers(subnet)
 			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
 				// take the peers with the most shared subnets
-				aShares := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
+				aShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
 				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
-				if aShares < bShared {
-					return -1
-				} else if aShares > bShared {
+				if aShared < bShared {
 					return 1
+				} else if aShared > bShared {
+					return -1
 				} else {
 					return 0
 				}
@@ -377,12 +484,6 @@ func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnet
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
-	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
-	go func() {
-		ctx, cancel := context.WithCancel(n.ctx)
-		defer cancel()
-		n.backoffConnector.Connect(ctx, discoveredPeers)
-	}()
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
 			if !n.idx.CanConnect(e.AddrInfo.ID) {

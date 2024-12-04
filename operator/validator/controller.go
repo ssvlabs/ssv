@@ -533,19 +533,21 @@ func (c *controller) StartValidators() {
 		// Setup committee validators.
 		inited, committees := c.setupValidators(ownShares)
 		if len(inited) == 0 {
-			// If no validators were started and therefore we're not subscribed to any subnets,
-			// then subscribe to a random subnet to participate in the network.
-			if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
-				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
-			}
+			// TODO - to see if discovery works on its own
+			//// If no validators were started and therefore we're not subscribed to any subnets,
+			//// then subscribe to a random subnet to participate in the network.
+			//if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
+			//	c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
+			//}
 		}
 		close(c.committeeValidatorSetup)
 
 		// Start validators.
 		c.startValidators(inited, committees)
-		if err := c.network.SubscribeFillerSubnets(c.logger); err != nil {
-			c.logger.Error("failed to subscribe to filler subnets", zap.Error(err))
-		}
+		// TODO - to see if discovery works on its own
+		//if err := c.network.SubscribeFillerSubnets(c.logger); err != nil {
+		//	c.logger.Error("failed to subscribe to filler subnets", zap.Error(err))
+		//}
 	}
 
 	// Fetch metadata now if there is none. Otherwise, UpdateValidatorsMetadataLoop will handle it.

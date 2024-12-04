@@ -152,14 +152,15 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 	if err := n.setupStreamCtrl(logger); err != nil {
 		return errors.Wrap(err, "could not setup stream controller")
 	}
-	if err := n.setupPeerServices(logger); err != nil {
+	topicsController, err := n.setupPubsub(logger)
+	if err != nil {
+		return errors.Wrap(err, "could not setup topic controller")
+	}
+	if err := n.setupPeerServices(logger, topicsController); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
-	if err := n.setupDiscovery(logger); err != nil {
+	if err := n.setupDiscovery(logger, topicsController); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
-	}
-	if err := n.setupPubsub(logger); err != nil {
-		return errors.Wrap(err, "could not setup topic controller")
 	}
 
 	return nil
@@ -171,7 +172,7 @@ func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
+func (n *p2pNetwork) setupPeerServices(logger *zap.Logger, topicsController topics.Controller) error {
 	libPrivKey, err := p2pcommons.ECDSAPrivToInterface(n.cfg.NetworkPrivateKey)
 	if err != nil {
 		return err
@@ -230,14 +231,14 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx, n.metrics)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx, topicsController, n.metrics)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
 	return nil
 }
 
-func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
+func (n *p2pNetwork) setupDiscovery(logger *zap.Logger, topicsController topics.Controller) error {
 	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
 		return errors.Wrap(err, "could not get ip addr")
@@ -272,7 +273,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		HostDNS:       n.cfg.HostDNS,
 		NetworkConfig: n.cfg.Network,
 	}
-	disc, err := discovery.NewService(n.ctx, logger, discOpts)
+	disc, err := discovery.NewService(n.ctx, logger, topicsController, discOpts)
 	if err != nil {
 		return err
 	}
@@ -283,7 +284,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
+func (n *p2pNetwork) setupPubsub(logger *zap.Logger) (topics.Controller, error) {
 	cfg := &topics.PubSubConfig{
 		NetworkConfig: n.cfg.Network,
 		Host:          n.host,
@@ -318,12 +319,12 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 
 	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
-		return errors.Wrap(err, "could not setup pubsub")
+		return nil, errors.Wrap(err, "could not setup pubsub")
 	}
 
 	n.topicsCtrl = tc
 	logger.Debug("topics controller is ready")
-	return nil
+	return tc, nil
 }
 
 func (n *p2pNetwork) connectionsAtLimit() bool {

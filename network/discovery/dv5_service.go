@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 	"net"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -19,6 +23,35 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+)
+
+// counters to keep track of discovered/connected peers (per subnet) through discovery mechanism ONLY,
+// this means there might be other peers (we've connected to before/outside-of the means of discovery
+// mechanism) who contribute to some subnets our SSV node is interested in - we just don't track these
+// contributions with these counters below.
+// Note also, these counters hold stats across all 128 subnets (not just the ones we are interested in).
+// For example, ConnectedSubnetsCounter will contain/maintain a list of peers even for subnets
+// that are irrelevant for our own SSV node (they are just there to reflect what subnets
+// each peer we connected to offers).
+var (
+	// CountersMtx helps with updating counters related to peer discovery/connecting in
+	// atomic fashion (like updating ConnectedSubnetsCounter while iterating DiscoveredSubnetsCounter
+	// map) to happen atomically.
+	// TODO - we don't need hashmap then, use plain simple golang map.
+	CountersMtx sync.Mutex
+	// DiscoveredSubnetsCounter contains subnet->peerIDs mapping for peers discovery service found.
+	DiscoveredSubnetsCounter = hashmap.New[int, []peer.ID]()
+	// ConnectedSubnetsCounter contains subnet->peerIDs mapping for peers previously added to
+	// DiscoveredSubnetsCounter map. This means ConnectedSubnetsCounter doesn't actually reflect/count
+	// all the active peer connections we have, but rather only those we've made with the help of
+	// discovery service (which is more like a half of all connections SSV node typically makes).
+	ConnectedSubnetsCounter = hashmap.New[int, []peer.ID]()
+	// Discovered1stTimeSubnetsCounter is subnet set that represents those subnets we've discovered a
+	// peer for (we add subnet to this set the very first time it happened).
+	Discovered1stTimeSubnetsCounter = hashmap.New[int, int64]()
+	// Connected1stTimeSubnetsCounter is subnet set that represents those subnets we've connected a
+	// peer for (we add subnet to this set the very first time it happened).
+	Connected1stTimeSubnetsCounter = hashmap.New[int, int64]()
 )
 
 var (
@@ -54,6 +87,7 @@ type DiscV5Service struct {
 
 	dv5Listener Listener
 	bootnodes   []*enode.Node
+	topicsCtrl  topics.Controller
 
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
@@ -67,11 +101,17 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(
+	pctx context.Context,
+	logger *zap.Logger,
+	topicsController topics.Controller,
+	discOpts *Options,
+) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:           ctx,
 		cancel:        cancel,
+		topicsCtrl:    topicsController,
 		conns:         discOpts.ConnIndex,
 		subnetsIdx:    discOpts.SubnetsIdx,
 		networkConfig: discOpts.NetworkConfig,
@@ -181,15 +221,54 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	}
 
 	// Get the peer's subnets, skipping if it has none.
-	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
+	if bytes.Equal(zeroSubnets, peerSubnets) {
 		return errors.New("zero subnets")
 	}
 
-	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
+
+	CountersMtx.Lock()
+	for subnet, subnetActive := range peerSubnets {
+		if subnetActive != 1 {
+			continue // not interested in subnet that's not active (or no longer active)
+		}
+
+		_, ok := Discovered1stTimeSubnetsCounter.Get(subnet)
+		if !ok {
+			logger.Debug(
+				"discovered subnet 1st time!",
+				zap.Int("subnet_id", subnet),
+				zap.String("peer_id", string(e.AddrInfo.ID)),
+			)
+			Discovered1stTimeSubnetsCounter.Set(subnet, 1)
+		}
+
+		peerIDs, _ := DiscoveredSubnetsCounter.Get(subnet)
+		peerAlreadyDiscoveredForSubnet := false
+		for _, peerID := range peerIDs {
+			if peerID == e.AddrInfo.ID {
+				// TODO - it's fine to get this warning occasionally, I guess ? Not sure what
+				// it would mean though ... a peer who has advertised he has a subnet, but then
+				// we discovered that he doesn't, and then peer says (still/again) that does
+				// work with that subnet ...
+				logger.Debug(
+					"already discovered this subnet through this peer",
+					zap.Int("subnet_id", subnet),
+					zap.String("peer_id", string(peerID)),
+				)
+				peerAlreadyDiscoveredForSubnet = true
+				break
+			}
+		}
+		if !peerAlreadyDiscoveredForSubnet {
+			DiscoveredSubnetsCounter.Set(subnet, append(peerIDs, e.AddrInfo.ID))
+		}
+	}
+	CountersMtx.Unlock()
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
@@ -199,6 +278,40 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
 		metricRejectedNodes.Inc()
 		return errors.New("no shared subnets")
+	}
+
+	// TODO - need a better (smart) way to do it, but for now try to connect only
+	// peers that help with getting rid of dead subnets
+	helpfulPeer := false
+	subscribedTopics := dvs.topicsCtrl.Topics()
+	for _, topic := range subscribedTopics {
+		topicPeers, err := dvs.topicsCtrl.Peers(topic)
+		if err != nil {
+			return errors.Wrap(err, "could not get subscribed topic peers")
+		}
+
+		if len(topicPeers) >= 1 {
+			continue // this topic has enough peers - TODO (1 is not enough tho)
+		}
+		//// TODO - testing 0 to see if this even works
+		//if len(topicPeers) >= 0 {
+		//	continue // this topic has enough peers - TODO (1 is not enough tho)
+		//}
+
+		// we've got a dead subnet here, see if this peer can help with that
+		subnet, err := strconv.Atoi(topic)
+		if err != nil {
+			return errors.Wrap(err, "could not convert topic name to subnet id")
+		}
+		peerSubnet := peerSubnets[subnet]
+		if peerSubnet != 1 {
+			continue // peer doesn't have this subnet either, lets check other dead subnets we have
+		}
+		helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+		break
+	}
+	if !helpfulPeer {
+		return errors.New("this peer doesn't help with dead subnets")
 	}
 
 	metricFoundNodes.Inc()

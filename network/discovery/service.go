@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/network/topics"
 	"io"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -54,9 +55,9 @@ type Service interface {
 }
 
 // NewService creates new discovery.Service
-func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
+func NewService(ctx context.Context, logger *zap.Logger, topicsController topics.Controller, opts Options) (Service, error) {
 	if opts.DiscV5Opts == nil {
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
-	return newDiscV5Service(ctx, logger, &opts)
+	return newDiscV5Service(ctx, logger, topicsController, &opts)
 }
