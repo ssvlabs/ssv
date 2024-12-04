@@ -123,6 +123,9 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	defer cancel()
 
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
+		// Set empty duties to inform DutyStore that fetch for this epoch is done.
+		h.duties.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{})
+
 		h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 		return
 	}
@@ -163,8 +166,6 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	if err != nil {
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
-
-	h.duties.ResetEpoch(epoch)
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0, len(duties))

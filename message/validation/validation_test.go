@@ -14,6 +14,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -38,6 +39,7 @@ import (
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -630,6 +632,77 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator = New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot))
 		require.NoError(t, err)
+	})
+
+	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
+		currentSlot := &utils.SlotValue{}
+		mockNetworkConfig := networkconfig.NetworkConfig{
+			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
+		}
+
+		const epoch = 1
+		currentSlot.SetSlot(netCfg.Beacon.FirstSlotAtEpoch(epoch))
+
+		ds := dutystore.New()
+
+		validator := New(mockNetworkConfig, validatorStore, ds, signatureVerifier).(*messageValidator)
+
+		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+
+		dutyExecutorID := shares.active.ValidatorPubKey[:]
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleProposer),
+			Data:    encodedMessages,
+		}
+
+		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+		receivedAt := mockNetworkConfig.Beacon.GetSlotStartTime(currentSlot.GetSlot())
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+
+		require.False(t, ds.Proposer.IsEpochSet(epoch))
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.NoError(t, err)
+	})
+
+	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
+		currentSlot := &utils.SlotValue{}
+		mockNetworkConfig := networkconfig.NetworkConfig{
+			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
+		}
+
+		const epoch = 1
+		currentSlot.SetSlot(mockNetworkConfig.Beacon.FirstSlotAtEpoch(epoch))
+
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0))
+
+		validator := New(mockNetworkConfig, validatorStore, ds, signatureVerifier).(*messageValidator)
+
+		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+
+		dutyExecutorID := shares.active.ValidatorPubKey[:]
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleProposer),
+			Data:    encodedMessages,
+		}
+
+		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+		receivedAt := mockNetworkConfig.Beacon.GetSlotStartTime(currentSlot.GetSlot())
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+
+		require.True(t, ds.Proposer.IsEpochSet(epoch))
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorContains(t, err, ErrNoDuty.Error())
 	})
 
 	//// Get error when receiving a message with over 13 partial signatures
@@ -1885,4 +1958,30 @@ func generateMultiSignedMessage(
 	signedSSVMessage.FullData = fullData
 
 	return signedSSVMessage
+}
+
+var generateRandaoMsg = func(
+	sk *bls.SecretKey,
+	id spectypes.OperatorID,
+	epoch phase0.Epoch,
+	slot phase0.Slot,
+) *spectypes.PartialSignatureMessages {
+	signer := spectestingutils.NewTestingKeyManager()
+	beacon := spectestingutils.NewTestingBeaconNode()
+	d, _ := beacon.DomainData(epoch, spectypes.DomainRandao)
+	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(epoch), d, sk.GetPublicKey().Serialize(), spectypes.DomainRandao)
+
+	msgs := spectypes.PartialSignatureMessages{
+		Type:     spectypes.RandaoPartialSig,
+		Slot:     slot,
+		Messages: []*spectypes.PartialSignatureMessage{},
+	}
+	msgs.Messages = append(msgs.Messages, &spectypes.PartialSignatureMessage{
+		PartialSignature: signed[:],
+		SigningRoot:      root,
+		Signer:           id,
+		ValidatorIndex:   spectestingutils.TestingValidatorIndex,
+	})
+
+	return &msgs
 }
