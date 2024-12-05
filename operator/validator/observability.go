@@ -31,7 +31,8 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
+	meter  = otel.Meter(observabilityName)
 
 	validatorStatusGauge = observability.NewMetric(
 		meter.Int64Gauge(
