@@ -143,7 +143,7 @@ type P2PNetwork interface {
 type controller struct {
 	ctx context.Context
 
-	logger  *zap.Logger
+	logger *zap.Logger
 
 	networkConfig     networkconfig.NetworkConfig
 	sharesStorage     SharesStorage
@@ -224,6 +224,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
+	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{

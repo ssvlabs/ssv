@@ -7,6 +7,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/observability"
 )
 
@@ -42,6 +43,6 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordDutyExecuted[T observability.BeaconRole](ctx context.Context, beaconRole T) {
+func recordDutyExecuted(ctx context.Context, beaconRole types.BeaconRole) {
 	dutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(observability.BeaconRoleAttribute(beaconRole)))
 }
