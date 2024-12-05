@@ -177,7 +177,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Warn("configured peer count is too low for this operator's committee count, increasing peer count",
 				zap.Int("configured_max_peers", cfg.P2pNetworkConfig.MaxPeers),
 				zap.Int("updated_max_peers", minRequiredPeers),
-				zap.Int("committee_threshold_for_peer_increase", minRequiredPeers),
+				zap.Int("committee_threshold_for_peer_increase", committeeThresholdForPeerIncrease),
 			)
 			cfg.P2pNetworkConfig.MaxPeers = minRequiredPeers
 		}
