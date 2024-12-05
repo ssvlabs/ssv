@@ -163,11 +163,16 @@ var StartNodeCmd = &cobra.Command{
 		operatorDataStore := operatordatastore.New(operatorData)
 
 		operatorCommittees := nodeStorage.ValidatorStore().OperatorCommittees(operatorData.ID)
+		// Currently, OperatorCommittees may return several committees with the same committee ID, so we need to filter the unique ones.
+		uniqueCommittees := make(map[[32]byte]struct{})
+		for _, oc := range operatorCommittees {
+			uniqueCommittees[oc.ID] = struct{}{}
+		}
 		// If operator has more than 4 committees, it needs more peers, so we need to override the value from config if it's too low.
 		// MaxPeers is used only in p2p, so the lines below must be executed before calling setupP2P function.
 		const committeeThresholdForPeerIncrease = 4
 		const minRequiredPeers = 150
-		if len(operatorCommittees) > committeeThresholdForPeerIncrease && cfg.P2pNetworkConfig.MaxPeers < minRequiredPeers {
+		if len(uniqueCommittees) > committeeThresholdForPeerIncrease && cfg.P2pNetworkConfig.MaxPeers < minRequiredPeers {
 			logger.Warn("configured peer count is too low for this operator's committee count, increasing peer count",
 				zap.Int("configured_max_peers", cfg.P2pNetworkConfig.MaxPeers),
 				zap.Int("updated_max_peers", minRequiredPeers),
