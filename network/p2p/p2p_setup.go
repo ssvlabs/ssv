@@ -121,7 +121,7 @@ func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
 	return n.idx.IsBad(logger, peerID)
 }
 
-func (n *p2pNetwork) canAcceptNewConnection(lg *zap.Logger, peerID peer.ID) bool {
+func (n *p2pNetwork) isBadInbound(lg *zap.Logger, peerID peer.ID) bool {
 	if n.idx == nil {
 		return false
 	}
@@ -131,14 +131,15 @@ func (n *p2pNetwork) canAcceptNewConnection(lg *zap.Logger, peerID peer.ID) bool
 
 	// should never happen
 	if maxPeers < inBoundLimit {
-		return false
+		return true
 	}
 
 	in, _ := n.connectionStats()
 
 	if in >= inBoundLimit {
+		n.interfaceLogger.Debug("preventing inbound connections due to inbound limit", zap.Int("inbound", in), zap.Int("inbound_limit", inBoundLimit))
 		// todo: should we disconnect to make sure its ==?
-		return false
+		return true
 	}
 
 	return n.idx.IsBad(lg, peerID)
@@ -181,7 +182,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.canAcceptNewConnection)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.isBadInbound)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
