@@ -164,7 +164,7 @@ var StartNodeCmd = &cobra.Command{
 
 		operatorCommittees := nodeStorage.ValidatorStore().OperatorCommittees(operatorData.ID)
 		// If operator has more than 4 committees, it needs more peers, so we need to override the value from config if it's too low.
-		// MaxPeers is used only in p2p, so the lines above must be executed before calling setupP2P function.
+		// MaxPeers is used only in p2p, so the lines below must be executed before calling setupP2P function.
 		const committeeThresholdForPeerIncrease = 4
 		const minRequiredPeers = 150
 		if len(operatorCommittees) > committeeThresholdForPeerIncrease && cfg.P2pNetworkConfig.MaxPeers < minRequiredPeers {
