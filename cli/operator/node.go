@@ -164,6 +164,7 @@ var StartNodeCmd = &cobra.Command{
 
 		operatorCommittees := nodeStorage.ValidatorStore().OperatorCommittees(operatorData.ID)
 		// Currently, OperatorCommittees may return several committees with the same committee ID, so we need to filter the unique ones.
+		// This might be a bug in validator store: https://github.com/ssvlabs/ssv/issues/1926
 		uniqueCommittees := make(map[[32]byte]struct{})
 		for _, oc := range operatorCommittees {
 			uniqueCommittees[oc.ID] = struct{}{}
