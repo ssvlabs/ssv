@@ -42,6 +42,7 @@ require (
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
+	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.14.0
 	go.opentelemetry.io/otel/sdk v1.32.0
 	go.opentelemetry.io/otel/sdk/metric v1.32.0
 	go.uber.org/mock v0.4.0

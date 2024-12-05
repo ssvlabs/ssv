@@ -1,5 +1,5 @@
 package observability
 
 type Config struct {
-	metricsEnabled bool
+	metricsEnabled, tracesEnabled bool
 }
