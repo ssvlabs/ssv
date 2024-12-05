@@ -2,6 +2,8 @@ package peers
 
 import (
 	"context"
+	"github.com/jellydator/ttlcache/v3"
+	"time"
 
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -16,6 +18,14 @@ const (
 )
 
 type PeerScore float64
+
+var (
+	TrimmedRecently = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](10 * time.Minute))
+)
+
+func init() {
+	go TrimmedRecently.Start() // start cleanup go-routine
+}
 
 // ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.
 // exposing an abstract interface so we can have the flexibility of doing some stuff manually
@@ -66,6 +76,7 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 				logger.Debug("error closing peer", fields.PeerID(pid), zap.Error(err))
 			}
 			trimmed = append(trimmed, pid)
+			TrimmedRecently.Set(pid, struct{}{}, ttlcache.DefaultTTL) // record stats
 			if len(trimmed) >= 2 {
 				break
 			}

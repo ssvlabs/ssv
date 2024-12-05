@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"github.com/ssvlabs/ssv/network/peers"
 	"runtime"
 	"time"
 
@@ -75,6 +76,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 	if n.disable {
 		return true
 	}
+
 	remoteAddr := multiaddrs.RemoteMultiaddr()
 	if !n.validateDial(remoteAddr) {
 		// Yield this goroutine to allow others to run in-between connection attempts.
@@ -89,6 +91,13 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+	if peers.TrimmedRecently.Has(id) {
+		n.logger.Debug(
+			"InterceptSecured: spotted a peer we've recently trimmed",
+			zap.String("conn_direction", direction.String()),
+		)
+	}
+
 	if n.isBadPeer(n.logger, id) {
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false

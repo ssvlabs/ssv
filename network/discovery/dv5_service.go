@@ -148,6 +148,11 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			fields.ENR(e.Node),
 			fields.PeerID(e.AddrInfo.ID),
 		)
+
+		if peers.TrimmedRecently.Has(e.AddrInfo.ID) {
+			logger.Debug("discovery suggested a peer we've recently trimmed")
+		}
+
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
 			if skippedPeers%logFrequency == 0 {
