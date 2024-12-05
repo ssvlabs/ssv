@@ -36,8 +36,13 @@ var (
 
 	validatorStatusCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("validators"),
+			metricName("validators.per_status"),
 			metric.WithDescription("total number of validators by status")))
+
+	validatorsCountGauge = observability.NewMetric(
+		meter.Int64Gauge(
+			metricName("validators.active"),
+			metric.WithDescription("number of active validators")))
 )
 
 func metricName(name string) string {
