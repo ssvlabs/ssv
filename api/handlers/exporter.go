@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -50,14 +51,23 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(err)
 	}
 
-	decodeStart := time.Now()
+	readAllStart := time.Now()
+	var readAll, unmar time.Duration
 	if r.Header.Get("Content-Type") == "application/json" {
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&request); err != nil {
-			return err
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return api.Error(err)
 		}
+		readAll = time.Since(readAllStart)
+		defer func() { _ = r.Body.Close() }()
+
+		unmarStart := time.Now()
+		err = json.Unmarshal(body, &request)
+		if err != nil {
+			return api.Error(err)
+		}
+		unmar = time.Since(unmarStart)
 	}
-	decode := time.Since(decodeStart)
 
 	if request.From > request.To {
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
@@ -73,7 +83,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 
 	dbTime := time.Duration(0)
 	defer func() {
-		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("decode", decode))
+		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("readAll", readAll), zap.Duration("unmar", unmar))
 	}()
 
 	response.Data = []*ParticipantResponse{}
