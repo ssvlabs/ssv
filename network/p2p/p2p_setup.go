@@ -127,8 +127,9 @@ func (n *p2pNetwork) canAcceptNewConnection(lg *zap.Logger, peerID peer.ID) bool
 	}
 
 	maxPeers := n.cfg.MaxPeers
-	inBoundLimit := int(float64(n.cfg.MaxPeers) * inboundRatio)
+	inBoundLimit := int(float64(maxPeers) * inboundRatio)
 
+	// should never happen
 	if maxPeers < inBoundLimit {
 		return false
 	}
@@ -157,7 +158,7 @@ func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
 			continue // TODO: how can it happen?
 		}
 
-		if cn.Stat().Direction == network.DirOutbound {
+		if dir == network.DirOutbound {
 			outbound++
 		} else {
 			inbound++

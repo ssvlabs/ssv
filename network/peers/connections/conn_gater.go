@@ -99,6 +99,10 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 		return false
 	}
 
+	if direction == libp2pnetwork.DirUnknown {
+		return false
+	}
+
 	if direction == libp2pnetwork.DirOutbound {
 		return n.canConnectOutbound(n.logger, id)
 	} else {
