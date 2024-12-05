@@ -39,7 +39,6 @@ type topicScoreSnapshot struct {
 func scoreInspector(logger *zap.Logger,
 	scoreIdx peers.ScoreIndex,
 	logFrequency int,
-	metrics Metrics,
 	peerConnected func(pid peer.ID) bool,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
@@ -54,9 +53,6 @@ func scoreInspector(logger *zap.Logger,
 			peerScores[pid] = ps.Score
 		}
 		gossipScoreIndex.SetScores(peerScores)
-
-		// Reset metrics before updating them.
-		metrics.ResetPeerScores()
 
 		// Use a "scope cache" for getting a topic's score parameters
 		// otherwise, the factory method would be called multiple times for the same topic
@@ -139,10 +135,6 @@ func scoreInspector(logger *zap.Logger,
 			// P7 - Behaviour penalty
 			p7 := peerScores.BehaviourPenalty
 			w7 := peerScoreParams.BehaviourPenaltyWeight
-
-			// Update metrics.
-			metrics.PeerScore(pid, peerScores.Score)
-			metrics.PeerP4Score(pid, p4Impact)
 
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)

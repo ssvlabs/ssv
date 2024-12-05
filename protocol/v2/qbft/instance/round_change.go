@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -16,6 +17,7 @@ import (
 // uponRoundChange process round change messages.
 // Assumes round change message is valid!
 func (i *Instance) uponRoundChange(
+	ctx context.Context,
 	logger *zap.Logger,
 	instanceStartValue []byte,
 	msg *specqbft.ProcessingMessage,
@@ -95,7 +97,7 @@ func (i *Instance) uponRoundChange(
 		if newRound <= i.State.Round {
 			return nil // no need to advance round
 		}
-		err := i.uponChangeRoundPartialQuorum(logger, newRound, instanceStartValue)
+		err := i.uponChangeRoundPartialQuorum(ctx, logger, newRound, instanceStartValue)
 		if err != nil {
 			return err
 		}
@@ -103,8 +105,8 @@ func (i *Instance) uponRoundChange(
 	return nil
 }
 
-func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
-	i.bumpToRound(newRound)
+func (i *Instance) uponChangeRoundPartialQuorum(ctx context.Context, logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
+	i.bumpToRound(ctx, newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 
 	i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)

@@ -10,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // SyncCommitteeDuties returns sync committee duties for a given epoch
@@ -43,7 +44,8 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 	if resp.Data == nil {
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
-	metricsSyncCommitteeDataRequest.Observe(time.Since(reqStart).Seconds())
+
+	recordAttestationDataRequest(gc.ctx, time.Since(reqStart), spectypes.BNRoleSyncCommittee)
 
 	return *resp.Data, spec.DataVersionAltair, nil
 }

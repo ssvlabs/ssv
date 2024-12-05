@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"sync"
@@ -69,10 +70,10 @@ func (i *Instance) ForceStop() {
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
-		i.bumpToRound(specqbft.FirstRound)
+		i.bumpToRound(ctx, specqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
@@ -126,7 +127,7 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
+func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
 	if !i.CanProcessMessages() {
 		return false, nil, nil, errors.New("instance stopped processing messages")
 	}
@@ -139,18 +140,18 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.ProcessingMessag
 
 		switch msg.QBFTMessage.MsgType {
 		case specqbft.ProposalMsgType:
-			return i.uponProposal(logger, msg, i.State.ProposeContainer)
+			return i.uponProposal(ctx, logger, msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(logger, msg, i.State.PrepareContainer)
+			return i.uponPrepare(ctx, logger, msg, i.State.PrepareContainer)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
+			decided, decidedValue, aggregatedCommit, err = i.UponCommit(ctx, logger, msg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(ctx, logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}
@@ -249,9 +250,8 @@ func (i *Instance) Decode(data []byte) error {
 }
 
 // bumpToRound sets round and sends current round metrics.
-func (i *Instance) bumpToRound(round specqbft.Round) {
+func (i *Instance) bumpToRound(ctx context.Context, round specqbft.Round) {
 	i.State.Round = round
-	i.metrics.SetRound(round)
 }
 
 // CanProcessMessages will return true if instance can process messages

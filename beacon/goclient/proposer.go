@@ -16,10 +16,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
+	"go.uber.org/zap"
 )
 
 const (
@@ -67,7 +66,8 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
 	}
 
-	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+	recordAttestationDataRequest(gc.ctx, time.Since(reqStart), spectypes.BNRoleProposer)
+
 	beaconBlock := proposalResp.Data
 
 	if beaconBlock.Blinded {

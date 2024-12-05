@@ -112,7 +112,6 @@ func (b *BaseRunner) validateValidatorIndexInPartialSigMsg(
 
 func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, signature spectypes.Signature, root [32]byte,
 	committee []*spectypes.ShareMember) error {
-	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	for _, n := range committee {
 		if n.Signer == signer {

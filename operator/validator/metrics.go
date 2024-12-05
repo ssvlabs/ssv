@@ -10,27 +10,27 @@ func (c *controller) reportValidatorStatus(pk []byte, meta *beacon.ValidatorMeta
 	logger := c.logger.With(fields.PubKey(pk), zap.Any("metadata", meta))
 	if meta == nil {
 		logger.Debug("validator metadata not found")
-		c.metrics.ValidatorNotFound(pk)
+		recordValidatorStatus(c.ctx, statusNotFound)
 	} else if meta.IsActive() {
 		logger.Debug("validator is ready")
-		c.metrics.ValidatorReady(pk)
+		recordValidatorStatus(c.ctx, statusReady)
 	} else if meta.Slashed() {
 		logger.Debug("validator slashed")
-		c.metrics.ValidatorSlashed(pk)
+		recordValidatorStatus(c.ctx, statusSlashed)
 	} else if meta.Exiting() {
 		logger.Debug("validator exiting / exited")
-		c.metrics.ValidatorExiting(pk)
+		recordValidatorStatus(c.ctx, statusExiting)
 	} else if !meta.Activated() {
 		logger.Debug("validator not activated")
-		c.metrics.ValidatorNotActivated(pk)
+		recordValidatorStatus(c.ctx, statusNotActivated)
 	} else if meta.Pending() {
 		logger.Debug("validator pending")
-		c.metrics.ValidatorPending(pk)
+		recordValidatorStatus(c.ctx, statusPending)
 	} else if meta.Index == 0 {
 		logger.Debug("validator index not found")
-		c.metrics.ValidatorNoIndex(pk)
+		recordValidatorStatus(c.ctx, statusNoIndex)
 	} else {
 		logger.Debug("validator is unknown")
-		c.metrics.ValidatorUnknown(pk)
+		recordValidatorStatus(c.ctx, statusUnknown)
 	}
 }
