@@ -14,6 +14,10 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -359,14 +363,22 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.execute_duties", observabilityNamespace),
+		trace.WithAttributes(attribute.Int("ssv.validator.duty_count", len(duties))))
+	defer span.End()
+
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
+
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			span.AddEvent("late duty execution", trace.WithAttributes(attribute.Int64("slot_delay_ms", slotDelay.Milliseconds())))
 		}
+
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
+
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
@@ -375,6 +387,8 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
