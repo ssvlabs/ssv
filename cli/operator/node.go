@@ -178,6 +178,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.Int("configured_max_peers", cfg.P2pNetworkConfig.MaxPeers),
 				zap.Int("updated_max_peers", minRequiredPeers),
 				zap.Int("committee_threshold_for_peer_increase", committeeThresholdForPeerIncrease),
+				zap.Int("unique_committees", len(uniqueCommittees)),
 			)
 			cfg.P2pNetworkConfig.MaxPeers = minRequiredPeers
 		}
