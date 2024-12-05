@@ -23,7 +23,7 @@ import (
 // MinConnectivitySubnets is the minimum number of subnets a node should subscribe to
 // TODO
 // const MinConnectivitySubnets = 5
-const MinConnectivitySubnets = 3
+const MinConnectivitySubnets = 4
 
 type validatorStatus int
 
