@@ -47,6 +47,8 @@ const (
 	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
 	connectorQueueSize = 256
+	// inboundRatio is the ratio of inbound connections to outbound connections
+	inboundRatio = float64(0.8)
 )
 
 // Setup is used to setup the network
@@ -119,6 +121,52 @@ func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
 	return n.idx.IsBad(logger, peerID)
 }
 
+func (n *p2pNetwork) canAcceptNewConnection(lg *zap.Logger, peerID peer.ID) bool {
+	if n.idx == nil {
+		return false
+	}
+
+	maxPeers := n.cfg.MaxPeers
+	inBoundLimit := int(float64(n.cfg.MaxPeers) * inboundRatio)
+
+	if maxPeers < inBoundLimit {
+		return false
+	}
+
+	in, _ := n.connectionStats()
+
+	if in >= inBoundLimit {
+		// todo: should we disconnect to make sure its ==?
+		return false
+	}
+
+	return n.idx.IsBad(lg, peerID)
+}
+
+func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
+	cns := n.host.Network().Conns()
+
+	for _, cn := range cns {
+
+		if n.host.Network().Connectedness(cn.RemotePeer()) != network.Connected {
+			continue
+		}
+
+		dir := cn.Stat().Direction
+		if dir == network.DirUnknown {
+			continue // TODO: how can it happen?
+		}
+
+		if cn.Stat().Direction == network.DirOutbound {
+			outbound++
+		} else {
+			inbound++
+		}
+	}
+
+	return inbound, outbound
+}
+
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	opts, err := n.cfg.Libp2pOptions(logger)
@@ -132,7 +180,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.canAcceptNewConnection)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
