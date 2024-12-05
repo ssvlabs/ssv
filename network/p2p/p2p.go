@@ -322,6 +322,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.Addr
 	}()
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
+			n.interfaceLogger.Debug("trying to connect to peer", fields.PeerID(e.AddrInfo.ID))
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
 				return
 			}
