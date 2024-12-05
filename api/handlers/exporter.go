@@ -97,6 +97,28 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
 		qbftStore := qbftStores[runnerRole]
 
+		if len(request.PubKeys) == 0 {
+			participantsList, err := qbftStore.GetParticipantsInSlot(from, to)
+			if err != nil {
+				return api.Error(fmt.Errorf("error getting participants: %w", err))
+			}
+
+			if len(participantsList) == 0 {
+				continue
+			}
+
+			data, err := exporterapi.ParticipantsAPIData(participantsList...)
+			if err != nil {
+				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
+			}
+
+			for _, apiMsg := range data {
+				response.Data = append(response.Data, transformToParticipantResponse(apiMsg))
+			}
+			continue
+		}
+
+		// fetch for each pubkey
 		for _, pubKey := range request.PubKeys {
 			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
 
@@ -119,6 +141,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
+
 	dbTime += time.Since(dbStart)
 
 	return api.Render(w, r, response)

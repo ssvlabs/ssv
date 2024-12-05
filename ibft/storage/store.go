@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"slices"
@@ -41,25 +42,25 @@ func init() {
 // ibftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
-	prefix         []byte
+	role           []byte
 	db             basedb.Database
 	participantsMu sync.Mutex
 }
 
 // New create new ibft storage
-func New(db basedb.Database, prefix string) qbftstorage.QBFTStore {
+func New(db basedb.Database, role string) qbftstorage.QBFTStore {
 	return &ibftStorage{
-		prefix: []byte(prefix),
-		db:     db,
+		role: []byte(role),
+		db:   db,
 	}
 }
 
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
 func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
-	prefix := i.prefix
-	prefix = append(prefix, msgID[:]...)
-	prefix = append(prefix, []byte(instanceKey)...)
-	err := i.db.DropPrefix(prefix)
+	role := i.role
+	role = append(role, msgID[:]...)
+	role = append(role, []byte(instanceKey)...)
+	err := i.db.DropPrefix(role)
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
@@ -102,7 +103,7 @@ func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from,
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
-		participants, err := i.GetParticipants(identifier, slot)
+		participants, err := i.getParticipants(nil, identifier, slot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get participants: %w", err)
 		}
@@ -121,12 +122,39 @@ func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from,
 	return participantsRange, nil
 }
 
-func (i *ibftStorage) GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	return i.getParticipants(nil, identifier, slot)
+func (i *ibftStorage) GetParticipantsInSlot(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
+
+	for slot := from; slot <= to; slot++ {
+		prefix := append(i.role, uInt64ToByteSlice(uint64(slot))...)
+
+		// TODO where do we use participantsKey?
+
+		err := i.db.GetAll(prefix, func(i int, o basedb.Obj) error {
+			op := decodeOperators(o.Value)
+
+			if len(op) == 0 {
+				return nil
+			}
+
+			participantsRange = append(participantsRange, qbftstorage.ParticipantsRangeEntry{
+				Slot:       slot,
+				Signers:    op,
+				Identifier: convert.MessageID(o.Key),
+			})
+			return nil
+		})
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to get participants: %w", err)
+		}
+	}
+
+	return participantsRange, nil
 }
 
 func (i *ibftStorage) getParticipants(txn basedb.ReadWriter, identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	val, found, err := i.get(txn, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
+	val, found, err := i.get(txn, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +171,7 @@ func (i *ibftStorage) saveParticipants(txn basedb.ReadWriter, identifier convert
 	if err != nil {
 		return fmt.Errorf("encode operators: %w", err)
 	}
-	if err := i.save(txn, bytes, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
+	if err := i.save(txn, bytes, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
 		return fmt.Errorf("save to DB: %w", err)
 	}
 
@@ -156,15 +184,31 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 	return slices.Compact(allParticipants)
 }
 
-func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, id string, pk []byte, keyParams ...[]byte) error {
-	prefix := append(i.prefix, pk...)
-	key := i.key(id, keyParams...)
+var thresholdSlot = uInt64ToByteSlice(10547550)
+
+func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, pk []byte, slot []byte) error {
+	var prefix, key []byte
+	if bytes.Compare(slot, thresholdSlot) > 0 {
+		prefix = append(i.role, slot...)
+		key = i.key(participantsKey, pk)
+	} else {
+		prefix = append(i.role, pk...)
+		key = i.key(participantsKey, pk)
+	}
+
 	return i.db.Using(txn).Set(prefix, key, value)
 }
 
-func (i *ibftStorage) get(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) ([]byte, bool, error) {
-	prefix := append(i.prefix, pk...)
-	key := i.key(id, keyParams...)
+func (i *ibftStorage) get(txn basedb.ReadWriter, pk []byte, slot []byte) ([]byte, bool, error) {
+	var prefix, key []byte
+	if bytes.Compare(slot, thresholdSlot) > 0 {
+		prefix = append(i.role, slot...)
+		key = i.key(participantsKey, pk)
+	} else {
+		prefix = append(i.role, pk...)
+		key = i.key(participantsKey, pk)
+	}
+
 	obj, found, err := i.db.Using(txn).Get(prefix, key)
 	if !found {
 		return nil, found, nil
@@ -176,7 +220,7 @@ func (i *ibftStorage) get(txn basedb.ReadWriter, id string, pk []byte, keyParams
 }
 
 func (i *ibftStorage) delete(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) error {
-	prefix := append(i.prefix, pk...)
+	prefix := append(i.role, pk...)
 	key := i.key(id, keyParams...)
 	return i.db.Using(txn).Delete(prefix, key)
 }
