@@ -162,6 +162,20 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
+		operatorCommittees := nodeStorage.ValidatorStore().OperatorCommittees(operatorData.ID)
+		// If operator has more than 4 committees, it needs more peers, so we need to override the value from config if it's too low.
+		// MaxPeers is used only in p2p, so the lines above must be executed before calling setupP2P function.
+		const committeeThresholdForPeerIncrease = 4
+		const minRequiredPeers = 150
+		if len(operatorCommittees) > committeeThresholdForPeerIncrease && cfg.P2pNetworkConfig.MaxPeers < minRequiredPeers {
+			logger.Warn("configured peer count is too low for this operator's committee count, increasing peer count",
+				zap.Int("configured_max_peers", cfg.P2pNetworkConfig.MaxPeers),
+				zap.Int("updated_max_peers", minRequiredPeers),
+				zap.Int("committee_threshold_for_peer_increase", minRequiredPeers),
+			)
+			cfg.P2pNetworkConfig.MaxPeers = minRequiredPeers
+		}
+
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
 		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
@@ -221,11 +235,9 @@ var StartNodeCmd = &cobra.Command{
 
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
-		validatorStore := nodeStorage.ValidatorStore()
-
 		messageValidator := validation.New(
 			networkConfig,
-			validatorStore,
+			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
@@ -293,7 +305,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		cfg.SSVOptions.ValidatorStore = validatorStore
+		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
