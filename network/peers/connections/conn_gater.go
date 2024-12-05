@@ -26,26 +26,28 @@ const (
 	//
 )
 
-type BadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+type CanConnectF func(logger *zap.Logger, peerID peer.ID) bool
 
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
-	logger    *zap.Logger // struct logger to implement connmgr.ConnectionGater
-	disable   bool
-	atLimit   func() bool
-	ipLimiter *leakybucket.Collector
-	isBadPeer BadPeerF
+	logger             *zap.Logger // struct logger to implement connmgr.ConnectionGater
+	disable            bool
+	atLimit            func() bool
+	ipLimiter          *leakybucket.Collector
+	canConnectOutbound CanConnectF
+	canConnectInbound  CanConnectF
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, isBadPeerF BadPeerF) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, canConnectOutbound, canConnectInbound CanConnectF) connmgr.ConnectionGater {
 	return &connGater{
-		logger:    logger,
-		disable:   disable,
-		atLimit:   atLimit,
-		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
-		isBadPeer: isBadPeerF,
+		logger:             logger,
+		disable:            disable,
+		atLimit:            atLimit,
+		ipLimiter:          leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
+		canConnectInbound:  canConnectInbound,
+		canConnectOutbound: canConnectOutbound,
 	}
 }
 
@@ -60,7 +62,7 @@ func (n *connGater) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
-	if n.isBadPeer(n.logger, id) {
+	if n.canConnectOutbound(n.logger, id) {
 		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
@@ -89,11 +91,11 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	if n.isBadPeer(n.logger, id) {
-		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
-		return false
+	if direction == libp2pnetwork.DirOutbound {
+		return n.canConnectOutbound(n.logger, id)
+	} else {
+		return n.canConnectInbound(n.logger, id)
 	}
-	return true
 }
 
 // InterceptUpgraded is called for inbound and outbound connections, after
