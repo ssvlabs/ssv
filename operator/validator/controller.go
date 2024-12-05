@@ -17,6 +17,9 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter/convert"
@@ -662,6 +665,16 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
+	_, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.execute_duty", observabilityNamespace),
+		trace.WithAttributes(
+			attribute.Int("ssv.validator.duty.slot", int(duty.Slot)),
+			attribute.String("ssv.beacon.role", duty.Type.String()),
+			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
+		))
+	defer span.End()
+
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	pk := make([]byte, 48)
@@ -670,41 +683,52 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.DomainType)
 		if err != nil {
-			logger.Error("could not create duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(ssvMsg)
 		if err != nil {
-			logger.Error("could not decode duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+			span.AddEvent("dropping ExecuteDuty message because the queue is full")
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		logger.Warn("could not find validator")
+		span.AddEvent("could not find validator")
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+	_, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.execute_committee_duty", observabilityNamespace),
+		trace.WithAttributes(
+			attribute.Int("ssv.validator.duty.slot", int(duty.Slot)),
+			attribute.String("ssv.comittee.id", string(committeeID[:])),
+			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+		))
+	defer span.End()
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
 		if err != nil {
-			logger.Error("could not create duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(ssvMsg)
 		if err != nil {
-			logger.Error("could not decode duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
-			logger.Error("could not execute committee duty", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 		}
 	} else {
-		logger.Warn("could not find committee", fields.CommitteeID(committeeID))
+		span.AddEvent("could not find comittee")
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
