@@ -9,3 +9,9 @@ func WithMetrics() Option {
 		cfg.metricsEnabled = true
 	}
 }
+
+func WithTraces() Option {
+	return func(cfg *Config) {
+		cfg.tracesEnabled = true
+	}
+}
