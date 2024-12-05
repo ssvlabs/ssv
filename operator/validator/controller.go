@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -309,6 +310,9 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if s.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 			active++
 		}
+	}
+	if operatorShares <= math.MaxInt64 {
+		validatorsCountGauge.Record(c.ctx, int64(operatorShares))
 	}
 	return uint64(len(allShares)), active, operatorShares, nil
 }
