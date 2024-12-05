@@ -219,6 +219,14 @@ Wait2:
 
 	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
+
+	// Wait for logs channel to be closed.
+	select {
+	case _, ok := <-logs:
+		require.False(t, ok, "logs channel should be closed")
+	case <-time.After(time.Second):
+		require.Fail(t, "logs channel should be closed")
+	}
 }
 
 func TestFetchLogsInBatches(t *testing.T) {
@@ -603,6 +611,14 @@ func TestSimSSV(t *testing.T) {
 
 	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
+
+	// Wait for logs channel to be closed.
+	select {
+	case _, ok := <-logs:
+		require.False(t, ok, "logs channel should be closed")
+	case <-time.After(time.Second):
+		require.Fail(t, "logs channel should be closed")
+	}
 }
 
 func httpToWebSocketURL(url string) string {
