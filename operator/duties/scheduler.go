@@ -374,7 +374,11 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
-			span.AddEvent("late duty execution", trace.WithAttributes(attribute.Int64("slot_delay_ms", slotDelay.Milliseconds())))
+			span.AddEvent("late duty execution",
+				trace.WithAttributes(
+					attribute.Int64("slot_delay_ms", slotDelay.Milliseconds()),
+					attribute.String("ssv.beacon.role", duty.Type.String()),
+					attribute.String("ssv.runner.role", duty.RunnerRole().String())))
 		}
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
@@ -393,6 +397,11 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.execute_committee_duties", observabilityNamespace),
+		trace.WithAttributes(attribute.Int("ssv.validator.duty_count", len(duties))))
+	defer span.End()
+
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
@@ -401,7 +410,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			span.AddEvent("late duty execution",
+				trace.WithAttributes(
+					attribute.Int64("slot_delay_ms", slotDelay.Milliseconds())))
 		}
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
@@ -410,6 +421,8 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
