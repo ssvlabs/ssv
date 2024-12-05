@@ -17,7 +17,8 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
+	meter  = otel.Meter(observabilityName)
 
 	slotDelayHistogram = observability.NewMetric(
 		meter.Float64Histogram(
