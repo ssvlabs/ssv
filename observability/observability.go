@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
@@ -18,7 +21,20 @@ var (
 )
 
 func Initialize(appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
-	var initError error
+	var (
+		initError     error
+		shutdownFuncs []func(context.Context) error
+	)
+
+	shutdown = func(ctx context.Context) error {
+		var err error
+		for _, fn := range shutdownFuncs {
+			err = errors.Join(err, fn(ctx))
+		}
+		shutdownFuncs = nil
+		return err
+	}
+
 	once.Do(func() {
 		for _, option := range options {
 			option(&config)
@@ -45,7 +61,22 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 				metric.WithReader(promExporter),
 			)
 			otel.SetMeterProvider(meterProvider)
-			shutdown = meterProvider.Shutdown
+			shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
+		}
+
+		if config.tracesEnabled {
+			traceExporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
+			if err != nil {
+				initError = errors.Join(errors.New("failed to instantiate traces stdout exporter"), err)
+				return
+			}
+
+			traceProvider := trace.NewTracerProvider(
+				trace.WithResource(resources),
+				trace.WithBatcher(traceExporter, trace.WithBatchTimeout(time.Second)),
+			)
+			shutdownFuncs = append(shutdownFuncs, traceExporter.Shutdown)
+			otel.SetTracerProvider(traceProvider)
 		}
 	})
 
