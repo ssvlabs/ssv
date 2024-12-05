@@ -10,6 +10,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv-spec/qbft"
@@ -206,19 +209,33 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
+		trace.WithAttributes(
+			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
+			attribute.Int64("ssv.validator.msg_type", int64(msg.GetType())),
+			attribute.Int64("ssv.runner.role", int64(msg.GetID().GetRoleType())),
+		))
+	defer span.End()
+
 	// Validate message
 	if msg.GetType() != message.SSVEventMsgType {
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			err := errors.Wrap(err, "invalid SignedSSVMessage")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			err := errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return errors.Wrap(err, "Message invalid")
+			err := errors.Wrap(err, "Message invalid")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 
@@ -226,31 +243,48 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &qbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get consensus Message from network Message")
+			err := errors.Wrap(err, "could not get consensus Message from network Message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		if err := qbftMsg.Validate(); err != nil {
-			return errors.Wrap(err, "invalid qbft Message")
+			err := errors.Wrap(err, "invalid qbft Message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		c.mtx.Lock()
 		runner, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.Unlock()
 		if !exists {
-			return errors.New("no runner found for message's slot")
+			err := errors.New("no runner found for message's slot")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
-		return runner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
+		if err := runner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		span.SetStatus(codes.Ok, "")
+		return nil
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from network Message")
+			err := errors.Wrap(err, "could not get post consensus Message from network Message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		// Validate
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return errors.New("PartialSignatureMessage has more than 1 signer")
+			err := errors.New("PartialSignatureMessage has more than 1 signer")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return errors.Wrap(err, "invalid PartialSignatureMessages")
+			err := errors.Wrap(err, "invalid PartialSignatureMessages")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
@@ -258,18 +292,36 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			runner, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.Unlock()
 			if !exists {
-				return errors.New("no runner found for message's slot")
+				err := errors.New("no runner found for message's slot")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
-			return runner.ProcessPostConsensus(ctx, logger, pSigMessages)
+
+			if err := runner.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
+				span.SetStatus(codes.Error, err.Error())
+				return err
+			}
+			span.SetStatus(codes.Ok, "")
+			return nil
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(ctx, logger, msg)
+		span.SetStatus(codes.Ok, "")
+		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		span.SetStatus(codes.Ok, "")
+		return nil
 	default:
-		return errors.New("unknown msg")
+		err := errors.New("unknown msg")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
-	return nil
 
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
+
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
 	if runnerExpirySlots > currentSlot {
 		return nil
