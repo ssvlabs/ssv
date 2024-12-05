@@ -39,17 +39,16 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		From    uint64        `json:"from"`
 		To      uint64        `json:"to"`
 		Roles   api.RoleSlice `json:"roles"`
-		PubKeys api.HexSlice  `json:"pubkeys"`
+		PubKeys []api.Hex     `json:"pubkeys"`
 	}
 	var response struct {
 		Data []*ParticipantResponse `json:"data"`
 	}
+	start := time.Now()
 
-	bindStart := time.Now()
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
 	}
-	bind := time.Since(bindStart)
 
 	decodeStart := time.Now()
 	if r.Header.Get("Content-Type") == "application/json" {
@@ -72,11 +71,9 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
-	start := time.Now()
 	dbTime := time.Duration(0)
-
 	defer func() {
-		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("bind", bind), zap.Duration("decode", decode))
+		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("decode", decode))
 	}()
 
 	response.Data = []*ParticipantResponse{}
@@ -95,6 +92,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
 
+	dbStart := time.Now()
 	for _, role := range request.Roles {
 		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
 		qbftStore := qbftStores[runnerRole]
@@ -102,12 +100,10 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		for _, pubKey := range request.PubKeys {
 			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
 
-			dbStart := time.Now()
 			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
-			dbTime += time.Since(dbStart)
 
 			if len(participantsList) == 0 {
 				continue
@@ -123,6 +119,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
+	dbTime += time.Since(dbStart)
 
 	return api.Render(w, r, response)
 }
