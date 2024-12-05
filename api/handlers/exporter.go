@@ -55,10 +55,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 
-	if len(request.PubKeys) == 0 {
-		return api.BadRequestError(fmt.Errorf("at least one public key is required"))
-	}
-
 	if len(request.Roles) == 0 {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}

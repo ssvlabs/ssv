@@ -196,6 +196,9 @@ func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, pk []byte, slot 
 		key = i.key(participantsKey, pk)
 	}
 
+	fmt.Println("saving under key", string(prefix), string(key))
+
+	// ATTESTER ${pk} participants ${ok}?
 	return i.db.Using(txn).Set(prefix, key, value)
 }
 
