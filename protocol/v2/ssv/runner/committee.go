@@ -462,7 +462,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
 						share.Committee, validator)
 				}
-				eventMsg := "got post-consensus quorum but it has invalid signatures"
+				eventMsg = "got post-consensus quorum but it has invalid signatures"
 				span.AddEvent(eventMsg)
 				vlogger.Error(eventMsg,
 					fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),

@@ -702,14 +702,15 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 }
 
 func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
-	_, span := tracer.Start(ctx,
+	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.execute_committee_duty", observabilityNamespace),
 		trace.WithAttributes(
 			attribute.Int("ssv.validator.duty.slot", int(duty.Slot)),
-			attribute.String("ssv.comittee.id", string(committeeID[:])),
+			attribute.String("ssv.comittee.id", hex.EncodeToString(committeeID[:])),
 			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
 		))
 	defer span.End()
+
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
 		if err != nil {
