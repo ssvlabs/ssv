@@ -172,12 +172,12 @@ var StartNodeCmd = &cobra.Command{
 		// If operator has more than 4 committees, it needs more peers, so we need to override the value from config if it's too low.
 		// MaxPeers is used only in p2p, so the lines below must be executed before calling setupP2P function.
 		const minRequiredPeers = 150
-		thresholdForPeerIncrease := networkConfig.CommitteeThresholdForPeerIncrease
-		if len(uniqueCommittees) > thresholdForPeerIncrease && cfg.P2pNetworkConfig.MaxPeers < minRequiredPeers {
+		th := networkConfig.CommitteeThresholdForPeerIncrease
+		if th > 0 && len(uniqueCommittees) > th && cfg.P2pNetworkConfig.MaxPeers < minRequiredPeers {
 			logger.Warn("configured peer count is too low for this operator's committee count, increasing peer count",
 				zap.Int("configured_max_peers", cfg.P2pNetworkConfig.MaxPeers),
 				zap.Int("updated_max_peers", minRequiredPeers),
-				zap.Int("committee_threshold_for_peer_increase", thresholdForPeerIncrease),
+				zap.Int("committee_threshold_for_peer_increase", th),
 				zap.Int("unique_committees", len(uniqueCommittees)),
 			)
 			cfg.P2pNetworkConfig.MaxPeers = minRequiredPeers
