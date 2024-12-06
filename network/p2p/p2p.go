@@ -302,14 +302,12 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		const maxPeersToDrop = 2
 		immunityQuota := len(connectedPeers) - maxPeersToDrop
 		protectedPeers := n.PeerProtection(connectedPeers, mySubnets, immunityQuota)
-		for p := range protectedPeers {
-			n.libConnManager.Protect(p, "subnet-protection")
-		}
-		// Unprotect the rest of the peers
-		for _, p := range connectedPeers {
-			if _, ok := protectedPeers[p]; !ok {
-				n.libConnManager.Unprotect(p, "subnet-protection")
+		for _, peer := range connectedPeers {
+			if _, ok := protectedPeers[peer]; ok {
+				n.libConnManager.Protect(peer, "subnet-protection")
+				continue
 			}
+			n.libConnManager.Unprotect(peer, "subnet-protection")
 		}
 
 		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxPeersToDrop) // trim up to maxPeersToDrop
@@ -320,40 +318,39 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 // it protects the best peers by these rules:
 // - At least 2 peers per subnet.
 // - Prefer peers that you have more shared subents with.
+// - Protect at most immunityQuota peers.
 func (n *p2pNetwork) PeerProtection(
 	myPeers []peer.ID,
 	mySubnets records.Subnets,
 	immunityQuota int,
 ) map[peer.ID]struct{} {
-	commonSubnetCounts := make(map[int]int)
+	commonSubnets := make(map[int]struct{})
 
 	for _, p := range myPeers {
 		peerSubnets := n.idx.GetPeerSubnets(p)
 		for i, a := range mySubnets {
 			if a == 1 && peerSubnets[i] == 1 {
-				commonSubnetCounts[i]++
+				commonSubnets[i] = struct{}{}
 			}
 		}
 	}
 
 	protectedPeers := make(map[peer.ID]struct{})
-	for subnet, count := range commonSubnetCounts {
-		if count > 0 {
-			subnetPeers := n.idx.GetSubnetPeers(subnet)
-			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
-				x := len(records.SharedSubnets(mySubnets, n.idx.GetPeerSubnets(a), 0))
-				y := len(records.SharedSubnets(mySubnets, n.idx.GetPeerSubnets(b), 0))
-				return x - y // desc order
-			})
-			const minPeersPerSubnet = 2
-			for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)) && immunityQuota > 0; i++ {
-				peerID := subnetPeers[i]
-				if _, ok := protectedPeers[peerID]; ok {
-					continue
-				}
-				protectedPeers[peerID] = struct{}{}
-				immunityQuota--
+	for subnet, _ := range commonSubnets {
+		subnetPeers := n.idx.GetSubnetPeers(subnet)
+		slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
+			x := len(records.SharedSubnets(mySubnets, n.idx.GetPeerSubnets(a), 0))
+			y := len(records.SharedSubnets(mySubnets, n.idx.GetPeerSubnets(b), 0))
+			return x - y // desc order
+		})
+		const minPeersPerSubnet = 2
+		for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)) && immunityQuota > 0; i++ {
+			peerID := subnetPeers[i]
+			if _, ok := protectedPeers[peerID]; ok {
+				continue
 			}
+			protectedPeers[peerID] = struct{}{}
+			immunityQuota--
 		}
 	}
 
