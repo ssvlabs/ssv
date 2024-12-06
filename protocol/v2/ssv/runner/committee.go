@@ -273,8 +273,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		case spectypes.BNRoleAttester:
 			validDuties++
 			attestationData := constructAttestationData(beaconVote, duty)
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
-				spectypes.DomainAttester)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(), spectypes.DomainAttester)
 			if err != nil {
 				err := errors.Wrap(err, "failed signing attestation data")
 				span.SetStatus(codes.Error, err.Error())
@@ -295,21 +294,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				attribute.String("ssv.validator.signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				attribute.String("ssv.validator.signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+				attribute.String("ssv.validator.attestation_data_root", hex.EncodeToString(attDataRoot[:])),
 			))
-
-			logger.Debug(eventMsg,
-				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
-				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
-				zap.Any("attestation_data", attestationData),
-				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
-				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
-				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
-			)
 		case spectypes.BNRoleSyncCommittee:
 			validDuties++
 			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
-				spectypes.DomainSyncCommittee)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(), spectypes.DomainSyncCommittee)
 			if err != nil {
 				err := errors.Wrap(err, "failed signing sync committee message")
 				span.SetStatus(codes.Error, err.Error())
