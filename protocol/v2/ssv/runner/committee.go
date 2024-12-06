@@ -243,7 +243,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		span.SetAttributes(
 			attribute.Int64("ssv.validator.index", int64(duty.ValidatorIndex)),
-			attribute.String("ssv.validator.pubkey", string(duty.PubKey[:])),
+			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
 			attribute.String("ssv.beacon.role", duty.Type.String()),
 		)
 		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
@@ -390,6 +390,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	if !quorum {
 		span.AddEvent("no quorum")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
