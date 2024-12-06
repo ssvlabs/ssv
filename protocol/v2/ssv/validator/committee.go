@@ -305,7 +305,6 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			return nil
 		}
 	case message.SSVEventMsgType:
-		span.SetStatus(codes.Ok, "")
 		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			return err
