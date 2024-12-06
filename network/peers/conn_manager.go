@@ -63,7 +63,7 @@ func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error
 	return net.ClosePeer(peerID)
 }
 
-// Closes the connection to all peers that are not protected
+// TrimPeers closes the connection to all peers that are not protected, dropping up to maxTrims peers.
 func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network, maxTrims int) {
 	allPeers := net.Peers()
 	before := len(allPeers)
@@ -77,7 +77,7 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 			}
 			trimmed = append(trimmed, pid)
 			TrimmedRecently.Set(pid, struct{}{}, ttlcache.DefaultTTL) // record stats
-			if len(trimmed) >= 2 {
+			if len(trimmed) >= maxTrims {
 				break
 			}
 		}

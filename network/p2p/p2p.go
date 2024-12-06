@@ -276,52 +276,43 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 // - Tagging the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removing the worst peer.
 func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 	return func() {
-		allPeers := n.host.Network().Peers()
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
-
-		// Disconnect from bad peers
-		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
-
-		// Check if it has the maximum number of connections
-		currentCount := len(allPeers)
-		if currentCount < n.cfg.MaxPeers {
-			_ = n.idx.GetSubnetsStats() // trigger metrics update
-			return
-		}
-
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerBalancingTimeout)
 		defer cancel()
+		defer func() {
+			_ = n.idx.GetSubnetsStats() // collect metrics
+		}()
 
-		mySubnets := records.Subnets(n.activeSubnets).Clone()
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
 
-		// Disconnect from irrelevant peers
-		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
-		if disconnectedPeers > 0 {
+		disconnectedCnt := connMgr.DisconnectFromBadPeers(logger, n.host.Network(), n.host.Network().Peers())
+		if disconnectedCnt > 0 {
+			// we can accept more peer connections now, no need to trim
 			return
 		}
 
-		protectedPeers := n.PeerProtection(allPeers, mySubnets)
+		connectedPeers := n.host.Network().Peers()
+		mySubnets := records.Subnets(n.activeSubnets).Clone()
 
+		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), connectedPeers, mySubnets)
+		if disconnectedCnt > 0 {
+			// we can accept more peer connections now, no need to trim
+			return
+		}
+
+		const maxPeersToDrop = 2
+		immunityQuota := len(connectedPeers) - maxPeersToDrop
+		protectedPeers := n.PeerProtection(connectedPeers, mySubnets, immunityQuota)
 		for p := range protectedPeers {
 			n.libConnManager.Protect(p, "subnet-protection")
 		}
-
 		// Unprotect the rest of the peers
-		for _, p := range allPeers {
+		for _, p := range connectedPeers {
 			if _, ok := protectedPeers[p]; !ok {
 				n.libConnManager.Unprotect(p, "subnet-protection")
 			}
 		}
 
-		// Re-fetch peer count.
-		allPeers = n.host.Network().Peers()
-		if len(allPeers) < n.cfg.MaxPeers {
-			return
-		}
-		targetCount := n.cfg.MaxPeers - 10
-		maxTrims := len(allPeers) - targetCount
-		// Trim peers according to subnet participation (considering the subnet size)
-		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxTrims)
+		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxPeersToDrop) // trim up to maxPeersToDrop
 	}
 }
 
@@ -329,37 +320,39 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 // it protects the best peers by these rules:
 // - At least 2 peers per subnet.
 // - Prefer peers that you have more shared subents with.
-func (n *p2pNetwork) PeerProtection(allPeers []peer.ID, mySubnets records.Subnets) map[peer.ID]struct{} {
-	subnetPeerCount := make(map[int]int)
+func (n *p2pNetwork) PeerProtection(
+	myPeers []peer.ID,
+	mySubnets records.Subnets,
+	immunityQuota int,
+) map[peer.ID]struct{} {
+	commonSubnetCounts := make(map[int]int)
 
-	for _, p := range allPeers {
+	for _, p := range myPeers {
 		peerSubnets := n.idx.GetPeerSubnets(p)
 		for i, a := range mySubnets {
 			if a == 1 && peerSubnets[i] == 1 {
-				subnetPeerCount[i]++
+				commonSubnetCounts[i]++
 			}
 		}
 	}
 
-	const minPeersPerSubnet = 2
 	protectedPeers := make(map[peer.ID]struct{})
-	for subnet, count := range subnetPeerCount {
+	for subnet, count := range commonSubnetCounts {
 		if count > 0 {
 			subnetPeers := n.idx.GetSubnetPeers(subnet)
 			slices.SortFunc(subnetPeers, func(a, b peer.ID) int {
-				// take the peers with the most shared subnets
-				aShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(a), 0))
-				bShared := len(records.SharedSubnets(n.activeSubnets, n.idx.GetPeerSubnets(b), 0))
-				if aShared < bShared {
-					return 1
-				} else if aShared > bShared {
-					return -1
-				} else {
-					return 0
-				}
+				x := len(records.SharedSubnets(mySubnets, n.idx.GetPeerSubnets(a), 0))
+				y := len(records.SharedSubnets(mySubnets, n.idx.GetPeerSubnets(b), 0))
+				return x - y // desc order
 			})
-			for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)); i++ {
-				protectedPeers[subnetPeers[i]] = struct{}{}
+			const minPeersPerSubnet = 2
+			for i := 0; i < min(minPeersPerSubnet, len(subnetPeers)) && immunityQuota > 0; i++ {
+				peerID := subnetPeers[i]
+				if _, ok := protectedPeers[peerID]; ok {
+					continue
+				}
+				protectedPeers[peerID] = struct{}{}
+				immunityQuota--
 			}
 		}
 	}
