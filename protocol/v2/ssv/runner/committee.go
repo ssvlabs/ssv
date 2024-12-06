@@ -14,6 +14,10 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -199,13 +203,25 @@ func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 }
 
 func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.process_consensus", observabilityNamespace),
+		trace.WithAttributes(
+			attribute.String("ssv.validator.msg_id", msg.SSVMessage.MsgID.String()),
+			attribute.Int64("ssv.validator.msg_type", int64(msg.SSVMessage.MsgType)),
+			attribute.Int64("ssv.runner.role", int64(msg.SSVMessage.GetID().GetRoleType())),
+		))
+	defer span.End()
+
 	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr, msg, &spectypes.BeaconVote{})
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		err := errors.Wrap(err, "failed processing consensus message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		span.AddEvent("instance is not decided")
 		return nil
 	}
 
@@ -225,8 +241,15 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
 	validDuties := 0
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		span.SetAttributes(
+			attribute.Int64("ssv.validator.index", int64(duty.ValidatorIndex)),
+			attribute.String("ssv.validator.pubkey", string(duty.PubKey[:])),
+			attribute.String("ssv.beacon.role", duty.Type.String()),
+		)
 		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
-			logger.Warn("duty is no longer valid", fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+			eventMsg := "duty is no longer valid"
+			span.AddEvent(eventMsg)
+			logger.Warn(eventMsg, fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
 			continue
 		}
 		switch duty.Type {
@@ -236,16 +259,28 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				spectypes.DomainAttester)
 			if err != nil {
-				return errors.Wrap(err, "failed signing attestation data")
+				err := errors.Wrap(err, "failed signing attestation data")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
 			// TODO: revert log
 			attDataRoot, err := attestationData.HashTreeRoot()
 			if err != nil {
-				return errors.Wrap(err, "failed to hash attestation data")
+				err := errors.Wrap(err, "failed to hash attestation data")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
-			logger.Debug("signed attestation data",
+
+			eventMsg := "signed attestation data"
+
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				attribute.String("ssv.validator.signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+				attribute.String("ssv.validator.signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+			))
+
+			logger.Debug(eventMsg,
 				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
 				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
@@ -259,15 +294,20 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
-				return errors.Wrap(err, "failed signing sync committee message")
+				err := errors.Wrap(err, "failed signing sync committee message")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 		default:
-			return fmt.Errorf("invalid duty type: %s", duty.Type)
+			err := fmt.Errorf("invalid duty type: %s", duty.Type)
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 	if validDuties == 0 {
 		cr.BaseRunner.State.Finished = true
+		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
 		return ErrNoValidDuties
 	}
 
@@ -281,12 +321,16 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 	ssvMsg.Data, err = postConsensusMsg.Encode()
 	if err != nil {
-		return errors.Wrap(err, "failed to encode post consensus signature msg")
+		err = errors.Wrap(err, "failed to encode post consensus signature msg")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	sig, err := cr.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return errors.Wrap(err, "could not sign SSVMessage")
+		err = errors.Wrap(err, "could not sign SSVMessage")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -296,10 +340,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial post consensus sig")
+		err = errors.Wrap(err, "can't broadcast partial post consensus sig")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
-
 }
 
 // TODO finish edge case where some roots may be missing
