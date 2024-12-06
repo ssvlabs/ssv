@@ -169,7 +169,8 @@ var StartNodeCmd = &cobra.Command{
 		for _, oc := range operatorCommittees {
 			uniqueCommittees[oc.ID] = struct{}{}
 		}
-		// If operator has more than 4 committees, it needs more peers, so we need to override the value from config if it's too low.
+		// If operator has more than CommitteeThresholdForPeerIncrease committees,
+		// it needs more peers, so we need to override the value from config if it's too low.
 		// MaxPeers is used only in p2p, so the lines below must be executed before calling setupP2P function.
 		const minRequiredPeers = 150
 		th := networkConfig.CommitteeThresholdForPeerIncrease
