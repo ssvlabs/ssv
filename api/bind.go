@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -93,8 +94,23 @@ func Bind(r *http.Request, dest interface{}) error {
 	}
 
 	if r.Header.Get("Content-Type") == "application/json" {
+		defer func() { _ = r.Body.Close() }()
 		reader := bufio.NewReader(r.Body)
-		if err := json.NewDecoder(reader).Decode(dest); err != nil {
+
+		if r.Header.Get("mode") == "decoder" {
+			if err := json.NewDecoder(reader).Decode(dest); err != nil {
+				return err
+			}
+
+			return nil
+		}
+
+		body, err := io.ReadAll(reader)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(body, dest)
+		if err != nil {
 			return err
 		}
 	}
