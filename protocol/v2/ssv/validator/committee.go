@@ -97,7 +97,7 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 	defer c.mtx.Unlock()
 
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.start_consuming_queue", observabilityNamespace),
+		fmt.Sprintf("%s.start_consume_queue", observabilityNamespace),
 		trace.WithAttributes(
 			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
 			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),

@@ -86,23 +86,40 @@ func NewCommitteeRunner(
 }
 
 func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.start_new_duty", observabilityNamespace),
+		trace.WithAttributes(
+			roleAttribute(duty.RunnerRole()),
+			attribute.Int64("ssv.validator.quorum", int64(quorum)),
+			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
+	defer span.End()
+
 	d, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
-		return errors.New("duty is not a CommitteeDuty")
+		err := errors.New("duty is not a CommitteeDuty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+	span.SetAttributes(attribute.Int("ssv.validator.duty_count", len(d.ValidatorDuties)))
+
 	for _, validatorDuty := range d.ValidatorDuties {
 		err := cr.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), d.DutySlot())
 		if err != nil {
-			return fmt.Errorf("could not start %s duty at slot %d for validator %x: %w",
+			err := fmt.Errorf("could not start %s duty at slot %d for validator %x: %w",
 				validatorDuty.Type, d.DutySlot(), validatorDuty.PubKey, err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 	err := cr.BaseRunner.baseStartNewDuty(ctx, logger, cr, duty, quorum)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	cr.submittedDuties[spectypes.BNRoleAttester] = make(map[phase0.ValidatorIndex]struct{})
 	cr.submittedDuties[spectypes.BNRoleSyncCommittee] = make(map[phase0.ValidatorIndex]struct{})
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -204,11 +221,11 @@ func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.process_consensus", observabilityNamespace),
+		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
 		trace.WithAttributes(
 			attribute.String("ssv.validator.msg_id", msg.SSVMessage.MsgID.String()),
 			attribute.Int64("ssv.validator.msg_type", int64(msg.SSVMessage.MsgType)),
-			attribute.Int64("ssv.runner.role", int64(msg.SSVMessage.GetID().GetRoleType())),
+			roleAttribute(msg.SSVMessage.GetID().GetRoleType()),
 		))
 	defer span.End()
 
@@ -350,7 +367,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_post_consensus", observabilityNamespace),
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.runner.process_post_consensus", observabilityNamespace),
 		trace.WithAttributes(
 			attribute.Int64("ssv.validator.duty.slot", int64(signedMsg.Slot)),
 			attribute.Int64("ssv.validator.signer", int64(signedMsg.Messages[0].Signer)),
