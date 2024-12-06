@@ -213,7 +213,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		trace.WithAttributes(
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
 			attribute.Int64("ssv.validator.msg_type", int64(msg.GetType())),
-			attribute.Int64("ssv.runner.role", int64(msg.GetID().GetRoleType())),
+			attribute.String("ssv.runner.role", msg.GetID().GetRoleType().String()),
 		))
 	defer span.End()
 
