@@ -364,7 +364,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.execute_duties", observabilityNamespace),
+		fmt.Sprintf("%s.scheduler.execute_duties", observabilityNamespace),
 		trace.WithAttributes(attribute.Int("ssv.validator.duty_count", len(duties))))
 	defer span.End()
 
@@ -398,7 +398,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.execute_committee_duties", observabilityNamespace),
+		fmt.Sprintf("%s.scheduler.execute_committee_duties", observabilityNamespace),
 		trace.WithAttributes(attribute.Int("ssv.validator.duty_count", len(duties))))
 	defer span.End()
 

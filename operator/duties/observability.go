@@ -13,7 +13,7 @@ import (
 
 const (
 	observabilityName      = "github.com/ssvlabs/ssv/operator/duties"
-	observabilityNamespace = "ssv.duty.scheduler"
+	observabilityNamespace = "ssv.duty"
 )
 
 var (
@@ -22,14 +22,14 @@ var (
 
 	slotDelayHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("slot_ticker_delay.duration"),
+			metricName("scheduler.slot_ticker_delay.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("delay of the slot ticker in seconds"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	dutiesExecutedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("executions"),
+			metricName("scheduler.executions"),
 			metric.WithUnit("{duty}"),
 			metric.WithDescription("total number of duties executed by scheduler")))
 )
