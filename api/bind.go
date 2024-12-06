@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -87,6 +89,13 @@ func Bind(r *http.Request, dest interface{}) error {
 			fieldValue.SetBool(v)
 		default:
 			return fmt.Errorf("%w: %s", errInvalidType, fieldType.Name)
+		}
+	}
+
+	if r.Header.Get("Content-Type") == "application/json" {
+		reader := bufio.NewReader(r.Body)
+		if err := json.NewDecoder(reader).Decode(dest); err != nil {
+			return err
 		}
 	}
 
