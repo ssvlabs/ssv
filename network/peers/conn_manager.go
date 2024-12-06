@@ -20,7 +20,7 @@ const (
 type PeerScore float64
 
 var (
-	TrimmedRecently = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](15 * time.Minute))
+	TrimmedRecently = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](30 * time.Minute))
 )
 
 func init() {
