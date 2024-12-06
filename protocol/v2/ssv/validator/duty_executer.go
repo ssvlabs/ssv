@@ -60,7 +60,7 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	}
 
 	span.AddEvent("start consume queue")
-	if err := c.StartConsumeQueue(logger, executeDutyData.Duty); err != nil {
+	if err := c.StartConsumeQueue(ctx, logger, executeDutyData.Duty); err != nil {
 		err = fmt.Errorf("could not start committee consume queue: %w", err)
 		span.SetStatus(codes.Error, err.Error())
 		return err

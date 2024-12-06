@@ -92,30 +92,46 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	}
 }
 
-func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.start_consuming_queue", observabilityNamespace),
+		trace.WithAttributes(
+			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
+			attribute.Int64("ssv.validator.duty.slot", int64(duty.Slot)),
+		))
+	defer span.End()
 
 	// Setting the cancel function separately due the queue could be created in HandleMessage
 	q, found := c.Queues[duty.Slot]
 	if !found {
-		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+		err := errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
-		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
+		err := errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	queueCtx, cancelF := context.WithDeadline(ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
 
 	go func() {
 		defer cancelF()
 		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
+			span.RecordError(err)
 		}
 	}()
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -123,12 +139,24 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.start_duty", observabilityNamespace),
+		trace.WithAttributes(
+			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
+			attribute.Int64("ssv.validator.duty.slot", int64(duty.Slot)),
+		))
+	defer span.End()
 
 	if len(duty.ValidatorDuties) == 0 {
-		return errors.New("no beacon duties")
+		err := errors.New("no beacon duties")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	if _, exists := c.Runners[duty.Slot]; exists {
-		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
+		err := errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// Filter out Beacon duties for which we don't have a share.
@@ -141,9 +169,11 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	for _, beaconDuty := range duty.ValidatorDuties {
 		share, exists := c.Shares[beaconDuty.ValidatorIndex]
 		if !exists {
-			logger.Debug("no share for validator duty",
-				fields.BeaconRole(beaconDuty.Type),
-				zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+			span.AddEvent("no share for validator duty", trace.WithAttributes(
+				attribute.Int64("ssv.validator.index", int64(beaconDuty.ValidatorIndex)),
+				attribute.String("ssv.beacon.role", beaconDuty.Type.String()),
+				attribute.String("ssv.validator.pubkey", beaconDuty.PubKey.String()),
+			))
 			continue
 		}
 		shares[beaconDuty.ValidatorIndex] = share
@@ -154,7 +184,9 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		}
 	}
 	if len(shares) == 0 {
-		return errors.New("no shares for duty's validators")
+		err := errors.New("no shares for duty's validators")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	duty = filteredDuty
 
@@ -182,14 +214,18 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	// Prunes all expired committee runners, when new runner is created
 	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
 	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+		span.RecordError(err)
 		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
-	logger.Info("ℹ️ starting duty processing")
+	span.AddEvent("ℹ️ starting duty processing")
 	err = runner.StartNewDuty(ctx, logger, duty, c.CommitteeMember.GetQuorum())
 	if err != nil {
-		return errors.Wrap(err, "runner failed to start duty")
+		err := errors.Wrap(err, "runner failed to start duty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
