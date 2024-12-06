@@ -143,11 +143,12 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	const logFrequency = 10
 	var skippedPeers uint64 = 0
 
-	dvs.discover(dvs.ctx, func(e PeerEvent) {
+	dvs.discover(dvs.ctx, logger, func(e PeerEvent) {
 		logger := logger.With(
 			fields.ENR(e.Node),
 			fields.PeerID(e.AddrInfo.ID),
 		)
+
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
 			if skippedPeers%logFrequency == 0 {
@@ -258,7 +259,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 // interval enables to control the rate of new nodes that we find.
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
-func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
+func (dvs *DiscV5Service) discover(ctx context.Context, logger *zap.Logger, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
 	iterator := dvs.dv5Listener.RandomNodes()
 	for _, f := range filters {
 		iterator = enode.Filter(iterator, f)
@@ -288,6 +289,12 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 			if err != nil {
 				continue
 			}
+
+			if peers.TrimmedRecently.Has(ai.ID) {
+				logger.Debug("skip peer: discovery suggested a peer we've recently trimmed", fields.PeerID(ai.ID))
+				continue
+			}
+
 			handler(PeerEvent{
 				AddrInfo: *ai,
 				Node:     n,
@@ -363,7 +370,7 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 	peerIDs := map[peer.ID]struct{}{}
 
 	// Publish ENR.
-	dvs.discover(ctx, func(e PeerEvent) {
+	dvs.discover(ctx, logger, func(e PeerEvent) {
 		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {

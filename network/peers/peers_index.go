@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -86,14 +87,14 @@ func (pi *peersIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	return pi.network.Connectedness(id)
 }
 
-func (pi *peersIndex) CanConnect(id peer.ID) bool {
+func (pi *peersIndex) CanConnect(id peer.ID) error {
 	cntd := pi.network.Connectedness(id)
 	switch cntd {
 	case libp2pnetwork.Connected:
-		fallthrough
+		return fmt.Errorf("peer already connected")
 	default:
 	}
-	return true
+	return nil
 }
 
 func (pi *peersIndex) AtLimit(dir libp2pnetwork.Direction) bool {
