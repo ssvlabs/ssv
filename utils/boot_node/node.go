@@ -164,26 +164,15 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port uint16
 		log.Fatal(err)
 	}
 
-	// Allocate a fake connection to forward postFork packets to the preFork listener.
-	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &discovery.SharedUDPConn{UDPConn: conn, Unhandled: unhandled}
-
-	postForkListener, err := discover.ListenV5(conn, localNode, discover.Config{
+	listener, err := discover.ListenV5(conn, localNode, discover.Config{
 		PrivateKey:   privateKey,
-		Unhandled:    unhandled,
 		V5ProtocolID: &n.network.DiscoveryProtocolID,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
-		PrivateKey: privateKey,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	return discovery.NewForkingDV5Listener(logger, preForkListener, postForkListener, 5*time.Second, n.network)
+	return listener
 }
 
 func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
@@ -198,26 +187,6 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	} else {
 		logger.Info("Running with External IP", zap.String("external_ip", n.externalIP))
 	}
-
-	// if *forkVersion != "" {
-	//	fVersion, err = hex.DecodeString(*forkVersion)
-	//	if err != nil {
-	//		return nil, errors.Wrap(err, "Could not retrieve fork version")
-	//	}
-	//	if len(fVersion) != 4 {
-	//		return nil, errors.Errorf("Invalid fork version size expected %d but got %d", 4, len(fVersion))
-	//	}
-	//}
-	// if *genesisValidatorRoot != "" {
-	//	retRoot, err := hex.DecodeString(*genesisValidatorRoot)
-	//	if err != nil {
-	//		return nil, errors.Wrap(err, "Could not retrieve genesis validator root")
-	//	}
-	//	if len(retRoot) != 32 {
-	//		return nil, errors.Errorf("Invalid root size, expected 32 but got %d", len(retRoot))
-	//	}
-	//	genRoot = bytesutil.ToBytes32(retRoot)
-	//}
 
 	localNode := enode.NewLocalNode(db, privKey)
 	localNode.Set(enr.WithEntry("ssv", true))
