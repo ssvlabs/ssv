@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -32,6 +32,7 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 		err = errors.Join(errors.New("failed to instantiate observability resources"), err)
 		return shutdown, err
 	}
+
 	if config.metricsEnabled {
 		promExporter, err := prometheus.New()
 		if err != nil {
@@ -45,20 +46,22 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 		otel.SetMeterProvider(meterProvider)
 		shutdown = meterProvider.Shutdown
 	}
+
 	if config.tracesEnabled {
-		traceExporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
+		gRPCExporter, err := otlptracegrpc.New(context.TODO(),
+			otlptracegrpc.WithInsecure(),
+			otlptracegrpc.WithEndpoint("stage-alloy.alloy.svc:4317"))
 		if err != nil {
-			err = errors.Join(errors.New("failed to instantiate traces stdout exporter"), err)
+			err = errors.Join(errors.New("failed to instantiate traces gRPC exporter"), err)
 			return shutdown, err
 		}
 
 		traceProvider := trace.NewTracerProvider(
 			trace.WithResource(resources),
-			trace.WithBatcher(traceExporter, trace.WithBatchTimeout(time.Second)),
+			trace.WithBatcher(gRPCExporter, trace.WithBatchTimeout(time.Second)),
 		)
+		shutdown = gRPCExporter.Shutdown
 		otel.SetTracerProvider(traceProvider)
-		shutdown = traceProvider.Shutdown
-
 	}
 
 	return shutdown, err
