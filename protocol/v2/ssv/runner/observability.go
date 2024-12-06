@@ -19,7 +19,8 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
+	meter  = otel.Meter(observabilityName)
 
 	consensusDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
