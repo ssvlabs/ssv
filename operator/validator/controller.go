@@ -723,10 +723,10 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 			return
 		}
 		if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
-			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
 		}
 	} else {
-		span.AddEvent("could not find comittee")
+		span.AddEvent("could not find committee")
 	}
 
 	span.SetStatus(codes.Ok, "")
