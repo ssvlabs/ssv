@@ -44,7 +44,7 @@ const (
 )
 
 const (
-	connManagerBalancingInterval       = 30 * time.Second
+	connManagerBalancingInterval       = 90 * time.Second
 	connManagerBalancingTimeout        = time.Minute
 	peersReportingInterval             = 60 * time.Second
 	peerIdentitiesReportingInterval    = 5 * time.Minute
