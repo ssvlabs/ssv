@@ -162,6 +162,28 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
+		operatorCommittees := nodeStorage.ValidatorStore().OperatorCommittees(operatorData.ID)
+		// Currently, OperatorCommittees may return several committees with the same committee ID, so we need to filter the unique ones.
+		// This might be a bug in validator store: https://github.com/ssvlabs/ssv/issues/1926
+		uniqueCommittees := make(map[[32]byte]struct{})
+		for _, oc := range operatorCommittees {
+			uniqueCommittees[oc.ID] = struct{}{}
+		}
+		// If operator has more than CommitteeThresholdForPeerIncrease committees,
+		// it needs more peers, so we need to override the value from config if it's too low.
+		// MaxPeers is used only in p2p, so the lines below must be executed before calling setupP2P function.
+		const minRequiredPeers = 150
+		th := networkConfig.CommitteeThresholdForPeerIncrease
+		if th > 0 && len(uniqueCommittees) > th && cfg.P2pNetworkConfig.MaxPeers < minRequiredPeers {
+			logger.Warn("configured peer count is too low for this operator's committee count, increasing peer count",
+				zap.Int("configured_max_peers", cfg.P2pNetworkConfig.MaxPeers),
+				zap.Int("updated_max_peers", minRequiredPeers),
+				zap.Int("committee_threshold_for_peer_increase", th),
+				zap.Int("unique_committees", len(uniqueCommittees)),
+			)
+			cfg.P2pNetworkConfig.MaxPeers = minRequiredPeers
+		}
+
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
 		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
@@ -221,11 +243,9 @@ var StartNodeCmd = &cobra.Command{
 
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
-		validatorStore := nodeStorage.ValidatorStore()
-
 		messageValidator := validation.New(
 			networkConfig,
-			validatorStore,
+			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
@@ -293,7 +313,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		cfg.SSVOptions.ValidatorStore = validatorStore
+		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
