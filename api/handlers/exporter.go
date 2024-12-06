@@ -3,11 +3,9 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
@@ -20,7 +18,6 @@ import (
 type Exporter struct {
 	DomainType spectypes.DomainType
 	QBFTStores *ibftstorage.QBFTStores
-	Log        *zap.Logger
 }
 
 type ParticipantResponse struct {
@@ -43,13 +40,10 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	var response struct {
 		Data []*ParticipantResponse `json:"data"`
 	}
-	start := time.Now()
 
-	decodeStart := time.Now()
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
 	}
-	decode := time.Since(decodeStart)
 
 	if request.From > request.To {
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
@@ -58,11 +52,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	if len(request.Roles) == 0 {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
-
-	dbTime := time.Duration(0)
-	defer func() {
-		e.Log.Debug("decideds", zap.Duration("total", time.Since(start)), zap.Duration("db", dbTime), zap.Duration("decode", decode))
-	}()
 
 	response.Data = []*ParticipantResponse{}
 
@@ -80,7 +69,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
 
-	dbStart := time.Now()
 	for _, role := range request.Roles {
 		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
 		qbftStore := qbftStores[runnerRole]
@@ -119,8 +107,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
-
-			dbTime += time.Since(dbStart)
 
 			if len(participantsList) == 0 {
 				continue

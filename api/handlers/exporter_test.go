@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -37,7 +38,6 @@ func TestHandleDecideds(t *testing.T) {
 
 	roles := []convert.RunnerRole{
 		convert.RoleAttester,
-		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)
 	_ = bls.Init(bls.BLS12_381)
@@ -45,7 +45,6 @@ func TestHandleDecideds(t *testing.T) {
 	exporter := Exporter{
 		DomainType: spectypes.DomainAttester,
 		QBFTStores: ibftStorage,
-		Log:        zap.NewNop(),
 	}
 
 	sks, op, rsaKeys := GenerateNodes(4)
@@ -54,17 +53,18 @@ func TestHandleDecideds(t *testing.T) {
 		oids = append(oids, o.OperatorID)
 	}
 
+	var msgID convert.MessageID
 	for _, role := range roles {
 		pk := sks[1].GetPublicKey()
 		networkConfig, err := networkconfig.GetNetworkConfigByName(networkconfig.HoleskyStage.Name)
 		require.NoError(t, err)
 		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-			id := convert.NewMsgID(networkConfig.DomainType, pk.Serialize(), role)
+			msgID = convert.NewMsgID(networkConfig.DomainType, pk.Serialize(), role)
 			return oids, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     height,
 				Round:      1,
-				Identifier: id[:],
+				Identifier: msgID[:],
 				Root:       [32]byte{0x1, 0x2, 0x3},
 			}
 		})
@@ -86,10 +86,10 @@ func TestHandleDecideds(t *testing.T) {
 			Roles   api.RoleSlice `json:"roles"`
 			PubKeys api.HexSlice  `json:"pubkeys"`
 		}{
-			From:  0,
-			To:    11,
-			Roles: []api.Role{api.Role(spectypes.BNRoleAttester)},
-			// PubKeys: pk[:],
+			From:    0,
+			To:      250,
+			Roles:   []api.Role{api.Role(spectypes.BNRoleAttester)},
+			PubKeys: api.HexSlice{msgID[:]},
 		}
 
 		data, _ := json.Marshal(request)
@@ -97,17 +97,24 @@ func TestHandleDecideds(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/decideds", bytes.NewBuffer(data))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
-		exporter.Decideds(w, req)
+
+		err = exporter.Decideds(w, req)
+		require.NoError(t, err)
+
 		res := w.Result()
 		defer res.Body.Close()
 
+		var response struct {
+			Data []*ParticipantResponse `json:"data"`
+		}
+
 		data, err = io.ReadAll(res.Body)
-		if err != nil {
-			t.Errorf("expected error to be nil got %v", err)
-		}
-		if string(data) != "ABC" {
-			t.Errorf("expected ABC got %v", string(data))
-		}
+		require.NoError(t, err)
+
+		err = json.Unmarshal(data, &response)
+		require.NoError(t, err)
+
+		assert.Len(t, response.Data, 251)
 	}
 }
 

@@ -1,8 +1,8 @@
 package storage
 
 import (
-	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sync"
@@ -184,32 +184,51 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 	return slices.Compact(allParticipants)
 }
 
-var thresholdSlot = uInt64ToByteSlice(10547550)
+var thresholdSlot = uint64(10547550)
 
 func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, pk []byte, slot []byte) error {
+	var idkey string
 	var prefix, key []byte
-	if bytes.Compare(slot, thresholdSlot) > 0 {
+
+	givenSlot := binary.LittleEndian.Uint64(slot)
+	if givenSlot > thresholdSlot {
 		prefix = append(i.prefix, slot...)
 		key = i.key(participantsKey, pk)
+
+		idkey += string(i.prefix) + "_" + hex.EncodeToString(slot) + "_"
+		idkey += participantsKey + "_" + hex.EncodeToString(pk)
+		// fmt.Println("save1", idkey)
 	} else {
 		prefix = append(i.prefix, pk...)
-		key = i.key(participantsKey, pk)
+		key = i.key(participantsKey, slot)
+
+		idkey += string(i.prefix) + "_" + hex.EncodeToString(pk) + "_"
+		idkey += participantsKey + "_" + hex.EncodeToString(slot)
+		// fmt.Println("save2", idkey)
 	}
 
-	fmt.Println("saving under key", string(prefix), string(key))
-
-	// ATTESTER ${pk} participants ${ok}?
 	return i.db.Using(txn).Set(prefix, key, value)
 }
 
 func (i *ibftStorage) get(txn basedb.ReadWriter, pk []byte, slot []byte) ([]byte, bool, error) {
+	var idkey string
 	var prefix, key []byte
-	if bytes.Compare(slot, thresholdSlot) > 0 {
+
+	givenSlot := binary.LittleEndian.Uint64(slot)
+	if givenSlot > thresholdSlot {
 		prefix = append(i.prefix, slot...)
 		key = i.key(participantsKey, pk)
+
+		idkey += string(i.prefix) + "_" + hex.EncodeToString(slot) + "_"
+		idkey += participantsKey + "_" + hex.EncodeToString(pk)
+		// fmt.Println("get", idkey)
 	} else {
 		prefix = append(i.prefix, pk...)
-		key = i.key(participantsKey, pk)
+		key = i.key(participantsKey, slot)
+
+		idkey += string(i.prefix) + "_" + hex.EncodeToString(pk) + "_"
+		idkey += participantsKey + "_" + hex.EncodeToString(slot)
+		// fmt.Println("get", idkey)
 	}
 
 	obj, found, err := i.db.Using(txn).Get(prefix, key)
