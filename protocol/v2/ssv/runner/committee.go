@@ -379,7 +379,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 	logger = logger.With(fields.ConsensusTime(cr.measurements.ConsensusTime()))
 
-	eventMsg := "🧩 got partial signatures"
+	eventMsg := "got partial signatures"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		zap.Bool("quorum", quorum),
@@ -475,7 +475,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
 
-			eventMsg = "🧩 reconstructed partial signatures committee"
+			eventMsg = "reconstructed partial signatures committee"
 			span.AddEvent(eventMsg)
 			vlogger.Debug(eventMsg, zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
