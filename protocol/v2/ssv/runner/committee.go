@@ -378,7 +378,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 	logger = logger.With(fields.ConsensusTime(cr.measurements.ConsensusTime()))
 
-	eventMsg := "🧩 got partial signatures"
+	eventMsg := "got partial signatures"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		zap.Bool("quorum", quorum),
@@ -474,7 +474,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
 
-			eventMsg = "🧩 reconstructed partial signatures committee"
+			eventMsg = "reconstructed partial signatures committee"
 			span.AddEvent(eventMsg)
 			vlogger.Debug(eventMsg, zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
@@ -526,7 +526,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
-		eventMsg := "✅ successfully submitted attestations"
+		eventMsg := "successfully submitted attestations"
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
 			attribute.Int64("ssv.validator.duty.round", int64(cr.BaseRunner.State.RunningInstance.State.Round)),
@@ -561,7 +561,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
-		eventMsg := "✅ successfully submitted sync committee"
+		eventMsg := "successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
 			attribute.Int64("ssv.validator.duty.round", int64(cr.BaseRunner.State.RunningInstance.State.Round)),
