@@ -44,7 +44,7 @@ const (
 )
 
 const (
-	connManagerBalancingInterval       = 90 * time.Second
+	connManagerBalancingInterval       = 60 * time.Second
 	connManagerBalancingTimeout        = time.Minute
 	peersReportingInterval             = 60 * time.Second
 	peerIdentitiesReportingInterval    = 5 * time.Minute
@@ -299,7 +299,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 			return
 		}
 
-		const maxPeersToDrop = 2
+		const maxPeersToDrop = 1
 		immunityQuota := len(connectedPeers) - maxPeersToDrop
 		protectedPeers := n.PeerProtection(connectedPeers, mySubnets, immunityQuota)
 		for _, peer := range connectedPeers {

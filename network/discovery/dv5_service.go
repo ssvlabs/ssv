@@ -291,7 +291,8 @@ func (dvs *DiscV5Service) discover(ctx context.Context, logger *zap.Logger, hand
 			}
 
 			if peers.TrimmedRecently.Has(ai.ID) {
-				logger.Debug("discovery suggested a peer we've recently trimmed", fields.PeerID(ai.ID))
+				logger.Debug("skip peer: discovery suggested a peer we've recently trimmed", fields.PeerID(ai.ID))
+				continue
 			}
 
 			handler(PeerEvent{

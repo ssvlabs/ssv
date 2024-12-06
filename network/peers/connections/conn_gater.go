@@ -93,9 +93,10 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
 	if peers.TrimmedRecently.Has(id) {
 		n.logger.Debug(
-			"InterceptSecured: spotted a peer we've recently trimmed",
+			"InterceptSecured: connecting a peer we've recently trimmed",
 			zap.String("conn_direction", direction.String()),
 		)
+		return false
 	}
 
 	if n.isBadPeer(n.logger, id) {
