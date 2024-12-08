@@ -49,6 +49,16 @@ func (dvs *DiscV5Service) ssvNodeFilter(logger *zap.Logger) func(node *enode.Nod
 	}
 }
 
+func (dvs *DiscV5Service) alreadyConnectedFilter() func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pid, err := PeerID(node)
+		if err != nil {
+			return false
+		}
+		return dvs.conns.Connectedness(pid) != libp2pnetwork.Connected
+	}
+}
+
 func (dvs *DiscV5Service) recentlyTrimmedFilter() func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		pid, err := PeerID(node)

@@ -158,7 +158,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			return
 		}
 		handler(e)
-	}, defaultDiscoveryInterval, dvs.ssvNodeFilter(logger), dvs.sharedSubnetsFilter(1), dvs.badNodeFilter(logger), dvs.recentlyTrimmedFilter())
+	}, defaultDiscoveryInterval, dvs.ssvNodeFilter(logger), dvs.sharedSubnetsFilter(1), dvs.badNodeFilter(logger), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
 
 	return nil
 }
