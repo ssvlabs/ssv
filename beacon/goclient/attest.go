@@ -67,6 +67,8 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		// Caching resulting value here (as part of inflight request) guarantees only 1 request
 		// will ever be done for a given slot.
 		gc.attestationDataCache.Set(slot, resp.Data, ttlcache.DefaultTTL)
+		gc.log.Debug("called attestation data and set data to cache",
+				zap.Uint64("slot", uint64(slot)))
 		return resp.Data, nil
 	})
 
