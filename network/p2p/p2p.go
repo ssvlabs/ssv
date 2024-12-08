@@ -304,10 +304,10 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		protectedPeers := n.PeerProtection(connectedPeers, mySubnets, immunityQuota)
 		for _, peer := range connectedPeers {
 			if _, ok := protectedPeers[peer]; ok {
-				n.libConnManager.Protect(peer, "subnet-protection")
+				n.libConnManager.Protect(peer, peers.ProtectedTag)
 				continue
 			}
-			n.libConnManager.Unprotect(peer, "subnet-protection")
+			n.libConnManager.Unprotect(peer, peers.ProtectedTag)
 		}
 
 		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxPeersToDrop) // trim up to maxPeersToDrop

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	protectedTag = "ssv/subnets"
+	ProtectedTag = "ssv/subnets"
 )
 
 type PeerScore float64
@@ -71,7 +71,7 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 	// c.connManager.TrimOpenConns(ctx)
 	trimmed := make([]peer.ID, 0)
 	for _, pid := range allPeers {
-		if !c.connManager.IsProtected(pid, protectedTag) {
+		if !c.connManager.IsProtected(pid, ProtectedTag) {
 			if err := c.disconnect(pid, net); err != nil {
 				logger.Debug("error closing peer", fields.PeerID(pid), zap.Error(err))
 			}
