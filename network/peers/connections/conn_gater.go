@@ -110,6 +110,8 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
+
+	n.logger.Debug("InterceptSecured: connection allowed", fields.PeerID(id))
 	return true
 }
 
