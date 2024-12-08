@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -82,20 +83,51 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 		topics := n.topicsCtrl.Topics()
 		nTopics := len(topics)
 		logger.Debug("connected topics", fields.Count(nTopics))
+		distribution := []int{}
 		for _, name := range topics {
-			n.reportTopicPeers(logger, name)
+			distribution = append(distribution, n.reportTopicPeers(logger, name))
 		}
+
+		// Calculate min, median, max
+		sort.Ints(distribution)
+		min := distribution[0]
+		median := distribution[len(distribution)/2]
+		max := distribution[len(distribution)-1]
+
+		onePeerTopics := 0
+		twoPeerTopics := 0
+		threePeerTopics := 0
+		for _, peers := range distribution {
+			if peers == 1 {
+				onePeerTopics++
+			} else if peers == 2 {
+				twoPeerTopics++
+			} else if peers == 3 {
+				threePeerTopics++
+			}
+		}
+
+		logger.Debug("topic peers distribution",
+			zap.Ints("distribution", distribution),
+			zap.Int("min", min),
+			zap.Int("median", median),
+			zap.Int("max", max),
+			zap.Int("one_peer_topics", onePeerTopics),
+			zap.Int("two_peer_topics", twoPeerTopics),
+			zap.Int("three_peer_topics", threePeerTopics),
+		)
 	}
 }
 
-func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
+func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) int {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
 		logger.Warn("could not get topic peers", fields.Topic(name), zap.Error(err))
-		return
+		return 0
 	}
 	logger.Debug("topic peers status", fields.Topic(name), fields.Count(len(peers)), zap.Any("peers", peers))
 	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+	return len(peers)
 }
 
 func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
