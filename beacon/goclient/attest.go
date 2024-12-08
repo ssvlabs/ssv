@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -46,17 +45,17 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			return nil, DataVersionNil, fmt.Errorf("failed to set committee index: %w", err)
 		}
 		gc.log.Debug("data cached for block root",
-				zap.Uint64("slot", uint64(slot)))
+			zap.Uint64("slot", uint64(slot)))
 		return data, spec.DataVersionPhase0, nil
 	}
 
 	// Have to make beacon node request and cache the result.
-	attDataReqStart := time.Now()
-	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
+	//attDataReqStart := time.Now()
+	result, err, shared := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
+		gc.log.Debug("singleflight executing function", zap.Uint64("slot", uint64(slot)))
 		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
 		})
-		metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get attestation data: %w", err)
 		}
@@ -64,14 +63,12 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			return nil, fmt.Errorf("attestation data response is nil")
 		}
 
-		// Caching resulting value here (as part of inflight request) guarantees only 1 request
-		// will ever be done for a given slot.
 		gc.attestationDataCache.Set(slot, resp.Data, ttlcache.DefaultTTL)
-		gc.log.Debug("called attestation data and set data to cache",
-				zap.Uint64("slot", uint64(slot)))
+		gc.log.Debug("singleflight fetched data and updated cache", zap.Uint64("slot", uint64(slot)))
 		return resp.Data, nil
 	})
 
+	gc.log.Debug("singleflight result", zap.Uint64("slot", uint64(slot)), zap.Bool("shared", shared), zap.Error(err))
 	if err != nil {
 		return nil, DataVersionNil, err
 	}
