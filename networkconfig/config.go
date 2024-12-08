@@ -39,7 +39,6 @@ type NetworkConfig struct {
 	RegistryContractAddr string // TODO: ethcommon.Address
 	Bootnodes            []string
 	DiscoveryProtocolID  [6]byte
-	PeersPerSubnet       int
 }
 
 func (n NetworkConfig) String() string {
