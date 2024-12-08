@@ -10,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
+	"go.uber.org/zap"
 )
 
 // AttesterDuties returns attester duties for a given epoch.
@@ -48,8 +49,8 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	}
 
 	// Have to make beacon node request and cache the result.
+	attDataReqStart := time.Now()
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
-		attDataReqStart := time.Now()
 		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
 		})
@@ -64,9 +65,12 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		// Caching resulting value here (as part of inflight request) guarantees only 1 request
 		// will ever be done for a given slot.
 		gc.attestationDataCache.Set(slot, resp.Data, ttlcache.DefaultTTL)
-
 		return resp.Data, nil
 	})
+
+	gc.log.Debug("successfully fetched attestation data",
+			zap.Uint64("slot", uint64(slot)),
+			zap.Duration("attestation_data_time", time.Since(attDataReqStart)))
 	if err != nil {
 		return nil, DataVersionNil, err
 	}
