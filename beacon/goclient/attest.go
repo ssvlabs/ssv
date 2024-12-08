@@ -45,6 +45,8 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		if err != nil {
 			return nil, DataVersionNil, fmt.Errorf("failed to set committee index: %w", err)
 		}
+		gc.log.Debug("data cached for block root",
+				zap.Uint64("slot", uint64(slot)))
 		return data, spec.DataVersionPhase0, nil
 	}
 
@@ -68,9 +70,6 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		return resp.Data, nil
 	})
 
-	gc.log.Debug("successfully fetched attestation data",
-			zap.Uint64("slot", uint64(slot)),
-			zap.Duration("attestation_data_time", time.Since(attDataReqStart)))
 	if err != nil {
 		return nil, DataVersionNil, err
 	}

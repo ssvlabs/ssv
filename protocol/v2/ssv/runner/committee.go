@@ -673,7 +673,6 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	slot := duty.DutySlot()
 	// We set committeeIndex to 0 for simplicity, there is no need to specify it exactly because
 	// all 64 Ethereum committees assigned to this slot will get the same data to attest for.
-	logger.Debug("BEFORE: getting attestation data", fields.Slot(slot))
 	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot, 0)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
@@ -682,7 +681,6 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		zap.Duration("attestation_data_time", time.Since(start)),
 		fields.Slot(slot),
 	)
-	logger.Debug("AFTER: got attestation data", zap.Any("attestation_data", attData))
 
 	cr.started = time.Now()
 	cr.metrics.StartConsensus()
