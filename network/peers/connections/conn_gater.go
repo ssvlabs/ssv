@@ -27,26 +27,29 @@ const (
 	//
 )
 
-type BadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+type IsBadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+type InboundLimitF func() bool // todo: consider being more flex at the limit for specific peers, e.g: peers that share multiple subnets
 
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
-	logger    *zap.Logger // struct logger to implement connmgr.ConnectionGater
-	disable   bool
-	atLimit   func() bool
-	ipLimiter *leakybucket.Collector
-	isBadPeer BadPeerF
+	logger       *zap.Logger // struct logger to implement connmgr.ConnectionGater
+	disable      bool
+	atLimit      func() bool
+	ipLimiter    *leakybucket.Collector
+	isBadPeer    IsBadPeerF
+	inboundLimit InboundLimitF
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, isBadPeerF BadPeerF) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, isBadPeer IsBadPeerF, inboundLimit InboundLimitF) connmgr.ConnectionGater {
 	return &connGater{
-		logger:    logger,
-		disable:   disable,
-		atLimit:   atLimit,
-		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
-		isBadPeer: isBadPeerF,
+		logger:       logger,
+		disable:      disable,
+		atLimit:      atLimit,
+		ipLimiter:    leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
+		isBadPeer:    isBadPeer,
+		inboundLimit: inboundLimit,
 	}
 }
 
@@ -77,6 +80,10 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		return true
 	}
 
+	if n.inboundLimit() { // inbound limit
+		return false
+	}
+
 	remoteAddr := multiaddrs.RemoteMultiaddr()
 	if !n.validateDial(remoteAddr) {
 		// Yield this goroutine to allow others to run in-between connection attempts.
@@ -85,7 +92,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		n.logger.Debug("connection rejected due to IP rate limit", zap.String("remote_addr", remoteAddr.String()))
 		return false
 	}
-	return !n.atLimit()
+	return !n.atLimit() // maxpeers limit
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
