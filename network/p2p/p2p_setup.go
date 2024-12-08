@@ -347,12 +347,9 @@ func (n *p2pNetwork) inboundLimit() bool {
 	maxPeers := n.cfg.MaxPeers
 	inBoundLimit := int(float64(maxPeers) * inboundRatio)
 
-	// should never happen
-	if maxPeers < inBoundLimit {
-		return true
-	}
-
 	in, _ := n.connectionStats()
+
+	n.interfaceLogger.Debug("Checking inbound limit", zap.Int("inbound", in), zap.Int("inbound_limit", inBoundLimit), zap.Int("max_peers", maxPeers))
 
 	if in >= inBoundLimit {
 		n.interfaceLogger.Debug("preventing inbound connections due to inbound limit", zap.Int("inbound", in), zap.Int("inbound_limit", inBoundLimit))
