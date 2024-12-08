@@ -117,54 +117,6 @@ func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
 	return n.idx.IsBad(logger, peerID)
 }
 
-func (n *p2pNetwork) isBadInbound(lg *zap.Logger, peerID peer.ID) bool {
-	if n.idx == nil {
-		return false
-	}
-
-	maxPeers := n.cfg.MaxPeers
-	inBoundLimit := int(float64(maxPeers) * inboundRatio)
-
-	// should never happen
-	if maxPeers < inBoundLimit {
-		return true
-	}
-
-	in, _ := n.connectionStats()
-
-	if in >= inBoundLimit {
-		n.interfaceLogger.Debug("preventing inbound connections due to inbound limit", zap.Int("inbound", in), zap.Int("inbound_limit", inBoundLimit))
-		// todo: should we disconnect to make sure its ==?
-		return true
-	}
-
-	return n.idx.IsBad(lg, peerID)
-}
-
-func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
-	cns := n.host.Network().Conns()
-
-	for _, cn := range cns {
-
-		if n.host.Network().Connectedness(cn.RemotePeer()) != network.Connected {
-			continue
-		}
-
-		dir := cn.Stat().Direction
-		if dir == network.DirUnknown {
-			continue // TODO: how can it happen?
-		}
-
-		if dir == network.DirOutbound {
-			outbound++
-		} else {
-			inbound++
-		}
-	}
-
-	return inbound, outbound
-}
-
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	opts, err := n.cfg.Libp2pOptions(logger)
@@ -178,7 +130,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.isBadInbound)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.inboundLimit)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -381,4 +333,52 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 		return false
 	}
 	return n.idx.AtLimit(network.DirOutbound)
+}
+
+func (n *p2pNetwork) inboundLimit() bool {
+	if n.idx == nil {
+		return false
+	}
+
+	maxPeers := n.cfg.MaxPeers
+	inBoundLimit := int(float64(maxPeers) * inboundRatio)
+
+	// should never happen
+	if maxPeers < inBoundLimit {
+		return true
+	}
+
+	in, _ := n.connectionStats()
+
+	if in >= inBoundLimit {
+		n.interfaceLogger.Debug("preventing inbound connections due to inbound limit", zap.Int("inbound", in), zap.Int("inbound_limit", inBoundLimit))
+		// todo: should we disconnect to stay at limit?
+		return true
+	}
+
+	return false
+}
+
+func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
+	cns := n.host.Network().Conns()
+
+	for _, cn := range cns {
+
+		if n.host.Network().Connectedness(cn.RemotePeer()) != network.Connected {
+			continue
+		}
+
+		dir := cn.Stat().Direction
+		if dir == network.DirUnknown {
+			continue // TODO: how can it happen?
+		}
+
+		if dir == network.DirOutbound {
+			outbound++
+		} else {
+			inbound++
+		}
+	}
+
+	return inbound, outbound
 }

@@ -26,28 +26,29 @@ const (
 	//
 )
 
-type IsBadF func(logger *zap.Logger, peerID peer.ID) bool
+type IsBadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+type InboundLimitF func() bool // todo: consider being more flex at the limit for specific peers, e.g: peers that share multiple subnets
 
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
-	logger        *zap.Logger // struct logger to implement connmgr.ConnectionGater
-	disable       bool
-	atLimit       func() bool
-	ipLimiter     *leakybucket.Collector
-	isBadOutbound IsBadF
-	isBadInbound  IsBadF
+	logger       *zap.Logger // struct logger to implement connmgr.ConnectionGater
+	disable      bool
+	atLimit      func() bool
+	ipLimiter    *leakybucket.Collector
+	isBadPeer    IsBadPeerF
+	inboundLimit InboundLimitF
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, canConnectOutbound, canConnectInbound IsBadF) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, isBadPeer IsBadPeerF, inboundLimit InboundLimitF) connmgr.ConnectionGater {
 	return &connGater{
-		logger:        logger,
-		disable:       disable,
-		atLimit:       atLimit,
-		ipLimiter:     leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
-		isBadInbound:  canConnectInbound,
-		isBadOutbound: canConnectOutbound,
+		logger:       logger,
+		disable:      disable,
+		atLimit:      atLimit,
+		ipLimiter:    leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
+		isBadPeer:    isBadPeer,
+		inboundLimit: inboundLimit,
 	}
 }
 
@@ -62,7 +63,7 @@ func (n *connGater) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
-	if n.isBadOutbound(n.logger, id) {
+	if n.isBadPeer(n.logger, id) {
 		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
@@ -77,6 +78,11 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 	if n.disable {
 		return true
 	}
+
+	if n.inboundLimit() { // inbound limit
+		return false
+	}
+
 	remoteAddr := multiaddrs.RemoteMultiaddr()
 	if !n.validateDial(remoteAddr) {
 		// Yield this goroutine to allow others to run in-between connection attempts.
@@ -85,21 +91,17 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		n.logger.Debug("connection rejected due to IP rate limit", zap.String("remote_addr", remoteAddr.String()))
 		return false
 	}
-	return !n.atLimit()
+	return !n.atLimit() // maxpeers limit
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	if direction == libp2pnetwork.DirUnknown {
+	if n.isBadPeer(n.logger, id) {
+		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
-
-	if direction == libp2pnetwork.DirOutbound {
-		return n.isBadOutbound(n.logger, id)
-	} else {
-		return n.isBadInbound(n.logger, id)
-	}
+	return true
 }
 
 // InterceptUpgraded is called for inbound and outbound connections, after
