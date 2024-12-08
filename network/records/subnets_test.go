@@ -2,7 +2,6 @@ package records
 
 import (
 	crand "crypto/rand"
-	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -11,16 +10,6 @@ import (
 
 	"github.com/ssvlabs/ssv/network/commons"
 )
-
-func TestDelete(t *testing.T) {
-	// TODO: delete
-	subnets := make([]byte, 128)
-	for _, i := range rand.Perm(128)[:16] {
-		subnets[i] = 1
-	}
-	t.Logf("subnets: %v", Subnets(subnets).String())
-	return
-}
 
 func Test_SubnetsEntry(t *testing.T) {
 	SubnetsCount := 128

@@ -43,7 +43,9 @@ import (
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
+	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/operator"
@@ -162,26 +164,28 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
-		// operatorCommittees := nodeStorage.ValidatorStore().OperatorCommittees(operatorData.ID)
-		// // Currently, OperatorCommittees may return several committees with the same committee ID, so we need to filter the unique ones.
-		// // This might be a bug in validator store: https://github.com/ssvlabs/ssv/issues/1926
-		// uniqueCommittees := make(map[[32]byte]struct{})
-		// for _, oc := range operatorCommittees {
-		// 	uniqueCommittees[oc.ID] = struct{}{}
-		// }
-		// // If operator has more than CommitteeThresholdForPeerIncrease committees,
-		// // it needs more peers, so we need to override the value from config if it's too low.
-		// // MaxPeers is used only in p2p, so the lines below must be executed before calling setupP2P function.
-		// const baseMaxPeers = 60
-		// idealMaxPeers := baseMaxPeers + (networkConfig.PeersPerSubnet * len(uniqueCommittees))
-		// if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
-		// 	logger.Warn("increasing MaxPeers to match operator's committee count",
-		// 		zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
-		// 		zap.Int("new_max_peers", idealMaxPeers),
-		// 		zap.Int("unique_committees", len(uniqueCommittees)),
-		// 	)
-		// 	cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
-		// }
+		// TODO: use OperatorCommittees when it's fixed.
+		myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
+		mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+		myActiveSubnets := 0
+		for _, v := range myValidators {
+			subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+			if mySubnets[subnet] == 0 {
+				mySubnets[subnet] = 1
+				myActiveSubnets++
+			}
+		}
+		const baseMaxPeers = 60
+		const maxPeersLimit = 150
+		idealMaxPeers := baseMaxPeers + min(networkConfig.PeersPerSubnet*myActiveSubnets, maxPeersLimit)
+		if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
+			logger.Warn("increasing MaxPeers to match operator's subscribed subnets",
+				zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
+				zap.Int("new_max_peers", idealMaxPeers),
+				zap.Int("subscribed_subnets", myActiveSubnets),
+			)
+			cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
+		}
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
