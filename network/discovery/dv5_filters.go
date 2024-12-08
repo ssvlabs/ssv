@@ -4,6 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
 )
@@ -45,6 +46,16 @@ func (dvs *DiscV5Service) ssvNodeFilter(logger *zap.Logger) func(node *enode.Nod
 			return false
 		}
 		return *isSSV
+	}
+}
+
+func (dvs *DiscV5Service) recentlyTrimmedFilter() func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pid, err := PeerID(node)
+		if err != nil {
+			return false
+		}
+		return !peers.TrimmedRecently.Has(pid)
 	}
 }
 

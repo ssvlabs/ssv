@@ -158,7 +158,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			return
 		}
 		handler(e)
-	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
+	}, defaultDiscoveryInterval, dvs.ssvNodeFilter(logger), dvs.sharedSubnetsFilter(1), dvs.badNodeFilter(logger), dvs.recentlyTrimmedFilter())
 
 	return nil
 }
@@ -287,11 +287,6 @@ func (dvs *DiscV5Service) discover(ctx context.Context, logger *zap.Logger, hand
 			}
 			ai, err := ToPeer(n)
 			if err != nil {
-				continue
-			}
-
-			if peers.TrimmedRecently.Has(ai.ID) {
-				logger.Debug("skip peer: discovery suggested a peer we've recently trimmed", fields.PeerID(ai.ID))
 				continue
 			}
 
