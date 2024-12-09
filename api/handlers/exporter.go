@@ -6,18 +6,18 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/networkconfig"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 
 	"github.com/ssvlabs/ssv/api"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type Exporter struct {
-	DomainType spectypes.DomainType
-	QBFTStores *ibftstorage.QBFTStores
+	DomainType        spectypes.DomainType
+	NetworkConfig     networkconfig.NetworkConfig
+	ParticipantStores *ibftstorage.ParticipantStores
 }
 
 type ParticipantResponse struct {
@@ -59,36 +59,33 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 
 	response.Data = []*ParticipantResponse{}
 
-	qbftStores := make(map[convert.RunnerRole]qbftstorage.QBFTStore, len(request.Roles))
 	for _, role := range request.Roles {
-		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
-		storage := e.QBFTStores.Get(runnerRole)
-		if storage == nil {
-			return api.Error(fmt.Errorf("role storage doesn't exist: %v", role))
-		}
-
-		qbftStores[runnerRole] = storage
-	}
-
-	for _, role := range request.Roles {
-		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
-		qbftStore := qbftStores[runnerRole]
+		store := e.ParticipantStores.Get(spectypes.BeaconRole(role))
 
 		for _, pubKey := range request.PubKeys {
-			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
 			from := phase0.Slot(request.From)
 			to := phase0.Slot(request.To)
 
-			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
+			participantsRange, err := store.GetParticipantsInRange(spectypes.BeaconRole(role), spectypes.ValidatorPK(pubKey), from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
 
-			if len(participantsList) == 0 {
+			if len(participantsRange) == 0 {
 				continue
 			}
 
-			data, err := exporterapi.ParticipantsAPIData(participantsList...)
+			participationList := make([]qbftstorage.Participation, 0, len(participantsRange))
+
+			for _, p := range participantsRange {
+				participationList = append(participationList, qbftstorage.Participation{
+					ParticipantsRangeEntry: p,
+					Role:                   spectypes.BeaconRole(role),
+					PubKey:                 spectypes.ValidatorPK(pubKey),
+				})
+			}
+
+			data, err := exporterapi.ParticipantsAPIData(e.NetworkConfig.DomainType, participationList...)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
 			}

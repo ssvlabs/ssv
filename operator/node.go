@@ -59,7 +59,7 @@ type operatorNode struct {
 	executionClient  *executionclient.ExecutionClient
 	net              network.P2PNetwork
 	storage          storage.Storage
-	qbftStorage      *qbftstorage.QBFTStores
+	qbftStorage      *qbftstorage.ParticipantStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 
@@ -70,7 +70,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) Node {
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) Node {
 	node := &operatorNode{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,

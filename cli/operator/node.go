@@ -32,7 +32,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -262,20 +261,19 @@ var StartNodeCmd = &cobra.Command{
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(networkConfig, logger, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []convert.RunnerRole{
-			convert.RoleCommittee,
-			convert.RoleAttester,
-			convert.RoleProposer,
-			convert.RoleSyncCommittee,
-			convert.RoleAggregator,
-			convert.RoleSyncCommitteeContribution,
-			convert.RoleValidatorRegistration,
-			convert.RoleVoluntaryExit,
+		storageRoles := []spectypes.BeaconRole{
+			spectypes.BNRoleAttester,
+			spectypes.BNRoleProposer,
+			spectypes.BNRoleSyncCommittee,
+			spectypes.BNRoleAggregator,
+			spectypes.BNRoleSyncCommitteeContribution,
+			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -364,8 +362,9 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					DomainType: networkConfig.DomainType,
-					QBFTStores: storageMap,
+					DomainType:        networkConfig.DomainType,
+					NetworkConfig:     networkConfig,
+					ParticipantStores: storageMap,
 				},
 			)
 			go func() {

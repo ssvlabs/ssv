@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -38,24 +37,24 @@ func init() {
 	}
 }
 
-// ibftStorage struct
+// participantStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
-type ibftStorage struct {
+type participantStorage struct {
 	prefix         []byte
 	db             basedb.Database
 	participantsMu sync.Mutex
 }
 
-// New create new ibft storage
-func New(db basedb.Database, prefix string) qbftstorage.QBFTStore {
-	return &ibftStorage{
+// New create new participant store
+func New(db basedb.Database, prefix string) qbftstorage.ParticipantStore {
+	return &participantStorage{
 		prefix: []byte(prefix),
 		db:     db,
 	}
 }
 
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
-func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
+func (i *participantStorage) CleanAllInstances(msgID []byte) error {
 	prefix := i.prefix
 	prefix = append(prefix, msgID[:]...)
 	prefix = append(prefix, []byte(instanceKey)...)
@@ -70,14 +69,14 @@ func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	return nil
 }
 
-func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+func (i *participantStorage) UpdateParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
 	i.participantsMu.Lock()
 	defer i.participantsMu.Unlock()
 
 	txn := i.db.Begin()
 	defer txn.Discard()
 
-	existingParticipants, err := i.getParticipants(txn, identifier, slot)
+	existingParticipants, err := i.getParticipants(txn, role, pk, slot)
 	if err != nil {
 		return false, fmt.Errorf("get participants %w", err)
 	}
@@ -87,7 +86,7 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 		return false, nil
 	}
 
-	if err := i.saveParticipants(txn, identifier, slot, mergedParticipants); err != nil {
+	if err := i.saveParticipants(txn, role, pk, slot, mergedParticipants); err != nil {
 		return false, fmt.Errorf("save participants: %w", err)
 	}
 
@@ -98,11 +97,11 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 	return true, nil
 }
 
-func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (i *participantStorage) GetParticipantsInRange(role spectypes.BeaconRole, pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
-		participants, err := i.GetParticipants(identifier, slot)
+		participants, err := i.GetParticipants(role, pk, slot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get participants: %w", err)
 		}
@@ -112,21 +111,21 @@ func (i *ibftStorage) GetParticipantsInRange(identifier convert.MessageID, from,
 		}
 
 		participantsRange = append(participantsRange, qbftstorage.ParticipantsRangeEntry{
-			Slot:       slot,
-			Signers:    participants,
-			Identifier: identifier,
+			Slot:    slot,
+			Signers: participants,
 		})
 	}
 
 	return participantsRange, nil
 }
 
-func (i *ibftStorage) GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	return i.getParticipants(nil, identifier, slot)
+func (i *participantStorage) GetParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	return i.getParticipants(nil, role, pk, slot)
 }
 
-func (i *ibftStorage) getParticipants(txn basedb.ReadWriter, identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	val, found, err := i.get(txn, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
+func (i *participantStorage) getParticipants(txn basedb.ReadWriter, role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+
+	val, found, err := i.get(txn, participantsKey, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err
 	}
@@ -138,12 +137,12 @@ func (i *ibftStorage) getParticipants(txn basedb.ReadWriter, identifier convert.
 	return operators, nil
 }
 
-func (i *ibftStorage) saveParticipants(txn basedb.ReadWriter, identifier convert.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
+func (i *participantStorage) saveParticipants(txn basedb.ReadWriter, role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
 	bytes, err := encodeOperators(operators)
 	if err != nil {
 		return fmt.Errorf("encode operators: %w", err)
 	}
-	if err := i.save(txn, bytes, participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
+	if err := i.save(txn, bytes, participantsKey, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot))); err != nil {
 		return fmt.Errorf("save to DB: %w", err)
 	}
 
@@ -156,13 +155,13 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 	return slices.Compact(allParticipants)
 }
 
-func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, id string, pk []byte, keyParams ...[]byte) error {
+func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, id string, pk []byte, keyParams ...[]byte) error {
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
 	return i.db.Using(txn).Set(prefix, key, value)
 }
 
-func (i *ibftStorage) get(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) ([]byte, bool, error) {
+func (i *participantStorage) get(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) ([]byte, bool, error) {
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
 	obj, found, err := i.db.Using(txn).Get(prefix, key)
@@ -175,13 +174,13 @@ func (i *ibftStorage) get(txn basedb.ReadWriter, id string, pk []byte, keyParams
 	return obj.Value, found, nil
 }
 
-func (i *ibftStorage) delete(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) error {
+func (i *participantStorage) delete(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) error {
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
 	return i.db.Using(txn).Delete(prefix, key)
 }
 
-func (i *ibftStorage) key(id string, params ...[]byte) []byte {
+func (i *participantStorage) key(id string, params ...[]byte) []byte {
 	ret := []byte(id)
 	for _, p := range params {
 		ret = append(ret, p...)

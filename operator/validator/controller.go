@@ -14,11 +14,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -76,7 +75,7 @@ type ControllerOptions struct {
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
-	StorageMap                 *storage.QBFTStores
+	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
@@ -151,7 +150,7 @@ type controller struct {
 	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage Recipients
-	ibftStorageMap    *storage.QBFTStores
+	ibftStorageMap    *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   spectypes.BeaconSigner
@@ -394,7 +393,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			DomainCache:       c.domainCache,
 		}
 		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewCommitteeObserver(convert.MessageID(ssvMsg.MsgID), committeeObserverOptions),
+			CommitteeObserver: validator.NewCommitteeObserver(committeeObserverOptions),
 		}
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
 		c.committeesObservers.Set(
