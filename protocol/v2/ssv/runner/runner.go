@@ -3,11 +3,15 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -143,13 +147,28 @@ func NewBaseRunner(
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.base_runner.start_new_duty", observabilityNamespace),
+		trace.WithAttributes(
+			roleAttribute(duty.RunnerRole()),
+			attribute.Int64("ssv.validator.quorum", int64(quorum)),
+			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
+	defer span.End()
+
 	if err := b.ShouldProcessDuty(duty); err != nil {
-		return errors.Wrap(err, "can't start duty")
+		err := errors.Wrap(err, "can't start duty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	b.baseSetupForNewDuty(duty, quorum)
 
-	return runner.executeDuty(ctx, logger, duty)
+	if err := runner.executeDuty(ctx, logger, duty); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
 
 // baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
