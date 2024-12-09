@@ -43,6 +43,6 @@ type QBFTStore interface {
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
 	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
-	// GetParticipants returns participants in quorum for the given slot.
-	GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
+	// GetParticipantsInSlot returns participants in quorum for the given slot range.
+	GetParticipantsInSlot(from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 }
