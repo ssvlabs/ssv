@@ -669,7 +669,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 	_, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.execute_duty", observabilityNamespace),
 		trace.WithAttributes(
-			attribute.Int("ssv.validator.duty.slot", int(duty.Slot)),
+			observability.BeaconSlotAttribute(duty.Slot),
 			observability.BeaconRoleAttribute(duty.Type),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
@@ -706,7 +706,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.execute_committee_duty", observabilityNamespace),
 		trace.WithAttributes(
-			attribute.Int("ssv.validator.duty.slot", int(duty.Slot)),
+			observability.BeaconSlotAttribute(duty.Slot),
 			attribute.String("ssv.comittee.id", hex.EncodeToString(committeeID[:])),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 		))

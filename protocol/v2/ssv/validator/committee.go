@@ -102,8 +102,8 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
-			attribute.Int64("ssv.validator.duty.slot", int64(duty.Slot)),
-		))
+			observability.BeaconSlotAttribute(duty.Slot)),
+	)
 	defer span.End()
 
 	// Setting the cancel function separately due the queue could be created in HandleMessage
@@ -145,8 +145,8 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
-			attribute.Int64("ssv.validator.duty.slot", int64(duty.Slot)),
-		))
+			observability.BeaconSlotAttribute(duty.Slot)),
+	)
 	defer span.End()
 
 	if len(duty.ValidatorDuties) == 0 {

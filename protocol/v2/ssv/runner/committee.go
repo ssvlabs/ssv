@@ -91,7 +91,7 @@ func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int64("ssv.validator.quorum", int64(quorum)),
-			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
+			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
 	d, ok := duty.(*spectypes.CommitteeDuty)
@@ -359,7 +359,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.runner.process_post_consensus", observabilityNamespace),
 		trace.WithAttributes(
-			attribute.Int64("ssv.validator.duty.slot", int64(signedMsg.Slot)),
+			observability.BeaconSlotAttribute(signedMsg.Slot),
 			attribute.Int64("ssv.validator.signer", int64(signedMsg.Messages[0].Signer)),
 			attribute.Int64("ssv.validator.msg_type", int64(signedMsg.Type)),
 		))
@@ -799,7 +799,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		fmt.Sprintf("%s.runner.execute_duty", observabilityNamespace),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
+			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
 	cr.measurements.StartDutyFlow()
