@@ -17,8 +17,11 @@ const (
 )
 
 func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
-	const eventNameAttrName = "ssv.beacon.role"
-	return attribute.String(eventNameAttrName, role.String())
+	return attribute.String("ssv.beacon.role", role.String())
+}
+
+func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
+	return attribute.String("ssv.runner.role", role.String())
 }
 
 func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
