@@ -3,12 +3,17 @@ package instance
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -72,6 +77,12 @@ func (i *Instance) ForceStop() {
 // Start is an interface implementation
 func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
+		ctx, span := tracer.Start(ctx,
+			fmt.Sprintf("%s.qbft.instance.start", observabilityNamespace),
+			trace.WithAttributes(
+				attribute.Int64("ssv.validator.duty.slot", int64(height))))
+		defer span.End()
+
 		i.StartValue = value
 		i.bumpToRound(ctx, specqbft.FirstRound)
 		i.State.Height = height
@@ -83,27 +94,31 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 			fields.Height(i.State.Height))
 
 		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
-		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
+		span.SetAttributes(attribute.Int64("ssv.validator.duty.proposer", int64(proposerID)))
+
+		span.AddEvent("starting QBFT instance")
 
 		// propose if this node is the proposer
 		if proposerID == i.State.CommitteeMember.OperatorID {
 			proposal, err := CreateProposal(i.State, i.signer, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				logger.Warn("❗ failed to create proposal", zap.Error(err))
+				span.RecordError(err)
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 
 				r, err := specqbft.HashDataRoot(i.StartValue) // @TODO (better than decoding?)
 				if err != nil {
-					logger.Warn("❗ failed to hash input data", zap.Error(err))
+					span.SetStatus(codes.Error, err.Error())
 					return
 				}
 				// nolint
 				logger = logger.With(fields.Root(r))
-				logger.Debug("📢 leader broadcasting proposal message")
+				span.AddEvent(
+					"leader broadcasting proposal message",
+					trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
 				if err := i.Broadcast(logger, proposal); err != nil {
-					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
+					span.SetStatus(codes.Error, err.Error())
 				}
 			}
 		}
