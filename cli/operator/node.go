@@ -365,6 +365,11 @@ var StartNodeCmd = &cobra.Command{
 				zap.Duration("took", time.Since(start)),
 			)
 			cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
+		} else {
+			logger.Warn("NOT increasing MaxPeers",
+				zap.Int("cfg.P2pNetworkConfig.MaxPeers", cfg.P2pNetworkConfig.MaxPeers),
+				zap.Int("idealMaxPeers", idealMaxPeers),
+			)
 		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
