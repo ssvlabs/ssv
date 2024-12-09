@@ -13,6 +13,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -78,8 +79,8 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.committee_handler.process_execution", observabilityNamespace),
 		trace.WithAttributes(
-			attribute.Int64("ssv.validator.duty.slot", int64(slot)),
-			attribute.Int64("ssv.validator.duty.epoch", int64(epoch)),
+			observability.BeaconSlotAttribute(slot),
+			observability.BeaconEpochAttribute(epoch),
 			attribute.Int64("ssv.validator.duty.period", int64(period)),
 		))
 

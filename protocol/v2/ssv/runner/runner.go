@@ -152,8 +152,8 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 		fmt.Sprintf("%s.base_runner.start_new_duty", observabilityNamespace),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			attribute.Int64("ssv.validator.quorum", int64(quorum)),
-			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
+			observability.BeaconSlotAttribute(duty.DutySlot()),
+			attribute.Int64("ssv.validator.quorum", int64(quorum))))
 	defer span.End()
 
 	if err := b.ShouldProcessDuty(duty); err != nil {
@@ -316,7 +316,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		fmt.Sprintf("%s.base_runner.decide", observabilityNamespace),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(runner.GetBaseRunner().RunnerRoleType),
-			attribute.Int64("ssv.validator.duty.slot", int64(slot))))
+			observability.BeaconSlotAttribute(slot)))
 	defer span.End()
 
 	byts, err := input.Encode()
