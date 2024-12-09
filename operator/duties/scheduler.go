@@ -15,7 +15,9 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -24,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -361,14 +364,26 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.scheduler.execute_duties", observabilityNamespace),
+		trace.WithAttributes(attribute.Int("ssv.validator.duty_count", len(duties))))
+	defer span.End()
+
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
+
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			span.AddEvent("late duty execution",
+				trace.WithAttributes(
+					attribute.Int64("slot_delay_ms", slotDelay.Milliseconds()),
+					observability.BeaconRoleAttribute(duty.Type),
+					observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
+
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
+
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
@@ -377,10 +392,17 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.scheduler.execute_committee_duties", observabilityNamespace),
+		trace.WithAttributes(attribute.Int("ssv.validator.duty_count", len(duties))))
+	defer span.End()
+
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
@@ -389,15 +411,21 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			span.AddEvent("late duty execution",
+				trace.WithAttributes(
+					attribute.Int64("slot_delay_ms", slotDelay.Milliseconds())))
 		}
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			committeeDutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("ssv.runner.role", committee.duty.RunnerRole().String())))
+			committeeDutiesExecutedCounter.Add(ctx, 1,
+				metric.WithAttributes(
+					observability.RunnerRoleAttribute(committee.duty.RunnerRole())))
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information

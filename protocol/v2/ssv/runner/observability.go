@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/observability"
 )
 
@@ -19,7 +18,8 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
+	meter  = otel.Meter(observabilityName)
 
 	consensusDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
@@ -64,10 +64,6 @@ var (
 
 func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
-
-func roleAttribute(role types.RunnerRole) attribute.KeyValue {
-	return attribute.String("ssv.runner.role", role.String())
 }
 
 func roundAttribute(qbftRound qbft.Round) attribute.KeyValue {

@@ -17,6 +17,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -89,7 +90,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	r.measurements.EndPreConsensus()
-	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
 
 	// collect selection proofs and subnets
 	var (
@@ -174,7 +175,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	}
 
 	r.measurements.EndConsensus()
-	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
 
 	r.measurements.StartPostConsensus()
 
@@ -246,7 +247,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	}
 
 	r.measurements.EndPostConsensus()
-	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
 
 	// get contributions
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
@@ -294,7 +295,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			}
 
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
-				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
@@ -303,8 +304,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 			r.measurements.EndDutyFlow()
 			dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-				metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution), roundAttribute(r.GetState().RunningInstance.State.Round)))
-			submissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleSyncCommitteeContribution)))
+				metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution), roundAttribute(r.GetState().RunningInstance.State.Round)))
+			submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
 
 			logger.Debug("✅ successfully submitted sync committee aggregator",
 				fields.SubmissionTime(time.Since(start)),
