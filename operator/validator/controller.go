@@ -692,6 +692,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
+		span.AddEvent("pushing message to the queue")
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			span.AddEvent("dropping ExecuteDuty message because the queue is full")
 		}
