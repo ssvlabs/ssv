@@ -164,7 +164,9 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
+		// Increase MaxPeers if the operator is subscribed to many subnets.
 		// TODO: use OperatorCommittees when it's fixed.
+		start := time.Now()
 		myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
 		mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
 		myActiveSubnets := 0
@@ -184,6 +186,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
 				zap.Int("new_max_peers", idealMaxPeers),
 				zap.Int("subscribed_subnets", myActiveSubnets),
+				zap.Duration("took", time.Since(start)),
 			)
 			cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 		}
