@@ -149,7 +149,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	}
 	go n.net.UpdateSubnets(logger)
 	go n.net.UpdateScoreParams(logger)
-	n.validatorsCtrl.ForkListener(logger)
 	n.validatorsCtrl.StartValidators()
 	go n.reportOperators(logger)
 
@@ -180,7 +179,7 @@ func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMe
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.DomainType())
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.DomainType)
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
 	default:

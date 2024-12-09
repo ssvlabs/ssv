@@ -85,7 +85,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 				})
 			}
 
-			data, err := exporterapi.ParticipantsAPIData(e.NetworkConfig.DomainType(), participationList...)
+			data, err := exporterapi.ParticipantsAPIData(e.NetworkConfig.DomainType, participationList...)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
 			}

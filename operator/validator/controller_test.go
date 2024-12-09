@@ -16,15 +16,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ekm"
-	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
@@ -237,7 +235,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
-			validatorStartFunc := func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			}
 			controllerOptions := MockControllerOptions{
@@ -282,7 +280,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	wg.Add(3)
 
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), []byte("pk"), spectypes.RoleCommittee)
+	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -350,18 +348,14 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
-	firstValidator, err := validators.NewValidatorContainer(
-		&validator.Validator{
-			DutyRunners: runner.ValidatorDutyRunners{},
-			Share: &types.SSVShare{
-				Share: spectypes.Share{
-					ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
-				},
+	firstValidator := &validator.Validator{
+		DutyRunners: runner.ValidatorDutyRunners{},
+		Share: &types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
 		},
-		nil,
-	)
-	require.NoError(t, err)
+	}
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			Committee:       operators,
@@ -405,7 +399,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 			firstValidatorPublicKey := secretKey.GetPublicKey().Serialize()
 
-			testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
+			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 				(spectypes.ValidatorPK)(firstValidatorPublicKey): firstValidator,
 			}
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
@@ -434,7 +428,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 			ctr := setupController(logger, controllerOptions)
 
-			validatorStartFunc := func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			}
 			ctr.validatorStartFunc = validatorStartFunc
@@ -515,7 +509,7 @@ func TestSetupValidators(t *testing.T) {
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
-	testValidator := setupTestValidator(t, ownerAddressBytes, feeRecipientBytes)
+	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
 	storageMu := sync.Mutex{}
 	storageData := make(map[string]*beacon.ValidatorMetadata)
 
@@ -547,7 +541,7 @@ func TestSetupValidators(t *testing.T) {
 		shares             []*types.SSVShare
 		recipientData      *registrystorage.RecipientData
 		bcResponse         map[phase0.ValidatorIndex]*eth2apiv1.Validator
-		validatorStartFunc func(validator *validators.ValidatorContainer) (bool, error)
+		validatorStartFunc func(validator *validator.Validator) (bool, error)
 	}{
 		{
 			name:               "setting fee recipient to storage data",
@@ -560,7 +554,7 @@ func TestSetupValidators(t *testing.T) {
 			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
 		},
@@ -575,7 +569,7 @@ func TestSetupValidators(t *testing.T) {
 			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
 		},
@@ -590,7 +584,7 @@ func TestSetupValidators(t *testing.T) {
 			inited:             0,
 			started:            0,
 			bcMockTimes:        0,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
 		},
@@ -605,7 +599,7 @@ func TestSetupValidators(t *testing.T) {
 			inited:             1,
 			started:            1,
 			bcMockTimes:        0,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
 		},
@@ -620,7 +614,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientFound:     false,
 			bcResponse:         bcResponse,
 			shares:             []*types.SSVShare{shareWithoutMetaData},
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
 		},
@@ -635,7 +629,7 @@ func TestSetupValidators(t *testing.T) {
 			inited:             0,
 			started:            0,
 			shares:             []*types.SSVShare{shareWithoutMetaData},
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
 		},
@@ -650,7 +644,7 @@ func TestSetupValidators(t *testing.T) {
 			inited:             1,
 			started:            0,
 			bcMockTimes:        0,
-			validatorStartFunc: func(validator *validators.ValidatorContainer) (bool, error) {
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, errors.New("some error")
 			},
 		},
@@ -659,7 +653,6 @@ func TestSetupValidators(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			genesisStorageMap := setupGenesisQBFTStorage(t)
 			defer ctrl.Finish()
 			bc := beacon.NewMockBeaconNode(ctrl)
 			storageMap := ibftstorage.NewStores()
@@ -678,11 +671,11 @@ func TestSetupValidators(t *testing.T) {
 				return nil
 			}).AnyTimes()
 
-			testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
+			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 				createPubKey(byte('0')): testValidator,
 			}
-			committeMap := make(map[spectypes.CommitteeID]*validator.Committee)
-			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeMap))
+			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
+			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
 			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
 
@@ -699,9 +692,6 @@ func TestSetupValidators(t *testing.T) {
 				validatorOptions: validator.Options{
 					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
-					GenesisOptions: validator.GenesisOptions{
-						Storage: genesisStorageMap,
-					},
 				},
 				metrics: validator.NopMetrics{},
 			}
@@ -725,17 +715,13 @@ func TestGetValidator(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	// Initialize a test validator with the decoded owner address
-	testValidator, err := validators.NewValidatorContainer(
-		&validator.Validator{
-			Share: &types.SSVShare{
-				Metadata: types.Metadata{},
-			},
+	testValidator := &validator.Validator{
+		Share: &types.SSVShare{
+			Metadata: types.Metadata{},
 		},
-		nil,
-	)
-	require.NoError(t, err)
+	}
 
-	testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
+	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 		createPubKey(byte('0')): testValidator,
 	}
 	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
@@ -974,9 +960,9 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	secondFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
 
 	t.Run("Test with right owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(t, ownerAddressBytes, firstFeeRecipientBytes)
+		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
 
-		testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
+		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			createPubKey(byte('0')): testValidator,
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
@@ -987,13 +973,13 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
 
-		actualFeeRecipient := testValidator.Share().FeeRecipientAddress[:]
+		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
 		require.Equal(t, secondFeeRecipientBytes, actualFeeRecipient, "Fee recipient address did not update correctly")
 	})
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(t, ownerAddressBytes, firstFeeRecipientBytes)
-		testValidatorsMap := map[spectypes.ValidatorPK]*validators.ValidatorContainer{
+		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
+		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			createPubKey(byte('0')): testValidator,
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
@@ -1003,7 +989,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
 
-		actualFeeRecipient := testValidator.Share().FeeRecipientAddress[:]
+		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
 		require.Equal(t, firstFeeRecipientBytes, actualFeeRecipient, "Fee recipient address should not have changed")
 	})
 }
@@ -1109,23 +1095,19 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 	return res
 }
 
-func setupTestValidator(t *testing.T, ownerAddressBytes, feeRecipientBytes []byte) *validators.ValidatorContainer {
-	v, err := validators.NewValidatorContainer(
-		&validator.Validator{
-			DutyRunners: runner.ValidatorDutyRunners{},
-			Share: &types.SSVShare{
-				Share: spectypes.Share{
-					FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
-				},
-				Metadata: types.Metadata{
-					OwnerAddress: common.BytesToAddress(ownerAddressBytes),
-				},
+func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
+	return &validator.Validator{
+		DutyRunners: runner.ValidatorDutyRunners{},
+
+		Share: &types.SSVShare{
+			Share: spectypes.Share{
+				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
+			},
+			Metadata: types.Metadata{
+				OwnerAddress: common.BytesToAddress(ownerAddressBytes),
 			},
 		},
-		nil,
-	)
-	require.NoError(t, err)
-	return v
+	}
 }
 
 func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
@@ -1180,34 +1162,6 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
-}
-
-func setupGenesisQBFTStorage(t *testing.T) *genesisibftstorage.QBFTStores {
-	logger := logging.TestLogger(t)
-	// ctrl := gomock.NewController(t)
-	// network := mocks.NewMockP2PNetwork(ctrl)
-
-	db, err := getBaseStorage(logger)
-	require.NoError(t, err)
-
-	genesisStorageRoles := []genesisspectypes.BeaconRole{
-		genesisspectypes.BNRoleAttester,
-		genesisspectypes.BNRoleAggregator,
-		genesisspectypes.BNRoleProposer,
-		genesisspectypes.BNRoleSyncCommittee,
-		genesisspectypes.BNRoleSyncCommitteeContribution,
-		genesisspectypes.BNRoleValidatorRegistration,
-		genesisspectypes.BNRoleVoluntaryExit,
-	}
-
-	genesisStorageMap := genesisibftstorage.NewStores()
-
-	for _, storageRole := range genesisStorageRoles {
-		genesisStorageMap.Add(storageRole, genesisibftstorage.New(db, "genesis_"+storageRole.String()))
-	}
-
-	require.NoError(t, err)
-	return genesisStorageMap
 }
 
 func buildOperators(t *testing.T) []*spectypes.ShareMember {

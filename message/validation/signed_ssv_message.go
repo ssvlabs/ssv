@@ -18,12 +18,6 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
-
-		// Ignore genesis messages in the first slot of the fork epoch
-		if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
-			e.reject = false
-		}
-
 		return nil, e
 	}
 
@@ -121,7 +115,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	// Rule: If domain is different then self domain
-	domain := mv.netCfg.DomainType()
+	domain := mv.netCfg.DomainType
 	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())

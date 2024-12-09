@@ -2,6 +2,7 @@ package qbft
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -91,7 +92,7 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(logger, msg)
+		decided, err := contr.ProcessMsg(context.TODO(), logger, msg)
 		if err != nil {
 			lastErr = err
 		}

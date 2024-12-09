@@ -16,7 +16,7 @@ import (
 
 // NewStreamPublisher handles incoming newly decided messages.
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
-func NewStreamPublisher(domainTypeProvider networkconfig.DomainTypeProvider, logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
+func NewStreamPublisher(domainTypeProvider networkconfig.NetworkConfig, logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
 	return func(msg qbftstorage.Participation) {
@@ -28,6 +28,6 @@ func NewStreamPublisher(domainTypeProvider networkconfig.DomainTypeProvider, log
 		c.SetDefault(key, true)
 
 		logger.Debug("broadcast decided stream", fields.PubKey(msg.PubKey[:]), fields.Slot(msg.Slot))
-		feed.Send(api.NewParticipantsAPIMsg(domainTypeProvider.DomainType(), msg))
+		feed.Send(api.NewParticipantsAPIMsg(domainTypeProvider.DomainType, msg))
 	}
 }
