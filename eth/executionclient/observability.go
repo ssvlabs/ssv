@@ -36,18 +36,18 @@ var (
 
 	syncingDistanceGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("syncing.distance"),
+			metricName("sync.distance"),
 			metric.WithUnit("{block}"),
 			metric.WithDescription("execution client syncing distance which is a delta between highest and current blocks")))
 
 	clientStatusGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("syncing.status"),
+			metricName("sync.status"),
 			metric.WithDescription("execution client syncing status")))
 
 	lastProcessedBlockGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("syncing.last_processed_block"),
+			metricName("sync.last_processed_block"),
 			metric.WithUnit("{block_number}"),
 			metric.WithDescription("last processed block by execution client")))
 )
