@@ -31,7 +31,6 @@ type connHandler struct {
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
 	peerInfos       peers.PeerInfoIndex
-	metrics         Metrics
 }
 
 // NewConnHandler creates a new connection handler
@@ -42,7 +41,6 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
-	mr Metrics,
 ) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,
@@ -51,7 +49,6 @@ func NewConnHandler(
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
 		peerInfos:       peerInfos,
-		metrics:         mr,
 	}
 }
 
@@ -61,7 +58,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
-			metricsFilteredConnections.Inc()
+			filteredCounter.Add(ch.ctx, 1)
 		}
 	}
 
@@ -189,7 +186,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				}
 
 				// Successfully connected.
-				metricsConnections.Inc()
+				connectedCounter.Add(ch.ctx, 1)
+
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
 			}()
@@ -204,9 +202,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return
 			}
 
-			metricsConnections.Dec()
+			disconnectedCounter.Add(ch.ctx, 1)
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
-			ch.metrics.PeerDisconnected(conn.RemotePeer())
 
 			logger := connLogger(conn)
 			logger.Debug("peer disconnected")

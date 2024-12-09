@@ -148,7 +148,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			fields.ENR(e.Node),
 			fields.PeerID(e.AddrInfo.ID),
 		)
-		err := dvs.checkPeer(logger, e)
+		err := dvs.checkPeer(dvs.ctx, logger, e)
 		if err != nil {
 			if skippedPeers%logFrequency == 0 {
 				logger.Debug("skipped discovered peer", zap.Error(err))
@@ -164,9 +164,10 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 
 var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
 
-func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
+func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
 	// TODO: uncomment errors once there are sufficient nodes with domain type.
+	peerDiscoveriesCounter.Add(ctx, 1)
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {
 		return errors.Wrap(err, "could not read domain type")
@@ -181,6 +182,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
 	if bytes.Equal(zeroSubnets, nodeSubnets) {
+		recordPeerRejection(ctx, zeroSubnetsReason)
 		return errors.New("zero subnets")
 	}
 
@@ -188,15 +190,16 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
-		metricRejectedNodes.Inc()
+		recordPeerRejection(ctx, reachedLimitReason)
 		return errors.New("reached limit")
 	}
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
-		metricRejectedNodes.Inc()
+		recordPeerRejection(ctx, noSharedSubnetsReason)
 		return errors.New("no shared subnets")
 	}
 
-	metricFoundNodes.Inc()
+	peerAcceptedCounter.Add(ctx, 1)
+
 	return nil
 }
 
@@ -364,7 +367,6 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 
 	// Publish ENR.
 	dvs.discover(ctx, func(e PeerEvent) {
-		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
 			errs++
@@ -375,7 +377,6 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 			logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
 			return
 		}
-		metricPublishEnrPongs.Inc()
 		pings++
 		peerIDs[e.AddrInfo.ID] = struct{}{}
 	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))

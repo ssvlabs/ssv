@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -56,7 +57,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
 
-	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
+	recordAttestationDataRequest(gc.ctx, time.Since(aggDataReqStart), spectypes.BNRoleAggregator)
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)

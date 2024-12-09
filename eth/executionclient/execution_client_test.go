@@ -87,7 +87,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		contractAddr,
 		WithLogger(logger),
 		WithFollowDistance(followDistance),
-		WithMetrics(nopMetrics{}),
 		WithConnectionTimeout(2*time.Second),
 		WithReconnectionInitialInterval(2*time.Second),
 	)

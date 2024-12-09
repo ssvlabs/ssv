@@ -15,13 +15,6 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
-// WithMetrics enables reporting metrics.
-func WithMetrics(metrics metrics) Option {
-	return func(eh *EventHandler) {
-		eh.metrics = metrics
-	}
-}
-
 // WithFullNode signals that node works in a full node state.
 func WithFullNode() Option {
 	return func(eh *EventHandler) {

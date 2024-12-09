@@ -10,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // AttesterDuties returns attester duties for a given epoch.
@@ -53,7 +54,9 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
 		})
-		metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
+
+		recordAttestationDataRequest(gc.ctx, time.Since(attDataReqStart), spectypes.BNRoleAttester)
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to get attestation data: %w", err)
 		}

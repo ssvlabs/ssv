@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -82,7 +83,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	contr.StoredInstances.addNewInstance(inst)
 
 	// Call OnTimeout and capture the error
-	err = contr.OnTimeout(logger, *msg)
+	err = contr.OnTimeout(context.TODO(), logger, *msg)
 
 	// Assert that the error is nil and the round did not bump
 	require.NoError(t, err)
@@ -92,7 +93,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	inst.State.Round = specqbft.FirstRound
 
 	// Call OnTimeout and capture the error
-	err = contr.OnTimeout(logger, *msg)
+	err = contr.OnTimeout(context.TODO(), logger, *msg)
 
 	// Assert that the error is nil and the round did bump
 	require.NoError(t, err)

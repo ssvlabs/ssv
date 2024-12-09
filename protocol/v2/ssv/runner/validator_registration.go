@@ -16,7 +16,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -28,8 +27,6 @@ type ValidatorRegistrationRunner struct {
 	signer         spectypes.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-
-	metrics metrics.ConsensusMetrics
 }
 
 func NewValidatorRegistrationRunner(
@@ -57,8 +54,6 @@ func NewValidatorRegistrationRunner(
 		network:        network,
 		signer:         signer,
 		operatorSigner: operatorSigner,
-
-		metrics: metrics.NewConsensusMetrics(spectypes.RoleValidatorRegistration),
 	}, nil
 }
 

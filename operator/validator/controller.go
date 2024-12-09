@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -78,7 +79,6 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	ValidatorStore             registrystorage.ValidatorStore
-	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
@@ -144,8 +144,7 @@ type P2PNetwork interface {
 type controller struct {
 	ctx context.Context
 
-	logger  *zap.Logger
-	metrics validator.Metrics
+	logger *zap.Logger
 
 	networkConfig     networkconfig.NetworkConfig
 	sharesStorage     SharesStorage
@@ -214,7 +213,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
-		Metrics:           options.Metrics,
 		Graffiti:          options.Graffiti,
 	}
 
@@ -227,17 +225,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
-	metrics := validator.Metrics(validator.NopMetrics{})
-	if options.Metrics != nil {
-		metrics = options.Metrics
-	}
-
 	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
-		metrics:           metrics,
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
 		operatorsStorage:  options.RegistryStorage,
@@ -318,6 +310,9 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if s.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 			active++
 		}
+	}
+	if operatorShares <= math.MaxInt64 {
+		validatorsCountGauge.Record(c.ctx, int64(operatorShares))
 	}
 	return uint64(len(allShares)), active, operatorShares, nil
 }
@@ -953,7 +948,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
-		c.metrics.ValidatorError(v.Share.ValidatorPubKey[:])
+		recordValidatorStatus(c.ctx, statusError)
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {

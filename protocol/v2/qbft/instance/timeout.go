@@ -1,6 +1,8 @@
 package instance
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
@@ -8,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
-func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
+func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing timeouts")
 	}
@@ -20,7 +22,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	// round to be bumped before the round change message was created & broadcasted.
 	// Remember to track the impact of this change and revert/modify if necessary.
 	defer func() {
-		i.bumpToRound(newRound)
+		i.bumpToRound(ctx, newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
