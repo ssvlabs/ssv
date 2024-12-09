@@ -177,7 +177,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 		const baseMaxPeers = 60
 		const maxPeersLimit = 150
-		const peersPerSubnet = 4
+		const peersPerSubnet = 3
 		idealMaxPeers := baseMaxPeers + min(peersPerSubnet*myActiveSubnets, maxPeersLimit)
 		if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 			logger.Warn("increasing MaxPeers to match operator's subscribed subnets",
