@@ -8,13 +8,13 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -60,8 +60,7 @@ func NewController(
 func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.controller.start_new_instance", observabilityNamespace),
-		trace.WithAttributes(
-			attribute.Int64("ssv.validator.duty.slot", int64(height))))
+		trace.WithAttributes(observability.BeaconSlotAttribute(height)))
 	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
