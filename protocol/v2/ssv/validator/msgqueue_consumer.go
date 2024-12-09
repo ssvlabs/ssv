@@ -28,14 +28,14 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
-
+	msg.Context = ctx
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()

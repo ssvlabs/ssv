@@ -19,11 +19,11 @@ import (
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
-
+	msg.Context = ctx
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))

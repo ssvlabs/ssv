@@ -666,7 +666,7 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
-	_, span := tracer.Start(ctx,
+	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.execute_duty", observabilityNamespace),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(duty.Slot),
@@ -692,6 +692,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
+		dec.Context = ctx
 		span.AddEvent("pushing message to the queue")
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			span.AddEvent("dropping ExecuteDuty message because the queue is full")

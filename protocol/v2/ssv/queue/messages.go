@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -18,6 +19,7 @@ var (
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 type SSVMessage struct {
+	Context          context.Context
 	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
