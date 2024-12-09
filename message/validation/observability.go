@@ -60,22 +60,18 @@ func reasonAttribute(reason string) attribute.KeyValue {
 	return attribute.String("ssv.p2p.message.validation.discard_reason", reason)
 }
 
-func roleAttribute(role types.RunnerRole) attribute.KeyValue {
-	return attribute.String("ssv.runner.role", role.String())
-}
-
 func recordMessage(ctx context.Context) {
 	messageValidationsCounter.Add(ctx, 1)
 }
 
 func recordAcceptedMessage(ctx context.Context, role types.RunnerRole) {
-	messageValidationsAcceptedCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(role)))
+	messageValidationsAcceptedCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(role)))
 }
 
 func recordRejectedMessage(ctx context.Context, role types.RunnerRole, reason string) {
-	messageValidationsRejectedCounter.Add(ctx, 1, metric.WithAttributes(reasonAttribute(reason), roleAttribute(role)))
+	messageValidationsRejectedCounter.Add(ctx, 1, metric.WithAttributes(reasonAttribute(reason), observability.RunnerRoleAttribute(role)))
 }
 
 func recordIgnoredMessage(ctx context.Context, role types.RunnerRole, reason string) {
-	messageValidationsIgnoredCounter.Add(ctx, 1, metric.WithAttributes(reasonAttribute(reason), roleAttribute(role)))
+	messageValidationsIgnoredCounter.Add(ctx, 1, metric.WithAttributes(reasonAttribute(reason), observability.RunnerRoleAttribute(role)))
 }

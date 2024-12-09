@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -99,7 +100,7 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.start_consume_queue", observabilityNamespace),
 		trace.WithAttributes(
-			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
 			attribute.Int64("ssv.validator.duty.slot", int64(duty.Slot)),
 		))
@@ -142,7 +143,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.start_duty", observabilityNamespace),
 		trace.WithAttributes(
-			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
 			attribute.Int64("ssv.validator.duty.slot", int64(duty.Slot)),
 		))
@@ -171,7 +172,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		if !exists {
 			span.AddEvent("no share for validator duty", trace.WithAttributes(
 				attribute.Int64("ssv.validator.index", int64(beaconDuty.ValidatorIndex)),
-				attribute.String("ssv.beacon.role", beaconDuty.Type.String()),
+				observability.BeaconRoleAttribute(beaconDuty.Type),
 				attribute.String("ssv.validator.pubkey", beaconDuty.PubKey.String()),
 			))
 			continue
@@ -249,7 +250,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		trace.WithAttributes(
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
 			attribute.Int64("ssv.validator.msg_type", int64(msg.GetType())),
-			attribute.String("ssv.runner.role", msg.GetID().GetRoleType().String()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
 		))
 	defer span.End()
 

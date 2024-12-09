@@ -29,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
@@ -638,8 +639,8 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 		fmt.Sprintf("%s.execute_duty", observabilityNamespace),
 		trace.WithAttributes(
 			attribute.Int("ssv.validator.duty.slot", int(duty.Slot)),
-			attribute.String("ssv.beacon.role", duty.Type.String()),
-			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+			observability.BeaconRoleAttribute(duty.Type),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
 		))
 	defer span.End()
@@ -676,7 +677,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		trace.WithAttributes(
 			attribute.Int("ssv.validator.duty.slot", int(duty.Slot)),
 			attribute.String("ssv.comittee.id", hex.EncodeToString(committeeID[:])),
-			attribute.String("ssv.runner.role", duty.RunnerRole().String()),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 		))
 	defer span.End()
 

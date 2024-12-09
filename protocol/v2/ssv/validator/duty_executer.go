@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -49,7 +50,7 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	span.SetAttributes(
 		attribute.Int64("ssv.validator.duty.slot", int64(executeDutyData.Duty.Slot)),
-		attribute.String("ssv.runner.role", executeDutyData.Duty.RunnerRole().String()),
+		observability.RunnerRoleAttribute(executeDutyData.Duty.RunnerRole()),
 		attribute.Int("ssv.validator.duty_count", len(executeDutyData.Duty.ValidatorDuties)),
 	)
 	span.AddEvent("start duty")

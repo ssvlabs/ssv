@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -377,8 +378,8 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 			span.AddEvent("late duty execution",
 				trace.WithAttributes(
 					attribute.Int64("slot_delay_ms", slotDelay.Milliseconds()),
-					attribute.String("ssv.beacon.role", duty.Type.String()),
-					attribute.String("ssv.runner.role", duty.RunnerRole().String())))
+					observability.BeaconRoleAttribute(duty.Type),
+					observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
@@ -417,7 +418,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			committeeDutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("ssv.runner.role", committee.duty.RunnerRole().String())))
+			committeeDutiesExecutedCounter.Add(ctx, 1,
+				metric.WithAttributes(
+					observability.RunnerRoleAttribute(committee.duty.RunnerRole())))
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
