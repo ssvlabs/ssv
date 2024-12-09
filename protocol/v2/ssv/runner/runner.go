@@ -311,32 +311,51 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 }
 
 func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.base_runner.decide", observabilityNamespace),
+		trace.WithAttributes(
+			roleAttribute(runner.GetBaseRunner().RunnerRoleType),
+			attribute.Int64("ssv.validator.duty.slot", int64(slot))))
+	defer span.End()
+
 	byts, err := input.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not encode input data for consensus")
+		err = errors.Wrap(err, "could not encode input data for consensus")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	if err := runner.GetValCheckF()(byts); err != nil {
-		return errors.Wrap(err, "input data invalid")
+		err = errors.Wrap(err, "input data invalid")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
+	span.AddEvent("start new instance")
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
 		ctx,
 		logger,
 		specqbft.Height(slot),
 		byts,
 	); err != nil {
-		return errors.Wrap(err, "could not start new QBFT instance")
+		err = errors.Wrap(err, "could not start new QBFT instance")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
 	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
-		return errors.New("could not find newly created QBFT instance")
+		err = errors.New("could not find newly created QBFT instance")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
+	span.AddEvent("register timeout handler")
 	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
