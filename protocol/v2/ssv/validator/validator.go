@@ -124,11 +124,11 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
-		trace.WithAttributes(
+		trace.WithLinks(trace.LinkFromContext(msg.Context,
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
 			attribute.Int64("ssv.validator.msg_type", int64(msg.GetType())),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
-		))
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))),
+	)
 
 	defer span.End()
 
