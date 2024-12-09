@@ -52,7 +52,7 @@ const (
 	connManagerBalancingTimeout        = time.Minute
 	peersReportingInterval             = 60 * time.Second
 	peerIdentitiesReportingInterval    = 5 * time.Minute
-	topicsReportingInterval            = 60 * time.Second // TODO: revert
+	topicsReportingInterval            = 180 * time.Second // TODO: revert
 	maximumIrrelevantPeersToDisconnect = 3
 )
 
