@@ -81,45 +81,39 @@ func (n *p2pNetwork) reportPeerIdentities(logger *zap.Logger) func() {
 func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 	return func() {
 		topics := n.topicsCtrl.Topics()
-		nTopics := len(topics)
-		logger.Debug("connected topics", fields.Count(nTopics))
-		distribution := []int{}
+		logger.Debug("connected topics", fields.Count(len(topics)))
+
+		subnetPeerCounts := []int{}
+		deadSubnets := 0
+		unhealthySubnets := 0
 		for _, name := range topics {
-			distribution = append(distribution, n.reportTopicPeers(logger, name))
-		}
+			count := n.reportTopicPeers(logger, name)
+			subnetPeerCounts = append(subnetPeerCounts, count)
 
-		// Calculate min, median, max
-		sort.Ints(distribution)
-		min := distribution[0]
-		median := distribution[len(distribution)/2]
-		max := distribution[len(distribution)-1]
-
-		onePeerTopics := 0
-		twoPeerTopics := 0
-		threePeerTopics := 0
-		for _, peers := range distribution {
-			if peers == 1 {
-				onePeerTopics++
-			} else if peers == 2 {
-				twoPeerTopics++
-			} else if peers == 3 {
-				threePeerTopics++
+			if count == 0 {
+				deadSubnets++
+			} else if count <= 2 {
+				unhealthySubnets++
 			}
 		}
 
+		// Calculate min, median, max
+		sort.Ints(subnetPeerCounts)
+		min := subnetPeerCounts[0]
+		median := subnetPeerCounts[len(subnetPeerCounts)/2]
+		max := subnetPeerCounts[len(subnetPeerCounts)-1]
+
 		logger.Debug("topic peers distribution",
-			zap.Ints("distribution", distribution),
 			zap.Int("min", min),
 			zap.Int("median", median),
 			zap.Int("max", max),
-			zap.Int("one_peer_topics", onePeerTopics),
-			zap.Int("two_peer_topics", twoPeerTopics),
-			zap.Int("three_peer_topics", threePeerTopics),
+			zap.Int("dead_subnets", deadSubnets),
+			zap.Int("unhealthy_subnets", unhealthySubnets),
 		)
 	}
 }
 
-func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) int {
+func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) (peerCount int) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
 		logger.Warn("could not get topic peers", fields.Topic(name), zap.Error(err))
