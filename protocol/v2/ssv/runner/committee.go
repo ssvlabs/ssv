@@ -795,16 +795,26 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 }
 
 func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	cr.measurements.StartDutyFlow()
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.execute_duty", observabilityNamespace),
+		trace.WithAttributes(
+			roleAttribute(duty.RunnerRole()),
+			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
+	defer span.End()
 
+	cr.measurements.StartDutyFlow()
+    
 	start := time.Now()
 	slot := duty.DutySlot()
 	// We set committeeIndex to 0 for simplicity, there is no need to specify it exactly because
 	// all 64 Ethereum committees assigned to this slot will get the same data to attest for.
 	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot, 0)
 	if err != nil {
-		return errors.Wrap(err, "failed to get attestation data")
+		err := errors.Wrap(err, "failed to get attestation data")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
 	logger = logger.With(
 		zap.Duration("attestation_data_time", time.Since(start)),
 		fields.Slot(slot),
@@ -819,8 +829,11 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+		err := errors.Wrap(err, "can't start new duty runner instance for duty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
