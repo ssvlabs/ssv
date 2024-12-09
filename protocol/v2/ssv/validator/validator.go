@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -126,7 +127,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		trace.WithAttributes(
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
 			attribute.Int64("ssv.validator.msg_type", int64(msg.GetType())),
-			attribute.String("ssv.runner.role", msg.GetID().GetRoleType().String()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
 		))
 
 	defer span.End()

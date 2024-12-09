@@ -89,7 +89,7 @@ func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.runner.start_new_duty", observabilityNamespace),
 		trace.WithAttributes(
-			roleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int64("ssv.validator.quorum", int64(quorum)),
 			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
 	defer span.End()
@@ -225,7 +225,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		trace.WithAttributes(
 			attribute.String("ssv.validator.msg_id", msg.SSVMessage.MsgID.String()),
 			attribute.Int64("ssv.validator.msg_type", int64(msg.SSVMessage.MsgType)),
-			roleAttribute(msg.SSVMessage.GetID().GetRoleType()),
+			observability.RunnerRoleAttribute(msg.SSVMessage.GetID().GetRoleType()),
 		))
 	defer span.End()
 
@@ -261,7 +261,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		span.SetAttributes(
 			attribute.Int64("ssv.validator.index", int64(duty.ValidatorIndex)),
 			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
-			attribute.String("ssv.beacon.role", duty.Type.String()),
+			observability.BeaconRoleAttribute(duty.Type),
 		)
 		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
 			eventMsg := "duty is no longer valid"
@@ -436,7 +436,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		}
 		eventMsg := "found validators for root"
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			attribute.String("ssv.beacon.role", role.String()),
+			observability.BeaconRoleAttribute(role),
 			attribute.String("ssv.validator.duty.root", hex.EncodeToString(root[:])),
 		))
 		logger.Debug(eventMsg,
@@ -798,7 +798,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.runner.execute_duty", observabilityNamespace),
 		trace.WithAttributes(
-			roleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
 	defer span.End()
 

@@ -16,6 +16,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -150,7 +151,7 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.base_runner.start_new_duty", observabilityNamespace),
 		trace.WithAttributes(
-			roleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			attribute.Int64("ssv.validator.quorum", int64(quorum)),
 			attribute.Int64("ssv.validator.duty.slot", int64(duty.DutySlot()))))
 	defer span.End()
@@ -314,7 +315,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.base_runner.decide", observabilityNamespace),
 		trace.WithAttributes(
-			roleAttribute(runner.GetBaseRunner().RunnerRoleType),
+			observability.RunnerRoleAttribute(runner.GetBaseRunner().RunnerRoleType),
 			attribute.Int64("ssv.validator.duty.slot", int64(slot))))
 	defer span.End()
 

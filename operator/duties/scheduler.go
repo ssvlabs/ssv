@@ -377,8 +377,8 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 			span.AddEvent("late duty execution",
 				trace.WithAttributes(
 					attribute.Int64("slot_delay_ms", slotDelay.Milliseconds()),
-					attribute.String("ssv.beacon.role", duty.Type.String()),
-					attribute.String("ssv.runner.role", duty.RunnerRole().String())))
+					observability.BeaconRoleAttribute(duty.Type),
+					observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
