@@ -43,7 +43,9 @@ import (
 	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
+	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/operator"
@@ -221,11 +223,9 @@ var StartNodeCmd = &cobra.Command{
 
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
-		validatorStore := nodeStorage.ValidatorStore()
-
 		messageValidator := validation.New(
 			networkConfig,
-			validatorStore,
+			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
@@ -293,7 +293,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		cfg.SSVOptions.ValidatorStore = validatorStore
+		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
@@ -336,6 +336,35 @@ var StartNodeCmd = &cobra.Command{
 		)
 		if len(cfg.LocalEventsPath) == 0 {
 			nodeProber.AddNode("event syncer", eventSyncer)
+		}
+
+		// Increase MaxPeers if the operator is subscribed to many subnets.
+		// TODO: use OperatorCommittees when it's fixed.
+		const (
+			baseMaxPeers   = 60
+			maxPeersLimit  = 150
+			peersPerSubnet = 3
+		)
+		start := time.Now()
+		myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
+		mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+		myActiveSubnets := 0
+		for _, v := range myValidators {
+			subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+			if mySubnets[subnet] == 0 {
+				mySubnets[subnet] = 1
+				myActiveSubnets++
+			}
+		}
+		idealMaxPeers := min(baseMaxPeers+peersPerSubnet*myActiveSubnets, maxPeersLimit)
+		if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
+			logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
+				zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
+				zap.Int("new_max_peers", idealMaxPeers),
+				zap.Int("subscribed_subnets", myActiveSubnets),
+				zap.Duration("took", time.Since(start)),
+			)
+			cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
