@@ -68,5 +68,7 @@ func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, networkCfg
 			Bootnodes:  []string{},
 		},
 	}
+	// TODO - not sure if bootnode needs topics controller, this can result in panic -
+	// we might need to account for that somehow
 	return newDiscV5Service(ctx, logger, nil, discOpts)
 }
