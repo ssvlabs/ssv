@@ -10,7 +10,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -58,7 +57,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
 
-	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.client.Address(), http.MethodGet, time.Since(aggDataReqStart), spectypes.BNRoleAggregator)
+	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.client.Address(), http.MethodGet, time.Since(aggDataReqStart))
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
@@ -72,7 +71,14 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
-	return gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
+	start := time.Now()
+	if err := gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg}); err != nil {
+		return err
+	}
+
+	recordRequestDuration(gc.ctx, "SubmitAggregateAttestations", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }
 
 // IsAggregator returns true if the signature is from the input validator. The committee

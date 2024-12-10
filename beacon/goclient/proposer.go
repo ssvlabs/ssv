@@ -28,6 +28,7 @@ const (
 
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
+	start := time.Now()
 	resp, err := gc.client.ProposerDuties(ctx, &api.ProposerDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
@@ -38,6 +39,8 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 	if resp == nil {
 		return nil, fmt.Errorf("proposer duties response is nil")
 	}
+
+	recordRequestDuration(gc.ctx, "ProposerDuties", gc.client.Address(), http.MethodGet, time.Since(start))
 
 	return resp.Data, nil
 }
@@ -67,7 +70,7 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
 	}
 
-	recordRequestDuration(gc.ctx, "Proposal", gc.client.Address(), http.MethodGet, time.Since(reqStart), spectypes.BNRoleProposer)
+	recordRequestDuration(gc.ctx, "Proposal", gc.client.Address(), http.MethodGet, time.Since(reqStart))
 
 	beaconBlock := proposalResp.Data
 
@@ -167,7 +170,14 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 		Proposal: signedBlock,
 	}
 
-	return gc.client.SubmitBlindedProposal(gc.ctx, opts)
+	start := time.Now()
+	if err := gc.client.SubmitBlindedProposal(gc.ctx, opts); err != nil {
+		return err
+	}
+
+	recordRequestDuration(gc.ctx, "SubmitBlindedProposal", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -213,7 +223,14 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	return gc.client.SubmitProposal(gc.ctx, opts)
+	start := time.Now()
+	if err := gc.client.SubmitProposal(gc.ctx, opts); err != nil {
+		return err
+	}
+
+	recordRequestDuration(gc.ctx, "SubmitProposal", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }
 
 func (gc *GoClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
@@ -228,7 +245,14 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 			FeeRecipient:   recipient,
 		})
 	}
-	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
+	start := time.Now()
+	if err := gc.client.SubmitProposalPreparations(gc.ctx, preparations); err != nil {
+		return err
+	}
+
+	recordRequestDuration(gc.ctx, "SubmitProposalPreparations", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }
 
 func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
@@ -334,9 +358,11 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 			bs = len(registrations)
 		}
 
+		start := time.Now()
 		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
 			return err
 		}
+		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.client.Address(), http.MethodPost, time.Since(start))
 
 		registrations = registrations[bs:]
 

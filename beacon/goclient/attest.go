@@ -11,11 +11,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // AttesterDuties returns attester duties for a given epoch.
 func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+	start := time.Now()
 	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
@@ -26,6 +26,8 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	if resp == nil {
 		return nil, fmt.Errorf("attester duties response is nil")
 	}
+
+	recordRequestDuration(gc.ctx, "AttesterDuties", gc.client.Address(), http.MethodPost, time.Since(start))
 
 	return resp.Data, nil
 }
@@ -56,7 +58,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			Slot: slot,
 		})
 
-		recordRequestDuration(gc.ctx, "AttestationData", gc.client.Address(), http.MethodGet, time.Since(attDataReqStart), spectypes.BNRoleAttester)
+		recordRequestDuration(gc.ctx, "AttestationData", gc.client.Address(), http.MethodGet, time.Since(attDataReqStart))
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to get attestation data: %w", err)
@@ -100,5 +102,12 @@ func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.Comm
 
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error {
-	return gc.client.SubmitAttestations(gc.ctx, attestations)
+	start := time.Now()
+	if err := gc.client.SubmitAttestations(gc.ctx, attestations); err != nil {
+		return err
+	}
+
+	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }
