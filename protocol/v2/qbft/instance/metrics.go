@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -30,7 +31,7 @@ func (m *metrics) EndStageProposal(ctx context.Context, round qbft.Round) {
 		metric.WithAttributes(
 			stageAttribute(proposalStage),
 			roleAttribute(m.role),
-			roundAttribute(round)))
+			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
 }
 
@@ -41,7 +42,7 @@ func (m *metrics) EndStagePrepare(ctx context.Context, round qbft.Round) {
 		metric.WithAttributes(
 			stageAttribute(prepareStage),
 			roleAttribute(m.role),
-			roundAttribute(round)))
+			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
 }
 
@@ -52,6 +53,6 @@ func (m *metrics) EndStageCommit(ctx context.Context, round qbft.Round) {
 		metric.WithAttributes(
 			stageAttribute(commitStage),
 			roleAttribute(m.role),
-			roundAttribute(round)))
+			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
 }

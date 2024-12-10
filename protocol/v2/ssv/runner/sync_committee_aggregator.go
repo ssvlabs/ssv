@@ -304,7 +304,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 			r.measurements.EndDutyFlow()
 			dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-				metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution), roundAttribute(r.GetState().RunningInstance.State.Round)))
+				metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution), observability.DutyRoundAttribute(r.GetState().RunningInstance.State.Round)))
 			submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
 
 			logger.Debug("✅ successfully submitted sync committee aggregator",

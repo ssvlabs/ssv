@@ -2,13 +2,10 @@ package runner
 
 import (
 	"fmt"
-	"math"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv/observability"
 )
 
@@ -63,13 +60,4 @@ var (
 
 func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
-
-func roundAttribute(qbftRound qbft.Round) attribute.KeyValue {
-	var round int64
-	r := uint64(qbftRound)
-	if r <= math.MaxInt64 {
-		round = int64(r)
-	}
-	return attribute.Int64("ssv.validator.duty.round", round)
 }

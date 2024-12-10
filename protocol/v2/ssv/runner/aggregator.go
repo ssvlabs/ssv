@@ -251,7 +251,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		}
 		r.measurements.EndDutyFlow()
 		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator), roundAttribute(r.GetState().RunningInstance.State.Round)))
+			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator), observability.DutyRoundAttribute(r.GetState().RunningInstance.State.Round)))
 		submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator)))
 
 		logger.Debug("✅ successful submitted aggregate",
