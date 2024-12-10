@@ -323,7 +323,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 		r.measurements.EndDutyFlow()
 		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer), roundAttribute(r.GetState().RunningInstance.State.Round)))
+			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer), observability.DutyRoundAttribute(r.GetState().RunningInstance.State.Round)))
 		submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 
 		logger.Info("✅ successfully submitted block proposal",
