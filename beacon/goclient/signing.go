@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,6 +17,7 @@ import (
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	start := time.Now()
 	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
 	if err != nil {
 		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
@@ -25,6 +28,8 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	if specResponse.Data == nil {
 		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
 	}
+
+	recordRequestDuration(gc.ctx, "Spec", gc.client.Address(), http.MethodGet, time.Since(start))
 
 	// TODO: consider storing fork version and genesis validators root in goClient
 	//		instead of fetching it every time
@@ -42,6 +47,7 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
+	start = time.Now()
 	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
 	if err != nil {
 		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
@@ -52,6 +58,9 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	if genesisResponse.Data == nil {
 		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
 	}
+
+	recordRequestDuration(gc.ctx, "Genesis", gc.client.Address(), http.MethodGet, time.Since(start))
+
 	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
@@ -84,10 +93,14 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		return gc.computeVoluntaryExitDomain(gc.ctx)
 	}
 
+	start := time.Now()
 	data, err := gc.client.Domain(gc.ctx, domain, epoch)
 	if err != nil {
 		return phase0.Domain{}, err
 	}
+
+	recordRequestDuration(gc.ctx, "Domain", gc.client.Address(), http.MethodGet, time.Since(start))
+
 	return data, nil
 }
 

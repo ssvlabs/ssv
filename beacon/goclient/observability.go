@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -50,12 +49,11 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, role types.BeaconRole) {
+func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration) {
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
 		metric.WithAttributes(
-			observability.BeaconRoleAttribute(role),
 			semconv.ServerAddress(serverAddr),
 			semconv.HTTPRequestMethodKey.String(requestMethod),
 			attribute.String("http.route_name", routeName),
