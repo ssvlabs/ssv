@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/topics"
 	"net"
 	"time"
 
@@ -54,6 +55,7 @@ type DiscV5Service struct {
 
 	dv5Listener Listener
 	bootnodes   []*enode.Node
+	topicsCtrl  topics.Controller
 
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
@@ -66,11 +68,17 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (Service, error) {
+func newDiscV5Service(
+	pctx context.Context,
+	logger *zap.Logger,
+	topicsController topics.Controller,
+	opts *Options,
+) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:           ctx,
 		cancel:        cancel,
+		topicsCtrl:    topicsController,
 		conns:         opts.ConnIndex,
 		subnetsIdx:    opts.SubnetsIdx,
 		networkConfig: opts.NetworkConfig,
@@ -177,15 +185,15 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	}
 
 	// Get the peer's subnets, skipping if it has none.
-	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
+	if bytes.Equal(zeroSubnets, peerSubnets) {
 		return errors.New("zero subnets")
 	}
 
-	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
@@ -196,6 +204,40 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		metricRejectedNodes.Inc()
 		return errors.New("no shared subnets")
 	}
+
+	//// TODO - need a better (smart) way to do it, but for now try to connect only
+	//// peers that help with getting rid of dead subnets
+	//helpfulPeer := false
+	//subscribedTopics := dvs.topicsCtrl.Topics()
+	//for _, topic := range subscribedTopics {
+	//	topicPeers, err := dvs.topicsCtrl.Peers(topic)
+	//	if err != nil {
+	//		return errors.Wrap(err, "could not get subscribed topic peers")
+	//	}
+	//
+	//	if len(topicPeers) >= 1 {
+	//		continue // this topic has enough peers - TODO (1 is not enough tho)
+	//	}
+	//	//// TODO - testing 0 to see if this even works
+	//	//if len(topicPeers) >= 0 {
+	//	//	continue // this topic has enough peers - TODO (1 is not enough tho)
+	//	//}
+	//
+	//	// we've got a dead subnet here, see if this peer can help with that
+	//	subnet, err := strconv.Atoi(topic)
+	//	if err != nil {
+	//		return errors.Wrap(err, "could not convert topic name to subnet id")
+	//	}
+	//	peerSubnet := peerSubnets[subnet]
+	//	if peerSubnet != 1 {
+	//		continue // peer doesn't have this subnet either, lets check other dead subnets we have
+	//	}
+	//	helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+	//	break
+	//}
+	//if !helpfulPeer {
+	//	return errors.New("this peer doesn't help with dead subnets")
+	//}
 
 	metricFoundNodes.Inc()
 	return nil

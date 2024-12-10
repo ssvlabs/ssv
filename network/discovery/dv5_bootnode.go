@@ -68,5 +68,5 @@ func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, networkCfg
 			Bootnodes:  []string{},
 		},
 	}
-	return newDiscV5Service(ctx, logger, discOpts)
+	return newDiscV5Service(ctx, logger, nil, discOpts)
 }

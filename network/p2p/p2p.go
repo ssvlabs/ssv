@@ -292,14 +292,20 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 
 		connectedPeers := n.host.Network().Peers()
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
-
 		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), connectedPeers, mySubnets)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
 			return
 		}
 
-		const maxPeersToDrop = 1
+		const maxPeersToDrop = 4
+
+		connectedPeers = n.host.Network().Peers()
+		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
+			// we can accept more peer connections already, no need to trim
+			return
+		}
+
 		immunityQuota := len(connectedPeers) - maxPeersToDrop
 		protectedPeers := n.PeerProtection(immunityQuota)
 		for _, peer := range connectedPeers {
