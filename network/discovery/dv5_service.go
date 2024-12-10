@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -138,22 +139,27 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
 
-	// Log every 10th skipped peer.
-	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
-	const logFrequency = 10
-	var skippedPeers uint64 = 0
+	epochDuration := time.Duration(dvs.networkConfig.SlotsPerEpoch()) * dvs.networkConfig.SlotDurationSec() // #nosec G115
+	logTTL := 2 * epochDuration
+	logCache := ttlcache.New[peer.ID, struct{}](
+		ttlcache.WithTTL[peer.ID, struct{}](logTTL),
+	)
+	go logCache.Start()
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		logger := logger.With(
-			fields.ENR(e.Node),
-			fields.PeerID(e.AddrInfo.ID),
-		)
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			if skippedPeers%logFrequency == 0 {
-				logger.Debug("skipped discovered peer", zap.Error(err))
+			if v := logCache.Get(e.AddrInfo.ID); v == nil {
+				// This log is triggered very often, however, we need it, so it's shown once per peer ID per 2 epochs.
+				logger.Debug("skipped discovered peer",
+					fields.ENR(e.Node),
+					fields.PeerID(e.AddrInfo.ID),
+					zap.Duration("rate_limit", logTTL),
+					zap.Error(err),
+				)
+				logCache.Set(e.AddrInfo.ID, struct{}{}, ttlcache.DefaultTTL)
 			}
-			skippedPeers++
+
 			return
 		}
 		handler(e)
