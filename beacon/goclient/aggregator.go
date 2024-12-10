@@ -3,6 +3,7 @@ package goclient
 import (
 	"encoding/binary"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -57,7 +58,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
 
-	recordAttestationDataRequest(gc.ctx, time.Since(aggDataReqStart), spectypes.BNRoleAggregator)
+	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.client.Address(), http.MethodGet, time.Since(aggDataReqStart), spectypes.BNRoleAggregator)
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)

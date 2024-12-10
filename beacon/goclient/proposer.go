@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -66,7 +67,7 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
 	}
 
-	recordAttestationDataRequest(gc.ctx, time.Since(reqStart), spectypes.BNRoleProposer)
+	recordRequestDuration(gc.ctx, "Proposal", gc.client.Address(), http.MethodGet, time.Since(reqStart), spectypes.BNRoleProposer)
 
 	beaconBlock := proposalResp.Data
 

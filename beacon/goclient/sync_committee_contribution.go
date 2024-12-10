@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -56,7 +57,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
-	recordAttestationDataRequest(gc.ctx, time.Since(scDataReqStart), spectypes.BNRoleSyncCommittee)
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart), spectypes.BNRoleSyncCommittee)
 
 	blockRoot := beaconBlockRootResp.Data
 
@@ -97,7 +98,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, err
 	}
 
-	recordAttestationDataRequest(gc.ctx, time.Since(sccDataReqStart), spectypes.BNRoleSyncCommitteeContribution)
+	recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(sccDataReqStart), spectypes.BNRoleSyncCommitteeContribution)
 
 	return &contributions, spec.DataVersionAltair, nil
 }

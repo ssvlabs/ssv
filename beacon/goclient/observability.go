@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 type beaconNodeStatus string
@@ -26,9 +27,9 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	attestationDataRequestHistogram = observability.NewMetric(
+	requestDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("attestation_data_request.duration"),
+			metricName("request.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("beacon data request duration in seconds"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
@@ -49,11 +50,16 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordAttestationDataRequest(ctx context.Context, duration time.Duration, role types.BeaconRole) {
-	attestationDataRequestHistogram.Record(
+func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, role types.BeaconRole) {
+	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
-		metric.WithAttributes(observability.BeaconRoleAttribute(role)))
+		metric.WithAttributes(
+			observability.BeaconRoleAttribute(role),
+			semconv.ServerAddress(serverAddr),
+			semconv.HTTPRequestMethodKey.String(requestMethod),
+			attribute.String("http.route_name", routeName),
+		))
 }
 
 func recordBeaconClientStatus(ctx context.Context, status beaconNodeStatus, nodeAddr string) {
