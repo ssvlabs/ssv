@@ -316,7 +316,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		}
 	}
 	if operatorShares <= math.MaxInt64 {
-		validatorsCountGauge.Record(c.ctx, int64(operatorShares))
+		activeValidatorsGauge.Record(c.ctx, int64(operatorShares))
 	}
 	return uint64(len(allShares)), active, operatorShares, nil
 }
