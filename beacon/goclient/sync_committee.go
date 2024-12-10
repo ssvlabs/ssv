@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -45,7 +46,7 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
-	recordAttestationDataRequest(gc.ctx, time.Since(reqStart), spectypes.BNRoleSyncCommittee)
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(reqStart), spectypes.BNRoleSyncCommittee)
 
 	return *resp.Data, spec.DataVersionAltair, nil
 }
