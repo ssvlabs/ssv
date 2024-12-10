@@ -2,6 +2,7 @@ package observability
 
 import (
 	"math"
+	"strconv"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -33,5 +34,5 @@ func Uint64AttributeValue(value uint64) attribute.Value {
 	if value <= math.MaxInt64 {
 		return attribute.Int64Value(int64(value))
 	}
-	return attribute.StringValue("OVERFLOW")
+	return attribute.StringValue(strconv.FormatUint(value, 10))
 }

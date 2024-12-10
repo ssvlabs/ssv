@@ -2,7 +2,6 @@ package topics
 
 import (
 	"fmt"
-	"strconv"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -37,5 +36,8 @@ func metricName(name string) string {
 }
 
 func messageTypeAttribute(value uint64) attribute.KeyValue {
-	return attribute.String("ssv.p2p.message.type", strconv.FormatUint(value, 10))
+	return attribute.KeyValue{
+		Key:   "ssv.p2p.message.type",
+		Value: observability.Uint64AttributeValue(value),
+	}
 }
