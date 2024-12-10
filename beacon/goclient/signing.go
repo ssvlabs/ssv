@@ -41,6 +41,8 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
 	}
 
+	recordRequestDuration(gc.ctx, "Spec", gc.client.Address(), http.MethodGet, time.Since(start))
+
 	// TODO: consider storing fork version and genesis validators root in goClient
 	//		instead of fetching it every time
 
