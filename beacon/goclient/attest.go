@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -55,7 +56,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			Slot: slot,
 		})
 
-		recordAttestationDataRequest(gc.ctx, time.Since(attDataReqStart), spectypes.BNRoleAttester)
+		recordRequestDuration(gc.ctx, "AttestationData", gc.client.Address(), http.MethodGet, time.Since(attDataReqStart), spectypes.BNRoleAttester)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to get attestation data: %w", err)
