@@ -340,41 +340,43 @@ var StartNodeCmd = &cobra.Command{
 
 		// Increase MaxPeers if the operator is subscribed to many subnets.
 		// TODO: use OperatorCommittees when it's fixed.
-		const (
-			baseMaxPeers        = 60
-			maxPeersLimit       = 150
-			idealPeersPerSubnet = 3
-		)
-		start := time.Now()
-		myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
-		mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
-		myActiveSubnets := 0
-		for _, v := range myValidators {
-			subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-			if mySubnets[subnet] == 0 {
-				mySubnets[subnet] = 1
-				myActiveSubnets++
-			}
-		}
-		idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
-		if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
-			logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
-				zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
-				zap.Int("new_max_peers", idealMaxPeers),
-				zap.Int("subscribed_subnets", myActiveSubnets),
-				zap.Duration("took", time.Since(start)),
+		if cfg.P2pNetworkConfig.DynamicMaxPeers {
+			var (
+				baseMaxPeers        = 60
+				maxPeersLimit       = cfg.P2pNetworkConfig.DynamicMaxPeersLimit
+				idealPeersPerSubnet = 3
 			)
-			cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
-		}
+			start := time.Now()
+			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
+			mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+			myActiveSubnets := 0
+			for _, v := range myValidators {
+				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+				if mySubnets[subnet] == 0 {
+					mySubnets[subnet] = 1
+					myActiveSubnets++
+				}
+			}
+			idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
+			if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
+				logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
+					zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
+					zap.Int("new_max_peers", idealMaxPeers),
+					zap.Int("subscribed_subnets", myActiveSubnets),
+					zap.Duration("took", time.Since(start)),
+				)
+				cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
+			}
 
-		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return validatorCtrl.GetValidatorStats()
-		}
-		if err := p2pNetwork.Setup(logger); err != nil {
-			logger.Fatal("failed to setup network", zap.Error(err))
-		}
-		if err := p2pNetwork.Start(logger); err != nil {
-			logger.Fatal("failed to start network", zap.Error(err))
+			cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+				return validatorCtrl.GetValidatorStats()
+			}
+			if err := p2pNetwork.Setup(logger); err != nil {
+				logger.Fatal("failed to setup network", zap.Error(err))
+			}
+			if err := p2pNetwork.Start(logger); err != nil {
+				logger.Fatal("failed to start network", zap.Error(err))
+			}
 		}
 
 		if cfg.SSVAPIPort > 0 {

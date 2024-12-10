@@ -46,8 +46,11 @@ type Config struct {
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Connected peers limit. If this is lower than the ideal MaxPeers for the operator's subnets, it will be increased (up to 150)."`
-	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Connected peers limit per pubsub topic"`
+
+	MaxPeers             int  `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Connected peers limit. At the time being, this may be increased by DynamicMaxPeers until that is phased out."`
+	DynamicMaxPeers      bool `yaml:"DynamicMaxPeers" env:"P2P_DYNAMIC_MAX_PEERS" env-default:"true" env-description:"If true, MaxPeers will grow with the operator's number of committees."`
+	DynamicMaxPeersLimit int  `yaml:"DynamicMaxPeersLimit" env:"P2P_DYNAMIC_MAX_PEERS_LIMIT" env-default:"150" env-description:"Limit for MaxPeers when DynamicMaxPeers is enabled."`
+	TopicMaxPeers        int  `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Connected peers limit per pubsub topic"`
 
 	// Subnets is a static bit list of subnets that this node will register upon start.
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
