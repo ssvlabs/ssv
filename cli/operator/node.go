@@ -341,9 +341,9 @@ var StartNodeCmd = &cobra.Command{
 		// Increase MaxPeers if the operator is subscribed to many subnets.
 		// TODO: use OperatorCommittees when it's fixed.
 		const (
-			baseMaxPeers   = 60
-			maxPeersLimit  = 150
-			peersPerSubnet = 3
+			baseMaxPeers        = 60
+			maxPeersLimit       = 150
+			idealPeersPerSubnet = 3
 		)
 		start := time.Now()
 		myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
@@ -356,7 +356,7 @@ var StartNodeCmd = &cobra.Command{
 				myActiveSubnets++
 			}
 		}
-		idealMaxPeers := min(baseMaxPeers+peersPerSubnet*myActiveSubnets, maxPeersLimit)
+		idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 		if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 			logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
 				zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
