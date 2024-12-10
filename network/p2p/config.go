@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -75,8 +74,6 @@ type Config struct {
 	Network networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
-	// Metrics report metrics.
-	Metrics metricsreporter.MetricsReporter
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`

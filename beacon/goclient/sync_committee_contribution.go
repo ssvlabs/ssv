@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -56,20 +57,21 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
-	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart))
+
 	blockRoot := beaconBlockRootResp.Data
 
 	gc.waitToSlotTwoThirds(slot)
 
 	// Fetch sync committee contributions for each subnet in parallel.
 	var (
-		sccDataReqStart = time.Now()
-		contributions   = make(spectypes.Contributions, 0, len(subnetIDs))
-		g               errgroup.Group
+		contributions = make(spectypes.Contributions, 0, len(subnetIDs))
+		g             errgroup.Group
 	)
 	for i := range subnetIDs {
 		index := i
 		g.Go(func() error {
+			start := time.Now()
 			syncCommitteeContrResp, err := gc.client.SyncCommitteeContribution(gc.ctx, &api.SyncCommitteeContributionOpts{
 				Slot:              slot,
 				SubcommitteeIndex: subnetIDs[index],
@@ -84,6 +86,9 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 			if syncCommitteeContrResp.Data == nil {
 				return fmt.Errorf("sync committee contribution data is nil")
 			}
+
+			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(start))
+
 			contribution := syncCommitteeContrResp.Data
 			contributions = append(contributions, &spectypes.Contribution{
 				SelectionProofSig: selectionProofs[index],
@@ -96,14 +101,18 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, err
 	}
 
-	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
-
 	return &contributions, spec.DataVersionAltair, nil
 }
 
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
-	return gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
+	start := time.Now()
+	if err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution}); err != nil {
+		return err
+	}
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)

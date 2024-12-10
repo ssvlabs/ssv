@@ -3,8 +3,6 @@ package validation
 import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 )
 
 // Option represents a functional option for configuring a messageValidator.
@@ -14,13 +12,6 @@ type Option func(validator *messageValidator)
 func WithLogger(logger *zap.Logger) Option {
 	return func(mv *messageValidator) {
 		mv.logger = logger
-	}
-}
-
-// WithMetrics sets the metrics for the messageValidator.
-func WithMetrics(metrics metricsreporter.MetricsReporter) Option {
-	return func(mv *messageValidator) {
-		mv.metrics = metrics
 	}
 }
 

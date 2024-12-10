@@ -16,14 +16,15 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -35,7 +36,7 @@ type ProposerRunner struct {
 	signer         spectypes.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-	metrics        metrics.ConsensusMetrics
+	measurements   measurementsStore
 	graffiti       []byte
 }
 
@@ -72,7 +73,7 @@ func NewProposerRunner(
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
 		graffiti:       graffiti,
-		metrics:        metrics.NewConsensusMetrics(spectypes.RoleProposer),
+		measurements:   NewMeasurementsStore(),
 	}, nil
 }
 
@@ -102,6 +103,9 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return nil
 	}
 
+	r.measurements.EndPreConsensus()
+	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	// randao is relevant only for block proposals, no need to check type
@@ -113,14 +117,14 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		fields.PreConsensusTime(r.metrics.GetPreConsensusTime()))
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
 
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get blinded beacon block",
-			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
+			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.BlockTime(time.Since(start)),
 			zap.Error(err))
 		return errors.Wrap(err, "failed to get beacon block")
@@ -138,17 +142,15 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	if err != nil {
 		return errors.Wrap(err, "could not marshal beacon block")
 	}
-	r.metrics.EndBeaconData()
-
 	input := &spectypes.ValidatorConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: byts,
 	}
 
-	r.metrics.StartConsensus()
+	r.measurements.StartConsensus()
 
-	if err := r.BaseRunner.decide(logger, r, duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 
@@ -165,8 +167,10 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return nil
 	}
 
-	r.metrics.EndConsensus()
-	r.metrics.StartPostConsensus()
+	r.measurements.EndConsensus()
+	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+
+	r.measurements.StartPostConsensus()
 
 	// specific duty sig
 	var blkToSign ssz.HashRoot
@@ -250,12 +254,14 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
-		r.metrics.EndPostConsensus()
+
+		r.measurements.EndPostConsensus()
+		postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+
 		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
 			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
-			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.Round(r.GetState().RunningInstance.State.Round))
-		endSubmission := r.metrics.StartBeaconSubmission()
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
 		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
@@ -266,10 +272,9 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		start := time.Now()
 
 		logger = logger.With(
-			fields.BeaconDataTime(r.metrics.GetBeaconDataTime()),
-			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
-			fields.ConsensusTime(r.metrics.GetConsensusTime()),
-			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+			fields.ConsensusTime(r.measurements.ConsensusTime()),
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
 			zap.Bool("blinded", r.decidedBlindedBlock()),
@@ -290,7 +295,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			)
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
-				r.metrics.RoleSubmissionFailed()
+				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 				logger.Error("❌ could not submit blinded Beacon block",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
@@ -308,7 +313,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			)
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
-				r.metrics.RoleSubmissionFailed()
+				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 				logger.Error("❌ could not submit Beacon block",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
@@ -316,9 +321,10 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			}
 		}
 
-		endSubmission()
-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
-		r.metrics.RoleSubmitted()
+		r.measurements.EndDutyFlow()
+		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
+			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer), observability.DutyRoundAttribute(r.GetState().RunningInstance.State.Round)))
+		submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(validatorConsensusData.Duty.Slot),
@@ -380,8 +386,8 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
+	r.measurements.StartDutyFlow()
+	r.measurements.StartPreConsensus()
 
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
