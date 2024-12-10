@@ -39,7 +39,7 @@ var (
 			metricName("validators.per_status"),
 			metric.WithDescription("total number of validators by status")))
 
-	validatorsCountGauge = observability.NewMetric(
+	activeValidatorsGauge = observability.NewMetric(
 		meter.Int64Gauge(
 			metricName("validators.active"),
 			metric.WithDescription("number of active validators")))

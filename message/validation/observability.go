@@ -24,25 +24,25 @@ var (
 		meter.Int64Counter(
 			observabilityNamespace,
 			metric.WithUnit("{message_validation}"),
-			metric.WithDescription("total count of messages validated")))
+			metric.WithDescription("total number of messages validated")))
 
 	messageValidationsAcceptedCounter = observability.NewMetric(
 		meter.Int64Counter(
 			metricName("accepted"),
 			metric.WithUnit("{message_validation}"),
-			metric.WithDescription("total count of messages successfully validated and accepted")))
+			metric.WithDescription("total number of messages successfully validated and accepted")))
 
 	messageValidationsIgnoredCounter = observability.NewMetric(
 		meter.Int64Counter(
 			metricName("ignored"),
 			metric.WithUnit("{message_validation}"),
-			metric.WithDescription("total count of messages that failed validation and were ignored")))
+			metric.WithDescription("total number of messages that failed validation and were ignored")))
 
 	messageValidationsRejectedCounter = observability.NewMetric(
 		meter.Int64Counter(
 			metricName("rejected"),
 			metric.WithUnit("{message_validation}"),
-			metric.WithDescription("total count of messages that failed validation and were rejected")))
+			metric.WithDescription("total number of messages that failed validation and were rejected")))
 
 	messageValidationDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
