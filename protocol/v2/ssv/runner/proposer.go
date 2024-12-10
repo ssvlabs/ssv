@@ -22,6 +22,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -103,7 +104,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	r.measurements.EndPreConsensus()
-	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -167,7 +168,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	r.measurements.EndConsensus()
-	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 
 	r.measurements.StartPostConsensus()
 
@@ -255,7 +256,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		copy(specSig[:], sig)
 
 		r.measurements.EndPostConsensus()
-		postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+		postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 
 		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
 			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
@@ -294,7 +295,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			)
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
-				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 				logger.Error("❌ could not submit blinded Beacon block",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
@@ -312,7 +313,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			)
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
-				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 				logger.Error("❌ could not submit Beacon block",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
@@ -322,8 +323,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 		r.measurements.EndDutyFlow()
 		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-			metric.WithAttributes(roleAttribute(spectypes.RoleProposer), roundAttribute(r.GetState().RunningInstance.State.Round)))
-		submissionCounter.Add(ctx, 1, metric.WithAttributes(roleAttribute(spectypes.RoleProposer)))
+			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer), roundAttribute(r.GetState().RunningInstance.State.Round)))
+		submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
 
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(validatorConsensusData.Duty.Slot),

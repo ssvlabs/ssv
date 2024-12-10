@@ -20,6 +20,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -210,7 +211,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	cr.measurements.EndConsensus()
-	consensusDurationHistogram.Record(ctx, cr.measurements.ConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleCommittee)))
+	consensusDurationHistogram.Record(ctx, cr.measurements.ConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleCommittee)))
 
 	cr.measurements.StartPostConsensus()
 	// decided means consensus is done
@@ -434,9 +435,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			}
 		}
 	}
-
+	metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleCommittee))
 	cr.measurements.EndPostConsensus()
-	postConsensusDurationHistogram.Record(ctx, cr.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(roleAttribute(spectypes.RoleCommittee)))
+	postConsensusDurationHistogram.Record(ctx, cr.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleCommittee)))
 
 	logger = logger.With(fields.PostConsensusTime(cr.measurements.PostConsensusTime()))
 
