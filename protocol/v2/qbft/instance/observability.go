@@ -45,7 +45,7 @@ func stageAttribute(stage stage) attribute.KeyValue {
 }
 
 func roleAttribute(role string) attribute.KeyValue {
-	return attribute.String("ssv.runner.role", role)
+	return attribute.String(observability.RunnerRoleAttrKey, role)
 }
 
 func roundAttribute(round qbft.Round) attribute.KeyValue {

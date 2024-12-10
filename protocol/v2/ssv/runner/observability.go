@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/observability"
 )
 
@@ -64,10 +63,6 @@ var (
 
 func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
-
-func roleAttribute(role types.RunnerRole) attribute.KeyValue {
-	return attribute.String("ssv.runner.role", role.String())
 }
 
 func roundAttribute(qbftRound qbft.Round) attribute.KeyValue {
