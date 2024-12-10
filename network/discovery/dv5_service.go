@@ -156,6 +156,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			skippedPeers++
 			return
 		}
+		logger.Debug("REVERT: discovered peer", fields.PeerID(e.AddrInfo.ID)) // TODO: revert
 		handler(e)
 	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
