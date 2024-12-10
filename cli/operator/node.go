@@ -164,6 +164,35 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
+		// Increase MaxPeers if the operator is subscribed to many subnets.
+		// TODO: use OperatorCommittees when it's fixed.
+		const (
+			baseMaxPeers   = 60
+			maxPeersLimit  = 150
+			peersPerSubnet = 3
+		)
+		start := time.Now()
+		myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
+		mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+		myActiveSubnets := 0
+		for _, v := range myValidators {
+			subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+			if mySubnets[subnet] == 0 {
+				mySubnets[subnet] = 1
+				myActiveSubnets++
+			}
+		}
+		idealMaxPeers := min(baseMaxPeers+peersPerSubnet*myActiveSubnets, maxPeersLimit)
+		if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
+			logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
+				zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
+				zap.Int("new_max_peers", idealMaxPeers),
+				zap.Int("subscribed_subnets", myActiveSubnets),
+				zap.Duration("took", time.Since(start)),
+			)
+			cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
+		}
+
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
 		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
@@ -336,35 +365,6 @@ var StartNodeCmd = &cobra.Command{
 		)
 		if len(cfg.LocalEventsPath) == 0 {
 			nodeProber.AddNode("event syncer", eventSyncer)
-		}
-
-		// Increase MaxPeers if the operator is subscribed to many subnets.
-		// TODO: use OperatorCommittees when it's fixed.
-		const (
-			baseMaxPeers   = 60
-			maxPeersLimit  = 150
-			peersPerSubnet = 3
-		)
-		start := time.Now()
-		myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
-		mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
-		myActiveSubnets := 0
-		for _, v := range myValidators {
-			subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-			if mySubnets[subnet] == 0 {
-				mySubnets[subnet] = 1
-				myActiveSubnets++
-			}
-		}
-		idealMaxPeers := min(baseMaxPeers+peersPerSubnet*myActiveSubnets, maxPeersLimit)
-		if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
-			logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
-				zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
-				zap.Int("new_max_peers", idealMaxPeers),
-				zap.Int("subscribed_subnets", myActiveSubnets),
-				zap.Duration("took", time.Since(start)),
-			)
-			cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
