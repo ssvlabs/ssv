@@ -25,41 +25,41 @@ var (
 		meter.Float64Histogram(
 			metricName("consensus.duration"),
 			metric.WithUnit("s"),
-			metric.WithDescription(""),
+			metric.WithDescription("consensus duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	preConsensusDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
 			metricName("pre_consensus.duration"),
 			metric.WithUnit("s"),
-			metric.WithDescription(""),
+			metric.WithDescription("pre consensus duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	postConsensusDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
 			metricName("post_consensus.duration"),
 			metric.WithUnit("s"),
-			metric.WithDescription(""),
+			metric.WithDescription("post consensus duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	dutyDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
 			metricName("duty.duration"),
 			metric.WithUnit("s"),
-			metric.WithDescription(""),
+			metric.WithDescription("duty duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	submissionCounter = observability.NewMetric(
 		meter.Int64Counter(
 			metricName("submissions"),
 			metric.WithUnit("{submission}"),
-			metric.WithDescription("")))
+			metric.WithDescription("total number of duty submissions")))
 
 	failedSubmissionCounter = observability.NewMetric(
 		meter.Int64Counter(
 			metricName("submissions.failed"),
 			metric.WithUnit("{submission}"),
-			metric.WithDescription("")))
+			metric.WithDescription("total number of failed duty submissions")))
 )
 
 func metricName(name string) string {
