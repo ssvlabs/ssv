@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -249,13 +250,13 @@ func (mc *MockConnection) Connectedness(id peer.ID) network.Connectedness {
 	return network.NotConnected
 }
 
-func (mc *MockConnection) CanConnect(id peer.ID) bool {
+func (mc *MockConnection) CanConnect(id peer.ID) error {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	if can, ok := mc.canConnect[id]; ok {
-		return can
+	if can, ok := mc.canConnect[id]; ok && can {
+		return nil
 	}
-	return false
+	return fmt.Errorf("cannot connect to peer")
 }
 
 func (mc *MockConnection) AtLimit(dir network.Direction) bool {

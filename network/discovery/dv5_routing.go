@@ -54,7 +54,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 	}
 	cn := make(chan peer.AddrInfo, 32)
 
-	dvs.discover(ctx, func(e PeerEvent) {
+	dvs.discover(ctx, logger, func(e PeerEvent) {
 		cn <- e.AddrInfo
 	}, time.Millisecond, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger), dvs.subnetFilter(subnet))
 
