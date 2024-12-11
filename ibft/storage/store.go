@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"slices"
@@ -54,16 +55,12 @@ func New(db basedb.Database, prefix string) qbftstorage.ParticipantStore {
 }
 
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
-func (i *participantStorage) CleanAllInstances(msgID []byte) error {
-	prefix := i.prefix
-	prefix = append(prefix, msgID[:]...)
-	prefix = append(prefix, []byte(instanceKey)...)
-	err := i.db.DropPrefix(prefix)
-	if err != nil {
+func (i *participantStorage) CleanAllInstances([]byte) error {
+	if err := i.delete([]byte(instanceKey)); err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
 
-	if err := i.delete(nil, highestInstanceKey, msgID[:]); err != nil {
+	if err := i.delete([]byte(highestInstanceKey)); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}
 	return nil
@@ -125,7 +122,7 @@ func (i *participantStorage) GetParticipants(role spectypes.BeaconRole, pk spect
 
 func (i *participantStorage) getParticipants(txn basedb.ReadWriter, role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 
-	val, found, err := i.get(txn, participantsKey, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot)))
+	val, found, err := i.get(txn, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +139,7 @@ func (i *participantStorage) saveParticipants(txn basedb.ReadWriter, role specty
 	if err != nil {
 		return fmt.Errorf("encode operators: %w", err)
 	}
-	if err := i.save(txn, bytes, participantsKey, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot))); err != nil {
+	if err := i.save(txn, bytes, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot))); err != nil {
 		return fmt.Errorf("save to DB: %w", err)
 	}
 
@@ -155,16 +152,20 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 	return slices.Compact(allParticipants)
 }
 
-func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, id string, pk []byte, keyParams ...[]byte) error {
-	prefix := append(i.prefix, pk...)
-	key := i.key(id, keyParams...)
-	return i.db.Using(txn).Set(prefix, key, value)
+func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, role, slot []byte) error {
+	// prefix := append(i.prefix, pk...) // TODO cleanup comments
+	// key := i.key(id, keyParams...)
+
+	prefix := i.makePrefix(role, slot)
+	return i.db.Using(txn).Set(prefix, pk, value)
 }
 
-func (i *participantStorage) get(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) ([]byte, bool, error) {
-	prefix := append(i.prefix, pk...)
-	key := i.key(id, keyParams...)
-	obj, found, err := i.db.Using(txn).Get(prefix, key)
+func (i *participantStorage) get(txn basedb.ReadWriter, pk, role, slot []byte) ([]byte, bool, error) {
+	// prefix := append(i.prefix, pk...)
+	// key := i.key(id, keyParams...)
+
+	prefix := i.makePrefix(role, slot)
+	obj, found, err := i.db.Using(txn).Get(prefix, pk)
 	if !found {
 		return nil, found, nil
 	}
@@ -174,18 +175,33 @@ func (i *participantStorage) get(txn basedb.ReadWriter, id string, pk []byte, ke
 	return obj.Value, found, nil
 }
 
-func (i *participantStorage) delete(txn basedb.ReadWriter, id string, pk []byte, keyParams ...[]byte) error {
-	prefix := append(i.prefix, pk...)
-	key := i.key(id, keyParams...)
-	return i.db.Using(txn).Delete(prefix, key)
+func (i *participantStorage) delete(key []byte) error {
+	var keys [][]byte
+	err := i.db.GetAll([]byte(i.prefix), func(_ int, o basedb.Obj) error {
+		if bytes.Contains(o.Key, key) {
+			keys = append(keys, o.Key)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+		_ = i.db.Delete(i.prefix, key)
+	}
+
+	return nil
 }
 
-func (i *participantStorage) key(id string, params ...[]byte) []byte {
-	ret := []byte(id)
-	for _, p := range params {
-		ret = append(ret, p...)
-	}
-	return ret
+func (i *participantStorage) makePrefix(role, slot []byte) []byte {
+	prefix := make([]byte, 0, len(i.prefix)+len(participantsKey)+len(role)+len(slot))
+	prefix = append(prefix, i.prefix...)
+	prefix = append(prefix, participantsKey...)
+	prefix = append(prefix, role...)
+	prefix = append(prefix, slot...)
+	return prefix
 }
 
 func uInt64ToByteSlice(n uint64) []byte {
