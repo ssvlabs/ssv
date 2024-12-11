@@ -3,10 +3,12 @@ package executionclient
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 
 	"github.com/ssvlabs/ssv/observability"
 )
@@ -27,23 +29,23 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	latencyHistogram = observability.NewMetric(
+	requestDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("latency.duration"),
+			metricName("request.duration"),
 			metric.WithUnit("s"),
-			metric.WithDescription("execution client latency in seconds"),
+			metric.WithDescription("execution client request duration in seconds"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
-	syncingDistanceGauge = observability.NewMetric(
+	syncDistanceGauge = observability.NewMetric(
 		meter.Int64Gauge(
 			metricName("sync.distance"),
 			metric.WithUnit("{block}"),
-			metric.WithDescription("execution client syncing distance which is a delta between highest and current blocks")))
+			metric.WithDescription("execution client sync distance which is a delta between highest and current blocks")))
 
 	clientStatusGauge = observability.NewMetric(
 		meter.Int64Gauge(
 			metricName("sync.status"),
-			metric.WithDescription("execution client syncing status")))
+			metric.WithDescription("execution client sync status")))
 
 	lastProcessedBlockGauge = observability.NewMetric(
 		meter.Int64Gauge(
@@ -56,9 +58,11 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func executionClientAddrAttribute(value string) attribute.KeyValue {
-	eventNameAttrName := fmt.Sprintf("%s.addr", observabilityNamespace)
-	return attribute.String(eventNameAttrName, value)
+func recordRequestDuration(ctx context.Context, serverAddr string, duration time.Duration) {
+	requestDurationHistogram.Record(
+		ctx,
+		duration.Seconds(),
+		metric.WithAttributes(semconv.ServerAddress(serverAddr)))
 }
 
 func executionClientStatusAttribute(value executionClientStatus) attribute.KeyValue {
@@ -70,7 +74,7 @@ func recordExecutionClientStatus(ctx context.Context, status executionClientStat
 	resetExecutionClientStatusGauge(ctx, nodeAddr)
 
 	clientStatusGauge.Record(ctx, 1,
-		metric.WithAttributes(executionClientAddrAttribute(nodeAddr)),
+		metric.WithAttributes(semconv.ServerAddress(nodeAddr)),
 		metric.WithAttributes(executionClientStatusAttribute(status)),
 	)
 }
@@ -78,7 +82,7 @@ func recordExecutionClientStatus(ctx context.Context, status executionClientStat
 func resetExecutionClientStatusGauge(ctx context.Context, nodeAddr string) {
 	for _, status := range []executionClientStatus{statusReady, statusSyncing, statusFailure} {
 		clientStatusGauge.Record(ctx, 0,
-			metric.WithAttributes(executionClientAddrAttribute(nodeAddr)),
+			metric.WithAttributes(semconv.ServerAddress(nodeAddr)),
 			metric.WithAttributes(executionClientStatusAttribute(status)),
 		)
 	}
