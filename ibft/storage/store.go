@@ -121,7 +121,6 @@ func (i *participantStorage) GetParticipants(role spectypes.BeaconRole, pk spect
 }
 
 func (i *participantStorage) getParticipants(txn basedb.ReadWriter, role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-
 	val, found, err := i.get(txn, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot)))
 	if err != nil {
 		return nil, err
@@ -153,17 +152,11 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 }
 
 func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, role, slot []byte) error {
-	// prefix := append(i.prefix, pk...) // TODO cleanup comments
-	// key := i.key(id, keyParams...)
-
 	prefix := i.makePrefix(role, slot)
 	return i.db.Using(txn).Set(prefix, pk, value)
 }
 
 func (i *participantStorage) get(txn basedb.ReadWriter, pk, role, slot []byte) ([]byte, bool, error) {
-	// prefix := append(i.prefix, pk...)
-	// key := i.key(id, keyParams...)
-
 	prefix := i.makePrefix(role, slot)
 	obj, found, err := i.db.Using(txn).Get(prefix, pk)
 	if !found {
@@ -177,7 +170,7 @@ func (i *participantStorage) get(txn basedb.ReadWriter, pk, role, slot []byte) (
 
 func (i *participantStorage) delete(key []byte) error {
 	var keys [][]byte
-	err := i.db.GetAll([]byte(i.prefix), func(_ int, o basedb.Obj) error {
+	err := i.db.GetAll(i.prefix, func(_ int, o basedb.Obj) error {
 		if bytes.Contains(o.Key, key) {
 			keys = append(keys, o.Key)
 		}
