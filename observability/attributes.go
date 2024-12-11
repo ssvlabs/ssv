@@ -13,6 +13,10 @@ import (
 	"github.com/ssvlabs/ssv-spec/types"
 )
 
+const (
+	RunnerRoleAttrKey = "ssv.runner.role"
+)
+
 type Slot interface {
 	qbft.Height | phase0.Slot
 }
@@ -21,12 +25,29 @@ func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
 	return attribute.String("ssv.beacon.role", role.String())
 }
 
+func BeaconEpochAttribute(epoch phase0.Epoch) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.beacon.epoch",
+		Value: Uint64AttributeValue(uint64(epoch)),
+	}
+}
+
 func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
 	return attribute.String(RunnerRoleAttrKey, role.String())
 }
 
 func BeaconSlotAttribute[T Slot](slot T) attribute.KeyValue {
-	return uint64Attribute("ssv.beacon.slot", uint64(slot))
+	return attribute.KeyValue{
+		Key:   "ssv.beacon.slot",
+		Value: Uint64AttributeValue(uint64(slot)),
+	}
+}
+
+func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.duty.round",
+		Value: Uint64AttributeValue(uint64(round)),
+	}
 }
 
 func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {
