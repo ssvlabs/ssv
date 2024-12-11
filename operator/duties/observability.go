@@ -31,12 +31,6 @@ var (
 			metricName("executions"),
 			metric.WithUnit("{duty}"),
 			metric.WithDescription("total number of duties executed by scheduler")))
-
-	committeeDutiesExecutedCounter = observability.NewMetric(
-		meter.Int64Counter(
-			metricName("committee_executions"),
-			metric.WithUnit("{committee_duty}"),
-			metric.WithDescription("total number of committee duties executed by scheduler")))
 )
 
 func metricName(name string) string {
@@ -44,5 +38,8 @@ func metricName(name string) string {
 }
 
 func recordDutyExecuted(ctx context.Context, beaconRole types.BeaconRole) {
-	dutiesExecutedCounter.Add(ctx, 1, metric.WithAttributes(observability.BeaconRoleAttribute(beaconRole)))
+	dutiesExecutedCounter.Add(ctx, 1,
+		metric.WithAttributes(
+			observability.BeaconRoleAttribute(beaconRole),
+		))
 }
