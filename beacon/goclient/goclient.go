@@ -21,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 )
@@ -224,11 +223,7 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	recordBeaconClientStatus(ctx, statusSyncing, gc.client.Address())
-
-	syncDistance := uint64(syncState.SyncDistance)
-	if syncDistance <= math.MaxInt64 {
-		syncingDistanceGauge.Record(ctx, int64(syncDistance), metric.WithAttributes(beaconClientAddrAttribute(gc.client.Address())))
-	}
+	recordSyncDistance(ctx, syncState.SyncDistance, gc.client.Address())
 
 	if syncState.IsSyncing {
 		return fmt.Errorf("syncing")

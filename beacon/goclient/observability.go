@@ -3,8 +3,10 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -30,7 +32,7 @@ var (
 		meter.Float64Histogram(
 			metricName("request.duration"),
 			metric.WithUnit("s"),
-			metric.WithDescription("beacon data request duration in seconds"),
+			metric.WithDescription("consensus client request duration in seconds"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	beaconNodeStatusGauge = observability.NewMetric(
@@ -38,7 +40,7 @@ var (
 			metricName("sync.status"),
 			metric.WithDescription("beacon node status")))
 
-	syncingDistanceGauge = observability.NewMetric(
+	syncDistanceGauge = observability.NewMetric(
 		meter.Int64Gauge(
 			metricName("sync.distance"),
 			metric.WithUnit("{block}"),
@@ -60,19 +62,26 @@ func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMe
 		))
 }
 
-func recordBeaconClientStatus(ctx context.Context, status beaconNodeStatus, nodeAddr string) {
-	resetBeaconClientStatusGauge(ctx, nodeAddr)
+func recordSyncDistance(ctx context.Context, distance phase0.Slot, serverAddr string) {
+	syncDistance := uint64(distance)
+	if syncDistance <= math.MaxInt64 {
+		syncDistanceGauge.Record(ctx, int64(syncDistance), metric.WithAttributes(semconv.ServerAddress(serverAddr)))
+	}
+}
+
+func recordBeaconClientStatus(ctx context.Context, status beaconNodeStatus, serverAddr string) {
+	resetBeaconClientStatusGauge(ctx, serverAddr)
 
 	beaconNodeStatusGauge.Record(ctx, 1,
-		metric.WithAttributes(beaconClientAddrAttribute(nodeAddr)),
+		metric.WithAttributes(semconv.ServerAddress(serverAddr)),
 		metric.WithAttributes(beaconClientStatusAttribute(status)),
 	)
 }
 
-func resetBeaconClientStatusGauge(ctx context.Context, nodeAddr string) {
+func resetBeaconClientStatusGauge(ctx context.Context, serverAddr string) {
 	for _, status := range []beaconNodeStatus{statusSynced, statusSyncing, statusUnknown} {
 		beaconNodeStatusGauge.Record(ctx, 0,
-			metric.WithAttributes(beaconClientAddrAttribute(nodeAddr)),
+			metric.WithAttributes(semconv.ServerAddress(serverAddr)),
 			metric.WithAttributes(beaconClientStatusAttribute(status)),
 		)
 	}
@@ -81,9 +90,4 @@ func resetBeaconClientStatusGauge(ctx context.Context, nodeAddr string) {
 func beaconClientStatusAttribute(value beaconNodeStatus) attribute.KeyValue {
 	eventNameAttrName := fmt.Sprintf("%s.sync.status", observabilityNamespace)
 	return attribute.String(eventNameAttrName, string(value))
-}
-
-func beaconClientAddrAttribute(value string) attribute.KeyValue {
-	eventNameAttrName := fmt.Sprintf("%s.addr", observabilityNamespace)
-	return attribute.String(eventNameAttrName, value)
 }

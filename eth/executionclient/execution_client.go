@@ -14,6 +14,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/contract"
@@ -235,17 +236,14 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 		return err
 	}
-	latencyHistogram.Record(ctx,
-		float64(time.Since(start).Seconds()),
-		metric.WithAttributes(executionClientAddrAttribute(ec.nodeAddr)),
-	)
+	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
 	if sp != nil {
 		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
 
 		syncingDistance := sp.HighestBlock - sp.CurrentBlock
 		if syncingDistance <= math.MaxInt64 {
-			syncingDistanceGauge.Record(ctx, int64(syncingDistance), metric.WithAttributes(executionClientAddrAttribute(ec.nodeAddr)))
+			syncDistanceGauge.Record(ctx, int64(syncingDistance), metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
 
 		return fmt.Errorf("syncing")
@@ -253,7 +251,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
 
-	syncingDistanceGauge.Record(ctx, 0, metric.WithAttributes(executionClientAddrAttribute(ec.nodeAddr)))
+	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 	return nil
 }
@@ -316,7 +314,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			}
 			fromBlock = toBlock + 1
 			if fromBlock <= math.MaxInt64 {
-				lastProcessedBlockGauge.Record(ctx, int64(fromBlock), metric.WithAttributes(executionClientAddrAttribute(ec.nodeAddr)))
+				lastProcessedBlockGauge.Record(ctx, int64(fromBlock), metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 			}
 		}
 	}
