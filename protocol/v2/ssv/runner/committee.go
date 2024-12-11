@@ -549,7 +549,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		eventMsg := "✅ successfully submitted attestations"
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
-			attribute.Int64("ssv.validator.duty.round", int64(cr.BaseRunner.State.RunningInstance.State.Round)),
+			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
 			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.started).Seconds()),
@@ -593,7 +593,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		eventMsg := "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
-			attribute.Int64("ssv.validator.duty.round", int64(cr.BaseRunner.State.RunningInstance.State.Round)),
+			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
 			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.started).Seconds()),
