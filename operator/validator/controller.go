@@ -315,9 +315,6 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 			active++
 		}
 	}
-	if operatorShares <= math.MaxInt64 {
-		activeValidatorsGauge.Record(c.ctx, int64(operatorShares))
-	}
 	return uint64(len(allShares)), active, operatorShares, nil
 }
 
@@ -1103,6 +1100,9 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
 				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 					validatorsPerStatus[statusParticipating]++
+				}
+				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+					validatorsPerStatus[statusActive]++
 				}
 				meta := share.BeaconMetadata
 				if meta == nil {
