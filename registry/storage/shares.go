@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -160,7 +161,8 @@ var memcount atomic.Int32
 
 func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
 	memcount.Add(1)
-	s.logger.Debug("sharesstorage#Get", zap.Int("count", int(memcount.Load())))
+	log("Get", s.logger)
+
 	defer memcount.Add(-1)
 
 	s.memoryMtx.RLock()
@@ -176,7 +178,8 @@ func (s *sharesStorage) unsafeGet(pubKey []byte) (*types.SSVShare, bool) {
 
 func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.SSVShare {
 	memcount.Add(1)
-	s.logger.Debug("sharesstorage#List", zap.Int("count", int(memcount.Load())))
+	log("List", s.logger)
+
 	defer memcount.Add(-1)
 
 	s.memoryMtx.RLock()
@@ -199,10 +202,26 @@ Shares:
 	return shares
 }
 
+func printStack() string {
+	buf := make([]byte, 1024)
+	n := runtime.Stack(buf, false)
+	return string(buf[:n])
+}
+
+func log(name string, logger *zap.Logger) {
+	var fields = []zap.Field{zap.Int("count", int(memcount.Load()))}
+	if memcount.Load() > 300 {
+		fields = append(fields, zap.String("stack", printStack()))
+	}
+	logger.Debug("sharesstorage#"+name, fields...)
+}
+
 func (s *sharesStorage) Range(_ basedb.Reader, fn func(*types.SSVShare) bool) {
+	printStack()
 	memcount.Add(1)
-	s.logger.Debug("sharesstorage#Range", zap.Int("count", int(memcount.Load())))
 	defer memcount.Add(-1)
+
+	log("Range", s.logger)
 
 	s.memoryMtx.RLock()
 	defer s.memoryMtx.RUnlock()
@@ -231,7 +250,8 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	// Update in-memory.
 	err := func() error {
 		memcount.Add(1)
-		s.logger.Debug("sharesstorage#Save", zap.Int("count", int(memcount.Load())))
+		log("Save", s.logger)
+
 		defer memcount.Add(-1)
 
 		s.memoryMtx.Lock()
@@ -349,7 +369,8 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 
 	err := func() error {
 		memcount.Add(1)
-		s.logger.Debug("sharesstorage#Delete", zap.Int("count", int(memcount.Load())))
+		log("Delete", s.logger)
+
 		defer memcount.Add(-1)
 
 		s.memoryMtx.Lock()
@@ -392,7 +413,8 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 
 	err := func() error {
 		memcount.Add(1)
-		s.logger.Debug("sharesstorage#UpdateValidatorsMetadata.func3", zap.Int("count", int(memcount.Load())))
+		log("func3", s.logger)
+
 		defer memcount.Add(-1)
 
 		s.memoryMtx.Lock()
