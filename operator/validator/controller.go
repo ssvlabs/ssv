@@ -1052,8 +1052,12 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			start := time.Now()
 			validatorsPerStatus := make(map[validatorStatus]uint32)
 			for _, share := range c.validatorStore.Validators() {
+				if ok := share.BelongsToOperator(c.operatorDataStore.GetOperatorID()); !ok {
+					continue
+				}
 				meta := share.BeaconMetadata
 				if meta == nil {
 					validatorsPerStatus[statusNotFound]++
@@ -1077,6 +1081,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 				c.logger.
 					With(zap.String("status", string(status))).
 					With(zap.Uint32("count", count)).
+					With(zap.Duration("elapsed_time", time.Since(start))).
 					Info("recording validator status")
 				recordValidatorStatus(ctx, count, status)
 			}
