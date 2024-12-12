@@ -54,8 +54,8 @@ func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
 	return attribute.String(attrName, string(value))
 }
 
-func recordValidatorStatus(ctx context.Context, status validatorStatus) {
-	validatorStatusCounter.Add(ctx, 1,
+func recordValidatorStatus(ctx context.Context, count uint32, status validatorStatus) {
+	validatorStatusCounter.Add(ctx, int64(count),
 		metric.WithAttributes(validatorStatusAttribute(status)),
 	)
 }
