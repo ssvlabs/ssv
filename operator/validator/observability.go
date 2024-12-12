@@ -19,7 +19,7 @@ const (
 type validatorStatus string
 
 const (
-	statusError        validatorStatus = "error"
+	statusActive       validatorStatus = "active"
 	statusNotFound     validatorStatus = "not_found"
 	statusReady        validatorStatus = "ready"
 	statusSlashed      validatorStatus = "slashed"
@@ -27,7 +27,6 @@ const (
 	statusNotActivated validatorStatus = "not_activated"
 	statusPending      validatorStatus = "pending"
 	statusNoIndex      validatorStatus = "no_index"
-	statusRemoved      validatorStatus = "removed"
 	statusUnknown      validatorStatus = "unknown"
 )
 
@@ -39,10 +38,17 @@ var (
 			metricName("validators.per_status"),
 			metric.WithDescription("total number of validators by status")))
 
-	activeValidatorsGauge = observability.NewMetric(
-		meter.Int64Gauge(
-			metricName("validators.active"),
-			metric.WithDescription("number of active validators")))
+	validatorsRemovedCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("validators.removed"),
+			metric.WithUnit("{validator}"),
+			metric.WithDescription("total number of validator errors")))
+
+	validatorErrorsCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("errors"),
+			metric.WithUnit("{validator}"),
+			metric.WithDescription("total number of validator errors")))
 )
 
 func metricName(name string) string {
