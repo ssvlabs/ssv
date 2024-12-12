@@ -15,7 +15,8 @@ import (
 type ENRKey string
 
 const (
-	KeyDomainType = "domaintype"
+	KeyDomainType     = "domaintype"
+	KeyNextDomainType = "next_domaintype"
 )
 
 var ErrEntryNotFound = errors.New("not found")
