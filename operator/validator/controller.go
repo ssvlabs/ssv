@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -310,9 +309,6 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if s.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 			active++
 		}
-	}
-	if operatorShares <= math.MaxInt64 {
-		activeValidatorsGauge.Record(c.ctx, int64(operatorShares))
 	}
 	return uint64(len(allShares)), active, operatorShares, nil
 }
@@ -948,7 +944,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
-		// recordValidatorStatus(c.ctx, statusError)
+		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {
@@ -1057,6 +1053,9 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			for _, share := range c.validatorStore.Validators() {
 				if ok := share.BelongsToOperator(c.operatorDataStore.GetOperatorID()); !ok {
 					continue
+				}
+				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+					validatorsPerStatus[statusActive]++
 				}
 				meta := share.BeaconMetadata
 				if meta == nil {
