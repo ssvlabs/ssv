@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -155,7 +156,13 @@ func (s *sharesStorage) load() error {
 	})
 }
 
+var memcount atomic.Int32
+
 func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
+	memcount.Add(1)
+	s.logger.Debug("sharesstorage#Get", zap.Int("count", int(memcount.Load())))
+	defer memcount.Add(-1)
+
 	s.memoryMtx.RLock()
 	defer s.memoryMtx.RUnlock()
 
@@ -168,6 +175,10 @@ func (s *sharesStorage) unsafeGet(pubKey []byte) (*types.SSVShare, bool) {
 }
 
 func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.SSVShare {
+	memcount.Add(1)
+	s.logger.Debug("sharesstorage#List", zap.Int("count", int(memcount.Load())))
+	defer memcount.Add(-1)
+
 	s.memoryMtx.RLock()
 	defer s.memoryMtx.RUnlock()
 
@@ -189,6 +200,10 @@ Shares:
 }
 
 func (s *sharesStorage) Range(_ basedb.Reader, fn func(*types.SSVShare) bool) {
+	memcount.Add(1)
+	s.logger.Debug("sharesstorage#Range", zap.Int("count", int(memcount.Load())))
+	defer memcount.Add(-1)
+
 	s.memoryMtx.RLock()
 	defer s.memoryMtx.RUnlock()
 
@@ -215,6 +230,10 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 
 	// Update in-memory.
 	err := func() error {
+		memcount.Add(1)
+		s.logger.Debug("sharesstorage#Save", zap.Int("count", int(memcount.Load())))
+		defer memcount.Add(-1)
+
 		s.memoryMtx.Lock()
 		defer s.memoryMtx.Unlock()
 
@@ -329,6 +348,10 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	defer s.storageMtx.Unlock()
 
 	err := func() error {
+		memcount.Add(1)
+		s.logger.Debug("sharesstorage#Delete", zap.Int("count", int(memcount.Load())))
+		defer memcount.Add(-1)
+
 		s.memoryMtx.Lock()
 		defer s.memoryMtx.Unlock()
 
@@ -354,14 +377,24 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	return s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
 }
 
+var diskcount atomic.Int32
+
 // UpdateValidatorsMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	var shares []*types.SSVShare
+	diskcount.Add(1)
+	s.logger.Debug("sharesstorage#UpdateValidatorsMetadata", zap.Int("dcount", int(diskcount.Load())))
+	defer diskcount.Add(-1)
 
 	s.storageMtx.Lock()
 	defer s.storageMtx.Unlock()
 
+	var shares = make([]*types.SSVShare, 0, len(data))
+
 	err := func() error {
+		memcount.Add(1)
+		s.logger.Debug("sharesstorage#UpdateValidatorsMetadata.func3", zap.Int("count", int(memcount.Load())))
+		defer memcount.Add(-1)
+
 		s.memoryMtx.Lock()
 		defer s.memoryMtx.Unlock()
 
