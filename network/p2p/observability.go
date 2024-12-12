@@ -28,7 +28,7 @@ var (
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers")))
 
-	peersByTopicCounter = observability.NewMetric(
+	peersPerTopicGauge = observability.NewMetric(
 		meter.Int64Gauge(
 			metricName("peers.per_topic"),
 			metric.WithUnit("{peer}"),
@@ -59,7 +59,7 @@ func recordPeerCountPerTopic(ctx context.Context, ctrl topics.Controller) func()
 			if err != nil {
 				return
 			}
-			peersByTopicCounter.Record(ctx, int64(len(peers)), metric.WithAttributes(attribute.String("ssv.p2p.topic.name", topicName)))
+			peersPerTopicGauge.Record(ctx, int64(len(peers)), metric.WithAttributes(attribute.String("ssv.p2p.topic.name", topicName)))
 		}
 	}
 }
