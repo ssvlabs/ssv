@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -398,15 +399,11 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	return s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
 }
 
-var diskcount atomic.Int32
-
 // UpdateValidatorsMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	diskcount.Add(1)
-	s.logger.Debug("sharesstorage#UpdateValidatorsMetadata", zap.Int("dcount", int(diskcount.Load())))
-	defer diskcount.Add(-1)
-
+	start := time.Now()
 	s.storageMtx.Lock()
+	s.logger.Debug("sharesstorage#UpdateValidatorsMetadata", zap.Duration("wait", time.Since(start)))
 	defer s.storageMtx.Unlock()
 
 	var shares = make([]*types.SSVShare, 0, len(data))
