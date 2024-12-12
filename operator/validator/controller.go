@@ -112,7 +112,7 @@ type Controller interface {
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
-
+	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
 }
 
@@ -948,7 +948,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
-		recordValidatorStatus(c.ctx, statusError)
+		// recordValidatorStatus(c.ctx, statusError)
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {
@@ -1043,6 +1043,49 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 		}
 	}
 	return nil
+}
+
+func (c *controller) ReportValidatorStatuses(ctx context.Context) {
+	ticker := time.NewTicker(time.Second * 30)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			validatorsPerStatus := make(map[validatorStatus]uint32)
+			for _, share := range c.validatorStore.Validators() {
+				meta := share.BeaconMetadata
+				if meta == nil {
+					validatorsPerStatus[statusNotFound]++
+				} else if meta.IsActive() {
+					validatorsPerStatus[statusReady]++
+				} else if meta.Slashed() {
+					validatorsPerStatus[statusSlashed]++
+				} else if meta.Exiting() {
+					validatorsPerStatus[statusExiting]++
+				} else if !meta.Activated() {
+					validatorsPerStatus[statusNotActivated]++
+				} else if meta.Pending() {
+					validatorsPerStatus[statusPending]++
+				} else if meta.Index == 0 {
+					validatorsPerStatus[statusNoIndex]++
+				} else {
+					validatorsPerStatus[statusUnknown]++
+				}
+			}
+			for status, count := range validatorsPerStatus {
+				c.logger.
+					With(zap.String("status", string(status))).
+					With(zap.Uint32("count", count)).
+					Info("recording validator status")
+				recordValidatorStatus(ctx, count, status)
+			}
+		case <-ctx.Done():
+			c.logger.Info("stopping to report validator statuses. Context cancelled")
+			return
+		}
+	}
+
 }
 
 func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {
