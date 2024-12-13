@@ -94,6 +94,30 @@ func (i *participantStorage) UpdateParticipants(role spectypes.BeaconRole, pk sp
 	return true, nil
 }
 
+func (i *participantStorage) GetAllParticipantsInRange(role spectypes.BeaconRole, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	var ee []qbftstorage.ParticipantsRangeEntry
+	roleBytes := uInt64ToByteSlice(uint64(role))
+	for slot := from; slot <= to; slot++ {
+		slotBytes := uInt64ToByteSlice(uint64(slot))
+		prefix := i.makePrefix(roleBytes, slotBytes)
+		err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
+			re := qbftstorage.ParticipantsRangeEntry{
+				Slot:    slot,
+				PubKey:  spectypes.ValidatorPK(o.Key), // is this safe? len check?
+				Signers: decodeOperators(o.Value),
+			}
+			ee = append(ee, re)
+			return nil
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ee, nil
+}
+
 func (i *participantStorage) GetParticipantsInRange(role spectypes.BeaconRole, pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
@@ -109,6 +133,7 @@ func (i *participantStorage) GetParticipantsInRange(role spectypes.BeaconRole, p
 
 		participantsRange = append(participantsRange, qbftstorage.ParticipantsRangeEntry{
 			Slot:    slot,
+			PubKey:  pk,
 			Signers: participants,
 		})
 	}

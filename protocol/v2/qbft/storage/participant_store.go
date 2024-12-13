@@ -34,6 +34,7 @@ func (si *StoredInstance) Decode(data []byte) error {
 
 type ParticipantsRangeEntry struct {
 	Slot    phase0.Slot
+	PubKey  spectypes.ValidatorPK
 	Signers []spectypes.OperatorID
 }
 
@@ -46,6 +47,9 @@ type ParticipantStore interface {
 	UpdateParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
+	GetAllParticipantsInRange(role spectypes.BeaconRole, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
+
+	// GetParticipantsInRange returns participants in quorum for the given slot range and validator public key.
 	GetParticipantsInRange(role spectypes.BeaconRole, pk spectypes.ValidatorPK, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipants returns participants in quorum for the given slot.
