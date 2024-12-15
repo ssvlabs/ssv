@@ -33,9 +33,16 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Indices: validatorIndices,
 	})
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "ProposerDuties"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
 	}
 	if resp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "ProposerDuties"),
+		)
 		return nil, fmt.Errorf("proposer duties response is nil")
 	}
 
@@ -58,18 +65,29 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 		SkipRandaoVerification: false,
 	})
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Proposal"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to get proposal: %w", err)
 	}
 	if proposalResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "Proposal"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("proposal response is nil")
 	}
 	if proposalResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "Proposal"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
 	}
 
 	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 	beaconBlock := proposalResp.Data
 
+	// TODO: consider adding logger.Error here as well
 	if beaconBlock.Blinded {
 		switch beaconBlock.Version {
 		case spec.DataVersionCapella:
@@ -166,7 +184,15 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 		Proposal: signedBlock,
 	}
 
-	return gc.client.SubmitBlindedProposal(gc.ctx, opts)
+	if err := gc.client.SubmitBlindedProposal(gc.ctx, opts); err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitBlindedProposal"),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	return nil
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -212,7 +238,15 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	return gc.client.SubmitProposal(gc.ctx, opts)
+	if err := gc.client.SubmitProposal(gc.ctx, opts); err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitProposal"),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	return nil
 }
 
 func (gc *GoClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
@@ -227,7 +261,16 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 			FeeRecipient:   recipient,
 		})
 	}
-	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
+
+	if err := gc.client.SubmitProposalPreparations(gc.ctx, preparations); err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitProposalPreparations"),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	return nil
 }
 
 func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
@@ -334,6 +377,10 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 		}
 
 		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
+			gc.log.Error(clResponseErrMsg,
+				zap.String("api", "SubmitValidatorRegistrations"),
+				zap.Error(err),
+			)
 			return err
 		}
 

@@ -17,6 +17,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -445,6 +446,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if len(attestations) > 0 {
 		submissionStart := time.Now()
 		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
+			// TODO: consider removing the logger.Error here
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
