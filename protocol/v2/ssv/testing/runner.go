@@ -5,20 +5,19 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -98,14 +97,13 @@ var ConstructBaseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet, convert.RunnerRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySet, casts.RunnerRoleToConvertRole(identifier.GetRoleType()))
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
 	}
 	config.Network = net
 	config.BeaconSigner = km
-	config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
 
 	contr := testing.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
@@ -117,6 +115,7 @@ var ConstructBaseRunner = func(
 
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[share.ValidatorIndex] = share
+	dutyGuard := validator.NewCommitteeDutyGuard()
 
 	var r runner.Runner
 	var err error
@@ -132,11 +131,11 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -149,7 +148,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -163,7 +162,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -176,7 +175,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -186,7 +185,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -204,7 +203,7 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
@@ -300,6 +299,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	var contr *controller.Controller
 
 	km := spectestingutils.NewTestingKeyManager()
+	dutyGuard := validator.NewCommitteeDutyGuard()
 
 	if len(shareMap) > 0 {
 		var keySetInstance *spectestingutils.TestKeySet
@@ -352,13 +352,12 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = nil
 		}
 
-		config := testing.TestingConfig(logger, keySetInstance, convert.RunnerRole(identifier.GetRoleType()))
+		config := testing.TestingConfig(logger, keySetInstance, casts.RunnerRoleToConvertRole(identifier.GetRoleType()))
 		config.ValueCheckF = valCheck
 		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		}
 		config.Network = net
-		config.Storage = testing.TestingStores(logger).Get(convert.RunnerRole(role))
 
 		contr = testing.NewTestingQBFTController(
 			spectestingutils.Testing4SharesSet(),
@@ -382,11 +381,11 @@ var ConstructBaseRunnerWithShareMap = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -399,7 +398,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -413,7 +412,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			contr,
@@ -426,7 +425,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -436,7 +435,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestNetwork.AlanDomainType,
+			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -454,7 +453,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			km,
 			opSigner,
 			valCheck,
-			validator.NewCommitteeDutyGuard(),
+			dutyGuard,
 		)
 		if r != nil {
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType

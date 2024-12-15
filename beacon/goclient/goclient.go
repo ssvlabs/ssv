@@ -13,17 +13,18 @@ import (
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
 )
 
 const (
@@ -141,19 +142,31 @@ var _ NodeClientProvider = (*GoClient)(nil)
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log                  *zap.Logger
-	ctx                  context.Context
-	network              beaconprotocol.Network
-	client               Client
-	nodeVersion          string
-	nodeClient           NodeClient
-	gasLimit             uint64
-	operatorDataStore    operatordatastore.OperatorDataStore
+	log         *zap.Logger
+	ctx         context.Context
+	network     beaconprotocol.Network
+	client      Client
+	nodeVersion string
+	nodeClient  NodeClient
+	gasLimit    uint64
+
+	operatorDataStore operatordatastore.OperatorDataStore
+
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
-	commonTimeout        time.Duration
-	longTimeout          time.Duration
+
+	// attestationReqInflight helps prevent duplicate attestation data requests
+	// from running in parallel.
+	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
+
+	// attestationDataCache helps reuse recently fetched attestation data.
+	// AttestationData is cached by slot only, because Beacon nodes should return the same
+	// data regardless of the requested committeeIndex.
+	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+
+	commonTimeout time.Duration
+	longTimeout   time.Duration
 }
 
 // New init new client and go-client instance
@@ -194,8 +207,13 @@ func New(
 		gasLimit:          opt.GasLimit,
 		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		commonTimeout:     commonTimeout,
-		longTimeout:       longTimeout,
+		attestationDataCache: ttlcache.New(
+			// we only fetch attestation data during the slot of the relevant duty (and never later),
+			// hence caching it for 2 slots is sufficient
+			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
+		),
+		commonTimeout: commonTimeout,
+		longTimeout:   longTimeout,
 	}
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
@@ -216,6 +234,8 @@ func New(
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)
+	// Start automatic expired item deletion for attestationDataCache.
+	go client.attestationDataCache.Start()
 
 	return client, nil
 }

@@ -2,6 +2,8 @@ package ekm
 
 import (
 	"encoding/hex"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,15 +13,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/holiman/uint256"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/eth2-key-manager/core"
+	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -48,9 +49,8 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
-			Beacon:            utils.SetupMockBeaconNetwork(t, nil),
-			GenesisDomainType: networkconfig.TestNetwork.DomainType(),
-			AlanDomainType:    networkconfig.TestNetwork.DomainType(),
+			Beacon:     utils.SetupMockBeaconNetwork(t, nil),
+			DomainType: networkconfig.TestNetwork.DomainType,
 		}
 	}
 
@@ -685,76 +685,6 @@ func TestSlashing_Attestation(t *testing.T) {
 	signAttestation(secretKeys[2], phase0.Root{7}, createAttestationData(6, 6), true, "HighestAttestationVote")
 }
 
-func TestSignRoot(t *testing.T) {
-	require.NoError(t, bls.Init(bls.BLS12_381))
-
-	km := testKeyManager(t, nil)
-
-	t.Run("pk 1", func(t *testing.T) {
-		pk := &bls.PublicKey{}
-		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
-
-		msg := genesisspecqbft.Message{
-			MsgType:    genesisspecqbft.CommitMsgType,
-			Height:     genesisspecqbft.Height(3),
-			Round:      genesisspecqbft.Round(2),
-			Identifier: []byte("identifier1"),
-			Root:       [32]byte{1, 2, 3},
-		}
-
-		// sign
-		sig, err := km.(*ethKeyManagerSigner).SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
-		require.NoError(t, err)
-
-		// verify
-		signed := &genesisspecqbft.SignedMessage{
-			Signature: genesisspectypes.Signature(sig),
-			Signers:   []spectypes.OperatorID{1},
-			Message:   msg,
-		}
-
-		err = signed.Signature.VerifyByOperators(
-			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
-			genesisspectypes.QBFTSignatureType,
-			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
-		)
-		require.NoError(t, err)
-	})
-
-	t.Run("pk 2", func(t *testing.T) {
-		pk := &bls.PublicKey{}
-		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
-
-		msg := genesisspecqbft.Message{
-			MsgType:    genesisspecqbft.CommitMsgType,
-			Height:     genesisspecqbft.Height(1),
-			Round:      genesisspecqbft.Round(3),
-			Identifier: []byte("identifier2"),
-			Root:       [32]byte{4, 5, 6},
-		}
-
-		// sign
-		sig, err := km.(*ethKeyManagerSigner).SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
-		require.NoError(t, err)
-
-		// verify
-		signed := &genesisspecqbft.SignedMessage{
-			Signature: genesisspectypes.Signature(sig),
-			Signers:   []spectypes.OperatorID{1},
-			Message:   msg,
-		}
-
-		err = signed.Signature.VerifyByOperators(
-			signed,
-			genesisspectypes.DomainType(networkconfig.TestNetwork.DomainType()),
-			genesisspectypes.QBFTSignatureType,
-			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
-		)
-		require.NoError(t, err)
-	})
-}
-
 func TestRemoveShare(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
@@ -787,4 +717,320 @@ func TestEkmListAccounts(t *testing.T) {
 	accounts, err := km.(*ethKeyManagerSigner).ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(accounts))
+}
+
+func TestConcurrentSlashingProtectionAttData(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	km := testKeyManager(t, nil)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+
+	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
+	currentEpoch := km.(*ethKeyManagerSigner).storage.Network().EstimatedEpochAtSlot(currentSlot)
+
+	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
+	highestSource := highestTarget - 1
+
+	attestationData := buildAttestationData(currentSlot, highestSource, highestTarget)
+
+	signAttestation := func(wg *sync.WaitGroup, errChan chan error) {
+		defer wg.Done()
+		sigBytes, root, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+			attestationData,
+			phase0.Domain{},
+			sk1.GetPublicKey().Serialize(),
+			spectypes.DomainAttester,
+		)
+		if err == nil {
+			sig := &bls.Sign{}
+			require.NoError(t, sig.Deserialize(sigBytes[:]))
+
+			// Perform BLS verification with public key and computed signing root.
+			if !sig.VerifyByte(sk1.GetPublicKey(), root[:]) {
+				err = fmt.Errorf("BLS verification failed for signature %x", sigBytes)
+			}
+		}
+		errChan <- err
+	}
+
+	// Set up concurrency.
+	const goroutineCount = 1000
+	var wg sync.WaitGroup
+	errChan := make(chan error, goroutineCount)
+
+	for i := 0; i < goroutineCount; i++ {
+		wg.Add(1)
+		go signAttestation(&wg, errChan)
+	}
+
+	// Wait for all goroutines to complete.
+	wg.Wait()
+	close(errChan)
+
+	// Count errors and successes.
+	var slashableErrors, successCount int
+	for err := range errChan {
+		if err != nil {
+			if err.Error() != "slashable attestation (HighestAttestationVote), not signing" {
+				require.Fail(t, "unexpected error: %v", err)
+			}
+			slashableErrors++
+		} else {
+			successCount++
+		}
+	}
+
+	require.Equal(t, 1, successCount, "expected exactly one successful signing")
+	require.Equal(t, goroutineCount-1, slashableErrors, "expected slashing errors for remaining goroutines")
+}
+
+func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	km := testKeyManager(t, nil)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+
+	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
+
+	blockContents := testingutils.TestingBlockContentsDeneb
+	blockContents.Block.Slot = highestProposal
+
+	// Define function to concurrently attempt signing.
+	signBeaconBlock := func(wg *sync.WaitGroup, errChan chan error) {
+		defer wg.Done()
+		sigBytes, root, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+			blockContents.Block,
+			phase0.Domain{},
+			sk1.GetPublicKey().Serialize(),
+			spectypes.DomainProposer,
+		)
+		if err == nil {
+			sig := &bls.Sign{}
+			require.NoError(t, sig.Deserialize(sigBytes[:]))
+
+			// Perform BLS verification with public key and computed signing root.
+			if !sig.VerifyByte(sk1.GetPublicKey(), root[:]) {
+				err = fmt.Errorf("BLS verification failed for signature %x", sigBytes)
+			}
+		}
+		errChan <- err
+	}
+
+	// Set up concurrency.
+	const goroutineCount = 1000
+	var wg sync.WaitGroup
+	errChan := make(chan error, goroutineCount)
+
+	for i := 0; i < goroutineCount; i++ {
+		wg.Add(1)
+		go signBeaconBlock(&wg, errChan)
+	}
+
+	// Wait for all goroutines to complete.
+	wg.Wait()
+	close(errChan)
+
+	// Count errors and successes.
+	var slashableErrors, successCount int
+	for err := range errChan {
+		if err != nil {
+			if err.Error() != "slashable proposal (HighestProposalVote), not signing" {
+				require.Fail(t, "unexpected error: %v", err)
+			}
+			slashableErrors++
+		} else {
+			successCount++
+		}
+	}
+
+	require.Equal(t, 1, successCount, "expected exactly one successful signing")
+	require.Equal(t, goroutineCount-1, slashableErrors, "expected slashing errors for remaining goroutines")
+}
+
+func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	type testValidator struct {
+		sk *bls.SecretKey
+		pk *bls.PublicKey
+	}
+	var testValidators []testValidator
+	for i := 0; i < 3; i++ {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+		pk := sk.GetPublicKey()
+		testValidators = append(testValidators, testValidator{sk: sk, pk: pk})
+	}
+
+	// Initialize key manager and add shares for each validator
+	km := testKeyManager(t, nil)
+	for _, validator := range testValidators {
+		require.NoError(t, km.AddShare(validator.sk))
+	}
+
+	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
+	currentEpoch := km.(*ethKeyManagerSigner).storage.Network().EstimatedEpochAtSlot(currentSlot)
+
+	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
+	highestSource := highestTarget - 1
+
+	attestationData := buildAttestationData(currentSlot, highestSource, highestTarget)
+
+	// Map to store results per validator
+	type validatorResult struct {
+		signs int
+		errs  int
+	}
+	validatorResults := make(map[string]*validatorResult)
+	for _, v := range testValidators {
+		validatorResults[v.pk.SerializeToHexStr()] = &validatorResult{}
+	}
+	var mu sync.Mutex
+
+	// Run signing attempts in parallel for each validator
+	const goroutinesPerValidator = 100
+	var wg sync.WaitGroup
+
+	for _, validator := range testValidators {
+		validator := validator // capture range variable
+		for i := 0; i < goroutinesPerValidator; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sigBytes, root, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+					attestationData,
+					phase0.Domain{},
+					validator.pk.Serialize(),
+					spectypes.DomainAttester,
+				)
+				mu.Lock()
+				defer mu.Unlock()
+				result := validatorResults[validator.pk.SerializeToHexStr()]
+				if err != nil {
+					result.errs++
+					require.ErrorContains(t, err, "slashable attestation (HighestAttestationVote), not signing")
+				} else {
+					sig := &bls.Sign{}
+					require.NoError(t, sig.Deserialize(sigBytes[:]))
+
+					// Perform BLS verification with public key and computed signing root.
+					if !sig.VerifyByte(validator.pk, root[:]) {
+						require.Truef(t, sig.VerifyByte(validator.pk, root[:]), "BLS verification failed for signature %x", sigBytes)
+					}
+					result.signs++
+				}
+			}()
+		}
+	}
+	wg.Wait()
+
+	// Validate that for each validator, only one signing succeeded, and the rest failed
+	for _, result := range validatorResults {
+		require.Equal(t, 1, result.signs)
+		require.Equal(t, goroutinesPerValidator-1, result.errs)
+	}
+}
+
+func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	type testValidator struct {
+		sk *bls.SecretKey
+		pk *bls.PublicKey
+	}
+	var testValidators []testValidator
+	for i := 0; i < 3; i++ { // Adjust the number of validators as needed
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+		pk := sk.GetPublicKey()
+		testValidators = append(testValidators, testValidator{sk: sk, pk: pk})
+	}
+
+	// Initialize key manager and add shares for each validator
+	km := testKeyManager(t, nil)
+	for _, validator := range testValidators {
+		require.NoError(t, km.AddShare(validator.sk))
+	}
+
+	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
+
+	blockContents := testingutils.TestingBlockContentsDeneb
+	blockContents.Block.Slot = highestProposal
+
+	// Map to store results per validator
+	type validatorResult struct {
+		signs int
+		errs  int
+	}
+	validatorResults := make(map[string]*validatorResult)
+	for _, v := range testValidators {
+		validatorResults[v.pk.SerializeToHexStr()] = &validatorResult{}
+	}
+	var mu sync.Mutex
+
+	// Run signing attempts in parallel for each validator
+	const goroutinesPerValidator = 100
+	var wg sync.WaitGroup
+
+	for _, validator := range testValidators {
+		validator := validator // capture range variable
+		for i := 0; i < goroutinesPerValidator; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sigBytes, root, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+					blockContents.Block,
+					phase0.Domain{},
+					validator.pk.Serialize(),
+					spectypes.DomainProposer,
+				)
+				mu.Lock()
+				defer mu.Unlock()
+				result := validatorResults[validator.pk.SerializeToHexStr()]
+				if err != nil {
+					result.errs++
+					require.ErrorContains(t, err, "slashable proposal (HighestProposalVote), not signing")
+				} else {
+					sig := &bls.Sign{}
+					require.NoError(t, sig.Deserialize(sigBytes[:]))
+
+					// Perform BLS verification with public key and computed signing root.
+					if !sig.VerifyByte(validator.pk, root[:]) {
+						require.Truef(t, sig.VerifyByte(validator.pk, root[:]), "BLS verification failed for signature %x", sigBytes)
+					}
+					result.signs++
+				}
+			}()
+		}
+	}
+	wg.Wait()
+
+	// Validate that for each validator, only one signing succeeded, and the rest failed
+	for _, result := range validatorResults {
+		require.Equal(t, 1, result.signs)
+		require.Equal(t, goroutinesPerValidator-1, result.errs)
+	}
+}
+
+// buildAttestationData creates a new AttestationData structure with the provided parameters.
+func buildAttestationData(slot phase0.Slot, highestSource, highestTarget phase0.Epoch) *phase0.AttestationData {
+	return &phase0.AttestationData{
+		Slot:            slot,
+		Index:           1,
+		BeaconBlockRoot: [32]byte{1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2},
+		Source: &phase0.Checkpoint{
+			Epoch: highestSource,
+			Root:  [32]byte{},
+		},
+		Target: &phase0.Checkpoint{
+			Epoch: highestTarget,
+			Root:  [32]byte{},
+		},
+	}
 }

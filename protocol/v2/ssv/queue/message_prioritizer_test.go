@@ -15,9 +15,11 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/stretchr/testify/require"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 var messagePriorityTests = []struct {
@@ -38,7 +40,7 @@ var messagePriorityTests = []struct {
 			// 1.1. Events/ExecuteDuty
 			mockExecuteDutyMessage{Slot: 62, Role: spectypes.BNRoleProposer},
 			// 1.2. Events/Timeout
-			mockTimeoutMessage{Height: 98, Role: spectypes.RunnerRole(spectypes.BNRoleProposer)},
+			mockTimeoutMessage{Height: 98, Role: spectypes.RoleProposer},
 
 			// 2. Current height/slot:
 			// 2.1. Consensus
@@ -272,7 +274,7 @@ func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMes
 	return &spectypes.SignedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: message.SSVEventMsgType,
-			MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(m.Role)),
+			MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], casts.BeaconRoleToRunnerRole(m.Role)),
 			Data:    data,
 		},
 		FullData:    []byte{1, 2, 3, 4},
@@ -401,19 +403,17 @@ func (m messageSlice) dump(s *State) string {
 
 func ssvMessageFactory(role spectypes.RunnerRole) func(*spectypes.SignedSSVMessage, *spectypes.PartialSignatureMessages) *spectypes.SSVMessage {
 	switch role {
-	case spectypes.RunnerRole(spectypes.BNRoleAttester):
+	case spectypes.RoleCommittee:
 		return testingutils.SSVMsgAttester
-	case spectypes.RunnerRole(spectypes.BNRoleProposer):
+	case spectypes.RoleProposer:
 		return testingutils.SSVMsgProposer
-	case spectypes.RunnerRole(spectypes.BNRoleAggregator):
+	case spectypes.RoleAggregator:
 		return testingutils.SSVMsgAggregator
-	case spectypes.RunnerRole(spectypes.BNRoleSyncCommittee):
-		return testingutils.SSVMsgSyncCommittee
-	case spectypes.RunnerRole(spectypes.BNRoleSyncCommitteeContribution):
+	case spectypes.RoleSyncCommitteeContribution:
 		return testingutils.SSVMsgSyncCommitteeContribution
-	case spectypes.RunnerRole(spectypes.BNRoleValidatorRegistration):
+	case spectypes.RoleValidatorRegistration:
 		return testingutils.SSVMsgValidatorRegistration
-	case spectypes.RunnerRole(spectypes.BNRoleVoluntaryExit):
+	case spectypes.RoleVoluntaryExit:
 		return testingutils.SSVMsgVoluntaryExit
 	default:
 		panic("invalid role")

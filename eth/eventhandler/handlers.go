@@ -332,7 +332,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		}
 	}
 
-	validatorShare.DomainType = eh.networkConfig.DomainType()
+	validatorShare.DomainType = eh.networkConfig.DomainType
 	validatorShare.Committee = shareMembers
 
 	return &validatorShare, shareSecret, nil
