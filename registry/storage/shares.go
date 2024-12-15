@@ -402,6 +402,10 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 // UpdateValidatorsMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
 	start := time.Now()
+
+	//experiment: before locking the db make sure all readers are done
+	s.memoryMtx.Lock()
+
 	s.storageMtx.Lock()
 	s.logger.Debug("sharesstorage#UpdateValidatorsMetadata", zap.Duration("wait", time.Since(start)))
 	defer s.storageMtx.Unlock()
@@ -414,7 +418,6 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 
 		defer memcount.Add(-1)
 
-		s.memoryMtx.Lock()
 		defer s.memoryMtx.Unlock()
 
 		for pk, metadata := range data {
