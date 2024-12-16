@@ -3,9 +3,11 @@ package observability
 import (
 	"math"
 	"strconv"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 )
@@ -28,6 +30,10 @@ func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
 		Key:   "ssv.validator.duty.round",
 		Value: Uint64AttributeValue(uint64(round)),
 	}
+}
+
+func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {
+	return attribute.String("ssv.p2p.connection.direction", strings.ToLower(direction.String()))
 }
 
 func Uint64AttributeValue(value uint64) attribute.Value {
