@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
-	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -444,7 +443,7 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		fields.Domain(dvs.networkConfig.DomainType),
 	}
 
-	if p2pv1.HasActiveSubnets(opts.Subnets) {
+	if HasActiveSubnets(opts.Subnets) {
 		logFields = append(logFields, fields.Subnets(opts.Subnets))
 	}
 

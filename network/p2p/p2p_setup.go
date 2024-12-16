@@ -254,7 +254,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if HasActiveSubnets(n.fixedSubnets) {
+		if discovery.HasActiveSubnets(n.fixedSubnets) {
 			discV5Opts.Subnets = n.fixedSubnets
 			logger = logger.With(fields.Subnets(n.fixedSubnets))
 		}
@@ -332,13 +332,4 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 		return false
 	}
 	return n.idx.AtLimit(network.DirOutbound)
-}
-
-func HasActiveSubnets(subnets []byte) bool {
-	for _, val := range subnets {
-		if val > 0 {
-			return true
-		}
-	}
-	return false
 }
