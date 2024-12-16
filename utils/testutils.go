@@ -39,25 +39,41 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 	}
 
 	beaconNetwork := spectypes.HoleskyNetwork // it must be something known by ekm
-
 	mockBeaconNetwork := mocknetwork.NewMockBeaconNetwork(ctrl)
+
 	mockBeaconNetwork.EXPECT().GetBeaconNetwork().Return(beaconNetwork).AnyTimes()
-
-	mockBeaconNetwork.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
-		func() phase0.Epoch {
-			return phase0.Epoch(currentSlot.GetSlot() / 32)
-		},
-	).AnyTimes()
-
+	mockBeaconNetwork.EXPECT().SlotsPerEpoch().Return(beaconNetwork.SlotsPerEpoch()).AnyTimes()
 	mockBeaconNetwork.EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
 			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
-
+	mockBeaconNetwork.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
+		func() phase0.Epoch {
+			return phase0.Epoch(uint64(currentSlot.GetSlot()) / beaconNetwork.SlotsPerEpoch())
+		},
+	).AnyTimes()
 	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
-			return phase0.Epoch(slot / 32)
+			return beaconNetwork.EstimatedEpochAtSlot(slot)
+		},
+	).AnyTimes()
+	mockBeaconNetwork.EXPECT().FirstSlotAtEpoch(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) phase0.Slot {
+			return beaconNetwork.FirstSlotAtEpoch(epoch)
+		},
+	).AnyTimes()
+	mockBeaconNetwork.EXPECT().IsFirstSlotOfEpoch(gomock.Any()).DoAndReturn(
+		func(slot phase0.Slot) bool {
+			return uint64(slot)%mockBeaconNetwork.SlotsPerEpoch() == 0
+		},
+	).AnyTimes()
+	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
+		func(slot phase0.Slot) time.Time {
+			timeSinceGenesisStart := int64(uint64(slot) * uint64(beaconNetwork.SlotDurationSec().Seconds())) // #nosec G115
+			minGenesisTime := int64(mockBeaconNetwork.GetBeaconNetwork().MinGenesisTime())                   // #nosec G115
+			start := time.Unix(minGenesisTime+timeSinceGenesisStart, 0)
+			return start
 		},
 	).AnyTimes()
 

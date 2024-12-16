@@ -24,6 +24,10 @@ import (
 // b64 encrypted key length is 256
 const encryptedKeyLength = 256
 
+// contractParticipationDelay is the number of epochs after contract registration or reactivation
+// in which the validator can start participating.
+const contractParticipationDelay phase0.Epoch = 1
+
 var (
 	ErrOperatorPubkeyAlreadyExists  = fmt.Errorf("operator public key already exists")
 	ErrOperatorIDAlreadyExists      = fmt.Errorf("operator ID already exists")
@@ -243,6 +247,12 @@ func (eh *EventHandler) handleShareCreation(
 		if err := eh.keyManager.AddShare(shareSecret); err != nil {
 			return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
 		}
+
+		// Set the minimum participation epoch to match slashing protection.
+		// Note: The current epoch can differ from the epoch set in slashing protection
+		// due to the passage of time between saving slashing protection data and setting
+		// the minimum participation epoch
+		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	// Save share.
@@ -322,7 +332,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		}
 	}
 
-	validatorShare.DomainType = eh.networkConfig.DomainType()
+	validatorShare.DomainType = eh.networkConfig.DomainType
 	validatorShare.Committee = shareMembers
 
 	return &validatorShare, shareSecret, nil
@@ -424,6 +434,12 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		if err := eh.keyManager.(ekm.StorageProvider).BumpSlashingProtection(share.SharePubKey); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
+
+		// Set the minimum participation epoch to match slashing protection.
+		// Note: The current epoch can differ from the epoch set in slashing protection
+		// due to the passage of time between saving slashing protection data and setting
+		// the minimum participation epoch
+		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	if len(enabledPubKeys) > 0 {
