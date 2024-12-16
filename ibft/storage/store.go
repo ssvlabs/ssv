@@ -2,10 +2,12 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -14,6 +16,8 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -53,6 +57,83 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 		prefix: []byte{role},
 		db:     db,
 	}
+}
+
+func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int) {
+	logger.Debug("start stale slot cleanup job", zap.Int("retain", retain))
+	ticker := slotTickerProvider()
+	<-ticker.Next()
+	threashold := uint64(ticker.Slot()) - uint64(retain) // #nosec G115
+
+	// on start we cleanup ALL slots <= threashold
+	start := time.Now()
+	count := i.removeSlotsOlderThan(logger, threashold)
+
+	logger.Debug("removed stale slot entries", zap.Int("count", count), zap.Duration("dur", time.Since(start)))
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.Next():
+			threashold := uint64(ticker.Slot()) - uint64(retain) // #nosec G115
+			if err := i.removeSlotAt(threashold); err != nil {
+				logger.Error("remove slot at", fields.Slot(phase0.Slot(threashold)))
+			}
+		}
+	}
+}
+
+func (i *participantStorage) removeSlotAt(slot uint64) error {
+	prefix := i.makePrefix(slotToByteSlice(phase0.Slot(slot)))
+	var keys [][]byte
+	err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
+		keys = append(keys, o.Key)
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+		if err = i.db.Delete(prefix, key); err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+// removes ALL entries for any slots older or equal to given slot
+func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot uint64) int {
+	var keySet = make(map[uint64]struct{})
+
+	prefix := make([]byte, 0, len(participantsKey)+1)
+	prefix = append(prefix, participantsKey...)
+	prefix = append(prefix, i.prefix...)
+
+	// collect keys
+	err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
+		slotBytes := o.Key[3:7]
+		if target := byteSliceToSlot(slotBytes); target <= slot {
+			keySet[target] = struct{}{}
+		}
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("collect keys for stale slots", zap.Error(err))
+	}
+
+	for k := range keySet {
+		err := i.removeSlotAt(k)
+		if err != nil {
+			logger.Error("remove slot at", zap.Error(err), fields.Slot(phase0.Slot(k)))
+		}
+	}
+
+	return len(keySet)
 }
 
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
@@ -214,7 +295,7 @@ func (i *participantStorage) delete(key []byte) error {
 }
 
 func (i *participantStorage) makePrefix(slot []byte) []byte {
-	prefix := make([]byte, 0, len(participantsKey)+8+len(slot))
+	prefix := make([]byte, 0, len(participantsKey)+1+len(slot))
 	prefix = append(prefix, participantsKey...)
 	prefix = append(prefix, i.prefix...)
 	prefix = append(prefix, slot...)
@@ -229,8 +310,13 @@ func (i *participantStorage) makePrefix(slot []byte) []byte {
 
 func slotToByteSlice(v phase0.Slot) []byte {
 	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b, uint32(uint64(v))) // we're good for now
+	// we're casting down but we should be good for now
+	binary.LittleEndian.PutUint32(b, uint32(uint64(v))) // #nosec G115
 	return b
+}
+
+func byteSliceToSlot(in []byte) uint64 {
+	return uint64(binary.LittleEndian.Uint32(in))
 }
 
 func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {

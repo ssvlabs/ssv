@@ -1,12 +1,15 @@
 package qbftstorage
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 // Participation extends ParticipantsRangeEntry with role and pubkey.
@@ -54,4 +57,7 @@ type ParticipantStore interface {
 
 	// GetParticipants returns participants in quorum for the given slot.
 	GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
+
+	// StartCleanupJob starts a background job to make sure that only a given number of slots will be kept back in the db
+	StartCleanupJob(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int)
 }

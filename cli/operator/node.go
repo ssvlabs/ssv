@@ -279,7 +279,9 @@ var StartNodeCmd = &cobra.Command{
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole))
+			s := ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole)
+			storageMap.Add(storageRole, s)
+			s.StartCleanupJob(cmd.Context(), logger, slotTickerProvider, cfg.DBOptions.RetainedSlotCount)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
