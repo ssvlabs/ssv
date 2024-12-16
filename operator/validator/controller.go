@@ -521,9 +521,7 @@ func (c *controller) selfSubnets() records.Subnets {
 	mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
 	for _, v := range myValidators {
 		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-		if mySubnets[subnet] == 0 {
-			mySubnets[subnet] = 1
-		}
+		mySubnets[subnet] = 1
 	}
 
 	return mySubnets
