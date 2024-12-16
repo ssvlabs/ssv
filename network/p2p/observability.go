@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/observability"
@@ -27,6 +28,12 @@ var (
 			metricName("peers.connected"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers")))
+
+	connectionsGauge = observability.NewMetric(
+		meter.Int64Gauge(
+			metricName("connections.active"),
+			metric.WithUnit("{connection}"),
+			metric.WithDescription("number of active connections")))
 
 	peersPerTopicGauge = observability.NewMetric(
 		meter.Int64Gauge(
@@ -48,6 +55,27 @@ func metricName(name string) string {
 func recordPeerCount(ctx context.Context, host host.Host) func() {
 	return func() {
 		peers := host.Network().Peers()
+		var (
+			numOfOutbound,
+			numOfInbound int64
+		)
+		for _, peer := range peers {
+			conns := host.Network().ConnsToPeer(peer)
+			for _, conn := range conns {
+				direction := conn.Stat().Direction
+				if direction == network.DirInbound {
+					numOfInbound++
+				} else if direction == network.DirOutbound {
+					numOfOutbound++
+				}
+			}
+		}
+		connectionsGauge.Record(ctx, numOfInbound, metric.WithAttributes(
+			observability.NetworkDirectionAttribute(network.DirInbound),
+		))
+		connectionsGauge.Record(ctx, numOfOutbound, metric.WithAttributes(
+			observability.NetworkDirectionAttribute(network.DirOutbound),
+		))
 		peersConnectedGauge.Record(ctx, int64(len(peers)))
 	}
 }

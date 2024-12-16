@@ -3,10 +3,8 @@ package connections
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -15,7 +13,7 @@ import (
 
 const (
 	observabilityComponentName = "github.com/ssvlabs/ssv/network/peers/connections"
-	observabilityNamespace     = "ssv.p2p.connection"
+	observabilityNamespace     = "ssv.p2p.connections"
 )
 
 var (
@@ -46,19 +44,15 @@ func metricName(name string) string {
 
 func recordConnected(ctx context.Context, direction network.Direction) {
 	connectedCounter.Add(ctx, 1,
-		metric.WithAttributes(networkDirectionAttribute(direction)))
+		metric.WithAttributes(observability.NetworkDirectionAttribute(direction)))
 }
 
 func recordDisconnected(ctx context.Context, direction network.Direction) {
 	disconnectedCounter.Add(ctx, 1,
-		metric.WithAttributes(networkDirectionAttribute(direction)))
+		metric.WithAttributes(observability.NetworkDirectionAttribute(direction)))
 }
 
 func recordFiltered(ctx context.Context, direction network.Direction) {
 	filteredCounter.Add(ctx, 1,
-		metric.WithAttributes(networkDirectionAttribute(direction)))
-}
-
-func networkDirectionAttribute(direction network.Direction) attribute.KeyValue {
-	return attribute.String("ssv.p2p.connection.direction", strings.ToLower(direction.String()))
+		metric.WithAttributes(observability.NetworkDirectionAttribute(direction)))
 }
