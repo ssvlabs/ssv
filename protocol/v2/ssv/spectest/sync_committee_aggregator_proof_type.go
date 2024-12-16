@@ -1,19 +1,20 @@
 package spectest
 
 import (
+	"context"
 	"encoding/hex"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -31,14 +32,14 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
-	lastErr := v.StartDuty(logger, &testingutils.TestingSyncCommitteeContributionDuty)
+	lastErr := v.StartDuty(context.TODO(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSignedSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		err = v.ProcessMessage(logger, dmsg)
+		err = v.ProcessMessage(context.TODO(), logger, dmsg)
 		if err != nil {
 			lastErr = err
 		}

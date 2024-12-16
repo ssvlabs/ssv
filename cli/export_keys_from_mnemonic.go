@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
+	"github.com/ssvlabs/eth2-key-manager/core"
 	util "github.com/wealdtech/go-eth2-util"
 	"go.uber.org/zap"
 

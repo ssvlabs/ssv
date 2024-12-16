@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -9,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (v *Validator) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error {
+func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
 	executeDutyData, err := msg.GetExecuteDutyData()
 	if err != nil {
 		return fmt.Errorf("failed to get execute duty data: %w", err)
@@ -21,20 +22,20 @@ func (v *Validator) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error
 	if _, err := v.Start(logger); err != nil {
 		return fmt.Errorf("could not start validator: %w", err)
 	}
-	if err := v.StartDuty(logger, executeDutyData.Duty); err != nil {
+	if err := v.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {
 		return fmt.Errorf("could not start duty: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Committee) OnExecuteDuty(logger *zap.Logger, msg *types.EventMsg) error {
+func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
 	executeDutyData, err := msg.GetExecuteCommitteeDutyData()
 	if err != nil {
 		return fmt.Errorf("failed to get execute committee duty data: %w", err)
 	}
 
-	if err := c.StartDuty(logger, executeDutyData.Duty); err != nil {
+	if err := c.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {
 		return fmt.Errorf("could not start committee duty: %w", err)
 	}
 

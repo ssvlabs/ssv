@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
@@ -48,7 +49,7 @@ func getTestingData(t *testing.T) TestData {
 			NodeVersion:   "some-node-version",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
-			Subnets:       "some-subnets",
+			Subnets:       records.AllSubnets,
 		},
 	}
 
@@ -59,7 +60,7 @@ func getTestingData(t *testing.T) TestData {
 				NodeVersion:   "test-node-version",
 				ExecutionNode: "test-execution-node",
 				ConsensusNode: "test-consensus-node",
-				Subnets:       "test-subnets",
+				Subnets:       records.AllSubnets,
 			},
 		},
 		MockSelfSealed: []byte("something"),
@@ -89,14 +90,15 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:                context.Background(),
-		nodeInfos:          nii,
-		peerInfos:          ns,
-		ids:                ids,
-		net:                net,
-		streams:            sc,
-		filters:            func() []HandshakeFilter { return []HandshakeFilter{} },
-		domainTypeProvider: networkconfig.TestNetwork,
+		ctx:        context.Background(),
+		nodeInfos:  nii,
+		peerInfos:  ns,
+		subnetsIdx: peers.NewSubnetsIndex(commons.Subnets()),
+		ids:        ids,
+		net:        net,
+		streams:    sc,
+		filters:    func() []HandshakeFilter { return []HandshakeFilter{} },
+		domainType: networkconfig.TestNetwork.DomainType,
 	}
 
 	mockConn := mock.Conn{

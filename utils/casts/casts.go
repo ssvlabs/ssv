@@ -24,15 +24,64 @@ func DurationFromUint64(t uint64) time.Duration {
 }
 
 func BeaconRoleToConvertRole(beaconRole spectypes.BeaconRole) convert.RunnerRole {
-	return convert.RunnerRole(beaconRole) // #nosec G115
+	switch beaconRole {
+	case spectypes.BNRoleAttester:
+		return convert.RoleAttester
+	case spectypes.BNRoleAggregator:
+		return convert.RoleAggregator
+	case spectypes.BNRoleProposer:
+		return convert.RoleProposer
+	case spectypes.BNRoleSyncCommittee:
+		return convert.RoleSyncCommittee
+	case spectypes.BNRoleSyncCommitteeContribution:
+		return convert.RoleSyncCommitteeContribution
+	case spectypes.BNRoleValidatorRegistration:
+		return convert.RoleValidatorRegistration
+	case spectypes.BNRoleVoluntaryExit:
+		return convert.RoleVoluntaryExit
+	default:
+		return -1
+	}
 }
 
-func BeaconRoleToRunnerRole(beaconRole spectypes.BeaconRole) spectypes.RunnerRole {
-	return spectypes.RunnerRole(beaconRole) // #nosec G115
+func RunnerRoleToConvertRole(runnerRole spectypes.RunnerRole) convert.RunnerRole {
+	switch runnerRole {
+	case spectypes.RoleCommittee:
+		return convert.RoleCommittee
+	case spectypes.RoleAggregator:
+		return convert.RoleAggregator
+	case spectypes.RoleProposer:
+		return convert.RoleProposer
+	case spectypes.RoleSyncCommitteeContribution:
+		return convert.RoleSyncCommitteeContribution
+	case spectypes.RoleValidatorRegistration:
+		return convert.RoleValidatorRegistration
+	case spectypes.RoleVoluntaryExit:
+		return convert.RoleVoluntaryExit
+	default:
+		return -1
+	}
 }
 
-func RunnerRoleToBeaconRole(role spectypes.RunnerRole) spectypes.BeaconRole {
-	return spectypes.BeaconRole(role) // #nosec G115
+func BeaconRoleToRunnerRole(runnerRole spectypes.BeaconRole) spectypes.RunnerRole {
+	switch runnerRole {
+	case spectypes.BNRoleAttester:
+		return spectypes.RoleCommittee
+	case spectypes.BNRoleAggregator:
+		return spectypes.RoleAggregator
+	case spectypes.BNRoleProposer:
+		return spectypes.RoleProposer
+	case spectypes.BNRoleSyncCommittee:
+		return spectypes.RoleCommittee
+	case spectypes.BNRoleSyncCommitteeContribution:
+		return spectypes.RoleSyncCommitteeContribution
+	case spectypes.BNRoleValidatorRegistration:
+		return spectypes.RoleValidatorRegistration
+	case spectypes.BNRoleVoluntaryExit:
+		return spectypes.RoleVoluntaryExit
+	default:
+		return spectypes.RoleUnknown
+	}
 }
 
 // DurationToUint64 returns error if duration is negative and converts time.Duration to uint64 safe otherwise

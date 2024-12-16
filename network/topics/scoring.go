@@ -55,13 +55,6 @@ func scoreInspector(logger *zap.Logger,
 		}
 		gossipScoreIndex.SetScores(peerScores)
 
-		// Skip if it's not time to log yet.
-		if inspections%logFrequency != 0 {
-			inspections++
-			return
-		}
-		inspections++
-
 		// Reset metrics before updating them.
 		metrics.ResetPeerScores()
 
@@ -154,6 +147,11 @@ func scoreInspector(logger *zap.Logger,
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
+			if inspections%logFrequency != 0 {
+				// Don't log yet.
+				continue
+			}
+
 			// Log.
 			fields := []zap.Field{
 				fields.PeerID(pid),
@@ -185,6 +183,8 @@ func scoreInspector(logger *zap.Logger,
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
+
+		inspections++
 	}
 }
 
@@ -219,27 +219,6 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		opts := params.NewSubnetTopicOpts(totalValidators, commons.Subnets(), topicCommittees)
 
 		// Generate topic parameters
-		tp, err := params.TopicParams(opts)
-		if err != nil {
-			logger.Debug("ignoring topic score params", zap.Error(err))
-			return nil
-		}
-		return tp
-	}
-}
-
-// topicScoreParams factory for creating scoring params for topics
-func validatorTopicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
-	return func(t string) *pubsub.TopicScoreParams {
-		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
-		if err != nil {
-			logger.Debug("could not read stats: active validators")
-			return nil
-		}
-		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
-			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
-		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOptsValidators(totalValidators, commons.Subnets())
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))
