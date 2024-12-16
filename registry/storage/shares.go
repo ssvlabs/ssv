@@ -361,8 +361,11 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 	defer s.storageMtx.Unlock()
 
 	err := func() error {
-		s.memoryMtx.Lock()
-		defer s.memoryMtx.Unlock()
+		// using a read-lock here even if we are writing to the share pointer
+		// because it's the only place a write is happening
+		// to be re-implemented in a a safer maner in future iteration
+		s.memoryMtx.RLock()
+		defer s.memoryMtx.RUnlock()
 
 		for pk, metadata := range data {
 			if metadata == nil {
@@ -375,11 +378,6 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			share.BeaconMetadata = metadata
 			share.Share.ValidatorIndex = metadata.Index
 			shares = append(shares, share)
-		}
-
-		for _, share := range shares {
-			key := hex.EncodeToString(share.ValidatorPubKey[:])
-			s.shares[key] = share
 		}
 
 		return s.validatorStore.handleSharesUpdated(shares...)
