@@ -12,10 +12,12 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -437,7 +439,16 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.networkConfig.DomainType), fields.Subnets(opts.Subnets))
+	logFields := []zapcore.Field{
+		fields.ENRLocalNode(localNode),
+		fields.Domain(dvs.networkConfig.DomainType),
+	}
+
+	if p2pv1.HasActiveSubnets(opts.Subnets) {
+		logFields = append(logFields, fields.Subnets(opts.Subnets))
+	}
+
+	logger.Debug("node record is ready", logFields...)
 
 	return localNode, nil
 }

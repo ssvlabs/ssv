@@ -217,26 +217,20 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
-	var activeSubnets []string
-	for i, val := range n.fixedSubnets {
-		if val > 0 {
-			activeSubnets = append(activeSubnets, fmt.Sprintf("%d", i))
-		}
-	}
-
-	// no active subnets to subscribe to
-	if len(activeSubnets) == 0 {
-		logger.Debug("no active subnets to subscribe to")
+	if !HasActiveSubnets(n.fixedSubnets) {
 		return nil
 	}
 
 	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
 
-	for _, subnet := range activeSubnets {
-		if err := n.topicsCtrl.Subscribe(logger, subnet); err != nil {
-			logger.Warn("could not subscribe to subnet",
-				zap.String("subnet", subnet), zap.Error(err))
-			// TODO: handle error
+	for i, val := range n.fixedSubnets {
+		if val > 0 {
+			subnet := fmt.Sprintf("%d", i)
+			if err := n.topicsCtrl.Subscribe(logger, subnet); err != nil {
+				logger.Warn("could not subscribe to subnet",
+					zap.String("subnet", subnet), zap.Error(err))
+				// TODO: handle error
+			}
 		}
 	}
 
