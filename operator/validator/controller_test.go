@@ -41,6 +41,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -63,6 +64,7 @@ type MockControllerOptions struct {
 	signer            spectypes.BeaconSigner
 	StorageMap        *ibftstorage.QBFTStores
 	validatorsMap     *validators.ValidatorsMap
+	validatorStore    registrystorage.ValidatorStore
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorStorage   registrystorage.Operators
 	networkConfig     networkconfig.NetworkConfig
@@ -240,6 +242,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
+			mockValidatorStore := registrystoragemocks.NewMockValidatorStore(ctrl)
+			mockValidatorStore.EXPECT().OperatorValidators(gomock.Any()).Return(sharesWithMetadata).AnyTimes()
+
 			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			}
@@ -251,6 +256,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				sharesStorage:     sharesStorage,
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
+				validatorStore:    mockValidatorStore,
 				validatorOptions: validator.Options{
 					Exporter: true,
 				},
@@ -1016,6 +1022,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		sharesStorage:           opts.sharesStorage,
 		operatorsStorage:        opts.operatorStorage,
 		validatorsMap:           opts.validatorsMap,
+		validatorStore:          opts.validatorStore,
 		ctx:                     context.Background(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,

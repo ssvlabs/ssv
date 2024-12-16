@@ -24,7 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
+	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -459,15 +459,16 @@ func (c *controller) StartValidators() {
 		return
 	}
 
+	mySubnets := c.selfSubnets()
+
 	var ownShares []*ssvtypes.SSVShare
 	var pubKeysToFetch [][]byte
-	activeSubnets := c.network.ActiveSubnets()
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		subnet := commons.CommitteeSubnet(share.CommitteeID())
-		if uint64(len(activeSubnets)) >= subnet && activeSubnets[subnet] != 0 {
+		subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
+		if uint64(len(mySubnets)) >= subnet && mySubnets[subnet] != 0 {
 			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
 		}
 	}
@@ -513,6 +514,19 @@ func (c *controller) StartValidators() {
 				fields.Took(time.Since(start)))
 		}
 	}
+}
+
+func (c *controller) selfSubnets() records.Subnets {
+	myValidators := c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID())
+	mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+	for _, v := range myValidators {
+		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+		if mySubnets[subnet] == 0 {
+			mySubnets[subnet] = 1
+		}
+	}
+
+	return mySubnets
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -986,7 +1000,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 				return true
 			}
 
-			subnet := commons.CommitteeSubnet(share.CommitteeID())
+			subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
 			if uint64(len(activeSubnets)) < subnet || activeSubnets[subnet] == 0 {
 				return true
 			}
