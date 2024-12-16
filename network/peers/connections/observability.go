@@ -3,10 +3,8 @@ package connections
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/libp2p/go-libp2p/core/network"
