@@ -999,7 +999,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			}
 
 			subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
-			if uint64(len(activeSubnets)) < subnet || activeSubnets[subnet] == 0 {
+			if uint64(len(activeSubnets)) < subnet {
 				return true
 			}
 
