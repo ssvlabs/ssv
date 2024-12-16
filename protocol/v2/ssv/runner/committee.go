@@ -16,7 +16,6 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -25,6 +24,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -552,7 +552,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
-			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.started).Seconds()),
+			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
 		))
 		logger.Info(eventMsg,
 			fields.Height(cr.BaseRunner.QBFTController.Height),
@@ -596,7 +596,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
-			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.started).Seconds()),
+			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
 		))
 		logger.Info(eventMsg,
 			fields.Height(cr.BaseRunner.QBFTController.Height),
@@ -803,7 +803,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	defer span.End()
 
 	cr.measurements.StartDutyFlow()
-    
+
 	start := time.Now()
 	slot := duty.DutySlot()
 	// We set committeeIndex to 0 for simplicity, there is no need to specify it exactly because
