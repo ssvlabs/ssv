@@ -988,18 +988,11 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	var sleep = 2 * time.Second
 
 	for {
-		activeSubnets := c.network.ActiveSubnets()
-
 		// Get the shares to fetch metadata for.
 		start := time.Now()
 		var existingShares, newShares []*ssvtypes.SSVShare
 		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 			if share.Liquidated {
-				return true
-			}
-
-			subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
-			if uint64(len(activeSubnets)) < subnet {
 				return true
 			}
 
