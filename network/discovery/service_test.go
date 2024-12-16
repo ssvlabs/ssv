@@ -263,7 +263,7 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// Mismatching domains
-	err = dvs.checkPeer(context.TODO(),testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
+	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
 	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// No subnets

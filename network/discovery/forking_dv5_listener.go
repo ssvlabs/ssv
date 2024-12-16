@@ -95,9 +95,5 @@ type annotatedIterator struct {
 }
 
 func (i *annotatedIterator) Next() bool {
-	if !i.Iterator.Next() {
-		return false
-	}
-	metricIterations.WithLabelValues(i.fork).Inc()
-	return true
+	return i.Iterator.Next()
 }
