@@ -120,7 +120,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		// save participants
 		for _, d := range decided250Seq {
 			_, err := ibftStorage.Get(role).UpdateParticipants(
-				role, spectypes.ValidatorPK(pk.Serialize()),
+				spectypes.ValidatorPK(pk.Serialize()),
 				phase0.Slot(d.State.Height),
 				d.DecidedMessage.OperatorIDs,
 			)
@@ -209,7 +209,7 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 
 	storageMap := qbftstorage.NewStores()
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(db, role.String()))
+		storageMap.Add(role, qbftstorage.New(db, role))
 	}
 
 	return sExporter, storageMap

@@ -64,14 +64,14 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 
 		if len(request.PubKeys) == 0 {
 			var err error
-			participantsRange, err = store.GetAllParticipantsInRange(role, from, to)
+			participantsRange, err = store.GetAllParticipantsInRange(from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
 		}
 		// these two^ are mutually exclusive
 		for _, pubKey := range request.PubKeys {
-			participantsByPK, err := store.GetParticipantsInRange(role, spectypes.ValidatorPK(pubKey), from, to)
+			participantsByPK, err := store.GetParticipantsInRange(spectypes.ValidatorPK(pubKey), from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}

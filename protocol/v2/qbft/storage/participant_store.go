@@ -44,14 +44,14 @@ type ParticipantStore interface {
 	CleanAllInstances(msgID []byte) error
 
 	// UpdateParticipants updates participants in quorum.
-	UpdateParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
+	UpdateParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
-	GetAllParticipantsInRange(role spectypes.BeaconRole, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
+	GetAllParticipantsInRange(from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range and validator public key.
-	GetParticipantsInRange(role spectypes.BeaconRole, pk spectypes.ValidatorPK, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
+	GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipants returns participants in quorum for the given slot.
-	GetParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
+	GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
 }

@@ -21,7 +21,7 @@ import (
 const (
 	highestInstanceKey = "highest_instance"
 	instanceKey        = "instance"
-	participantsKey    = "participants"
+	participantsKey    = "pt"
 )
 
 var (
@@ -47,9 +47,10 @@ type participantStorage struct {
 }
 
 // New create new participant store
-func New(db basedb.Database, prefix string) qbftstorage.ParticipantStore {
+func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.ParticipantStore {
+	role := byte(prefix & 0xff)
 	return &participantStorage{
-		prefix: []byte(prefix),
+		prefix: []byte{role},
 		db:     db,
 	}
 }
@@ -66,14 +67,14 @@ func (i *participantStorage) CleanAllInstances([]byte) error {
 	return nil
 }
 
-func (i *participantStorage) UpdateParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+func (i *participantStorage) UpdateParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
 	i.participantsMu.Lock()
 	defer i.participantsMu.Unlock()
 
 	txn := i.db.Begin()
 	defer txn.Discard()
 
-	existingParticipants, err := i.getParticipants(txn, role, pk, slot)
+	existingParticipants, err := i.getParticipants(txn, pk, slot)
 	if err != nil {
 		return false, fmt.Errorf("get participants %w", err)
 	}
@@ -83,7 +84,7 @@ func (i *participantStorage) UpdateParticipants(role spectypes.BeaconRole, pk sp
 		return false, nil
 	}
 
-	if err := i.saveParticipants(txn, role, pk, slot, mergedParticipants); err != nil {
+	if err := i.saveParticipants(txn, pk, slot, mergedParticipants); err != nil {
 		return false, fmt.Errorf("save participants: %w", err)
 	}
 
@@ -94,12 +95,11 @@ func (i *participantStorage) UpdateParticipants(role spectypes.BeaconRole, pk sp
 	return true, nil
 }
 
-func (i *participantStorage) GetAllParticipantsInRange(role spectypes.BeaconRole, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (i *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	var ee []qbftstorage.ParticipantsRangeEntry
-	roleBytes := uInt64ToByteSlice(uint64(role))
 	for slot := from; slot <= to; slot++ {
-		slotBytes := uInt64ToByteSlice(uint64(slot))
-		prefix := i.makePrefix(roleBytes, slotBytes)
+		slotBytes := slotToByteSlice(slot)
+		prefix := i.makePrefix(slotBytes)
 		err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
 			re := qbftstorage.ParticipantsRangeEntry{
 				Slot:    slot,
@@ -118,11 +118,11 @@ func (i *participantStorage) GetAllParticipantsInRange(role spectypes.BeaconRole
 	return ee, nil
 }
 
-func (i *participantStorage) GetParticipantsInRange(role spectypes.BeaconRole, pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (i *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
-		participants, err := i.GetParticipants(role, pk, slot)
+		participants, err := i.GetParticipants(pk, slot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get participants: %w", err)
 		}
@@ -141,12 +141,12 @@ func (i *participantStorage) GetParticipantsInRange(role spectypes.BeaconRole, p
 	return participantsRange, nil
 }
 
-func (i *participantStorage) GetParticipants(role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	return i.getParticipants(nil, role, pk, slot)
+func (i *participantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	return i.getParticipants(nil, pk, slot)
 }
 
-func (i *participantStorage) getParticipants(txn basedb.ReadWriter, role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	val, found, err := i.get(txn, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot)))
+func (i *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	val, found, err := i.get(txn, pk[:], slotToByteSlice(slot))
 	if err != nil {
 		return nil, err
 	}
@@ -158,12 +158,12 @@ func (i *participantStorage) getParticipants(txn basedb.ReadWriter, role spectyp
 	return operators, nil
 }
 
-func (i *participantStorage) saveParticipants(txn basedb.ReadWriter, role spectypes.BeaconRole, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
+func (i *participantStorage) saveParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
 	bytes, err := encodeOperators(operators)
 	if err != nil {
 		return fmt.Errorf("encode operators: %w", err)
 	}
-	if err := i.save(txn, bytes, pk[:], uInt64ToByteSlice(uint64(role)), uInt64ToByteSlice(uint64(slot))); err != nil {
+	if err := i.save(txn, bytes, pk[:], slotToByteSlice(slot)); err != nil {
 		return fmt.Errorf("save to DB: %w", err)
 	}
 
@@ -176,13 +176,13 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 	return slices.Compact(allParticipants)
 }
 
-func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, role, slot []byte) error {
-	prefix := i.makePrefix(role, slot)
+func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, slot []byte) error {
+	prefix := i.makePrefix(slot)
 	return i.db.Using(txn).Set(prefix, pk, value)
 }
 
-func (i *participantStorage) get(txn basedb.ReadWriter, pk, role, slot []byte) ([]byte, bool, error) {
-	prefix := i.makePrefix(role, slot)
+func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte, bool, error) {
+	prefix := i.makePrefix(slot)
 	obj, found, err := i.db.Using(txn).Get(prefix, pk)
 	if !found {
 		return nil, found, nil
@@ -213,18 +213,23 @@ func (i *participantStorage) delete(key []byte) error {
 	return nil
 }
 
-func (i *participantStorage) makePrefix(role, slot []byte) []byte {
-	prefix := make([]byte, 0, len(i.prefix)+len(participantsKey)+len(role)+len(slot))
-	prefix = append(prefix, i.prefix...)
+func (i *participantStorage) makePrefix(slot []byte) []byte {
+	prefix := make([]byte, 0, len(participantsKey)+8+len(slot))
 	prefix = append(prefix, participantsKey...)
-	prefix = append(prefix, role...)
+	prefix = append(prefix, i.prefix...)
 	prefix = append(prefix, slot...)
 	return prefix
 }
 
-func uInt64ToByteSlice(n uint64) []byte {
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, n)
+// func uInt64ToByteSlice(n uint64) []byte {
+// 	b := make([]byte, 8)
+// 	binary.LittleEndian.PutUint64(b, n)
+// 	return b
+// }
+
+func slotToByteSlice(v phase0.Slot) []byte {
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, uint32(uint64(v))) // we're good for now
 	return b
 }
 

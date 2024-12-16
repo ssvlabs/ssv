@@ -21,7 +21,7 @@ func NewStores() *ParticipantStores {
 func NewStoresFromRoles(db basedb.Database, roles ...spectypes.BeaconRole) *ParticipantStores {
 	stores := NewStores()
 	for _, role := range roles {
-		stores.Add(role, New(db, role.String()))
+		stores.Add(role, New(db, role))
 	}
 	return stores
 }

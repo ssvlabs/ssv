@@ -88,7 +88,7 @@ func HandleParticipantsQuery(logger *zap.Logger, store *storage.ParticipantStore
 
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
-	participantsList, err := roleStorage.GetParticipantsInRange(role, spectypes.ValidatorPK(pkRaw), from, to)
+	participantsList, err := roleStorage.GetParticipantsInRange(spectypes.ValidatorPK(pkRaw), from, to)
 	if err != nil {
 		logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}
