@@ -9,13 +9,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -89,7 +87,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	}
 
 	r.measurements.EndPreConsensus()
-	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator)))
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
 
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
@@ -146,7 +144,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	r.measurements.EndConsensus()
-	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator)))
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregator)
 
 	r.measurements.StartPostConsensus()
 
@@ -210,8 +208,9 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	r.measurements.EndPostConsensus()
-	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator)))
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregator)
 
+	var successfullySubmittedAggregates uint32
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
@@ -242,22 +241,26 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		start := time.Now()
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
-			failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator)))
-
+			recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 				fields.SubmissionTime(time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
-		r.measurements.EndDutyFlow()
-		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator), observability.DutyRoundAttribute(r.GetState().RunningInstance.State.Round)))
-		submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleAggregator)))
-
+		successfullySubmittedAggregates++
 		logger.Debug("✅ successful submitted aggregate",
 			fields.SubmissionTime(time.Since(start)),
 		)
 	}
+
+	r.measurements.EndDutyFlow()
+
+	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(ctx,
+		successfullySubmittedAggregates,
+		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		spectypes.BNRoleAggregator)
+
 	r.GetState().Finished = true
 
 	return nil
@@ -308,6 +311,8 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	if err != nil {
 		return err
 	}
+
+	r.measurements.StartConsensus()
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,

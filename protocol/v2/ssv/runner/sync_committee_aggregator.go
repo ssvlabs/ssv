@@ -11,13 +11,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -90,7 +88,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	r.measurements.EndPreConsensus()
-	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
 	// collect selection proofs and subnets
 	var (
@@ -175,7 +173,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	}
 
 	r.measurements.EndConsensus()
-	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
 	r.measurements.StartPostConsensus()
 
@@ -247,7 +245,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	}
 
 	r.measurements.EndPostConsensus()
-	postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
 	// get contributions
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
@@ -260,6 +258,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		return errors.Wrap(err, "could not get contributions")
 	}
 
+	var successfullySubmittedContributions uint32
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
@@ -295,24 +294,29 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			}
 
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
-				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
+				recordFailedSubmission(ctx, spectypes.BNRoleSyncCommitteeContribution)
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
 
-			r.measurements.EndDutyFlow()
-			dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-				metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution), observability.DutyRoundAttribute(r.GetState().RunningInstance.State.Round)))
-			submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleSyncCommitteeContribution)))
-
+			successfullySubmittedContributions++
 			logger.Debug("✅ successfully submitted sync committee aggregator",
 				fields.SubmissionTime(time.Since(start)),
 			)
 			break
 		}
 	}
+
+	r.measurements.EndDutyFlow()
+
+	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(ctx,
+		successfullySubmittedContributions,
+		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		spectypes.BNRoleSyncCommitteeContribution)
+
 	r.GetState().Finished = true
 	return nil
 }

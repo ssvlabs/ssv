@@ -16,13 +16,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -104,7 +102,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	r.measurements.EndPreConsensus()
-	preConsensusDurationHistogram.Record(ctx, r.measurements.PreConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleProposer)
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -168,7 +166,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	r.measurements.EndConsensus()
-	consensusDurationHistogram.Record(ctx, r.measurements.ConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
 
 	r.measurements.StartPostConsensus()
 
@@ -243,6 +241,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		return nil
 	}
 
+	var successfullySubmittedProposals uint8
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
@@ -256,7 +255,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		copy(specSig[:], sig)
 
 		r.measurements.EndPostConsensus()
-		postConsensusDurationHistogram.Record(ctx, r.measurements.PostConsensusTime().Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+		recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
 
 		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
 			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
@@ -295,7 +294,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			)
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
-				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 				logger.Error("❌ could not submit blinded Beacon block",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
@@ -313,7 +312,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			)
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
-				failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
+				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 				logger.Error("❌ could not submit Beacon block",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
@@ -321,11 +320,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			}
 		}
 
-		r.measurements.EndDutyFlow()
-		dutyDurationHistogram.Record(ctx, r.measurements.DutyDurationTime().Seconds(),
-			metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer), observability.DutyRoundAttribute(r.GetState().RunningInstance.State.Round)))
-		submissionCounter.Add(ctx, 1, metric.WithAttributes(observability.RunnerRoleAttribute(spectypes.RoleProposer)))
-
+		successfullySubmittedProposals++
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(validatorConsensusData.Duty.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
@@ -335,7 +330,17 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.Duration("took", time.Since(start)),
 			zap.NamedError("summarize_err", summarizeErr))
 	}
+
+	r.measurements.EndDutyFlow()
+
+	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(ctx,
+		uint32(successfullySubmittedProposals),
+		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		spectypes.BNRoleProposer)
+
 	r.GetState().Finished = true
+
 	return nil
 }
 
