@@ -48,8 +48,8 @@ const (
 	// connectorQueueSize is the buffer size of the channel used by the connector
 	connectorQueueSize = 256
 	// inboundRatio is the ratio of inbound connections to outbound connections
-	inboundRatio = float64(0.8)
-	//inboundRatio = float64(0.1) // TODO - testing
+	//inboundRatio = float64(0.8)
+	inboundRatio = float64(0.5) // TODO - testing
 )
 
 // Setup is used to setup the network
@@ -163,7 +163,7 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
-	if err := n.setupPeerServices(logger); err != nil {
+	if err := n.setupPeerServices(logger, topicsController); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
 	if err := n.setupDiscovery(logger, topicsController); err != nil {
@@ -179,7 +179,7 @@ func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
+func (n *p2pNetwork) setupPeerServices(logger *zap.Logger, topicsController topics.Controller) error {
 	libPrivKey, err := p2pcommons.ECDSAPrivToInterface(n.cfg.NetworkPrivateKey)
 	if err != nil {
 		return err
@@ -238,7 +238,16 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx, n.metrics)
+	n.connHandler = connections.NewConnHandler(
+		n.ctx,
+		handshaker,
+		subnetsProvider,
+		n.idx,
+		n.idx,
+		n.idx,
+		topicsController,
+		n.metrics,
+	)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 

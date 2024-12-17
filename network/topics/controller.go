@@ -29,7 +29,7 @@ type Controller interface {
 	Unsubscribe(logger *zap.Logger, topicName string, hard bool) error
 	// Peers returns the peers subscribed to the given topic
 	Peers(topicName string) ([]peer.ID, error)
-	// Topics lists all the available topics
+	// Topics lists all topics this node is subscribed to
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
@@ -155,7 +155,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	return topic.ListPeers(), nil
 }
 
-// Topics lists all the available topics
+// Topics lists all topics this node is subscribed to
 func (ctrl *topicsCtrl) Topics() []string {
 	topics := ctrl.ps.GetTopics()
 	for i, tp := range topics {

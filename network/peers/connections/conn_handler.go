@@ -2,19 +2,18 @@ package connections
 
 import (
 	"context"
-	"sync"
-	"time"
-
 	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/topics"
+	"go.uber.org/zap"
+	"sync"
+	"time"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
@@ -31,6 +30,7 @@ type connHandler struct {
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
 	peerInfos       peers.PeerInfoIndex
+	topicsCtrl      topics.Controller
 	metrics         Metrics
 }
 
@@ -42,6 +42,7 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
+	topicsController topics.Controller,
 	mr Metrics,
 ) ConnHandler {
 	return &connHandler{
@@ -51,6 +52,7 @@ func NewConnHandler(
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
 		peerInfos:       peerInfos,
+		topicsCtrl:      topicsController,
 		metrics:         mr,
 	}
 }
@@ -144,6 +146,11 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
+			// TODO
+			//if !ch.essentialPeer(logger, conn) {
+			//	return errors.New("peer doesn't help us much (with dead/solo subnets)")
+			//}
+
 			return nil
 		}
 
@@ -233,3 +240,63 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 
 	return len(shared) == 1
 }
+
+//// TODO - need a better (smart) way to do it, but for now try to connect only
+//// peers that help with getting rid of dead subnets
+//func (ch *connHandler) essentialPeer(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
+//	// TODO
+//	//peerSubnets := ch.subnetsIndex.GetPeerSubnets(conn.RemotePeer())
+//	//if len(peerSubnets) == 0 {
+//	//	// no subnets for this peer
+//	//	return false
+//	//}
+//	peerSubnets := make(map[peer.ID]map[string]struct{}) // peers -> topics
+//	for _, topic := range ch.topicsCtrl.Topics() {
+//		peerz, err := ch.topicsCtrl.Peers(topic)
+//		if err != nil {
+//			logger.Error(
+//				"Cant get peers for topic, skipping to keep the network running",
+//				zap.String("topic", topic),
+//				zap.Error(err),
+//			)
+//			continue
+//		}
+//		for _, p := range peerz {
+//			peerSubnets[p][topic] = struct{}{}
+//		}
+//	}
+//
+//	essentialPeer := false
+//	subscribedTopics := ch.topicsCtrl.Topics()
+//	for _, topic := range subscribedTopics {
+//		topicPeers, err := ch.topicsCtrl.Peers(topic)
+//		if err != nil {
+//			panic(fmt.Sprintf("could not get subscribed topic peers: %s", err)) // TODO
+//		}
+//
+//		if len(topicPeers) >= 1 {
+//			continue // this topic has enough peers - TODO (1 is not enough tho)
+//		}
+//
+//		// we've got a dead subnet here, see if this peer can help with that
+//		//subnet, err := strconv.Atoi(topic)
+//		//if err != nil {
+//		//	panic(fmt.Sprintf("could not convert topic name to subnet id: %s", err)) // TODO
+//		//}
+//		//peerSubnet := peerSubnets[subnet]
+//		//if peerSubnet != 1 {
+//		//	continue // peer doesn't have this subnet either, lets check other dead subnets we have
+//		//}
+//		_, ok := peerSubnets[conn.RemotePeer()][topic]
+//		if !ok {
+//			continue // peer doesn't have this subnet either, lets check other dead subnets we have
+//		}
+//		essentialPeer = true // this peer helps with at least 1 dead subnet for us
+//		break
+//	}
+//	if !essentialPeer {
+//		return false
+//	}
+//
+//	return true
+//}

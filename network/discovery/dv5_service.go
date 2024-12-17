@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ssvlabs/ssv/network/topics"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -205,39 +206,35 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		return errors.New("no shared subnets")
 	}
 
-	//// TODO - need a better (smart) way to do it, but for now try to connect only
-	//// peers that help with getting rid of dead subnets
-	//helpfulPeer := false
-	//subscribedTopics := dvs.topicsCtrl.Topics()
-	//for _, topic := range subscribedTopics {
-	//	topicPeers, err := dvs.topicsCtrl.Peers(topic)
-	//	if err != nil {
-	//		return errors.Wrap(err, "could not get subscribed topic peers")
-	//	}
-	//
-	//	if len(topicPeers) >= 1 {
-	//		continue // this topic has enough peers - TODO (1 is not enough tho)
-	//	}
-	//	//// TODO - testing 0 to see if this even works
-	//	//if len(topicPeers) >= 0 {
-	//	//	continue // this topic has enough peers - TODO (1 is not enough tho)
-	//	//}
-	//
-	//	// we've got a dead subnet here, see if this peer can help with that
-	//	subnet, err := strconv.Atoi(topic)
-	//	if err != nil {
-	//		return errors.Wrap(err, "could not convert topic name to subnet id")
-	//	}
-	//	peerSubnet := peerSubnets[subnet]
-	//	if peerSubnet != 1 {
-	//		continue // peer doesn't have this subnet either, lets check other dead subnets we have
-	//	}
-	//	helpfulPeer = true // this peer helps with at least 1 dead subnet for us
-	//	break
-	//}
-	//if !helpfulPeer {
-	//	return errors.New("this peer doesn't help with dead subnets")
-	//}
+	// TODO - need a better (smart) way to do it, but for now try to connect only
+	// peers that help with getting rid of dead subnets
+	helpfulPeer := false
+	subscribedTopics := dvs.topicsCtrl.Topics()
+	for _, topic := range subscribedTopics {
+		topicPeers, err := dvs.topicsCtrl.Peers(topic)
+		if err != nil {
+			return errors.Wrap(err, "could not get subscribed topic peers")
+		}
+
+		if len(topicPeers) >= 1 {
+			continue // this topic has enough peers - TODO (1 is not enough tho)
+		}
+
+		// we've got a dead subnet here, see if this peer can help with that
+		subnet, err := strconv.Atoi(topic)
+		if err != nil {
+			return errors.Wrap(err, "could not convert topic name to subnet id")
+		}
+		peerSubnet := peerSubnets[subnet]
+		if peerSubnet != 1 {
+			continue // peer doesn't have this subnet either, lets check other dead subnets we have
+		}
+		helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+		break
+	}
+	if !helpfulPeer {
+		return errors.New("this peer doesn't help with dead subnets")
+	}
 
 	metricFoundNodes.Inc()
 	return nil

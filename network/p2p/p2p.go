@@ -328,16 +328,19 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 func (n *p2pNetwork) PeerProtection(
 	immunityQuota int,
 ) map[peer.ID]struct{} {
-
 	protectedPeers := make(map[peer.ID]struct{})
 
 	tpcs := n.topicsCtrl.Topics()
-	peerz := make(map[string][]peer.ID, len(tpcs))
+	peerz := make(map[string][]peer.ID, len(tpcs)) // topic -> peers
 	for _, tpc := range tpcs {
 		var err error
 		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
 		if err != nil {
-			n.interfaceLogger.Error("Cant get peers from topics, skipping to keep the network running", zap.Error(err))
+			n.interfaceLogger.Error(
+				"Cant get peers for topic, skipping to keep the network running",
+				zap.String("topic", tpc),
+				zap.Error(err),
+			)
 			continue
 		}
 	}
@@ -352,8 +355,8 @@ func (n *p2pNetwork) PeerProtection(
 		return shared
 	}
 
-	// for each topic we have peers in, sort the peers by the numbers of topics they present in
-	// and protect the top 2 peers in each topic, if there's only one peer in that topic, always protect it.
+	// for each topic we have peers in sort these peers by the number of topics they share with us
+	// and protect top 2 peers for each topic, if there's only one peer in that topic, always protect it
 	for _, tpc := range tpcs {
 		peersInTopic := peerz[tpc]
 		if len(peersInTopic) == 0 {
