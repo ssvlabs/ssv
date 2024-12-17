@@ -7,10 +7,11 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
 	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
-	"go.uber.org/zap"
 )
 
 var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
@@ -85,12 +86,6 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 func WithProtocolID(protocolID [6]byte) func(config *discover.Config) {
 	return func(config *discover.Config) {
 		config.V5ProtocolID = &protocolID
-	}
-}
-
-func WithUnhandled(unhandled chan<- discover.ReadPacket) func(config *discover.Config) {
-	return func(config *discover.Config) {
-		config.Unhandled = unhandled
 	}
 }
 
