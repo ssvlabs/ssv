@@ -27,7 +27,7 @@ var migration_5_highest_instance = Migration{
 		stores := ibftstorage.NewStoresFromRoles(opt.Db, storageRoles...)
 
 		return stores.Each(func(role spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
-			return store.CleanAllInstances(nil)
+			return store.CleanAllInstances()
 		})
 	},
 }

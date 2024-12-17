@@ -43,8 +43,8 @@ type ParticipantsRangeEntry struct {
 
 // ParticipantStore is the store used by QBFT components
 type ParticipantStore interface {
-	// CleanAllInstances removes all historical and highest instances for the given identifier.
-	CleanAllInstances(msgID []byte) error
+	// CleanAllInstances removes all records in old format.
+	CleanAllInstances() error
 
 	// UpdateParticipants updates participants in quorum.
 	UpdateParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
