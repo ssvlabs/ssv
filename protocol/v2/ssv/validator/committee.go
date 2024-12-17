@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -45,8 +44,6 @@ type Committee struct {
 
 	dutyGuard      *CommitteeDutyGuard
 	CreateRunnerFn CommitteeRunnerFunc
-
-	stopped atomic.Bool
 }
 
 // NewCommittee creates a new cluster
@@ -299,12 +296,11 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 }
 
 func (c *Committee) Stopped() bool {
-	return c.stopped.Load()
+	return c.ctx.Err() == context.Canceled
 }
 
 func (c *Committee) stop() {
 	c.cancel()
-	c.stopped.Store(true)
 }
 
 func (c *Committee) Encode() ([]byte, error) {
