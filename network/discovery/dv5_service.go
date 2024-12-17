@@ -227,7 +227,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		protocolID = DefaultSSVProtocolID
 	}
 
-	dv5Cfg, err := opts.DiscV5Cfg(logger)
+	dv5Cfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID))
 	if err != nil {
 		return err
 	}
