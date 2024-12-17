@@ -201,10 +201,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		ids.Start()
 	}
 
-	subnetsProvider := func() records.Subnets {
-		return n.activeSubnets
-	}
-
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
 		newDomain := n.cfg.Network.DomainType
@@ -224,17 +220,21 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		IDService:       ids,
 		Network:         n.host.Network(),
 		DomainType:      n.cfg.Network.DomainType,
-		SubnetsProvider: subnetsProvider,
+		SubnetsProvider: n.ActiveSubnets,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx, n.metrics)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.metrics)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
 	return nil
+}
+
+func (n *p2pNetwork) ActiveSubnets() records.Subnets {
+	return n.activeSubnets
 }
 
 func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
