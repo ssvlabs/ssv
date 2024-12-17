@@ -42,10 +42,10 @@ type ExecutionClient struct {
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	logBatchSize                uint64
-	allowUnsyncedBlocks         uint64
 
-	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
-	blockNumberFn  func(ctx context.Context) (uint64, error)
+	allowUnsyncedBlocks uint64
+	syncProgressFn      func(context.Context) (*ethereum.SyncProgress, error)
+	blockNumberFn       func(ctx context.Context) (uint64, error)
 
 	// variables
 	client *ethclient.Client

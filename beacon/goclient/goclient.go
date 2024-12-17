@@ -10,21 +10,24 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
-	"go.uber.org/zap"
-	"tailscale.com/util/singleflight"
 )
 
 const (
@@ -142,14 +145,16 @@ var _ NodeClientProvider = (*GoClient)(nil)
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log                *zap.Logger
-	ctx                context.Context
-	network            beaconprotocol.Network
-	client             Client
-	nodeVersion        string
-	nodeClient         NodeClient
-	gasLimit           uint64
+	log         *zap.Logger
+	ctx         context.Context
+	network     beaconprotocol.Network
+	client      Client
+	nodeVersion string
+	nodeClient  NodeClient
+	gasLimit    uint64
+
 	allowUnsyncedSlots phase0.Slot
+	nodeSyncingFn      func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -206,7 +211,7 @@ func New(
 		network:            opt.Network,
 		client:             httpClient.(*eth2clienthttp.Service),
 		gasLimit:           opt.GasLimit,
-		allowUnsyncedSlots: opt.AllowUnsyncedSlots,
+		allowUnsyncedSlots: phase0.Slot(opt.AllowUnsyncedSlots),
 		operatorDataStore:  operatorDataStore,
 		registrationCache:  map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
@@ -217,6 +222,8 @@ func New(
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
 	}
+
+	client.nodeSyncingFn = client.nodeSyncing
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 	if err != nil {
@@ -242,14 +249,20 @@ func New(
 	return client, nil
 }
 
+func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
+	return gc.client.NodeSyncing(ctx, opts)
+}
+
 func (gc *GoClient) NodeClient() NodeClient {
 	return gc.nodeClient
 }
 
+var errSyncing = errors.New("syncing")
+
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
@@ -267,8 +280,8 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	metricsBeaconNodeStatus.Set(float64(statusSyncing))
-	if syncState.IsSyncing && syncState.SyncDistance < phase0.Slot(gc.allowUnsyncedSlots) {
-		return fmt.Errorf("syncing")
+	if syncState.IsSyncing && syncState.SyncDistance > gc.allowUnsyncedSlots {
+		return errSyncing
 	}
 	if syncState.IsOptimistic {
 		return fmt.Errorf("optimistic")
