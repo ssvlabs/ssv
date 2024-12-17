@@ -64,6 +64,9 @@ type Options struct {
 	Network        Network
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	GasLimit       uint64
-	CommonTimeout  time.Duration // Optional.
-	LongTimeout    time.Duration // Optional.
+
+	AllowUnsyncedSlots uint64 `yaml:"AllowUnsyncedSlots" env:"ALLOW_UNSYNCED_SLOTS" env-required:"false"`
+
+	CommonTimeout time.Duration // Optional.
+	LongTimeout   time.Duration // Optional.
 }

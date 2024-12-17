@@ -142,13 +142,14 @@ var _ NodeClientProvider = (*GoClient)(nil)
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log         *zap.Logger
-	ctx         context.Context
-	network     beaconprotocol.Network
-	client      Client
-	nodeVersion string
-	nodeClient  NodeClient
-	gasLimit    uint64
+	log                *zap.Logger
+	ctx                context.Context
+	network            beaconprotocol.Network
+	client             Client
+	nodeVersion        string
+	nodeClient         NodeClient
+	gasLimit           uint64
+	allowUnsyncedSlots uint64
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -200,13 +201,14 @@ func New(
 	}
 
 	client := &GoClient{
-		log:               logger,
-		ctx:               opt.Context,
-		network:           opt.Network,
-		client:            httpClient.(*eth2clienthttp.Service),
-		gasLimit:          opt.GasLimit,
-		operatorDataStore: operatorDataStore,
-		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		log:                logger,
+		ctx:                opt.Context,
+		network:            opt.Network,
+		client:             httpClient.(*eth2clienthttp.Service),
+		gasLimit:           opt.GasLimit,
+		allowUnsyncedSlots: opt.AllowUnsyncedSlots,
+		operatorDataStore:  operatorDataStore,
+		registrationCache:  map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
@@ -265,7 +267,7 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	metricsBeaconNodeStatus.Set(float64(statusSyncing))
-	if syncState.IsSyncing {
+	if syncState.IsSyncing && syncState.SyncDistance < phase0.Slot(gc.allowUnsyncedSlots) {
 		return fmt.Errorf("syncing")
 	}
 	if syncState.IsOptimistic {
