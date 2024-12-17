@@ -91,7 +91,9 @@ func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.
 	}
 
 	for _, r := range rolesToReset {
-		submissions[r] = submissionsMetric{}
+		submissions[r] = submissionsMetric{
+			epoch: epoch,
+		}
 	}
 
 	submission := submissions[role]
