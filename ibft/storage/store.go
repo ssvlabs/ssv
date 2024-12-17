@@ -105,9 +105,9 @@ func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase
 
 	// collect keys
 	err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
-		slotBytes := o.Key[3:7] // TODO check if we're hitting the slot here
-		if target := byteSliceToSlot(slotBytes); target <= slot {
-			keySet[target] = struct{}{}
+		dbSlot := byteSliceToSlot(o.Key[:4])
+		if dbSlot < slot {
+			keySet[dbSlot] = struct{}{}
 		}
 		return nil
 	})
@@ -171,7 +171,7 @@ func (i *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]
 		err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
 			re := qbftstorage.ParticipantsRangeEntry{
 				Slot:    slot,
-				PubKey:  spectypes.ValidatorPK(o.Key), // is this safe? len check?
+				PubKey:  spectypes.ValidatorPK(o.Key),
 				Signers: decodeOperators(o.Value),
 			}
 			ee = append(ee, re)
