@@ -149,7 +149,7 @@ type GoClient struct {
 	nodeVersion        string
 	nodeClient         NodeClient
 	gasLimit           uint64
-	allowUnsyncedSlots uint64
+	allowUnsyncedSlots phase0.Slot
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
