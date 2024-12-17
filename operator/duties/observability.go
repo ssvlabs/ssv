@@ -37,9 +37,9 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordDutyExecuted(ctx context.Context, beaconRole types.BeaconRole) {
+func recordDutyExecuted(ctx context.Context, role types.RunnerRole) {
 	dutiesExecutedCounter.Add(ctx, 1,
 		metric.WithAttributes(
-			observability.BeaconRoleAttribute(beaconRole),
+			observability.RunnerRoleAttribute(role),
 		))
 }
