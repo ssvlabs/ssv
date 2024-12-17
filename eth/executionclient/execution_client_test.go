@@ -2,7 +2,6 @@ package executionclient
 
 import (
 	"context"
-	"errors"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -645,28 +644,12 @@ func TestSyncProgress(t *testing.T) {
 	err = client.Healthy(ctx)
 	require.NoError(t, err)
 
-	t.Run("can't get block number", func(t *testing.T) {
-		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
-			return new(ethereum.SyncProgress), nil
-		}
-
-		client.blockNumberFn = func(ctx context.Context) (uint64, error) {
-			return 0, errors.New("some err")
-		}
-
-		err = client.Healthy(ctx)
-		require.ErrorIs(t, err, errSyncing)
-	})
-
 	t.Run("out of sync", func(t *testing.T) {
 		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
+			p.HighestBlock = 6
 			return p, nil
-		}
-
-		client.blockNumberFn = func(ctx context.Context) (uint64, error) {
-			return 6, nil
 		}
 
 		err = client.Healthy(ctx)
@@ -680,11 +663,8 @@ func TestSyncProgress(t *testing.T) {
 		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
+			p.HighestBlock = 7
 			return p, nil
-		}
-
-		client.blockNumberFn = func(ctx context.Context) (uint64, error) {
-			return 7, nil
 		}
 
 		err = client.Healthy(ctx)

@@ -45,7 +45,6 @@ type ExecutionClient struct {
 
 	allowUnsyncedBlocks uint64
 	syncProgressFn      func(context.Context) (*ethereum.SyncProgress, error)
-	blockNumberFn       func(ctx context.Context) (uint64, error)
 
 	// variables
 	client *ethclient.Client
@@ -75,17 +74,12 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	}
 
 	client.syncProgressFn = client.syncProgress
-	client.blockNumberFn = client.blockNumber
 
 	return client, nil
 }
 
 func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
 	return ec.client.SyncProgress(ctx)
-}
-
-func (ec *ExecutionClient) blockNumber(ctx context.Context) (uint64, error) {
-	return ec.client.BlockNumber(ctx)
 }
 
 // Close shuts down ExecutionClient.
@@ -256,15 +250,9 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 	if sp != nil {
 		ec.metrics.ExecutionClientSyncing()
-
-		current, err := ec.blockNumberFn(ctx)
-		if err != nil {
+		if sp.CurrentBlock < sp.HighestBlock-ec.allowUnsyncedBlocks {
 			return errSyncing
 		}
-		if sp.CurrentBlock < current-ec.allowUnsyncedBlocks {
-			return errSyncing
-		}
-		return nil
 	}
 
 	ec.metrics.ExecutionClientReady()
