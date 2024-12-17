@@ -16,8 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
-	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -133,9 +131,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if err != nil {
 		return fmt.Errorf("could not subscribe to committee: %w", err)
 	}
-	if !n.cfg.Network.PastAlanFork() {
-		return n.subscribeValidator(pk)
-	}
+
 	return nil
 }
 
@@ -156,23 +152,6 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	return nil
 }
 
-// subscribeValidator handles the subscription logic for validator subnets
-func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
-	pkHex := hex.EncodeToString(pk[:])
-	n.interfaceLogger.Debug("subscribing to validator", zap.String("validator", pkHex))
-	status, found := n.activeValidators.GetOrSet(pkHex, validatorStatusSubscribing)
-	if found && status != validatorStatusInactive {
-		return nil
-	}
-	for _, topic := range commons.ValidatorTopicID(pk[:]) {
-		if err := n.topicsCtrl.Subscribe(n.interfaceLogger, topic); err != nil {
-			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
-		}
-	}
-	n.activeValidators.Set(pkHex, validatorStatusSubscribed)
-	return nil
-}
-
 func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint64) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
@@ -190,14 +169,6 @@ func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint64) error 
 func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
-	}
-
-	if !n.cfg.Network.PastAlanFork() {
-		pkHex := hex.EncodeToString(pk[:])
-		if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
-			return nil
-		}
-		n.activeValidators.Delete(pkHex)
 	}
 
 	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
@@ -232,9 +203,6 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		case *queue.SSVMessage:
 			decodedMsg = m
 			metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(m.MsgType)).Inc()
-		case *genesisqueue.GenesisSSVMessage:
-			decodedMsg = m
-			metricsRouterIncoming.WithLabelValues(genesismessage.MsgTypeToString(m.MsgType)).Inc()
 		case nil:
 			return errors.New("message was not decoded")
 		default:
