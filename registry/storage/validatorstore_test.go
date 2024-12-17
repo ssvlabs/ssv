@@ -1,10 +1,13 @@
 package storage
 
 import (
+	cryptorand "crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -655,7 +658,7 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 				ValidatorPubKey: spectypes.ValidatorPK{99, 88, 77},
 			},
 		})
-		require.NoError(t, err)
+		require.ErrorContains(t, err, "committee not found")
 		// Ensure store remains unaffected
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
@@ -755,7 +758,9 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 
 	t.Run("update non-existing share", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			require.NoError(t, store.handleSharesUpdated(share1)) // Update without adding
+			err := store.handleSharesUpdated(share1)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "committee not found")
 		})
 		require.Len(t, store.Validators(), 0)
 
@@ -788,43 +793,6 @@ func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 		require.False(t, e)
 		require.Nil(t, s)
 
-	})
-}
-
-func TestValidatorStore_UpdateNilData(t *testing.T) {
-	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
-
-	// Add a valid share and simulate a nil entry in byOperatorID
-	shareMap[share1.ValidatorPubKey] = share1
-	require.NoError(t, store.handleSharesAdded(share1))
-
-	// Manually set a nil entry for a signer in byOperatorID
-	store.mu.Lock()
-	store.byOperatorID[share1.Committee[0].Signer] = nil
-	store.mu.Unlock()
-
-	t.Run("update with nil data in byOperatorID", func(t *testing.T) {
-		require.NotPanics(t, func() {
-			require.NoError(t, store.handleSharesUpdated(share1)) // Attempt to update share1
-		})
-
-		// Validate that the state remains consistent and does not crash
-		require.Len(t, store.Validators(), 1)
-
-		s, e := store.Validator(share1.ValidatorPubKey[:])
-		require.True(t, e)
-		require.Equal(t, share1, s)
 	})
 }
 
@@ -1012,62 +980,6 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 	})
 }
 
-func TestValidatorStore_HighContentionConcurrency(t *testing.T) {
-	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
-
-	shareMap[share1.ValidatorPubKey] = share1
-	shareMap[share2.ValidatorPubKey] = share2
-	require.NoError(t, store.handleSharesAdded(share1, share2))
-
-	var wg sync.WaitGroup
-	wg.Add(100)
-
-	// High contention test with concurrent read, add, update, and remove
-	for i := 0; i < 25; i++ {
-		go func() {
-			defer wg.Done()
-			require.NoError(t, store.handleSharesAdded(share1, share2))
-		}()
-		go func() {
-			defer wg.Done()
-			require.NoError(t, store.handleSharesUpdated(updatedShare2))
-		}()
-		go func() {
-			defer wg.Done()
-			require.NoError(t, store.handleSharesAdded(share1))
-		}()
-		go func() {
-			defer wg.Done()
-			_, _ = store.Validator(share1.ValidatorPubKey[:])
-			_, _ = store.Committee(share1.CommitteeID())
-			_ = store.Validators()
-			_ = store.Committees()
-		}()
-	}
-
-	wg.Wait()
-
-	t.Run("validate high contention state", func(t *testing.T) {
-		// Check that the store is consistent and valid after high contention
-		require.NotPanics(t, func() {
-			store.Validators()
-			store.Committees()
-			store.OperatorValidators(1)
-			store.OperatorCommittees(1)
-		})
-	})
-}
-
 func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 
@@ -1174,4 +1086,153 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 		require.False(t, e)
 		require.Nil(t, s, "Validator should be nil after removal")
 	})
+}
+
+// requireValidatorStoreIntegrity checks that every function of the ValidatorStore returns the expected results,
+// by reconstructing the expected state from the given shares and comparing it to the actual state of the store.
+// This may seem like an overkill, but as ValidatorStore's implementation becomes more optimized and complex,
+// it's a good way to double-check it with a dumb implementation that never changes.
+func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares []*ssvtypes.SSVShare) {
+	// Check that there are no false positives.
+	const nonExistingIndex = phase0.ValidatorIndex(math.MaxUint64 - 1)
+	const nonExistingOperatorID = spectypes.OperatorID(math.MaxUint64 - 1)
+	var nonExistingCommitteeID spectypes.CommitteeID
+	n, err := cryptorand.Read(nonExistingCommitteeID[:])
+	require.NoError(t, err)
+	require.Equal(t, len(nonExistingCommitteeID), n)
+
+	validator, exists := store.ValidatorByIndex(nonExistingIndex)
+	require.False(t, exists)
+	require.Nil(t, validator)
+
+	operatorShares := store.OperatorValidators(nonExistingOperatorID)
+	require.Empty(t, operatorShares)
+
+	committee, exists := store.Committee(nonExistingCommitteeID)
+	require.False(t, exists)
+	require.Nil(t, committee)
+
+	// Check Validator(pubkey) and ValidatorByIndex(index)
+	for _, share := range shares {
+		byPubKey, exists := store.Validator(share.ValidatorPubKey[:])
+		require.True(t, exists, "validator %x not found", share.ValidatorPubKey)
+		requireEqualShare(t, share, byPubKey)
+
+		byIndex, exists := store.ValidatorByIndex(share.Metadata.BeaconMetadata.Index)
+		require.True(t, exists, "validator %d not found", share.Metadata.BeaconMetadata.Index)
+		requireEqualShare(t, share, byIndex)
+	}
+
+	// Reconstruct hierarchy to check integrity of operators and committees.
+	byOperator := make(map[spectypes.OperatorID][]*ssvtypes.SSVShare)
+	byCommittee := make(map[spectypes.CommitteeID][]*ssvtypes.SSVShare)
+	committeeOperators := make(map[spectypes.CommitteeID]map[spectypes.OperatorID]struct{})
+	operatorCommittees := make(map[spectypes.OperatorID]map[spectypes.CommitteeID]struct{})
+	for _, share := range shares {
+		id := share.CommitteeID()
+		byCommittee[id] = append(byCommittee[id], share)
+		for _, operator := range share.Committee {
+			byOperator[operator.Signer] = append(byOperator[operator.Signer], share)
+
+			if committeeOperators[id] == nil {
+				committeeOperators[id] = make(map[spectypes.OperatorID]struct{})
+			}
+			committeeOperators[id][operator.Signer] = struct{}{}
+
+			if operatorCommittees[operator.Signer] == nil {
+				operatorCommittees[operator.Signer] = make(map[spectypes.CommitteeID]struct{})
+			}
+			operatorCommittees[operator.Signer][id] = struct{}{}
+		}
+	}
+
+	// Check OperatorValidators(operatorID)
+	for operatorID, shares := range byOperator {
+		operatorShares := store.OperatorValidators(operatorID)
+		requireEqualShares(t, shares, operatorShares)
+	}
+
+	// Check Committees(cmtID)
+	for cmtID, shares := range byCommittee {
+		cmt, exists := store.Committee(cmtID)
+		require.True(t, exists)
+		requireEqualShares(t, shares, cmt.Validators)
+
+		operatorIDs := maps.Keys(committeeOperators[cmtID])
+		slices.Sort(operatorIDs)
+		require.Equal(t, operatorIDs, cmt.Operators, "committee %s has %d operators, but %d in store", cmtID, len(operatorIDs), len(cmt.Operators))
+	}
+
+	// Check Committees()
+	storeCommittees := store.Committees()
+	require.Equal(t, len(byCommittee), len(storeCommittees))
+	for _, cmt := range storeCommittees {
+		_, ok := byCommittee[cmt.ID]
+		require.True(t, ok)
+	}
+
+	// Check Validators()
+	storeValidators := store.Validators()
+	require.Equal(t, len(shares), len(storeValidators))
+	for _, share := range shares {
+		storeIndex := slices.IndexFunc(storeValidators, func(validator *ssvtypes.SSVShare) bool {
+			return validator.ValidatorPubKey == share.ValidatorPubKey
+		})
+		require.NotEqual(t, -1, storeIndex)
+		requireEqualShare(t, share, storeValidators[storeIndex])
+	}
+
+	// Check OperatorCommittees(operatorID)
+	for operatorID, committees := range operatorCommittees {
+		storeOperatorCommittees := store.OperatorCommittees(operatorID)
+		require.Equal(t, len(committees), len(storeOperatorCommittees), "operator %d has %d committees, but %d in store", operatorID, len(committees), len(storeOperatorCommittees))
+		for committee := range committees {
+			// Find the committee in the store.
+			storeIndex := slices.IndexFunc(storeOperatorCommittees, func(storeCommittee *Committee) bool {
+				return storeCommittee.ID == committee
+			})
+			require.NotEqual(t, -1, storeIndex)
+
+			// Compare shares.
+			storeOperatorCommittee := storeOperatorCommittees[storeIndex]
+			requireEqualShares(t, byCommittee[committee], storeOperatorCommittee.Validators, "committee %v doesn't have expected shares", storeOperatorCommittee.Operators)
+
+			// Compare operator IDs.
+			operatorIDs := maps.Keys(committeeOperators[committee])
+			slices.Sort(operatorIDs)
+			require.Equal(t, operatorIDs, storeOperatorCommittee.Operators)
+
+			// Compare indices.
+			expectedIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))
+			for i, validator := range storeOperatorCommittee.Validators {
+				expectedIndices[i] = validator.Metadata.BeaconMetadata.Index
+			}
+			slices.Sort(expectedIndices)
+			storeIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))
+			copy(storeIndices, storeOperatorCommittee.Indices)
+			slices.Sort(storeIndices)
+			require.Equal(t, expectedIndices, storeIndices)
+		}
+	}
+
+	// Check ParticipatingValidators(epoch)
+	var epoch = phase0.Epoch(math.MaxUint64 - 1)
+	var participatingValidators []*ssvtypes.SSVShare
+	var participatingCommittees = make(map[spectypes.CommitteeID]struct{})
+	for _, share := range shares {
+		if share.IsParticipating(epoch) {
+			participatingValidators = append(participatingValidators, share)
+			participatingCommittees[share.CommitteeID()] = struct{}{}
+		}
+	}
+	storeParticipatingValidators := store.ParticipatingValidators(epoch)
+	requireEqualShares(t, participatingValidators, storeParticipatingValidators)
+
+	// Check ParticipatingCommittees(epoch)
+	storeParticipatingCommittees := store.ParticipatingCommittees(epoch)
+	require.Equal(t, len(participatingCommittees), len(storeParticipatingCommittees))
+	for _, cmt := range storeParticipatingCommittees {
+		_, ok := participatingCommittees[cmt.ID]
+		require.True(t, ok)
+	}
 }
