@@ -468,7 +468,7 @@ func (c *controller) StartValidators() {
 			ownShares = append(ownShares, share)
 		}
 		subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
-		if uint64(len(mySubnets)) >= subnet && mySubnets[subnet] != 0 {
+		if mySubnets[subnet] != 0 {
 			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
 		}
 	}
@@ -990,9 +990,16 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		// Get the shares to fetch metadata for.
 		start := time.Now()
+
+		mySubnets := c.selfSubnets()
 		var existingShares, newShares []*ssvtypes.SSVShare
 		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 			if share.Liquidated {
+				return true
+			}
+
+			subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
+			if mySubnets[subnet] == 0 {
 				return true
 			}
 
