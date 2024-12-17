@@ -42,6 +42,10 @@ type ExecutionClient struct {
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	logBatchSize                uint64
+	allowUnsyncedBlocks         uint64
+
+	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
+	blockNumberFn  func(ctx context.Context) (uint64, error)
 
 	// variables
 	client *ethclient.Client
@@ -69,7 +73,19 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
 	}
+
+	client.syncProgressFn = client.syncProgress
+	client.blockNumberFn = client.blockNumber
+
 	return client, nil
+}
+
+func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
+	return ec.client.SyncProgress(ctx)
+}
+
+func (ec *ExecutionClient) blockNumber(ctx context.Context) (uint64, error) {
+	return ec.client.BlockNumber(ctx)
 }
 
 // Close shuts down ExecutionClient.
@@ -221,6 +237,8 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 	return logs
 }
 
+var errSyncing = fmt.Errorf("syncing")
+
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if ec.isClosed() {
@@ -230,7 +248,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	sp, err := ec.client.SyncProgress(ctx)
+	sp, err := ec.syncProgressFn(ctx)
 	if err != nil {
 		ec.metrics.ExecutionClientFailure()
 		return err
@@ -238,7 +256,15 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 	if sp != nil {
 		ec.metrics.ExecutionClientSyncing()
-		return fmt.Errorf("syncing")
+
+		current, err := ec.blockNumberFn(ctx)
+		if err != nil {
+			return errSyncing
+		}
+		if sp.CurrentBlock < current-ec.allowUnsyncedBlocks {
+			return errSyncing
+		}
+		return nil
 	}
 
 	ec.metrics.ExecutionClientReady()

@@ -58,3 +58,10 @@ func WithLogBatchSize(size uint64) Option {
 		s.logBatchSize = size
 	}
 }
+
+// WithAllowUnsyncedBlocks sets the number of blocks that is acceptable to lag behind.
+func WithAllowUnsyncedBlocks(count uint64) Option {
+	return func(s *ExecutionClient) {
+		s.allowUnsyncedBlocks = count
+	}
+}
