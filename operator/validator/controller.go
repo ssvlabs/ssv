@@ -610,7 +610,11 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 				c.logger.Warn("could not start validator", zap.Error(err))
 			}
 
-			_, _ = c.validatorsMap.AddShareToCommittee(v.Share())
+			_, found = c.validatorsMap.AddShareToCommittee(share)
+
+			if !found {
+				c.logger.Warn("committee not found", fields.PubKey(share.ValidatorPubKey[:]))
+			}
 		} else {
 			c.logger.Info("starting new validator", fields.PubKey(share.ValidatorPubKey[:]))
 
@@ -751,7 +755,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	v.Stop()
 	c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
 
-	_, found := c.validatorsMap.RemoveShareFromCommittee(v.Share())
+	_, found := c.validatorsMap.RemoveShareFromCommittee(v.Share)
 
 	if !found {
 		c.logger.Warn("committee not found", fields.PubKey(pubKey[:]))
