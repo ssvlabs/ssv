@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -253,9 +254,9 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if len(n.fixedSubnets) > 0 {
+		if discovery.HasActiveSubnets(n.fixedSubnets) {
 			discV5Opts.Subnets = n.fixedSubnets
-			logger = logger.With(zap.String("subnets", records.Subnets(n.fixedSubnets).String()))
+			logger = logger.With(fields.Subnets(n.fixedSubnets))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
