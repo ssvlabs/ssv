@@ -47,6 +47,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		Slot:                slot,
 		AttestationDataRoot: root,
 	})
+	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.client.Address(), http.MethodGet, time.Since(aggDataReqStart))
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get aggregate attestation: %w", err)
 	}
@@ -56,8 +57,6 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if aggDataResp.Data == nil {
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
-
-	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.client.Address(), http.MethodGet, time.Since(aggDataReqStart))
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
@@ -72,13 +71,9 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
 	start := time.Now()
-	if err := gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg}); err != nil {
-		return err
-	}
-
+	err := gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
 	recordRequestDuration(gc.ctx, "SubmitAggregateAttestations", gc.client.Address(), http.MethodPost, time.Since(start))
-
-	return nil
+	return err
 }
 
 // IsAggregator returns true if the signature is from the input validator. The committee
