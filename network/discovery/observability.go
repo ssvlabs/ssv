@@ -16,12 +16,13 @@ const (
 	observabilityNamespace = "ssv.p2p.discovery"
 )
 
-type rejectionReason string
+type skipReason string
 
 const (
-	reachedLimitReason    rejectionReason = "reachedLimit"
-	noSharedSubnetsReason rejectionReason = "noSharedSubnets"
-	zeroSubnetsReason     rejectionReason = "zeroSubnets"
+	reachedLimitReason       skipReason = "reachedLimit"
+	noSharedSubnetsReason    skipReason = "noSharedSubnets"
+	zeroSubnetsReason        skipReason = "zeroSubnets"
+	domainTypeMismatchReason skipReason = "domainTypeMismatch"
 )
 
 var (
@@ -35,9 +36,9 @@ var (
 
 	peerRejectionsCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("peers.rejected"),
+			metricName("peers.skipped"),
 			metric.WithUnit("{peer}"),
-			metric.WithDescription("total number of peers rejected during discovery")))
+			metric.WithDescription("total number of peers skipped during discovery")))
 
 	peerAcceptedCounter = observability.NewMetric(
 		meter.Int64Counter(
@@ -50,10 +51,10 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordPeerRejection(ctx context.Context, reason rejectionReason) {
-	peerRejectionsCounter.Add(ctx, 1, metric.WithAttributes(peerRejectionReasonAttribute(reason)))
+func recordPeerSkipped(ctx context.Context, reason skipReason) {
+	peerRejectionsCounter.Add(ctx, 1, metric.WithAttributes(peerSkipReasonAttribute(reason)))
 }
 
-func peerRejectionReasonAttribute(reason rejectionReason) attribute.KeyValue {
-	return attribute.String("ssv.p2p.discovery.rejection_reason", string(reason))
+func peerSkipReasonAttribute(reason skipReason) attribute.KeyValue {
+	return attribute.String("ssv.p2p.discovery.skip_reason", string(reason))
 }
