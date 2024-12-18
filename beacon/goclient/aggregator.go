@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"go.uber.org/zap"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -31,9 +32,6 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if attData == nil {
-		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
-	}
 
 	// Get aggregate attestation data.
 	root, err := attData.HashTreeRoot()
@@ -47,12 +45,22 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		AttestationDataRoot: root,
 	})
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "AggregateAttestation"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to get aggregate attestation: %w", err)
 	}
 	if aggDataResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "AggregateAttestation"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation response is nil")
 	}
 	if aggDataResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "AggregateAttestation"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
 

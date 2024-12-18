@@ -87,7 +87,6 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeValidators *hashmap.Map[string, validatorStatus]
 	activeCommittees *hashmap.Map[string, validatorStatus]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
@@ -116,7 +115,6 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
-		activeValidators:        hashmap.New[string, validatorStatus](),
 		activeCommittees:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
@@ -359,13 +357,6 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			return true
 		})
 
-		if !n.cfg.Network.PastAlanFork() {
-			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-				subnet := commons.ValidatorSubnet(pkHex)
-				updatedSubnets[subnet] = byte(1)
-				return true
-			})
-		}
 		n.activeSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.

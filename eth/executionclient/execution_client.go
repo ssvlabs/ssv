@@ -26,6 +26,8 @@ var (
 	ErrNothingToSync = errors.New("nothing to sync")
 )
 
+const elResponseErrMsg = "Execution client returned an error"
+
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
@@ -33,8 +35,10 @@ type ExecutionClient struct {
 	contractAddress ethcommon.Address
 
 	// optional
-	logger                      *zap.Logger
-	metrics                     metrics
+	logger  *zap.Logger
+	metrics metrics
+	// followDistance defines an offset into the past from the head block such that the block
+	// at this offset will be considered as very likely finalized.
 	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
@@ -81,6 +85,9 @@ func (ec *ExecutionClient) Close() error {
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
 	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_blockNumber"),
+			zap.Error(err))
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
 	if currentBlock < ec.followDistance {
@@ -122,6 +129,9 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				ToBlock:   new(big.Int).SetUint64(toBlock),
 			})
 			if err != nil {
+				ec.logger.Error(elResponseErrMsg,
+					zap.String("method", "eth_getLogs"),
+					zap.Error(err))
 				errors <- err
 				return
 			}
@@ -230,11 +240,15 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 	sp, err := ec.client.SyncProgress(ctx)
 	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_syncing"),
+			zap.Error(err))
 		ec.metrics.ExecutionClientFailure()
 		return err
 	}
 
 	if sp != nil {
+		ec.logger.Error("Execution client is not synced")
 		ec.metrics.ExecutionClientSyncing()
 		return fmt.Errorf("syncing")
 	}
@@ -245,7 +259,15 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 }
 
 func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	return ec.client.BlockByNumber(ctx, blockNumber)
+	b, err := ec.client.BlockByNumber(ctx, blockNumber)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getBlockByNumber"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return b, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {
@@ -265,6 +287,9 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("operation", "SubscribeNewHead"),
+			zap.Error(err))
 		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
 	defer sub.Unsubscribe()
@@ -318,6 +343,9 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	var err error
 	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("operation", "DialContext"),
+			zap.Error(err))
 		return err
 	}
 

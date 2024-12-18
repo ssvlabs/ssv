@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -80,22 +81,47 @@ func (n *p2pNetwork) reportPeerIdentities() func() {
 func (n *p2pNetwork) reportTopics() func() {
 	return func() {
 		topics := n.topicsCtrl.Topics()
-		nTopics := len(topics)
-		n.logger.Debug("connected topics", fields.Count(nTopics))
+		n.logger.Debug("connected topics", fields.Count(len(topics)))
+
+		subnetPeerCounts := []int{}
+		deadSubnets := 0
+		unhealthySubnets := 0
 		for _, name := range topics {
-			n.reportTopicPeers(name)
+			count := n.reportTopicPeers(name)
+			subnetPeerCounts = append(subnetPeerCounts, count)
+
+			if count == 0 {
+				deadSubnets++
+			} else if count <= 2 {
+				unhealthySubnets++
+			}
 		}
+
+		// Calculate min, median, max
+		sort.Ints(subnetPeerCounts)
+		min := subnetPeerCounts[0]
+		median := subnetPeerCounts[len(subnetPeerCounts)/2]
+		max := subnetPeerCounts[len(subnetPeerCounts)-1]
+
+		n.logger.Debug("topic peers distribution",
+			zap.Int("min", min),
+			zap.Int("median", median),
+			zap.Int("max", max),
+			zap.Int("dead_subnets", deadSubnets),
+			zap.Int("unhealthy_subnets", unhealthySubnets),
+		)
 	}
 }
 
-func (n *p2pNetwork) reportTopicPeers(name string) {
+func (n *p2pNetwork) reportTopicPeers(name string) (peerCount int) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
 		n.logger.Warn("could not get topic peers", fields.Topic(name), zap.Error(err))
-		return
+		return 0
 	}
 	n.logger.Debug("topic peers status", fields.Topic(name), fields.Count(len(peers)), zap.Any("peers", peers))
 	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+	return len(peers)
 }
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
