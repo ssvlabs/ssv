@@ -19,12 +19,22 @@ const (
 
 type PeerScore float64
 
+type DiscoveredPeer struct {
+	peer.AddrInfo
+	// ConnectRetries keeps track of how many times we tried to connect to this peer.
+	ConnectRetries int
+}
+
 var (
-	TrimmedRecently = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](30 * time.Minute))
+	// DiscoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
+	// the best candidates to connect to.
+	DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](30 * time.Minute))
+	TrimmedRecently     = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](30 * time.Minute))
 )
 
 func init() {
-	go TrimmedRecently.Start() // start cleanup go-routine
+	go TrimmedRecently.Start()     // start cleanup go-routine
+	go DiscoveredPeersPool.Start() // start cleanup go-routine
 }
 
 // ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.

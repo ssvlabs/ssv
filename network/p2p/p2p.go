@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jellydator/ttlcache/v3"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -252,7 +253,92 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
-	go n.startDiscovery(logger, connector)
+	connectorProposals := make(chan peer.AddrInfo)
+	go n.startDiscovery(logger, connectorProposals)
+	go func() {
+		// keep discovered peers in the pool so we can choose the best ones
+		for proposal := range connectorProposals {
+			if peers.DiscoveredPeersPool.Has(proposal.ID) {
+				continue // this proposal is already "on the table"
+			}
+			discoveredPeer := peers.DiscoveredPeer{
+				AddrInfo:       proposal,
+				ConnectRetries: 0,
+			}
+			peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer, ttlcache.DefaultTTL)
+		}
+	}()
+	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
+	async.Interval(n.ctx, 10*time.Second, func() {
+		tpcs := n.topicsCtrl.Topics()
+		peerz := make(map[string][]peer.ID, len(tpcs)) // topic -> peers
+		for _, tpc := range tpcs {
+			var err error
+			peerz[tpc], err = n.topicsCtrl.Peers(tpc)
+			if err != nil {
+				n.interfaceLogger.Error(
+					"Cant get peers for topic, skipping to keep the network running",
+					zap.String("topic", tpc),
+					zap.Error(err),
+				)
+				continue
+			}
+		}
+		sharedTopics := func(peerID peer.ID) int {
+			shared := 0
+			for _, tpc := range tpcs {
+				if slices.Contains(peerz[tpc], peerID) {
+					shared++
+				}
+			}
+			return shared
+		}
+
+		// find and propose the best discovered peer we can
+		var (
+			bestProposal      peers.DiscoveredPeer
+			bestProposalFound bool
+			bestProposalScore int // how good the proposed peer is
+		)
+		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
+			// TODO
+			const retryLimit = 2
+			//const retryLimit = 5
+			if item.Value().ConnectRetries > retryLimit {
+				// this discovered peer has been tried many times already, we'll ignore him but won't
+				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
+				// peer again (essentially resetting this peer's retry attempts counter to 0)
+
+				// TODO
+				n.interfaceLogger.Error(
+					"DiscoveredPeersPool: peer ran out of retries",
+					zap.String("topic", string(item.Key())),
+				)
+
+				return true
+			}
+			proposalScore := sharedTopics(item.Key())
+			if proposalScore > bestProposalScore {
+				bestProposal = item.Value()
+				bestProposalFound = true
+				bestProposalScore = proposalScore
+			}
+			return true
+		})
+		if !bestProposalFound {
+			return // we have not a single peer to propose
+		}
+		// update retry counter for this peer so we eventually skip it after certain number of retries
+		// TODO ^ becase we aren't using mutex to make operations related to DiscoveredPeersPool atomic
+		// it's better to do this before we send this proposal on `connector` to minimize the chance of
+		// hitting the undesirable race condition (where we'll successfully connect to this peer but will
+		// keep retrying until last allowed retry attempt)
+		peers.DiscoveredPeersPool.Set(bestProposal.ID, peers.DiscoveredPeer{
+			AddrInfo:       bestProposal.AddrInfo,
+			ConnectRetries: bestProposal.ConnectRetries + 1,
+		}, ttlcache.DefaultTTL)
+		connector <- bestProposal.AddrInfo // try to connect to best peer
+	})
 
 	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming(logger))
 	if n.cfg.Metrics != nil { // don't report metrics in tests
