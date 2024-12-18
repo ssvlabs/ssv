@@ -47,9 +47,9 @@ const (
 	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
 	connectorQueueSize = 256
-	// inboundRatio is the ratio of inbound connections to outbound connections
-	//inboundRatio = float64(0.8)
-	inboundRatio = float64(0.5) // TODO - testing
+	// inboundLimitRatio is the ratio of inbound connections to the total connections
+	// we allow (both inbound and outbound).
+	inboundLimitRatio = float64(0.5)
 )
 
 // Setup is used to setup the network
@@ -103,10 +103,6 @@ func (n *p2pNetwork) initCfg() error {
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
 	}
-
-	// TODO - override config value for testing
-	//n.cfg.MaxPeers = 10
-
 	if n.cfg.TopicMaxPeers <= 0 {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
 	}
@@ -163,7 +159,7 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
-	if err := n.setupPeerServices(logger, topicsController); err != nil {
+	if err := n.setupPeerServices(logger); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
 	if err := n.setupDiscovery(logger, topicsController); err != nil {
@@ -179,7 +175,7 @@ func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) setupPeerServices(logger *zap.Logger, topicsController topics.Controller) error {
+func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	libPrivKey, err := p2pcommons.ECDSAPrivToInterface(n.cfg.NetworkPrivateKey)
 	if err != nil {
 		return err
@@ -245,7 +241,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger, topicsController topi
 		n.idx,
 		n.idx,
 		n.idx,
-		topicsController,
 		n.metrics,
 	)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
@@ -351,20 +346,15 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 }
 
 func (n *p2pNetwork) inboundLimit() bool {
-	if n.idx == nil {
-		return false
-	}
-
-	maxPeers := n.cfg.MaxPeers
-	inBoundLimit := int(float64(maxPeers) * inboundRatio)
-
 	in, _ := n.connectionStats()
-
-	n.interfaceLogger.Debug("Checking inbound limit", zap.Int("inbound", in), zap.Int("inbound_limit", inBoundLimit), zap.Int("max_peers", maxPeers))
-
-	if in >= inBoundLimit {
-		n.interfaceLogger.Debug("preventing inbound connections due to inbound limit", zap.Int("inbound", in), zap.Int("inbound_limit", inBoundLimit))
-		// todo: should we disconnect to stay at limit?
+	inboundLimit := int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
+	if in >= inboundLimit {
+		n.interfaceLogger.Debug(
+			"Preventing inbound connections due to reaching inbound limit",
+			zap.Int("inbound", in),
+			zap.Int("inbound_limit", inboundLimit),
+			zap.Int("max_peers", n.cfg.MaxPeers),
+		)
 		return true
 	}
 
@@ -372,25 +362,19 @@ func (n *p2pNetwork) inboundLimit() bool {
 }
 
 func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
-	cns := n.host.Network().Conns()
-
-	for _, cn := range cns {
-
+	for _, cn := range n.host.Network().Conns() {
 		if n.host.Network().Connectedness(cn.RemotePeer()) != network.Connected {
 			continue
 		}
-
 		dir := cn.Stat().Direction
 		if dir == network.DirUnknown {
 			continue // TODO: how can it happen?
 		}
-
 		if dir == network.DirOutbound {
 			outbound++
 		} else {
 			inbound++
 		}
 	}
-
 	return inbound, outbound
 }

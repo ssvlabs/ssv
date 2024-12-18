@@ -206,9 +206,7 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		return errors.New("no shared subnets")
 	}
 
-	// TODO - need a better (smart) way to do it, but for now try to connect only
-	// peers that help with getting rid of dead subnets
-	helpfulPeer := false
+	helpfulPeer := false // whether this peer helps us with getting rid of dead/solo subnets
 	subscribedTopics := dvs.topicsCtrl.Topics()
 	for _, topic := range subscribedTopics {
 		topicPeers, err := dvs.topicsCtrl.Peers(topic)
@@ -216,8 +214,8 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 			return errors.Wrap(err, "could not get subscribed topic peers")
 		}
 
-		if len(topicPeers) >= 1 {
-			continue // this topic has enough peers - TODO (1 is not enough tho)
+		if len(topicPeers) >= 2 {
+			continue // this topic has enough peers
 		}
 
 		// we've got a dead subnet here, see if this peer can help with that

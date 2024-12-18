@@ -1,10 +1,6 @@
 package connections
 
 import (
-	"github.com/ssvlabs/ssv/network/peers"
-	"runtime"
-	"time"
-
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -13,9 +9,11 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/peers"
+	"go.uber.org/zap"
+	"runtime"
+	"time"
 )
 
 const (
@@ -23,8 +21,6 @@ const (
 	ipLimitRate   = 4
 	ipLimitBurst  = 8
 	ipLimitPeriod = 30 * time.Second
-
-	//
 )
 
 type IsBadPeerF func(logger *zap.Logger, peerID peer.ID) bool
@@ -79,8 +75,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 	if n.disable {
 		return true
 	}
-
-	if n.inboundLimit() { // inbound limit
+	if n.inboundLimit() {
 		return false
 	}
 
@@ -100,7 +95,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
 	if peers.TrimmedRecently.Has(id) {
 		n.logger.Debug(
-			"InterceptSecured: connecting a peer we've recently trimmed",
+			"InterceptSecured: trying to connect a peer we've recently trimmed",
 			zap.String("conn_direction", direction.String()),
 		)
 		return false
@@ -110,8 +105,6 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
-
-	n.logger.Debug("InterceptSecured: connection allowed", fields.PeerID(id))
 	return true
 }
 

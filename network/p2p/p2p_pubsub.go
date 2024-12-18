@@ -20,9 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// MinConnectivitySubnets is the minimum number of subnets a node should subscribe to
-// const MinConnectivitySubnets = 5
-// TODO
+// MinConnectivitySubnets is the minimum number of subnets a node should subscribe to.
+// This parameter can help increase overall p2p network connectivity somewhat "artificially".
 const MinConnectivitySubnets = 0
 
 type validatorStatus int

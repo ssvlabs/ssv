@@ -67,8 +67,6 @@ func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error
 func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network, maxTrims int) {
 	allPeers := net.Peers()
 	before := len(allPeers)
-	// TODO: use libp2p's conn manager once ready
-	// c.connManager.TrimOpenConns(ctx)
 	trimmed := make([]peer.ID, 0)
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, ProtectedTag) {

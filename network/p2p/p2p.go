@@ -44,12 +44,14 @@ const (
 )
 
 const (
-	connManagerBalancingInterval       = 60 * time.Second
-	connManagerBalancingTimeout        = time.Minute
-	peersReportingInterval             = 60 * time.Second
-	peerIdentitiesReportingInterval    = 5 * time.Minute
-	topicsReportingInterval            = 180 * time.Second
-	maximumIrrelevantPeersToDisconnect = 3
+	// peersTrimmingInterval defines how often we want to try and trim connected peers. This value
+	// should be low enough for our node to find good set of peers reasonably fast (10-20 minutes)
+	// after node start, but it shouldn't be too low since that might negatively affect Ethereum
+	// duty execution quality.
+	peersTrimmingInterval           = 60 * time.Second
+	peersReportingInterval          = 60 * time.Second
+	peerIdentitiesReportingInterval = 5 * time.Minute
+	topicsReportingInterval         = 180 * time.Second
 )
 
 // PeersIndexProvider holds peers index instance
@@ -252,13 +254,10 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 	go n.startDiscovery(logger, connector)
 
-	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
-	// don't report metrics in tests
-	if n.cfg.Metrics != nil {
+	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming(logger))
+	if n.cfg.Metrics != nil { // don't report metrics in tests
 		async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
-
 		async.Interval(n.ctx, peerIdentitiesReportingInterval, n.reportPeerIdentities(logger))
-
 		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
 	}
 
@@ -269,14 +268,14 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	return nil
 }
 
-// Returns a function that balances the peers.
-// Balancing is peformed by:
-// - Dropping peers with bad Gossip score.
-// - Dropping irrelevant peers that don't have any subnet in common.
-// - Tagging the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removing the worst peer.
-func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
+// Returns a function that trims currently connected peers if necessary, namely:
+//   - Dropping peers with bad Gossip score.
+//   - Dropping irrelevant peers that don't have any subnet in common.
+//   - Tagging the best MaxPeers-N peers (according to subnets intersection) as Protected,
+//     and then removing the worst peers. But only if we are close to MaxPeers limit.
+func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 	return func() {
-		ctx, cancel := context.WithTimeout(n.ctx, connManagerBalancingTimeout)
+		ctx, cancel := context.WithTimeout(n.ctx, 60*time.Second)
 		defer cancel()
 		defer func() {
 			_ = n.idx.GetSubnetsStats() // collect metrics
@@ -291,20 +290,36 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		}
 
 		connectedPeers := n.host.Network().Peers()
-		mySubnets := records.Subnets(n.activeSubnets).Clone()
-		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), connectedPeers, mySubnets)
+
+		const maximumIrrelevantPeersToDisconnect = 3
+		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(
+			logger,
+			maximumIrrelevantPeersToDisconnect,
+			n.host.Network(),
+			connectedPeers,
+			records.Subnets(n.activeSubnets).Clone(),
+		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
 			return
 		}
 
-		const maxPeersToDrop = 4
+		// maxPeersToDrop value should be in the range of 3-5% of MaxPeers for trimming to work
+		// fast enough so that our node finds good set of peers within 10-20 minutes after node
+		// start; it shouldn't be too large because that would negatively affect Ethereum duty
+		// execution quality
+		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 
 		connectedPeers = n.host.Network().Peers()
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
 			// we can accept more peer connections already, no need to trim
 			return
 		}
+
+		// gotta trim some peers then, note we trim not only when our current connections reach
+		// MaxPeers limit exactly but even if we get close enough to it - this ensures we don't
+		// skip trim iteration because of "random fluctuations" in currently connected peer count
+		// at that limit boundary
 
 		immunityQuota := len(connectedPeers) - maxPeersToDrop
 		protectedPeers := n.PeerProtection(immunityQuota)
@@ -315,7 +330,6 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 			}
 			n.libConnManager.Unprotect(peer, peers.ProtectedTag)
 		}
-
 		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxPeersToDrop) // trim up to maxPeersToDrop
 	}
 }
