@@ -2,9 +2,9 @@ package peers
 
 import (
 	"context"
-	"github.com/jellydator/ttlcache/v3"
 	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"

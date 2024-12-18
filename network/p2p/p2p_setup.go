@@ -19,8 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
@@ -30,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/commons"
+	"go.uber.org/zap"
 )
 
 const (
@@ -131,7 +130,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.inboundLimit)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.atInboundLimit)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -345,7 +344,7 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 	return n.idx.AtLimit(network.DirOutbound)
 }
 
-func (n *p2pNetwork) inboundLimit() bool {
+func (n *p2pNetwork) atInboundLimit() bool {
 	in, _ := n.connectionStats()
 	inboundLimit := int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
 	if in >= inboundLimit {

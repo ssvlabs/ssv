@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/ssvlabs/ssv/network/topics"
 	"net"
 	"strconv"
 	"time"
@@ -13,14 +12,14 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
 )
 
 var (
@@ -56,7 +55,14 @@ type DiscV5Service struct {
 
 	dv5Listener Listener
 	bootnodes   []*enode.Node
-	topicsCtrl  topics.Controller
+
+	// withExtraFiltering specifies whether we want to additionally filter discovered peers,
+	// since operator node and boot node are using the same discovery code (`DiscV5Service`) we
+	// want to do this extra filtering for operator node only
+	withExtraFiltering bool
+	// topicsCtrl must be non-nil when withExtraFiltering is set to true since it will be used
+	// to help us decide which peers need to be filtered out
+	topicsCtrl topics.Controller
 
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
@@ -72,19 +78,21 @@ type DiscV5Service struct {
 func newDiscV5Service(
 	pctx context.Context,
 	logger *zap.Logger,
+	withExtraFiltering bool,
 	topicsController topics.Controller,
 	opts *Options,
 ) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:           ctx,
-		cancel:        cancel,
-		topicsCtrl:    topicsController,
-		conns:         opts.ConnIndex,
-		subnetsIdx:    opts.SubnetsIdx,
-		networkConfig: opts.NetworkConfig,
-		subnets:       opts.DiscV5Opts.Subnets,
-		publishLock:   make(chan struct{}, 1),
+		ctx:                ctx,
+		cancel:             cancel,
+		withExtraFiltering: withExtraFiltering,
+		topicsCtrl:         topicsController,
+		conns:              opts.ConnIndex,
+		subnetsIdx:         opts.SubnetsIdx,
+		networkConfig:      opts.NetworkConfig,
+		subnets:            opts.DiscV5Opts.Subnets,
+		publishLock:        make(chan struct{}, 1),
 	}
 
 	logger.Debug(
@@ -206,32 +214,34 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 		return errors.New("no shared subnets")
 	}
 
-	helpfulPeer := false // whether this peer helps us with getting rid of dead/solo subnets
-	subscribedTopics := dvs.topicsCtrl.Topics()
-	for _, topic := range subscribedTopics {
-		topicPeers, err := dvs.topicsCtrl.Peers(topic)
-		if err != nil {
-			return errors.Wrap(err, "could not get subscribed topic peers")
-		}
+	if dvs.withExtraFiltering {
+		helpfulPeer := false // whether this peer helps us with getting rid of dead/solo subnets
+		subscribedTopics := dvs.topicsCtrl.Topics()
+		for _, topic := range subscribedTopics {
+			topicPeers, err := dvs.topicsCtrl.Peers(topic)
+			if err != nil {
+				return errors.Wrap(err, "could not get subscribed topic peers")
+			}
 
-		if len(topicPeers) >= 2 {
-			continue // this topic has enough peers
-		}
+			if len(topicPeers) >= 2 {
+				continue // this topic has enough peers
+			}
 
-		// we've got a dead subnet here, see if this peer can help with that
-		subnet, err := strconv.Atoi(topic)
-		if err != nil {
-			return errors.Wrap(err, "could not convert topic name to subnet id")
+			// we've got a dead subnet here, see if this peer can help with that
+			subnet, err := strconv.Atoi(topic)
+			if err != nil {
+				return errors.Wrap(err, "could not convert topic name to subnet id")
+			}
+			peerSubnet := peerSubnets[subnet]
+			if peerSubnet != 1 {
+				continue // peer doesn't have this subnet either, lets check other dead subnets we have
+			}
+			helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+			break
 		}
-		peerSubnet := peerSubnets[subnet]
-		if peerSubnet != 1 {
-			continue // peer doesn't have this subnet either, lets check other dead subnets we have
+		if !helpfulPeer {
+			return errors.New("this peer doesn't help with dead subnets")
 		}
-		helpfulPeer = true // this peer helps with at least 1 dead subnet for us
-		break
-	}
-	if !helpfulPeer {
-		return errors.New("this peer doesn't help with dead subnets")
 	}
 
 	metricFoundNodes.Inc()

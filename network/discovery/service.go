@@ -2,17 +2,16 @@ package discovery
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/network/topics"
 	"io"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
 )
 
 const (
@@ -59,5 +58,5 @@ func NewService(ctx context.Context, logger *zap.Logger, topicsController topics
 	if opts.DiscV5Opts == nil {
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
-	return newDiscV5Service(ctx, logger, topicsController, &opts)
+	return newDiscV5Service(ctx, logger, true, topicsController, &opts)
 }
