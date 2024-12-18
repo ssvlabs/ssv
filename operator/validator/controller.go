@@ -1050,10 +1050,8 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 		case <-ticker.C:
 			start := time.Now()
 			validatorsPerStatus := make(map[validatorStatus]uint32)
-			for _, share := range c.validatorStore.Validators() {
-				if ok := share.BelongsToOperator(c.operatorDataStore.GetOperatorID()); !ok {
-					continue
-				}
+
+			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
 				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 					validatorsPerStatus[statusParticipating]++
 				}
