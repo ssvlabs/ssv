@@ -172,7 +172,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 		return errors.Wrap(err, "could not read domain type")
 	}
 	if dvs.networkConfig.DomainType != nodeDomainType {
-		recordPeerSkipped(ctx, domainTypeMismatchReason)
+		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
 		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.networkConfig.DomainType)
 	}
 
@@ -182,7 +182,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
 	if bytes.Equal(zeroSubnets, nodeSubnets) {
-		recordPeerSkipped(ctx, zeroSubnetsReason)
+		recordPeerSkipped(ctx, skipReasonZeroSubnets)
 		return errors.New("zero subnets")
 	}
 
@@ -190,11 +190,11 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
-		recordPeerSkipped(ctx, reachedLimitReason)
+		recordPeerSkipped(ctx, skipReasonReachedLimit)
 		return errors.New("reached limit")
 	}
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
-		recordPeerSkipped(ctx, noSharedSubnetsReason)
+		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
 		return errors.New("no shared subnets")
 	}
 

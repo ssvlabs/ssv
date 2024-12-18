@@ -19,10 +19,10 @@ const (
 type skipReason string
 
 const (
-	reachedLimitReason       skipReason = "reachedLimit"
-	noSharedSubnetsReason    skipReason = "noSharedSubnets"
-	zeroSubnetsReason        skipReason = "zeroSubnets"
-	domainTypeMismatchReason skipReason = "domainTypeMismatch"
+	skipReasonReachedLimit       skipReason = "reachedLimit"
+	skipReasonNoSharedSubnets    skipReason = "noSharedSubnets"
+	skipReasonZeroSubnets        skipReason = "zeroSubnets"
+	skipReasonDomainTypeMismatch skipReason = "domainTypeMismatch"
 )
 
 var (
