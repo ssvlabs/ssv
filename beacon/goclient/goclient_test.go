@@ -53,7 +53,7 @@ func TestHealthy(t *testing.T) {
 		require.ErrorIs(t, err, errSyncing)
 	})
 
-	t.Run("sync distance larger than allowed", func(t *testing.T) {
+	t.Run("sync distance within allowed limits", func(t *testing.T) {
 		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
 			r := new(api.Response[*v1.SyncState])
 			r.Data = &v1.SyncState{
