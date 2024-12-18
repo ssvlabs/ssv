@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -73,7 +74,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 // Testing discovery with a given NetworkConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, netConfig)
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
+	service, err := newDiscV5Service(testCtx, testLogger, false, nil, opts)
 	require.NoError(t, err)
 	require.NotNil(t, service)
 
@@ -303,13 +304,13 @@ func (mc *MockConnection) Connectedness(id peer.ID) network.Connectedness {
 	return network.NotConnected
 }
 
-func (mc *MockConnection) CanConnect(id peer.ID) bool {
+func (mc *MockConnection) CanConnect(id peer.ID) error {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	if can, ok := mc.canConnect[id]; ok {
-		return can
+	if can, ok := mc.canConnect[id]; ok && can {
+		return nil
 	}
-	return false
+	return fmt.Errorf("cannot connect")
 }
 
 func (mc *MockConnection) AtLimit(dir network.Direction) bool {

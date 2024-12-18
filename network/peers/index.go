@@ -8,9 +8,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/records"
+	"go.uber.org/zap"
 )
 
 const (
@@ -36,7 +35,7 @@ type ConnectionIndex interface {
 
 	// CanConnect returns whether we can connect to the given peer,
 	// by checking if it is already connected or if we tried to connect to it recently and failed
-	CanConnect(id peer.ID) bool
+	CanConnect(id peer.ID) error
 
 	// AtLimit checks if the node has reached peers limit
 	AtLimit(dir libp2pnetwork.Direction) bool

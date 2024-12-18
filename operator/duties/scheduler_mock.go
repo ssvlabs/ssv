@@ -18,8 +18,8 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ethereum/go-ethereum/core/types"
-	types1 "github.com/ssvlabs/ssv-spec/types"
-	types2 "github.com/ssvlabs/ssv/protocol/v2/types"
+	types0 "github.com/ssvlabs/ssv-spec/types"
+	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 )
@@ -60,7 +60,7 @@ func (mr *MockDutiesExecutorMockRecorder) ExecuteCommitteeDuties(ctx, logger, du
 }
 
 // ExecuteDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*types1.ValidatorDuty) {
+func (m *MockDutiesExecutor) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*types0.ValidatorDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuties", ctx, logger, duties)
 }
@@ -95,7 +95,7 @@ func (m *MockDutyExecutor) EXPECT() *MockDutyExecutorMockRecorder {
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID types1.CommitteeID, duty *types1.CommitteeDuty) {
+func (m *MockDutyExecutor) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID types0.CommitteeID, duty *types0.CommitteeDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteCommitteeDuty", ctx, logger, committeeID, duty)
 }
@@ -107,7 +107,7 @@ func (mr *MockDutyExecutorMockRecorder) ExecuteCommitteeDuty(ctx, logger, commit
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *types1.ValidatorDuty) {
+func (m *MockDutyExecutor) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *types0.ValidatorDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuty", ctx, logger, duty)
 }
@@ -290,10 +290,10 @@ func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 }
 
 // ParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) ParticipatingValidators(epoch phase0.Epoch) []*types2.SSVShare {
+func (m *MockValidatorProvider) ParticipatingValidators(epoch phase0.Epoch) []*types1.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types2.SSVShare)
+	ret0, _ := ret[0].([]*types1.SSVShare)
 	return ret0
 }
 
@@ -304,10 +304,10 @@ func (mr *MockValidatorProviderMockRecorder) ParticipatingValidators(epoch any) 
 }
 
 // SelfParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types2.SSVShare {
+func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types1.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types2.SSVShare)
+	ret0, _ := ret[0].([]*types1.SSVShare)
 	return ret0
 }
 
@@ -318,10 +318,10 @@ func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch a
 }
 
 // Validator mocks base method.
-func (m *MockValidatorProvider) Validator(pubKey []byte) (*types2.SSVShare, bool) {
+func (m *MockValidatorProvider) Validator(pubKey []byte) (*types1.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
-	ret0, _ := ret[0].(*types2.SSVShare)
+	ret0, _ := ret[0].(*types1.SSVShare)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }

@@ -19,8 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
@@ -31,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/commons"
+	"go.uber.org/zap"
 )
 
 const (
@@ -48,6 +47,9 @@ const (
 	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
 	connectorQueueSize = 256
+	// inboundLimitRatio is the ratio of inbound connections to the total connections
+	// we allow (both inbound and outbound).
+	inboundLimitRatio = float64(0.75)
 )
 
 // Setup is used to setup the network
@@ -129,7 +131,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.atInboundLimit)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -153,14 +155,15 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 	if err := n.setupStreamCtrl(logger); err != nil {
 		return errors.Wrap(err, "could not setup stream controller")
 	}
+	topicsController, err := n.setupPubsub(logger)
+	if err != nil {
+		return errors.Wrap(err, "could not setup topic controller")
+	}
 	if err := n.setupPeerServices(logger); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
-	if err := n.setupDiscovery(logger); err != nil {
+	if err := n.setupDiscovery(logger, topicsController); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
-	}
-	if err := n.setupPubsub(logger); err != nil {
-		return errors.Wrap(err, "could not setup topic controller")
 	}
 
 	return nil
@@ -238,7 +241,7 @@ func (n *p2pNetwork) ActiveSubnets() records.Subnets {
 	return n.activeSubnets
 }
 
-func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
+func (n *p2pNetwork) setupDiscovery(logger *zap.Logger, topicsController topics.Controller) error {
 	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
 		return errors.Wrap(err, "could not get ip addr")
@@ -273,7 +276,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		HostDNS:       n.cfg.HostDNS,
 		NetworkConfig: n.cfg.Network,
 	}
-	disc, err := discovery.NewService(n.ctx, logger, discOpts)
+	disc, err := discovery.NewService(n.ctx, logger, topicsController, discOpts)
 	if err != nil {
 		return err
 	}
@@ -284,7 +287,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
+func (n *p2pNetwork) setupPubsub(logger *zap.Logger) (topics.Controller, error) {
 	cfg := &topics.PubSubConfig{
 		NetworkConfig: n.cfg.Network,
 		Host:          n.host,
@@ -319,12 +322,12 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 
 	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
-		return errors.Wrap(err, "could not setup pubsub")
+		return nil, errors.Wrap(err, "could not setup pubsub")
 	}
 
 	n.topicsCtrl = tc
 	logger.Debug("topics controller is ready")
-	return nil
+	return tc, nil
 }
 
 func (n *p2pNetwork) connectionsAtLimit() bool {
@@ -332,4 +335,38 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 		return false
 	}
 	return n.idx.AtLimit(network.DirOutbound)
+}
+
+func (n *p2pNetwork) atInboundLimit() bool {
+	in, _ := n.connectionStats()
+	inboundLimit := int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
+	if in >= inboundLimit {
+		n.interfaceLogger.Debug(
+			"Preventing inbound connections due to reaching inbound limit",
+			zap.Int("inbound", in),
+			zap.Int("inbound_limit", inboundLimit),
+			zap.Int("max_peers", n.cfg.MaxPeers),
+		)
+		return true
+	}
+
+	return false
+}
+
+func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
+	for _, cn := range n.host.Network().Conns() {
+		if n.host.Network().Connectedness(cn.RemotePeer()) != network.Connected {
+			continue
+		}
+		dir := cn.Stat().Direction
+		if dir == network.DirUnknown {
+			continue // TODO: how can it happen?
+		}
+		if dir == network.DirOutbound {
+			outbound++
+		} else {
+			inbound++
+		}
+	}
+	return inbound, outbound
 }
