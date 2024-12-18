@@ -7,10 +7,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"go.uber.org/zap"
 )
 
 // implementing discovery.Discovery
@@ -54,9 +53,9 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 	}
 	cn := make(chan peer.AddrInfo, 32)
 
-	dvs.discover(ctx, func(e PeerEvent) {
+	dvs.discover(ctx, logger, func(e PeerEvent) {
 		cn <- e.AddrInfo
-	}, time.Millisecond, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger), dvs.subnetFilter(subnet))
+	}, time.Millisecond, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger), dvs.subnetFilter(subnet), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
 
 	return cn, nil
 }

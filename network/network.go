@@ -5,11 +5,9 @@ import (
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/records"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"go.uber.org/zap"
 )
 
 // DecodedSSVMessage serves as a marker interface for any SSV message types.
@@ -45,6 +43,8 @@ type P2PNetwork interface {
 	SubscribeAll(logger *zap.Logger) error
 	// SubscribeRandoms subscribes to random subnets
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	// SubscribeFillerSubnets
+	SubscribeFillerSubnets(logger *zap.Logger) error
 	// UpdateScoreParams will update the scoring parameters of GossipSub
 	UpdateScoreParams(logger *zap.Logger)
 	//ActiveSubnets returns active subnets

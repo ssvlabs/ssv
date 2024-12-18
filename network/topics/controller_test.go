@@ -1,4 +1,4 @@
-package topics
+package topics_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/topics"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -114,10 +115,10 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 		for _, p := range peers {
 			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
 			// simulate concurrency, by trying to subscribe multiple times
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				<-time.After(100 * time.Millisecond)
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
@@ -315,7 +316,7 @@ func committeeTopic(cidHex string) string {
 type P struct {
 	host host.Host
 	ps   *pubsub.PubSub
-	tm   *topicsCtrl
+	tm   topics.Controller
 
 	connsCount uint64
 
@@ -376,12 +377,12 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	require.NoError(t, err)
 
 	var p *P
-	var midHandler MsgIDHandler
+	var midHandler topics.MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
 		go midHandler.Start()
 	}
-	cfg := &PubSubConfig{
+	cfg := &topics.PubSubConfig{
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,
@@ -389,7 +390,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			p.saveMsg(topic, msg)
 			return nil
 		},
-		Scoring: &ScoringConfig{
+		Scoring: &topics.ScoringConfig{
 			IPWhilelist:        nil,
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
@@ -407,13 +408,13 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		t.Fatal(err)
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore, nil)
+	ps, tm, err := topics.NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore, nil)
 	require.NoError(t, err)
 
 	p = &P{
 		host:     h,
 		ps:       ps,
-		tm:       tm.(*topicsCtrl),
+		tm:       tm,
 		msgs:     make(map[string][]*pubsub.Message),
 		msgsLock: &sync.Mutex{},
 	}

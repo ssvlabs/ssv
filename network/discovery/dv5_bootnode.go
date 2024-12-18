@@ -3,12 +3,11 @@ package discovery
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
+	"go.uber.org/zap"
 )
 
 // BootnodeOptions contains options to create the node
@@ -68,5 +67,5 @@ func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, networkCfg
 			Bootnodes:  []string{},
 		},
 	}
-	return newDiscV5Service(ctx, logger, discOpts)
+	return newDiscV5Service(ctx, logger, false, nil, discOpts)
 }

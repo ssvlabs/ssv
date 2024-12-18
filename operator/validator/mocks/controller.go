@@ -32,7 +32,6 @@ import (
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
-	isgomock struct{}
 }
 
 // MockControllerMockRecorder is the mock recorder for MockController.
@@ -274,7 +273,6 @@ func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 type MockRecipients struct {
 	ctrl     *gomock.Controller
 	recorder *MockRecipientsMockRecorder
-	isgomock struct{}
 }
 
 // MockRecipientsMockRecorder is the mock recorder for MockRecipients.
@@ -314,7 +312,6 @@ func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Cal
 type MockSharesStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockSharesStorageMockRecorder
-	isgomock struct{}
 }
 
 // MockSharesStorageMockRecorder is the mock recorder for MockSharesStorage.
@@ -398,7 +395,6 @@ func (mr *MockSharesStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gom
 type MockP2PNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockP2PNetworkMockRecorder
-	isgomock struct{}
 }
 
 // MockP2PNetworkMockRecorder is the mock recorder for MockP2PNetwork.
@@ -444,6 +440,20 @@ func (m *MockP2PNetwork) Broadcast(id types.MessageID, message *types.SignedSSVM
 func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
+}
+
+// SubscribeFillerSubnets mocks base method.
+func (m *MockP2PNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeFillerSubnets", logger)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeFillerSubnets indicates an expected call of SubscribeFillerSubnets.
+func (mr *MockP2PNetworkMockRecorder) SubscribeFillerSubnets(logger any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeFillerSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeFillerSubnets), logger)
 }
 
 // SubscribeRandoms mocks base method.
