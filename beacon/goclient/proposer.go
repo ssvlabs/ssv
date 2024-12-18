@@ -87,7 +87,6 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 	beaconBlock := proposalResp.Data
 
-	// TODO: consider adding logger.Error here as well
 	if beaconBlock.Blinded {
 		switch beaconBlock.Version {
 		case spec.DataVersionCapella:
