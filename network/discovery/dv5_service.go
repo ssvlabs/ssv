@@ -59,8 +59,7 @@ type DiscV5Service struct {
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
-	conn       *net.UDPConn
-	sharedConn *SharedUDPConn
+	conn *net.UDPConn
 
 	networkConfig networkconfig.NetworkConfig
 	subnets       []byte
@@ -96,9 +95,6 @@ func (dvs *DiscV5Service) Close() error {
 		if err := dvs.conn.Close(); err != nil {
 			return err
 		}
-	}
-	if dvs.sharedConn != nil {
-		close(dvs.sharedConn.Unhandled)
 	}
 	if dvs.dv5Listener != nil {
 		dvs.dv5Listener.Close()
@@ -227,22 +223,17 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		protocolID = DefaultSSVProtocolID
 	}
 
-	// New discovery, with ProtocolID restriction, to be kept post-fork
-	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &SharedUDPConn{udpConn, unhandled}
-	dvs.sharedConn = sharedConn
-
-	dv5PostForkCfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
+	dv5Cfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID))
 	if err != nil {
 		return err
 	}
 
-	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
+	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not create discV5 listener")
 	}
 
-	logger.Debug("started discv5 post-fork listener (UDP)",
+	logger.Debug("started discv5 listener (UDP)",
 		fields.BindIP(bindIP),
 		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
@@ -250,26 +241,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		fields.ProtocolID(protocolID),
 	)
 
-	// Previous discovery, without ProtocolID restriction, to be discontinued after the fork
-	dv5PreForkCfg, err := opts.DiscV5Cfg(logger)
-	if err != nil {
-		return err
-	}
-
-	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
-	if err != nil {
-		return errors.Wrap(err, "could not create discV5 pre-fork listener")
-	}
-
-	logger.Debug("started discv5 pre-fork listener (UDP)",
-		fields.BindIP(bindIP),
-		zap.Uint16("UdpPort", opts.Port),
-		fields.ENRLocalNode(localNode),
-		fields.Domain(discOpts.NetworkConfig.DomainType),
-	)
-
-	dvs.dv5Listener = NewForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
-	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
+	dvs.dv5Listener = dv5Listener
+	dvs.bootnodes = dv5Cfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil
 }
