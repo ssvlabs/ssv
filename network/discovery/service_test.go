@@ -280,35 +280,11 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 
 func TestDiscV5ServiceListenerType(t *testing.T) {
 
-	t.Run("Post-Fork", func(t *testing.T) {
-		netConfig := PostForkNetworkConfig()
+	t.Run("Listener Type", func(t *testing.T) {
+		netConfig := TestingNetworkConfig()
 		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
 
-		// Check listener type
-		_, ok := dvs.dv5Listener.(*forkingDV5Listener)
-		require.True(t, ok)
-
-		_, ok = dvs.dv5Listener.(*discover.UDPv5)
-		require.False(t, ok)
-
-		// Check bootnodes
-		CheckBootnodes(t, dvs, netConfig)
-
-		// Close
-		err := dvs.Close()
-		require.NoError(t, err)
-	})
-
-	t.Run("Pre-Fork", func(t *testing.T) {
-
-		netConfig := PreForkNetworkConfig()
-		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
-
-		// Check listener type
 		_, ok := dvs.dv5Listener.(*discover.UDPv5)
-		require.False(t, ok)
-
-		_, ok = dvs.dv5Listener.(*forkingDV5Listener)
 		require.True(t, ok)
 
 		// Check bootnodes
