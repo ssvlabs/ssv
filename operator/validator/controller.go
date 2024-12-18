@@ -17,8 +17,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -47,6 +45,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -140,6 +139,7 @@ type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeFillerSubnets(logger *zap.Logger) error
 	ActiveSubnets() records.Subnets
 	FixedSubnets() records.Subnets
 }
@@ -486,6 +486,10 @@ func (c *controller) StartValidators() {
 
 		// Start validators.
 		c.startValidators(inited, committees)
+
+		if err := c.network.SubscribeFillerSubnets(c.logger); err != nil {
+			c.logger.Error("failed to subscribe to filler subnets", zap.Error(err))
+		}
 	}
 
 	// Fetch metadata now if there is none. Otherwise, UpdateValidatorsMetadataLoop will handle it.

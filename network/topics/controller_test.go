@@ -1,4 +1,4 @@
-package topics
+package topics_test
 
 import (
 	"context"
@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/topics"
 	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -113,10 +112,10 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 		for _, p := range peers {
 			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
 			// simulate concurrency, by trying to subscribe multiple times
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				<-time.After(100 * time.Millisecond)
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
@@ -314,7 +313,7 @@ func committeeTopic(cidHex string) string {
 type P struct {
 	host host.Host
 	ps   *pubsub.PubSub
-	tm   *topicsCtrl
+	tm   topics.Controller
 
 	connsCount uint64
 
@@ -375,12 +374,12 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	require.NoError(t, err)
 
 	var p *P
-	var midHandler MsgIDHandler
+	var midHandler topics.MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
 		go midHandler.Start()
 	}
-	cfg := &PubSubConfig{
+	cfg := &topics.PubSubConfig{
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,

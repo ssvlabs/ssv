@@ -454,6 +454,20 @@ func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
 }
 
+// SubscribeFillerSubnets mocks base method.
+func (m *MockP2PNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeFillerSubnets", logger)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeFillerSubnets indicates an expected call of SubscribeFillerSubnets.
+func (mr *MockP2PNetworkMockRecorder) SubscribeFillerSubnets(logger any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeFillerSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeFillerSubnets), logger)
+}
+
 // FixedSubnets mocks base method.
 func (m *MockP2PNetwork) FixedSubnets() records.Subnets {
 	m.ctrl.T.Helper()

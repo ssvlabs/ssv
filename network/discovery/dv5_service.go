@@ -5,21 +5,22 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -56,6 +57,14 @@ type DiscV5Service struct {
 	dv5Listener Listener
 	bootnodes   []*enode.Node
 
+	// withExtraFiltering specifies whether we want to additionally filter discovered peers,
+	// since operator node and boot node are using the same discovery code (`DiscV5Service`) we
+	// want to do this extra filtering for operator node only
+	withExtraFiltering bool
+	// topicsCtrl must be non-nil when withExtraFiltering is set to true since it will be used
+	// to help us decide which peers need to be filtered out
+	topicsCtrl topics.Controller
+
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
@@ -68,20 +77,33 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(
+	pctx context.Context,
+	logger *zap.Logger,
+	withExtraFiltering bool,
+	topicsController topics.Controller,
+	opts *Options,
+) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:           ctx,
-		cancel:        cancel,
-		conns:         discOpts.ConnIndex,
-		subnetsIdx:    discOpts.SubnetsIdx,
-		networkConfig: discOpts.NetworkConfig,
-		subnets:       discOpts.DiscV5Opts.Subnets,
-		publishLock:   make(chan struct{}, 1),
+		ctx:                ctx,
+		cancel:             cancel,
+		withExtraFiltering: withExtraFiltering,
+		topicsCtrl:         topicsController,
+		conns:              opts.ConnIndex,
+		subnetsIdx:         opts.SubnetsIdx,
+		networkConfig:      opts.NetworkConfig,
+		subnets:            opts.DiscV5Opts.Subnets,
+		publishLock:        make(chan struct{}, 1),
 	}
 
-	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
-	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
+	logger.Debug(
+		"configuring discv5 discovery",
+		zap.Any("discV5Opts", opts.DiscV5Opts),
+		zap.Any("hostAddress", opts.HostAddress),
+		zap.Any("hostDNS", opts.HostDNS),
+	)
+	if err := dvs.initDiscV5Listener(logger, opts); err != nil {
 		return nil, err
 	}
 	return &dvs, nil
@@ -143,7 +165,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	const logFrequency = 10
 	var skippedPeers uint64 = 0
 
-	dvs.discover(dvs.ctx, func(e PeerEvent) {
+	dvs.discover(dvs.ctx, logger, func(e PeerEvent) {
 		logger := logger.With(
 			fields.ENR(e.Node),
 			fields.PeerID(e.AddrInfo.ID),
@@ -157,7 +179,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			return
 		}
 		handler(e)
-	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
+	}, defaultDiscoveryInterval, dvs.ssvNodeFilter(logger), dvs.sharedSubnetsFilter(1), dvs.badNodeFilter(logger), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
 
 	return nil
 }
@@ -178,16 +200,16 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 	}
 
 	// Get the peer's subnets, skipping if it has none.
-	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
+	if bytes.Equal(zeroSubnets, peerSubnets) {
 		recordPeerSkipped(ctx, skipReasonZeroSubnets)
 		return errors.New("zero subnets")
 	}
 
-	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
@@ -197,6 +219,36 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
 		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
 		return errors.New("no shared subnets")
+	}
+
+	if dvs.withExtraFiltering {
+		helpfulPeer := false // whether this peer helps us with getting rid of dead/solo subnets
+		subscribedTopics := dvs.topicsCtrl.Topics()
+		for _, topic := range subscribedTopics {
+			topicPeers, err := dvs.topicsCtrl.Peers(topic)
+			if err != nil {
+				return errors.Wrap(err, "could not get subscribed topic peers")
+			}
+
+			if len(topicPeers) >= 2 {
+				continue // this topic has enough peers
+			}
+
+			// we've got a dead subnet here, see if this peer can help with that
+			subnet, err := strconv.Atoi(topic)
+			if err != nil {
+				return errors.Wrap(err, "could not convert topic name to subnet id")
+			}
+			peerSubnet := peerSubnets[subnet]
+			if peerSubnet != 1 {
+				continue // peer doesn't have this subnet either, lets check other dead subnets we have
+			}
+			helpfulPeer = true // this peer helps with at least 1 dead subnet for us
+			break
+		}
+		if !helpfulPeer {
+			return errors.New("this peer doesn't help with dead subnets")
+		}
 	}
 
 	peerAcceptedCounter.Add(ctx, 1)
@@ -285,7 +337,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 // interval enables to control the rate of new nodes that we find.
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
-func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
+func (dvs *DiscV5Service) discover(ctx context.Context, logger *zap.Logger, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
 	iterator := dvs.dv5Listener.RandomNodes()
 	for _, f := range filters {
 		iterator = enode.Filter(iterator, f)
