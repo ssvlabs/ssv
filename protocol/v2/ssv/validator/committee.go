@@ -86,6 +86,9 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	if share, exist := c.Shares[validatorIndex]; exist {
 		c.dutyGuard.StopValidator(share.ValidatorPubKey)
 		delete(c.Shares, validatorIndex)
+		if len(c.Shares) == 0 {
+			c.stop()
+		}
 	}
 }
 
@@ -292,7 +295,11 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	return nil
 }
 
-func (c *Committee) Stop() {
+func (c *Committee) Stopped() bool {
+	return c.ctx.Err() == context.Canceled
+}
+
+func (c *Committee) stop() {
 	c.cancel()
 }
 
