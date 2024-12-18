@@ -23,7 +23,7 @@ metadata:
   namespace: REPLACE_NAMESPACE
 spec:
   selector:
-    istio: ingressgateway-int
+    istio: ingressgateway-ssv-int
   servers:
   - port:
       number: 80
