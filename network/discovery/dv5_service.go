@@ -336,11 +336,6 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 		logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
-	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.networkConfig.DomainType)
-	if err != nil {
-		logger.Error("could not set next domain type", zap.Error(err))
-		return
-	}
 
 	// Acquire publish lock to prevent parallel publishing.
 	// If there's an ongoing goroutine, it would now start publishing the record updated above,
@@ -404,7 +399,6 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 
 		// Satisfy decorations of forks supported by this node.
 		DecorateWithDomainType(records.KeyDomainType, dvs.networkConfig.DomainType),
-		DecorateWithDomainType(records.KeyNextDomainType, dvs.networkConfig.DomainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {

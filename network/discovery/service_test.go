@@ -128,15 +128,6 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	err := localNode.Node().Record().Load(&domainEntry)
 	require.NoError(t, err)
 	require.Equal(t, netConfig.DomainType, domainEntry.DomainType)
-
-	// Check next domain entry
-	nextDomainEntry := records.DomainTypeEntry{
-		Key:        records.KeyNextDomainType,
-		DomainType: spectypes.DomainType{},
-	}
-	err = localNode.Node().Record().Load(&nextDomainEntry)
-	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType, nextDomainEntry.DomainType)
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {

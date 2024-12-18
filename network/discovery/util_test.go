@@ -127,8 +127,6 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 	// Set entries
 	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType)
 	require.NoError(t, err)
-	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.DomainType)
-	require.NoError(t, err)
 	err = records.SetSubnetsEntry(localNode, mockSubnets(1))
 	require.NoError(t, err)
 
@@ -137,7 +135,7 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 
 // Testing node
 func NewTestingNode(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, mockSubnets(1))
+	return CustomNode(t, true, testNetConfig.DomainType, true, mockSubnets(1))
 }
 
 func NewTestingNodes(t *testing.T, count int) []*enode.Node {
@@ -149,32 +147,31 @@ func NewTestingNodes(t *testing.T, count int) []*enode.Node {
 }
 
 func NodeWithoutDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.DomainType, true, mockSubnets(1))
+	return CustomNode(t, false, spectypes.DomainType{}, true, mockSubnets(1))
 }
 
 func NodeWithoutNextDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, false, spectypes.DomainType{}, true, mockSubnets(1))
+	return CustomNode(t, true, testNetConfig.DomainType, true, mockSubnets(1))
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType, false, nil)
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
-	return CustomNode(t, true, domainType, true, nextDomainType, true, mockSubnets(1))
+	return CustomNode(t, true, domainType, true, mockSubnets(1))
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, zeroSubnets)
 }
 
 func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, subnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, subnets)
 }
 
 func CustomNode(t *testing.T,
 	setDomainType bool, domainType spectypes.DomainType,
-	setNextDomainType bool, nextDomainType spectypes.DomainType,
 	setSubnets bool, subnets []byte) *enode.Node {
 
 	// Generate key
@@ -197,12 +194,6 @@ func CustomNode(t *testing.T,
 		record.Set(records.DomainTypeEntry{
 			Key:        records.KeyDomainType,
 			DomainType: domainType,
-		})
-	}
-	if setNextDomainType {
-		record.Set(records.DomainTypeEntry{
-			Key:        records.KeyNextDomainType,
-			DomainType: nextDomainType,
 		})
 	}
 	if setSubnets {
