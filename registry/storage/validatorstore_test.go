@@ -1088,6 +1088,68 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	})
 }
 
+func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
+	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+
+	store := newValidatorStore(
+		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shareMap[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
+		},
+	)
+
+	// Create a share
+	duplicateShare := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:      phase0.ValidatorIndex(1),
+			ValidatorPubKey:     spectypes.ValidatorPK{1, 2, 3},
+			SharePubKey:         spectypes.ShareValidatorPK{4, 5, 6},
+			Committee:           []*spectypes.ShareMember{{Signer: 1}},
+			FeeRecipientAddress: [20]byte{10, 20, 30},
+			Graffiti:            []byte("duplicate_test"),
+		},
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Index:           phase0.ValidatorIndex(1),
+				ActivationEpoch: 100,
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+			},
+			OwnerAddress: common.HexToAddress("0x12345"),
+			Liquidated:   false,
+		},
+	}
+
+	// Add the same share multiple times
+	require.NoError(t, store.handleSharesAdded(duplicateShare))
+	require.NoError(t, store.handleSharesAdded(duplicateShare))
+
+	t.Run("check no duplicates in data.shares", func(t *testing.T) {
+		// Validate the internal state for operator ID
+		data, exists := store.byOperatorID[duplicateShare.Committee[0].Signer]
+		require.True(t, exists, "operator data should exist")
+		require.NotNil(t, data, "operator data should not be nil")
+
+		// Ensure no duplicates in shares
+		require.Len(t, data.shares, 1, "data.shares should not contain duplicate entries")
+		require.Contains(t, data.shares, duplicateShare, "data.shares should contain the added share")
+	})
+
+	t.Run("check no duplicates in committee validators", func(t *testing.T) {
+		committeeID := duplicateShare.CommitteeID()
+		committee, exists := store.byCommitteeID[committeeID]
+		require.True(t, exists, "committee should exist")
+		require.NotNil(t, committee, "committee should not be nil")
+
+		// Ensure no duplicates in committee validators
+		require.Len(t, committee.Validators, 1, "committee.Validators should not contain duplicate entries")
+		require.Contains(t, committee.Validators, duplicateShare, "committee.Validators should contain the added share")
+	})
+}
+
 // requireValidatorStoreIntegrity checks that every function of the ValidatorStore returns the expected results,
 // by reconstructing the expected state from the given shares and comparing it to the actual state of the store.
 // This may seem like an overkill, but as ValidatorStore's implementation becomes more optimized and complex,

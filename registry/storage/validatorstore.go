@@ -267,7 +267,9 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 				}
 			}
 
-			data.shares = append(data.shares, share)
+			if !containsShare(data.shares, share) {
+				data.shares = append(data.shares, share)
+			}
 
 			if !containsCommittee(data.committees, committee.ID) {
 				data.committees = append(data.committees, committee)
