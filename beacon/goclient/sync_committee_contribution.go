@@ -47,6 +47,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	beaconBlockRootResp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
 		Block: fmt.Sprint(slot),
 	})
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart))
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
@@ -56,8 +57,6 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	if beaconBlockRootResp.Data == nil {
 		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
-
-	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart))
 
 	blockRoot := beaconBlockRootResp.Data
 
@@ -77,6 +76,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 				SubcommitteeIndex: subnetIDs[index],
 				BeaconBlockRoot:   *blockRoot,
 			})
+			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(start))
 			if err != nil {
 				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)
 			}
@@ -86,8 +86,6 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 			if syncCommitteeContrResp.Data == nil {
 				return fmt.Errorf("sync committee contribution data is nil")
 			}
-
-			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(start))
 
 			contribution := syncCommitteeContrResp.Data
 			contributions = append(contributions, &spectypes.Contribution{
@@ -107,12 +105,11 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
 	start := time.Now()
-	if err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution}); err != nil {
-		return err
-	}
+	err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
+
 	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.client.Address(), http.MethodPost, time.Since(start))
 
-	return nil
+	return err
 }
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)

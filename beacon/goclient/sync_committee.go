@@ -20,14 +20,13 @@ func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
+	recordRequestDuration(gc.ctx, "SyncCommitteeDuties", gc.client.Address(), http.MethodPost, time.Since(reqStart))
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain sync committee duties: %w", err)
 	}
 	if resp == nil {
 		return nil, fmt.Errorf("sync committee duties response is nil")
 	}
-
-	recordRequestDuration(gc.ctx, "SyncCommitteeDuties", gc.client.Address(), http.MethodPost, time.Since(reqStart))
 
 	return resp.Data, nil
 }
@@ -38,6 +37,7 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 	resp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
 		Block: "head",
 	})
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(reqStart))
 	if err != nil {
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
@@ -48,19 +48,15 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
-	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(reqStart))
-
 	return *resp.Data, spec.DataVersionAltair, nil
 }
 
 // SubmitSyncMessages submits a signed sync committee msg
 func (gc *GoClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
 	reqStart := time.Now()
-	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs); err != nil {
-		return err
-	}
+	err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs)
 
 	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeMessages", gc.client.Address(), http.MethodPost, time.Since(reqStart))
 
-	return nil
+	return err
 }
