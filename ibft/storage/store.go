@@ -66,7 +66,7 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 	<-ticker.Next()
 	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
 
-	// on start we cleanup ALL slots <= threashold
+	// on start we cleanup ALL slots below the threashold
 	start := time.Now()
 	count := i.removeSlotsOlderThan(logger, threashold)
 
