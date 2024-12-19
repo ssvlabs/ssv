@@ -14,12 +14,16 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -81,23 +85,40 @@ func NewCommitteeRunner(
 }
 
 func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.start_new_duty", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			attribute.Int64("ssv.validator.quorum", int64(quorum)),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
+	defer span.End()
+
 	d, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
-		return errors.New("duty is not a CommitteeDuty")
+		err := errors.New("duty is not a CommitteeDuty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+	span.SetAttributes(attribute.Int("ssv.validator.duty_count", len(d.ValidatorDuties)))
+
 	for _, validatorDuty := range d.ValidatorDuties {
 		err := cr.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), d.DutySlot())
 		if err != nil {
-			return fmt.Errorf("could not start %s duty at slot %d for validator %x: %w",
+			err := fmt.Errorf("could not start %s duty at slot %d for validator %x: %w",
 				validatorDuty.Type, d.DutySlot(), validatorDuty.PubKey, err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 	err := cr.BaseRunner.baseStartNewDuty(ctx, logger, cr, duty, quorum)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	cr.submittedDuties[spectypes.BNRoleAttester] = make(map[phase0.ValidatorIndex]struct{})
 	cr.submittedDuties[spectypes.BNRoleSyncCommittee] = make(map[phase0.ValidatorIndex]struct{})
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -198,13 +219,25 @@ func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 }
 
 func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
+		trace.WithAttributes(
+			attribute.String("ssv.validator.msg_id", msg.SSVMessage.MsgID.String()),
+			attribute.Int64("ssv.validator.msg_type", int64(msg.SSVMessage.MsgType)),
+			observability.RunnerRoleAttribute(msg.SSVMessage.GetID().GetRoleType()),
+		))
+	defer span.End()
+
 	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr, msg, &spectypes.BeaconVote{})
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		err := errors.Wrap(err, "failed processing consensus message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		span.AddEvent("instance is not decided")
 		return nil
 	}
 
@@ -224,49 +257,63 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
 	validDuties := 0
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		span.SetAttributes(
+			attribute.Int64("ssv.validator.index", int64(duty.ValidatorIndex)),
+			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
+			observability.BeaconRoleAttribute(duty.Type),
+		)
 		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
-			logger.Warn("duty is no longer valid", fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+			eventMsg := "duty is no longer valid"
+			span.AddEvent(eventMsg)
+			logger.Warn(eventMsg, fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
 			continue
 		}
 		switch duty.Type {
 		case spectypes.BNRoleAttester:
 			validDuties++
 			attestationData := constructAttestationData(beaconVote, duty)
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
-				spectypes.DomainAttester)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(), spectypes.DomainAttester)
 			if err != nil {
-				return errors.Wrap(err, "failed signing attestation data")
+				err := errors.Wrap(err, "failed signing attestation data")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
 			// TODO: revert log
 			attDataRoot, err := attestationData.HashTreeRoot()
 			if err != nil {
-				return errors.Wrap(err, "failed to hash attestation data")
+				err := errors.Wrap(err, "failed to hash attestation data")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
-			logger.Debug("signed attestation data",
-				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
-				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
-				zap.Any("attestation_data", attestationData),
-				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
-				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
-				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
-			)
+
+			eventMsg := "signed attestation data"
+
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				attribute.String("ssv.validator.signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+				attribute.String("ssv.validator.signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+				attribute.String("ssv.validator.attestation_data_root", hex.EncodeToString(attDataRoot[:])),
+			))
 		case spectypes.BNRoleSyncCommittee:
 			validDuties++
 			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
-				spectypes.DomainSyncCommittee)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(), spectypes.DomainSyncCommittee)
 			if err != nil {
-				return errors.Wrap(err, "failed signing sync committee message")
+				err := errors.Wrap(err, "failed signing sync committee message")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 		default:
-			return fmt.Errorf("invalid duty type: %s", duty.Type)
+			err := fmt.Errorf("invalid duty type: %s", duty.Type)
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 	if validDuties == 0 {
 		cr.BaseRunner.State.Finished = true
+		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
 		return ErrNoValidDuties
 	}
 
@@ -280,12 +327,16 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 	ssvMsg.Data, err = postConsensusMsg.Encode()
 	if err != nil {
-		return errors.Wrap(err, "failed to encode post consensus signature msg")
+		err = errors.Wrap(err, "failed to encode post consensus signature msg")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	sig, err := cr.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return errors.Wrap(err, "could not sign SSVMessage")
+		err = errors.Wrap(err, "could not sign SSVMessage")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -295,17 +346,33 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial post consensus sig")
+		err = errors.Wrap(err, "can't broadcast partial post consensus sig")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
-
 }
 
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.runner.process_post_consensus", observabilityNamespace),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(signedMsg.Slot),
+			attribute.Int64("ssv.validator.signer", int64(signedMsg.Messages[0].Signer)),
+			attribute.Int64("ssv.validator.msg_type", int64(signedMsg.Type)),
+		))
+	defer span.End()
+
 	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
+	span.SetAttributes(
+		attribute.Bool("ssv.validator.quorum", quorum),
+		attribute.Int("ssv.validator.signatures", len(roots)),
+	)
 	if err != nil {
-		return errors.Wrap(err, "failed processing post consensus message")
+		err := errors.Wrap(err, "failed processing post consensus message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	logger = logger.With(fields.Slot(signedMsg.Slot))
 
@@ -318,7 +385,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 	logger = logger.With(fields.ConsensusTime(cr.measurements.ConsensusTime()))
 
-	logger.Debug("🧩 got partial signatures",
+	eventMsg := "got partial signatures"
+	span.AddEvent(eventMsg)
+	logger.Debug(eventMsg,
 		zap.Bool("quorum", quorum),
 		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
@@ -326,16 +395,21 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		zap.Uint64s("validators", indices))
 
 	if !quorum {
+		span.AddEvent("no quorum")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects(logger)
 	if err != nil {
-		return errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
+		err := errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	if len(beaconObjects) == 0 {
 		cr.BaseRunner.State.Finished = true
+		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
 		return ErrNoValidDuties
 	}
 
@@ -359,8 +433,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			// In this case, we simply continue.
 			continue
 		}
-
-		logger.Debug("found validators for root",
+		eventMsg := "found validators for root"
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.BeaconRoleAttribute(role),
+			attribute.String("ssv.validator.duty.root", hex.EncodeToString(root[:])),
+		))
+		logger.Debug(eventMsg,
 			fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			zap.String("role", role.String()),
 			zap.String("root", hex.EncodeToString(root[:])),
@@ -391,7 +469,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
 						share.Committee, validator)
 				}
-				vlogger.Error("got post-consensus quorum but it has invalid signatures",
+				eventMsg = "got post-consensus quorum but it has invalid signatures"
+				span.AddEvent(eventMsg)
+				vlogger.Error(eventMsg,
 					fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 					zap.Error(err),
 				)
@@ -402,8 +482,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
 
-			vlogger.Debug("🧩 reconstructed partial signatures committee",
-				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
+			eventMsg = "reconstructed partial signatures committee"
+			span.AddEvent(eventMsg)
+			vlogger.Debug(eventMsg, zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
 			validatorObjs, exists := beaconObjects[validator]
 			if !exists {
@@ -452,11 +533,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
-			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+			err := errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
-
 		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleAttester, cr.BaseRunner.State.RunningInstance.State.Round)
-
 		attestationsCount := len(attestations)
 		if attestationsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
@@ -464,9 +545,15 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
 				spectypes.BNRoleAttester)
 		}
-
-		logger.Info("✅ successfully submitted attestations",
-			fields.Epoch(cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
+		eventMsg := "✅ successfully submitted attestations"
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
+			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
+			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
+			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
+			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
+		))
+		logger.Info(eventMsg,
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attestations[0].Data.BeaconBlockRoot),
@@ -490,11 +577,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
 			logger.Error("❌ failed to submit sync committee", zap.Error(err))
 			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
-			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+			err = errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
-
 		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
-
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
@@ -502,8 +589,15 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
 				spectypes.BNRoleSyncCommittee)
 		}
-
-		logger.Info("✅ successfully submitted sync committee",
+		eventMsg := "✅ successfully submitted sync committee"
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
+			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
+			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
+			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
+			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
+		))
+		logger.Info(eventMsg,
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
@@ -517,6 +611,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	if anyErr != nil {
+		span.SetStatus(codes.Error, anyErr.Error())
 		return anyErr
 	}
 
@@ -524,6 +619,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if cr.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
 		cr.BaseRunner.State.Finished = true
 	}
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -697,6 +794,13 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 }
 
 func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.execute_duty", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
+	defer span.End()
+
 	cr.measurements.StartDutyFlow()
 
 	start := time.Now()
@@ -705,8 +809,11 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	// all 64 Ethereum committees assigned to this slot will get the same data to attest for.
 	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot, 0)
 	if err != nil {
-		return errors.Wrap(err, "failed to get attestation data")
+		err := errors.Wrap(err, "failed to get attestation data")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
 	logger = logger.With(
 		zap.Duration("attestation_data_time", time.Since(start)),
 		fields.Slot(slot),
@@ -721,8 +828,11 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+		err := errors.Wrap(err, "can't start new duty runner instance for duty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

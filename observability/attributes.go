@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 )
@@ -16,13 +17,30 @@ const (
 	RunnerRoleAttrKey = "ssv.runner.role"
 )
 
+type Slot interface {
+	qbft.Height | phase0.Slot
+}
+
 func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
-	const eventNameAttrName = "ssv.beacon.role"
-	return attribute.String(eventNameAttrName, role.String())
+	return attribute.String("ssv.beacon.role", role.String())
+}
+
+func BeaconEpochAttribute(epoch phase0.Epoch) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.beacon.epoch",
+		Value: Uint64AttributeValue(uint64(epoch)),
+	}
 }
 
 func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
 	return attribute.String(RunnerRoleAttrKey, role.String())
+}
+
+func BeaconSlotAttribute[T Slot](slot T) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.beacon.slot",
+		Value: Uint64AttributeValue(uint64(slot)),
+	}
 }
 
 func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
