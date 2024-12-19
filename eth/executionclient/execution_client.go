@@ -262,7 +262,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if sp != nil {
 		ec.logger.Error("Execution client is not synced")
 		ec.metrics.ExecutionClientSyncing()
-		if sp.CurrentBlock < sp.HighestBlock-ec.syncDistanceTolerance {
+		if sp.HighestBlock > ec.syncDistanceTolerance && sp.CurrentBlock < sp.HighestBlock-ec.syncDistanceTolerance {
 			return errSyncing
 		}
 	}
