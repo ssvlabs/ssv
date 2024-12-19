@@ -256,11 +256,11 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
 
-	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, n.host))
+	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, logger, n.host))
 
 	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
 
-	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.topicsCtrl))
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl))
 
 	if err := n.subscribeToSubnets(logger); err != nil {
 		return err
