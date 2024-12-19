@@ -273,15 +273,19 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
 
-		now := time.Now()
-		defer func() { ec.syncLastUnsuccessful = &now }()
-
 		nTime := ec.syncLastUnsuccessful != nil
+		now := time.Now()
 
-		// maximum time we can tolerate since last Syncing=False
+		// maximum time we can tolerate being out-of-sync
 		if nTime && ec.syncLastUnsuccessful.Before(now.Add(-syncTimeTolerance)) {
 			return fmt.Errorf("not synced for too long (%s): %w", time.Since(*ec.syncLastUnsuccessful), errSyncing)
 		}
+
+		// save checkpoint
+		ec.syncLastUnsuccessful = &now
+	} else {
+		// reset checkpoint
+		ec.syncLastUnsuccessful = nil
 	}
 
 	ec.metrics.ExecutionClientReady()

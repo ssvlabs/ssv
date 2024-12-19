@@ -700,7 +700,23 @@ func TestSyncProgress(t *testing.T) {
 		client.syncLastUnsuccessful = &overTimeLimit
 
 		err = client.Healthy(ctx)
-		require.Error(t, err, errSyncing)
+		require.ErrorIs(t, err, errSyncing)
+	})
+
+	t.Run("successful sync resets SLU", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
+		require.NoError(t, err)
+
+		now := time.Now()
+		client.syncLastUnsuccessful = &now
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			return nil, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+		require.Nil(t, client.syncLastUnsuccessful)
 	})
 }
 
