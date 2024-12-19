@@ -38,6 +38,10 @@ const (
 	// Client timeouts.
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
+
+	clResponseErrMsg        = "Consensus client returned an error"
+	clNilResponseErrMsg     = "Consensus client returned a nil response"
+	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
 )
 
 type beaconNodeStatus int32
@@ -202,6 +206,10 @@ func New(
 		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	if err != nil {
+		logger.Error("Consensus client initialization failed",
+			zap.String("address", opt.BeaconNodeAddr),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 
@@ -227,9 +235,16 @@ func New(
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 	if err != nil {
+		logger.Error(clResponseErrMsg,
+			zap.String("api", "NodeVersion"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get node version: %w", err)
 	}
 	if nodeVersionResp == nil {
+		logger.Error(clNilResponseErrMsg,
+			zap.String("api", "NodeVersion"),
+		)
 		return nil, fmt.Errorf("node version response is nil")
 	}
 	client.nodeVersion = nodeVersionResp.Data
@@ -264,15 +279,25 @@ var errSyncing = errors.New("syncing")
 func (gc *GoClient) Healthy(ctx context.Context) error {
 	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "NodeSyncing"),
+			zap.Error(err),
+		)
 		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
 		return fmt.Errorf("failed to obtain node syncing status: %w", err)
 	}
 	if nodeSyncingResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "NodeSyncing"),
+		)
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
 		return fmt.Errorf("node syncing response is nil")
 	}
 	if nodeSyncingResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "NodeSyncing"),
+		)
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
 		return fmt.Errorf("node syncing data is nil")
 	}
@@ -281,9 +306,11 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	metricsBeaconNodeStatus.Set(float64(statusSyncing))
 	if syncState.IsSyncing && syncState.SyncDistance > gc.allowUnsyncedSlots {
+		gc.log.Error("Consensus client is not synced")
 		return errSyncing
 	}
 	if syncState.IsOptimistic {
+		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
 	}
 
@@ -305,5 +332,14 @@ func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 }
 
 func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
-	return gc.client.Events(ctx, topics, handler)
+	if err := gc.client.Events(ctx, topics, handler); err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Events"),
+			zap.Error(err),
+		)
+
+		return err
+	}
+
+	return nil
 }

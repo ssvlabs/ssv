@@ -12,6 +12,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -47,12 +48,22 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		Block: fmt.Sprint(slot),
 	})
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
 	if beaconBlockRootResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("beacon block root response is nil")
 	}
 	if beaconBlockRootResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
@@ -76,12 +87,22 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 				BeaconBlockRoot:   *blockRoot,
 			})
 			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+					zap.Error(err),
+				)
 				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)
 			}
 			if syncCommitteeContrResp == nil {
+				gc.log.Error(clNilResponseErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+				)
 				return fmt.Errorf("sync committee contribution response is nil")
 			}
 			if syncCommitteeContrResp.Data == nil {
+				gc.log.Error(clNilResponseDataErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+				)
 				return fmt.Errorf("sync committee contribution data is nil")
 			}
 			contribution := syncCommitteeContrResp.Data
@@ -103,7 +124,15 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
-	return gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
+	if err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution}); err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitSyncCommitteeContributions"),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	return nil
 }
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)

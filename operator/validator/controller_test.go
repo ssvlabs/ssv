@@ -26,6 +26,7 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -40,6 +41,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -62,6 +64,7 @@ type MockControllerOptions struct {
 	signer            spectypes.BeaconSigner
 	StorageMap        *ibftstorage.QBFTStores
 	validatorsMap     *validators.ValidatorsMap
+	validatorStore    registrystorage.ValidatorStore
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorStorage   registrystorage.Operators
 	networkConfig     networkconfig.NetworkConfig
@@ -190,15 +193,14 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	testCases := []struct {
 		name                       string
 		shareStorageListResponse   []*types.SSVShare
-		expectMetadataFetch        bool
 		syncHighestDecidedResponse error
 		getValidatorDataResponse   error
 	}{
-		{"no shares of non committee", nil, false, nil, nil},
-		{"set up non committee validators", sharesWithMetadata, false, nil, nil},
-		{"set up non committee validators without metadata", sharesWithoutMetadata, true, nil, nil},
-		{"fail to sync highest decided", sharesWithMetadata, false, errors.New("failed to sync highest decided"), nil},
-		{"fail to update validators metadata", sharesWithMetadata, false, nil, errors.New("could not update all validators")},
+		{"no shares of non committee", nil, nil, nil},
+		{"set up non committee validators", sharesWithMetadata, nil, nil},
+		{"set up non committee validators without metadata", sharesWithoutMetadata, nil, nil},
+		{"fail to sync highest decided", sharesWithMetadata, errors.New("failed to sync highest decided"), nil},
+		{"fail to update validators metadata", sharesWithMetadata, nil, errors.New("could not update all validators")},
 	}
 
 	for _, tc := range testCases {
@@ -207,6 +209,13 @@ func TestSetupValidatorsExporter(t *testing.T) {
 
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(context.TODO())
+
+			subnets := [commons.SubnetsCount]byte{}
+			for _, share := range sharesWithMetadata {
+				subnets[commons.CommitteeSubnet(share.CommitteeID())] = 1
+			}
+
+			network.EXPECT().ActiveSubnets().Return(subnets[:]).AnyTimes()
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
@@ -227,13 +236,14 @@ func TestSetupValidatorsExporter(t *testing.T) {
 						}
 					}
 				}).AnyTimes()
-				if tc.expectMetadataFetch {
-					bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
-					bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
-				}
+				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).AnyTimes()
+				bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
+
+			mockValidatorStore := registrystoragemocks.NewMockValidatorStore(ctrl)
+			mockValidatorStore.EXPECT().OperatorValidators(gomock.Any()).Return(sharesWithMetadata).AnyTimes()
 
 			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
 				return true, nil
@@ -246,6 +256,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				sharesStorage:     sharesStorage,
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
+				validatorStore:    mockValidatorStore,
 				validatorOptions: validator.Options{
 					Exporter: true,
 				},
@@ -1011,6 +1022,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		sharesStorage:           opts.sharesStorage,
 		operatorsStorage:        opts.operatorStorage,
 		validatorsMap:           opts.validatorsMap,
+		validatorStore:          opts.validatorStore,
 		ctx:                     context.Background(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
