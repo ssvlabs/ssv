@@ -47,11 +47,14 @@ type ExecutionClient struct {
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
+	syncLastSuccess       time.Time
 
 	// variables
 	client *ethclient.Client
 	closed chan struct{}
 }
+
+const syncTimeTolerance = time.Duration(1 * time.Minute)
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
@@ -66,6 +69,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
+		syncLastSuccess:             time.Now(),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -262,9 +266,22 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if sp != nil {
 		ec.logger.Error("Execution client is not synced")
 		ec.metrics.ExecutionClientSyncing()
-		if sp.HighestBlock > ec.syncDistanceTolerance && sp.CurrentBlock < sp.HighestBlock-ec.syncDistanceTolerance {
+
+		hblock := sp.HighestBlock > ec.syncDistanceTolerance // make sure we don't underflow
+		blockOutOfLimit := sp.CurrentBlock < sp.HighestBlock-ec.syncDistanceTolerance
+
+		// block out of sync distance tolerance
+		blockOutOfSDT := hblock && blockOutOfLimit
+
+		// maximum time we can tolerate since last Syncing=False
+		timeOutOfSDT := ec.syncLastSuccess.Before(time.Now().Add(-syncTimeTolerance))
+
+		// in both cases we crash
+		if blockOutOfSDT || timeOutOfSDT {
 			return errSyncing
 		}
+	} else {
+		ec.syncLastSuccess = time.Now()
 	}
 
 	ec.metrics.ExecutionClientReady()
