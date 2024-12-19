@@ -25,7 +25,7 @@ func RecordUint64Value(ctx context.Context,
 	recordF func(ctx context.Context, value int64, options ...metric.RecordOption),
 	options ...metric.RecordOption) {
 	if value > math.MaxInt64 {
-		logger.Warn("value exceeds int64 range, metric not recorded")
+		logger.Error("value exceeds int64 range, metric not recorded")
 		return
 	}
 
