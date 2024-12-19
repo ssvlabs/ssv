@@ -3,7 +3,6 @@ package observability
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
@@ -12,44 +11,39 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
-var (
-	once   sync.Once
-	config Config
-)
+var config Config
 
 func Initialize(appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
-	var initError error
 	shutdown = func(ctx context.Context) error { return nil }
 
-	once.Do(func() {
-		for _, option := range options {
-			option(&config)
-		}
+	for _, option := range options {
+		option(&config)
+	}
 
-		resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName(appName),
-			semconv.ServiceVersion(appVersion),
-		))
+	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceName(appName),
+		semconv.ServiceVersion(appVersion),
+	))
+	if err != nil {
+		err = errors.Join(errors.New("failed to instantiate observability resources"), err)
+		return shutdown, err
+	}
+
+	if config.metricsEnabled {
+		var promExporter *prometheus.Exporter
+		promExporter, err = prometheus.New()
 		if err != nil {
-			initError = errors.Join(errors.New("failed to instantiate observability resources"), err)
-			return
+			err = errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
+			return shutdown, err
 		}
+		meterProvider := metric.NewMeterProvider(
+			metric.WithResource(resources),
+			metric.WithReader(promExporter),
+		)
+		otel.SetMeterProvider(meterProvider)
+		shutdown = meterProvider.Shutdown
+	}
 
-		if config.metricsEnabled {
-			promExporter, err := prometheus.New()
-			if err != nil {
-				initError = errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
-				return
-			}
-			meterProvider := metric.NewMeterProvider(
-				metric.WithResource(resources),
-				metric.WithReader(promExporter),
-			)
-			otel.SetMeterProvider(meterProvider)
-			shutdown = meterProvider.Shutdown
-		}
-	})
-
-	return shutdown, initError
+	return shutdown, err
 }
