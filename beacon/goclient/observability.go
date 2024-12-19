@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv/observability"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+
+	"github.com/ssvlabs/ssv/observability"
 )
 
 type beaconNodeStatus string
@@ -50,15 +53,26 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration) {
+func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, err error) {
+	attr := []attribute.KeyValue{
+		semconv.ServerAddress(serverAddr),
+		semconv.HTTPRequestMethodKey.String(requestMethod),
+		attribute.String("http.route_name", routeName),
+	}
+
+	apiError, ok := err.(*api.Error)
+	if !ok {
+		requestDurationHistogram.Record(
+			ctx,
+			duration.Seconds(),
+			metric.WithAttributes(attr...))
+		return
+	}
+	attr = append(attr, attribute.Int("http.response.error_status_code", apiError.StatusCode))
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
-		metric.WithAttributes(
-			semconv.ServerAddress(serverAddr),
-			semconv.HTTPRequestMethodKey.String(requestMethod),
-			attribute.String("http.route_name", routeName),
-		))
+		metric.WithAttributes(attr...))
 }
 
 func recordSyncDistance(ctx context.Context, distance phase0.Slot, serverAddr string) {
