@@ -19,6 +19,8 @@ var (
 
 func Initialize(appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
 	var initError error
+	shutdown = func(ctx context.Context) error { return nil }
+
 	once.Do(func() {
 		for _, option := range options {
 			option(&config)
