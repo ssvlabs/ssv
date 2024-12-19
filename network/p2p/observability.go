@@ -3,13 +3,16 @@ package p2pv1
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.uber.org/zap"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/observability"
@@ -52,7 +55,7 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordPeerCount(ctx context.Context, host host.Host) func() {
+func recordPeerCount(ctx context.Context, logger *zap.Logger, host host.Host) func() {
 	return func() {
 		peers := host.Network().Peers()
 		var (
@@ -76,19 +79,48 @@ func recordPeerCount(ctx context.Context, host host.Host) func() {
 		connectionsGauge.Record(ctx, numOfOutbound, metric.WithAttributes(
 			observability.NetworkDirectionAttribute(network.DirOutbound),
 		))
+
+		logger.Debug("connected peers status", fields.Count(len(peers)))
 		peersConnectedGauge.Record(ctx, int64(len(peers)))
 	}
 }
 
-func recordPeerCountPerTopic(ctx context.Context, ctrl topics.Controller) func() {
+func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topics.Controller) func() {
 	return func() {
+		var (
+			subnetPeerCounts []int
+			deadSubnets,
+			unhealthySubnets int
+		)
 		for _, topicName := range ctrl.Topics() {
 			peers, err := ctrl.Peers(topicName)
 			if err != nil {
 				return
 			}
+			subnetPeerCounts = append(subnetPeerCounts, len(peers))
+			if len(peers) == 0 {
+				deadSubnets++
+			} else if len(peers) <= 2 {
+				unhealthySubnets++
+			}
+
+			logger.Debug("topic peers status", fields.Topic(topicName), fields.Count(len(peers)), zap.Any("peers", peers))
 			peersPerTopicGauge.Record(ctx, int64(len(peers)), metric.WithAttributes(attribute.String("ssv.p2p.topic.name", topicName)))
 		}
+
+		// Calculate min, median, max
+		sort.Ints(subnetPeerCounts)
+		min := subnetPeerCounts[0]
+		median := subnetPeerCounts[len(subnetPeerCounts)/2]
+		max := subnetPeerCounts[len(subnetPeerCounts)-1]
+
+		logger.Debug("topic peers distribution",
+			zap.Int("min", min),
+			zap.Int("median", median),
+			zap.Int("max", max),
+			zap.Int("dead_subnets", deadSubnets),
+			zap.Int("unhealthy_subnets", unhealthySubnets),
+		)
 	}
 }
 
