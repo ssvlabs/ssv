@@ -47,7 +47,7 @@ func TestHealthy(t *testing.T) {
 			return r, nil
 		}
 
-		client.syncTolerance = 2
+		client.syncDistanceTolerance = 2
 
 		err = client.Healthy(ctx)
 		require.ErrorIs(t, err, errSyncing)
@@ -63,7 +63,7 @@ func TestHealthy(t *testing.T) {
 			return r, nil
 		}
 
-		client.syncTolerance = 3
+		client.syncDistanceTolerance = 3
 
 		err = client.Healthy(ctx)
 		require.NoError(t, err)

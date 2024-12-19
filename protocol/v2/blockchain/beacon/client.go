@@ -66,7 +66,7 @@ type Options struct {
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	GasLimit       uint64
 
-	SyncTolerance uint64 `yaml:"SyncTolerance" env:"BEACON_SYNC_TOLERANCE" env-required:"false"  env-description:"The numbers of out-of-sync slots we can tolerate"`
+	SyncDistanceTolerance uint64 `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"2" env-required:"false" env-description:"The numbers of out-of-sync slots we can tolerate"`
 
 	CommonTimeout time.Duration // Optional.
 	LongTimeout   time.Duration // Optional.

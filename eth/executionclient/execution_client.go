@@ -45,8 +45,8 @@ type ExecutionClient struct {
 	reconnectionMaxInterval     time.Duration
 	logBatchSize                uint64
 
-	syncTolerance  uint64
-	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
+	syncDistanceTolerance uint64
+	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
 	client *ethclient.Client
@@ -262,7 +262,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if sp != nil {
 		ec.logger.Error("Execution client is not synced")
 		ec.metrics.ExecutionClientSyncing()
-		if sp.CurrentBlock < sp.HighestBlock-ec.syncTolerance {
+		if sp.CurrentBlock < sp.HighestBlock-ec.syncDistanceTolerance {
 			return errSyncing
 		}
 	}

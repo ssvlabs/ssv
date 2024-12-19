@@ -657,7 +657,7 @@ func TestSyncProgress(t *testing.T) {
 	})
 
 	t.Run("within tolerable limits", func(t *testing.T) {
-		client, err := New(ctx, addr, contractAddr, WithSyncTolerance(2))
+		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
 		require.NoError(t, err)
 
 		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
