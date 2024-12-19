@@ -8,6 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -20,11 +21,9 @@ import (
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
-func TestSomething(t *testing.T) {
+func TestOldSlotCleanup(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(t, err)
 
 	role := spectypes.BNRoleAttester
 
@@ -51,11 +50,11 @@ func TestSomething(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	store := ibftStorage.Get(role).(*participantStorage)
+	storage := ibftStorage.Get(role).(*participantStorage)
 
 	// save participants
 	for _, d := range decided250Seq {
-		_, err := store.UpdateParticipants(
+		_, err := storage.UpdateParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
 			phase0.Slot(d.State.Height),
 			d.DecidedMessage.OperatorIDs,
@@ -64,7 +63,7 @@ func TestSomething(t *testing.T) {
 	}
 
 	t.Run("should have all participants", func(t *testing.T) {
-		pp, err := store.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
+		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
 		require.Nil(t, err)
 		require.Equal(t, 251, len(pp)) // seq 0 - 250
 	})
@@ -72,10 +71,10 @@ func TestSomething(t *testing.T) {
 	t.Run("remove slot older than", func(t *testing.T) {
 		threashold := phase0.Slot(100)
 
-		count := store.removeSlotsOlderThan(zap.NewNop(), threashold)
+		count := storage.removeSlotsOlderThan(zap.NewNop(), threashold)
 		require.Equal(t, 100, count)
 
-		pp, err := store.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
+		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
 		require.Nil(t, err)
 		require.Equal(t, 151, len(pp)) // seq 0 - 150
 
@@ -83,23 +82,16 @@ func TestSomething(t *testing.T) {
 			return e.Slot < threashold
 		})
 
-		if found {
-			t.Error("found slots, none expected")
-		}
+		assert.False(t, found, "found slots, none expected")
 	})
 
 	t.Run("remove slot at", func(t *testing.T) {
-		err = store.removeSlotAt(phase0.Slot(150))
+		err = storage.removeSlotAt(phase0.Slot(150))
 		require.Nil(t, err)
-		pp, err := store.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
+		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
 		require.Nil(t, err)
 		require.Equal(t, 150, len(pp)) // seq 0 - 149
 	})
-}
-
-func Test1(t *testing.T) {
-	key := []uint8{112, 116, 0, 0, 0, 0, 0, 180, 22, 253, 21, 127, 165, 192, 0, 76, 255, 189, 129, 104, 13, 241, 9, 212, 232, 244, 180, 245, 36, 145, 206, 99, 6, 1, 63, 244, 224, 201, 10, 161, 242, 135, 45, 214, 128, 29, 255, 4, 96, 99, 1, 244, 77, 229, 136}
-	t.Log(key[7:])
 }
 
 func TestEncodeDecodeOperators(t *testing.T) {

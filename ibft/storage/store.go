@@ -85,6 +85,7 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 	}
 }
 
+// removes ALL entries that have given slot in their prefix
 func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
 	prefix := i.makePrefix(slotToByteSlice(slot))
 
