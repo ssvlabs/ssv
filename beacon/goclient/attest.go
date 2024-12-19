@@ -20,7 +20,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(gc.ctx, "AttesterDuties", gc.client.Address(), http.MethodPost, time.Since(start))
+	recordRequestDuration(gc.ctx, "AttesterDuties", gc.client.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain attester duties: %w", err)
 	}
@@ -57,7 +57,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 			Slot: slot,
 		})
 
-		recordRequestDuration(gc.ctx, "AttestationData", gc.client.Address(), http.MethodGet, time.Since(attDataReqStart))
+		recordRequestDuration(gc.ctx, "AttestationData", gc.client.Address(), http.MethodGet, time.Since(attDataReqStart), err)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to get attestation data: %w", err)
@@ -104,7 +104,7 @@ func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error
 	start := time.Now()
 	err := gc.client.SubmitAttestations(gc.ctx, attestations)
 
-	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.client.Address(), http.MethodPost, time.Since(start))
+	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.client.Address(), http.MethodPost, time.Since(start), err)
 
 	return err
 }
