@@ -1083,7 +1083,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 				recordValidatorStatus(ctx, count, status)
 			}
 		case <-ctx.Done():
-			c.logger.Info("stopping to report validator statuses. Context cancelled")
+			c.logger.Info("stopped reporting validator statuses. Context cancelled")
 			return
 		}
 	}
