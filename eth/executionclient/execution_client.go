@@ -45,10 +45,16 @@ type ExecutionClient struct {
 	reconnectionMaxInterval     time.Duration
 	logBatchSize                uint64
 
+	syncDistanceTolerance uint64
+	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
+	syncLastUnsuccessful  *time.Time
+
 	// variables
 	client *ethclient.Client
 	closed chan struct{}
 }
+
+const syncTimeTolerance = 1 * time.Minute
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
@@ -71,7 +77,14 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
 	}
+
+	client.syncProgressFn = client.syncProgress
+
 	return client, nil
+}
+
+func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
+	return ec.client.SyncProgress(ctx)
 }
 
 // Close shuts down ExecutionClient.
@@ -229,6 +242,8 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 	return logs
 }
 
+var errSyncing = fmt.Errorf("syncing")
+
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if ec.isClosed() {
@@ -238,7 +253,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	sp, err := ec.client.SyncProgress(ctx)
+	sp, err := ec.syncProgressFn(ctx)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_syncing"),
@@ -250,7 +265,27 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if sp != nil {
 		ec.logger.Error("Execution client is not synced")
 		ec.metrics.ExecutionClientSyncing()
-		return fmt.Errorf("syncing")
+
+		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
+
+		// block out of sync distance tolerance
+		if syncDistance > ec.syncDistanceTolerance {
+			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
+		}
+
+		nTime := ec.syncLastUnsuccessful != nil
+		now := time.Now()
+
+		// maximum time we can tolerate being out-of-sync
+		if nTime && ec.syncLastUnsuccessful.Before(now.Add(-syncTimeTolerance)) {
+			return fmt.Errorf("not synced for too long (%s): %w", time.Since(*ec.syncLastUnsuccessful), errSyncing)
+		}
+
+		// save checkpoint
+		ec.syncLastUnsuccessful = &now
+	} else {
+		// reset checkpoint
+		ec.syncLastUnsuccessful = nil
 	}
 
 	ec.metrics.ExecutionClientReady()

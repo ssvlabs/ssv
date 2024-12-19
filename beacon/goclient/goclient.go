@@ -10,17 +10,19 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -155,6 +157,9 @@ type GoClient struct {
 	nodeClient  NodeClient
 	gasLimit    uint64
 
+	syncDistanceTolerance phase0.Slot
+	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
+
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	registrationMu       sync.Mutex
@@ -209,13 +214,14 @@ func New(
 	}
 
 	client := &GoClient{
-		log:               logger,
-		ctx:               opt.Context,
-		network:           opt.Network,
-		client:            httpClient.(*eth2clienthttp.Service),
-		gasLimit:          opt.GasLimit,
-		operatorDataStore: operatorDataStore,
-		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		log:                   logger,
+		ctx:                   opt.Context,
+		network:               opt.Network,
+		client:                httpClient.(*eth2clienthttp.Service),
+		gasLimit:              opt.GasLimit,
+		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
+		operatorDataStore:     operatorDataStore,
+		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
@@ -224,6 +230,8 @@ func New(
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
 	}
+
+	client.nodeSyncingFn = client.nodeSyncing
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 	if err != nil {
@@ -256,14 +264,20 @@ func New(
 	return client, nil
 }
 
+func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
+	return gc.client.NodeSyncing(ctx, opts)
+}
+
 func (gc *GoClient) NodeClient() NodeClient {
 	return gc.nodeClient
 }
 
+var errSyncing = errors.New("syncing")
+
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "NodeSyncing"),
@@ -291,9 +305,9 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	metricsBeaconNodeStatus.Set(float64(statusSyncing))
-	if syncState.IsSyncing {
+	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
 		gc.log.Error("Consensus client is not synced")
-		return fmt.Errorf("syncing")
+		return errSyncing
 	}
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
