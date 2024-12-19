@@ -266,24 +266,21 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		ec.logger.Error("Execution client is not synced")
 		ec.metrics.ExecutionClientSyncing()
 
-		hblock := sp.HighestBlock > ec.syncDistanceTolerance // make sure we don't underflow
-		blockOutOfSDT := sp.CurrentBlock < sp.HighestBlock-ec.syncDistanceTolerance
+		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
 
 		// block out of sync distance tolerance
-		if hblock && blockOutOfSDT {
-			return errSyncing
+		if syncDistance > ec.syncDistanceTolerance {
+			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
 
 		now := time.Now()
 		defer func() { ec.syncLastUnsuccessful = &now }()
 
 		nTime := ec.syncLastUnsuccessful != nil
-		// maximum time we can tolerate since last Syncing=False
-		timeOutOfSDT := nTime && ec.syncLastUnsuccessful.Before(now.Add(-syncTimeTolerance))
 
-		// in both cases we crash
-		if timeOutOfSDT {
-			return errSyncing
+		// maximum time we can tolerate since last Syncing=False
+		if nTime && ec.syncLastUnsuccessful.Before(now.Add(-syncTimeTolerance)) {
+			return fmt.Errorf("not synced for too long (%s): %w", time.Since(*ec.syncLastUnsuccessful), errSyncing)
 		}
 	}
 
