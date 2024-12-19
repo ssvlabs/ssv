@@ -684,6 +684,23 @@ func TestSyncProgress(t *testing.T) {
 		err = client.Healthy(ctx)
 		require.NoError(t, err)
 	})
+
+	t.Run("time out of tolerable limits", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
+		require.NoError(t, err)
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			p := new(ethereum.SyncProgress)
+			p.CurrentBlock = 5
+			p.HighestBlock = 7
+			return p, nil
+		}
+
+		client.syncLastSuccess = time.Now().Add(-61 * time.Second)
+
+		err = client.Healthy(ctx)
+		require.Error(t, err, errSyncing)
+	})
 }
 
 func httpToWebSocketURL(url string) string {
