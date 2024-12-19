@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -60,8 +61,8 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
 	logger = logger.Named(logging.NameWSServer)
 
-	ws.RegisterHandler(logger, "/query", ws.handleQuery)
-	ws.RegisterHandler(logger, "/stream", ws.handleStream)
+	ws.RegisterHandler(logger, "query", "/query", ws.handleQuery)
+	ws.RegisterHandler(logger, "stream", "/stream", ws.handleStream)
 
 	go func() {
 		if err := ws.broadcaster.FromFeed(logger, ws.out); err != nil {
@@ -93,8 +94,8 @@ func (ws *wsServer) BroadcastFeed() *event.Feed {
 }
 
 // RegisterHandler registers an end point
-func (ws *wsServer) RegisterHandler(logger *zap.Logger, endPoint string, handler func(logger *zap.Logger, conn *websocket.Conn)) {
-	ws.router.HandleFunc(endPoint, func(w http.ResponseWriter, r *http.Request) {
+func (ws *wsServer) RegisterHandler(logger *zap.Logger, name, endPoint string, handler func(logger *zap.Logger, conn *websocket.Conn)) {
+	wrappedHandler := func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, w.Header())
 		logger := logger.With(zap.String("remote addr", conn.RemoteAddr().String()))
 		if err != nil {
@@ -110,7 +111,10 @@ func (ws *wsServer) RegisterHandler(logger *zap.Logger, endPoint string, handler
 			}
 		}()
 		handler(logger, conn)
-	})
+	}
+
+	otelHandler := otelhttp.NewHandler(http.HandlerFunc(wrappedHandler), name)
+	ws.router.Handle(endPoint, otelHandler)
 }
 
 // handleQuery receives query message and respond async

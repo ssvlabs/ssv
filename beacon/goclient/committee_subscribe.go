@@ -2,16 +2,32 @@ package goclient
 
 import (
 	"context"
+	"net/http"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 )
 
 // SubmitBeaconCommitteeSubscriptions is implementation for subscribing committee to subnet (p2p topic)
 func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error {
-	return gc.client.SubmitBeaconCommitteeSubscriptions(ctx, subscription)
+	start := time.Now()
+	if err := gc.client.SubmitBeaconCommitteeSubscriptions(ctx, subscription); err != nil {
+		return err
+	}
+
+	recordRequestDuration(gc.ctx, "SubmitBeaconCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }
 
 // SubmitSyncCommitteeSubscriptions is implementation for subscribing sync committee to subnet (p2p topic)
 func (gc *GoClient) SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error {
-	return gc.client.SubmitSyncCommitteeSubscriptions(ctx, subscription)
+	start := time.Now()
+	if err := gc.client.SubmitSyncCommitteeSubscriptions(ctx, subscription); err != nil {
+		return err
+	}
+
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start))
+
+	return nil
 }

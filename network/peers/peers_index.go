@@ -1,7 +1,6 @@
 package peers
 
 import (
-	"strconv"
 	"sync"
 	"time"
 
@@ -155,19 +154,13 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
 
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
-	mySubnets, err := records.Subnets{}.FromString(pi.Self().Metadata.Subnets)
-	if err != nil {
-		mySubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
-	}
 	stats := pi.SubnetsIndex.GetSubnetsStats()
 	if stats == nil {
 		return nil
 	}
 	stats.Connected = make([]int, len(stats.PeersCount))
 	var sumConnected int
-	for subnet, count := range stats.PeersCount {
-		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
-		metricsMySubnets.WithLabelValues(strconv.Itoa(subnet)).Set(float64(mySubnets[subnet]))
+	for subnet := range stats.PeersCount {
 		peers := pi.SubnetsIndex.GetSubnetPeers(subnet)
 		connectedCount := 0
 		for _, p := range peers {
@@ -177,7 +170,6 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 		}
 		stats.Connected[subnet] = connectedCount
 		sumConnected += connectedCount
-		metricsSubnetsConnectedPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(connectedCount))
 	}
 	if len(stats.PeersCount) > 0 {
 		stats.AvgConnected = sumConnected / len(stats.PeersCount)

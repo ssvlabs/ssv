@@ -291,7 +291,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	return true, nil
 }
 
-func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
+func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
 	byts, err := input.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode input data for consensus")
@@ -301,7 +301,9 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot,
 		return errors.Wrap(err, "input data invalid")
 	}
 
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
+	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
+		ctx,
+		logger,
 		specqbft.Height(slot),
 		byts,
 	); err != nil {

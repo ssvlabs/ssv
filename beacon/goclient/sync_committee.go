@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -14,6 +15,7 @@ import (
 
 // SyncCommitteeDuties returns sync committee duties for a given epoch
 func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
+	reqStart := time.Now()
 	resp, err := gc.client.SyncCommitteeDuties(ctx, &api.SyncCommitteeDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
@@ -24,6 +26,8 @@ func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 	if resp == nil {
 		return nil, fmt.Errorf("sync committee duties response is nil")
 	}
+
+	recordRequestDuration(gc.ctx, "SyncCommitteeDuties", gc.client.Address(), http.MethodPost, time.Since(reqStart))
 
 	return resp.Data, nil
 }
@@ -43,15 +47,20 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 	if resp.Data == nil {
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
-	metricsSyncCommitteeDataRequest.Observe(time.Since(reqStart).Seconds())
+
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(reqStart))
 
 	return *resp.Data, spec.DataVersionAltair, nil
 }
 
 // SubmitSyncMessages submits a signed sync committee msg
 func (gc *GoClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
+	reqStart := time.Now()
 	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs); err != nil {
 		return err
 	}
+
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeMessages", gc.client.Address(), http.MethodPost, time.Since(reqStart))
+
 	return nil
 }

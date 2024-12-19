@@ -29,7 +29,7 @@ type ExecutionClient interface {
 }
 
 type EventHandler interface {
-	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
+	HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
 }
 
 // EventSyncer syncs registry contract events from the given ExecutionClient
@@ -40,7 +40,6 @@ type EventSyncer struct {
 	eventHandler    EventHandler
 
 	logger             *zap.Logger
-	metrics            metrics
 	stalenessThreshold time.Duration
 
 	lastProcessedBlock       uint64
@@ -54,7 +53,6 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		eventHandler:    eventHandler,
 
 		logger:             zap.NewNop(),
-		metrics:            nopMetrics{},
 		stalenessThreshold: 150 * time.Second,
 	}
 
@@ -96,7 +94,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 		return 0, fmt.Errorf("failed to fetch historical events: %w", err)
 	}
 
-	lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(fetchLogs, false)
+	lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogs, false)
 	if err != nil {
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
@@ -111,11 +109,11 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 		// Event replay: this should never happen!
 		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
 	}
-	es.metrics.LastBlockProcessed(lastProcessedBlock)
 
 	es.logger.Info("finished syncing historical events",
 		zap.Uint64("from_block", fromBlock),
 		zap.Uint64("last_processed_block", lastProcessedBlock))
+
 	return lastProcessedBlock, nil
 }
 
@@ -123,7 +121,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error {
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
-	logs := es.executionClient.StreamLogs(ctx, fromBlock)
-	_, err := es.eventHandler.HandleBlockEventsStream(logs, true)
+	logStream := es.executionClient.StreamLogs(ctx, fromBlock)
+	_, err := es.eventHandler.HandleBlockEventsStream(ctx, logStream, true)
 	return err
 }
