@@ -6,11 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"time"
 
 	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -119,9 +119,8 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		}
 		lastProcessedBlock = blockLogs.BlockNumber
 
-		if lastProcessedBlock <= math.MaxInt64 {
-			lastProcessedBlockGauge.Record(ctx, int64(lastProcessedBlock))
-		}
+		observability.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
+
 		if !executeTasks || len(tasks) == 0 {
 			continue
 		}

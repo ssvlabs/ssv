@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -63,10 +62,7 @@ func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMe
 }
 
 func recordSyncDistance(ctx context.Context, distance phase0.Slot, serverAddr string) {
-	syncDistance := uint64(distance)
-	if syncDistance <= math.MaxInt64 {
-		syncDistanceGauge.Record(ctx, int64(syncDistance), metric.WithAttributes(semconv.ServerAddress(serverAddr)))
-	}
+	observability.RecordUint64Value(ctx, uint64(distance), syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(serverAddr)))
 }
 
 func recordBeaconClientStatus(ctx context.Context, status beaconNodeStatus, serverAddr string) {
