@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"time"
 
@@ -19,6 +18,7 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
@@ -242,9 +242,8 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
 
 		syncingDistance := sp.HighestBlock - sp.CurrentBlock
-		if syncingDistance <= math.MaxInt64 {
-			syncDistanceGauge.Record(ctx, int64(syncingDistance), metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
-		}
+
+		observability.RecordUint64Value(ctx, syncingDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 		return fmt.Errorf("syncing")
 	}
@@ -313,9 +312,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
-			if fromBlock <= math.MaxInt64 {
-				lastProcessedBlockGauge.Record(ctx, int64(fromBlock), metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
-			}
+			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
 	}
 }
