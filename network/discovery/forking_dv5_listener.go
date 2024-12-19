@@ -1,10 +1,13 @@
 package discovery
 
 import (
+	"context"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -95,5 +98,9 @@ type annotatedIterator struct {
 }
 
 func (i *annotatedIterator) Next() bool {
+	if i.Iterator.Next() {
+		peerDiscoveryIterationsCounter.Add(
+			context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.fork", i.fork)))
+	}
 	return i.Iterator.Next()
 }
