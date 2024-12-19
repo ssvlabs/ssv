@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/stretchr/testify/require"
@@ -107,7 +106,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 
 	// Fetch all logs history starting from block 0
-	var fetchedLogs []ethtypes.Log
+	var fetchedLogs []types.Log
 	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
 	for block := range logs {
 		fetchedLogs = append(fetchedLogs, block.Logs...)
@@ -164,7 +163,7 @@ func TestStreamLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	logs := client.StreamLogs(ctx, 0)
-	var streamedLogs []ethtypes.Log
+	var streamedLogs []types.Log
 	var streamedLogsCount atomic.Int64
 	go func() {
 		// Receive emitted events, this func will exit when test exits.
@@ -654,6 +653,21 @@ func TestSyncProgress(t *testing.T) {
 
 		err = client.Healthy(ctx)
 		require.ErrorIs(t, err, errSyncing)
+	})
+
+	t.Run("within tolerable limits", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
+		require.NoError(t, err)
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			p := new(ethereum.SyncProgress)
+			p.CurrentBlock = 5
+			p.HighestBlock = 7
+			return p, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
 	})
 
 	t.Run("within tolerable limits", func(t *testing.T) {

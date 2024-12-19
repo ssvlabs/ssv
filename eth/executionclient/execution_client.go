@@ -54,7 +54,7 @@ type ExecutionClient struct {
 	closed chan struct{}
 }
 
-const syncTimeTolerance = time.Duration(1 * time.Minute)
+const syncTimeTolerance = 1 * time.Minute
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
