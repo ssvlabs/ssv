@@ -13,7 +13,7 @@ func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subs
 	start := time.Now()
 	err := gc.client.SubmitBeaconCommitteeSubscriptions(ctx, subscription)
 
-	recordRequestDuration(gc.ctx, "SubmitBeaconCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start))
+	recordRequestDuration(gc.ctx, "SubmitBeaconCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start), err)
 
 	return err
 }
@@ -23,7 +23,7 @@ func (gc *GoClient) SubmitSyncCommitteeSubscriptions(ctx context.Context, subscr
 	start := time.Now()
 	err := gc.client.SubmitSyncCommitteeSubscriptions(ctx, subscription)
 
-	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start))
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start), err)
 
 	return err
 }

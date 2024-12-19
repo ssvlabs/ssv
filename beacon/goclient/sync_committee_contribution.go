@@ -47,7 +47,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	beaconBlockRootResp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
 		Block: fmt.Sprint(slot),
 	})
-	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart))
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart), err)
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
@@ -76,7 +76,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 				SubcommitteeIndex: subnetIDs[index],
 				BeaconBlockRoot:   *blockRoot,
 			})
-			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(start))
+			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(start), err)
 			if err != nil {
 				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)
 			}
@@ -107,7 +107,7 @@ func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.Signed
 	start := time.Now()
 	err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
 
-	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.client.Address(), http.MethodPost, time.Since(start))
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.client.Address(), http.MethodPost, time.Since(start), err)
 
 	return err
 }

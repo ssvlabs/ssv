@@ -47,7 +47,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		Slot:                slot,
 		AttestationDataRoot: root,
 	})
-	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.client.Address(), http.MethodGet, time.Since(aggDataReqStart))
+	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.client.Address(), http.MethodGet, time.Since(aggDataReqStart), err)
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get aggregate attestation: %w", err)
 	}
@@ -72,7 +72,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
 	start := time.Now()
 	err := gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
-	recordRequestDuration(gc.ctx, "SubmitAggregateAttestations", gc.client.Address(), http.MethodPost, time.Since(start))
+	recordRequestDuration(gc.ctx, "SubmitAggregateAttestations", gc.client.Address(), http.MethodPost, time.Since(start), err)
 	return err
 }
 
