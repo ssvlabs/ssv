@@ -35,7 +35,7 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 	c.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
-			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
