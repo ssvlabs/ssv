@@ -696,7 +696,8 @@ func TestSyncProgress(t *testing.T) {
 			return p, nil
 		}
 
-		client.syncLastSuccess = time.Now().Add(-61 * time.Second)
+		overTimeLimit := time.Now().Add(-61 * time.Second)
+		client.syncLastUnsuccessful = &overTimeLimit
 
 		err = client.Healthy(ctx)
 		require.Error(t, err, errSyncing)
