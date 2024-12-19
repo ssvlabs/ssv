@@ -98,9 +98,10 @@ type annotatedIterator struct {
 }
 
 func (i *annotatedIterator) Next() bool {
-	if i.Iterator.Next() {
-		peerDiscoveryIterationsCounter.Add(
-			context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.fork", i.fork)))
+	if !i.Iterator.Next() {
+		return false
 	}
-	return i.Iterator.Next()
+	peerDiscoveryIterationsCounter.Add(
+		context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.fork", i.fork)))
+	return true
 }
