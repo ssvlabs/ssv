@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -309,17 +310,33 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// execution quality
 		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 
+		// see if we can accept more peer connections already (no need to trim), note we trim not
+		// only when our current connections reach MaxPeers limit exactly but even if we get close
+		// enough to it - this ensures we don't skip trim iteration because of "random fluctuations"
+		// in currently connected peer count at that limit boundary
 		connectedPeers = n.host.Network().Peers()
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
-			// we can accept more peer connections already, no need to trim
-			return
+			// we probably don't want to trim then
+
+			// additionally, make sure incoming connections aren't at the limit - since if they are we
+			// actually want to try and trim some of them to make sure we re-cycle incoming connections
+			// at least occasionally (note btw, with current implementation there is no guarantee incoming
+			// connections will be trimmed in this case, since we don't differentiate between incoming/outgoing
+			// when trimming)
+			in, _ := n.connectionStats()
+			inboundLimit := int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
+			if in < inboundLimit {
+				return // skip trim iteration
+			}
+			// we don't want to trim incoming connections as often as outgoing connections (since trimming
+			// outgoing connections often helps us discover valuable peers, while it's not really the case
+			// for with incoming connections - only slightly so), hence we'll only do it 1/3 of the times
+			if rand.Intn(3) > 0 {
+				return // skip trim iteration
+			}
 		}
 
-		// gotta trim some peers then, note we trim not only when our current connections reach
-		// MaxPeers limit exactly but even if we get close enough to it - this ensures we don't
-		// skip trim iteration because of "random fluctuations" in currently connected peer count
-		// at that limit boundary
-
+		// gotta trim some peers then
 		immunityQuota := len(connectedPeers) - maxPeersToDrop
 		protectedPeers := n.PeerProtection(immunityQuota)
 		for _, peer := range connectedPeers {
