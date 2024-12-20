@@ -23,10 +23,15 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > maxEncodedPartialSignatureSize {
+	localMaxEncodedPartialSigSize := maxEncodedPartialSignatureSize
+	if mv.netCfg.Beacon.EpochStartTime(mv.netCfg.BlossomEpoch).Before(receivedAt) {
+		localMaxEncodedPartialSigSize = maxEncodedPartialSignatureSizeOld
+	}
+
+	if len(ssvMessage.Data) > localMaxEncodedPartialSigSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = maxEncodedPartialSignatureSize
+		e.want = localMaxEncodedPartialSigSize
 		return nil, e
 	}
 
