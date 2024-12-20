@@ -2,6 +2,9 @@ package executionclient
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -669,6 +672,13 @@ func TestSyncProgress(t *testing.T) {
 
 		err = client.Healthy(ctx)
 		require.NoError(t, err)
+	})
+
+	t.Run("within tolerable limits", func(t *testing.T) {
+		err1 := errors.New("some")
+		err := errors.Join(fmt.Errorf("check health status: %w", err1), errSyncing)
+		is := errors.Is(err, io.EOF)
+		t.Log(is)
 	})
 }
 
