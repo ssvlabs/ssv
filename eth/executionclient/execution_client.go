@@ -267,7 +267,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 			return nil
 		}
 
-		return err
+		return errors.Join(fmt.Errorf("check sync progress: %w", err), errSyncing)
 	}
 
 	if sp != nil {
