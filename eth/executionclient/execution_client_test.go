@@ -2,6 +2,7 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -606,7 +607,7 @@ func TestSimSSV(t *testing.T) {
 	require.NoError(t, sim.Close())
 }
 
-func TestSyncProgress(t *testing.T) {
+func TestHealthy(t *testing.T) {
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
@@ -644,7 +645,7 @@ func TestSyncProgress(t *testing.T) {
 	err = client.Healthy(ctx)
 	require.NoError(t, err)
 
-	t.Run("out of sync", func(t *testing.T) {
+	t.Run("distance out of sync", func(t *testing.T) {
 		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
@@ -656,7 +657,7 @@ func TestSyncProgress(t *testing.T) {
 		require.ErrorIs(t, err, errSyncing)
 	})
 
-	t.Run("within tolerable limits", func(t *testing.T) {
+	t.Run("sync distance within tolerable limits", func(t *testing.T) {
 		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
 		require.NoError(t, err)
 
@@ -669,6 +670,62 @@ func TestSyncProgress(t *testing.T) {
 
 		err = client.Healthy(ctx)
 		require.NoError(t, err)
+	})
+
+	t.Run("overrides error if within time tolerance", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr)
+		require.NoError(t, err)
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			return nil, errors.New("connection refused")
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates error if outside of time tolerance", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr)
+		require.NoError(t, err)
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			return nil, errors.New("connection refused")
+		}
+
+		client.lastHealthy = time.Now().Add(-61 * time.Second)
+		err = client.Healthy(ctx)
+		require.ErrorIs(t, err, errSyncing)
+	})
+
+	t.Run("within block distance but outside of time tolerance", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr)
+		require.NoError(t, err)
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			p := new(ethereum.SyncProgress)
+			return p, nil
+		}
+
+		client.lastHealthy = time.Now().Add(-61 * time.Second)
+		err = client.Healthy(ctx)
+		require.ErrorIs(t, err, errSyncing)
+	})
+
+	t.Run("overwrites checkpoint on OK response", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr)
+		require.NoError(t, err)
+
+		old := client.lastHealthy
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			time.Sleep(time.Millisecond)
+			return nil, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+
+		require.True(t, client.lastHealthy.After(old))
 	})
 }
 
