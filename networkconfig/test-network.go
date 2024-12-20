@@ -13,6 +13,7 @@ var TestNetwork = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.BeaconTestNetwork),
 	DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},
 	GenesisEpoch:         152834,
+	BlossomEpoch:         999999999,
 	RegistrySyncOffset:   new(big.Int).SetInt64(9015219),
 	RegistryContractAddr: "0x4B133c68A084B8A88f72eDCd7944B69c8D545f03",
 	Bootnodes: []string{

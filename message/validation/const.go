@@ -36,8 +36,13 @@ const (
 )
 
 const (
-	partialSignatureSize            = 96
-	maxSizePartialSignatureMessage  = partialSignatureSize + rootSize + operatorIDSize + validatorIndexSize
+	partialSignatureSize           = 96
+	maxSizePartialSignatureMessage = partialSignatureSize + rootSize + operatorIDSize + validatorIndexSize
+	/// Pre fork values TODO remove after Blossom
+	maxSizePartialSignatureMessagesOld = 1000
+	maxPartialSignatureMsgsSizeOld     = partialSigMsgTypeSize + slotSize + maxSizePartialSignatureMessagesOld*maxSizePartialSignatureMessage + 4
+	maxEncodedPartialSignatureSizeOld  = maxPartialSignatureMsgsSizeOld + maxPartialSignatureMsgsSizeOld/encodingOverheadDivisor
+	///
 	maxSizePartialSignatureMessages = 1512
 	partialSigMsgTypeSize           = 8 // uint64
 	maxPartialSignatureMsgsSize     = partialSigMsgTypeSize + slotSize + maxSizePartialSignatureMessages*maxSizePartialSignatureMessage + 4
