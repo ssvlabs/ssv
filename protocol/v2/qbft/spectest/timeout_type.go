@@ -1,6 +1,7 @@
 package qbft
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -26,7 +27,7 @@ type SpecTest struct {
 
 func RunTimeout(t *testing.T, test *SpecTest) {
 	logger := logging.TestLogger(t)
-	err := test.Pre.UponRoundTimeout(logger)
+	err := test.Pre.UponRoundTimeout(context.TODO(), logger)
 
 	if len(test.ExpectedError) != 0 {
 		require.EqualError(t, err, test.ExpectedError)
