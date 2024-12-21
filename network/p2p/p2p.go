@@ -330,8 +330,8 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			}
 			// we don't want to trim incoming connections as often as outgoing connections (since trimming
 			// outgoing connections often helps us discover valuable peers, while it's not really the case
-			// for with incoming connections - only slightly so), hence we'll only do it 1/3 of the times
-			if rand.Intn(3) > 0 {
+			// for with incoming connections - only slightly so), hence we'll only do it 1/5 of the times
+			if rand.Intn(5) > 0 {
 				return // skip trim iteration
 			}
 		}
