@@ -331,6 +331,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.NamedError("summarize_err", summarizeErr))
 	}
 
+	r.GetState().Finished = true
+
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
@@ -338,8 +340,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		uint32(successfullySubmittedProposals),
 		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
 		spectypes.BNRoleProposer)
-
-	r.GetState().Finished = true
 
 	return nil
 }

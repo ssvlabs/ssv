@@ -253,6 +253,8 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		)
 	}
 
+	r.GetState().Finished = true
+
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
@@ -260,8 +262,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		successfullySubmittedAggregates,
 		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
 		spectypes.BNRoleAggregator)
-
-	r.GetState().Finished = true
 
 	return nil
 }
