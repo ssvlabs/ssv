@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
