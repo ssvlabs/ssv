@@ -140,6 +140,7 @@ type P2PNetwork interface {
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	ActiveSubnets() records.Subnets
+	FixedSubnets() records.Subnets
 }
 
 // controller implements Controller
@@ -508,8 +509,14 @@ func (c *controller) StartValidators() {
 }
 
 func (c *controller) selfSubnets() records.Subnets {
+	// Get the fixed subnets (e.g., exporter subscribed to all subnets).
+	mySubnets := c.network.FixedSubnets()
+	if mySubnets == nil {
+		mySubnets = make(records.Subnets, networkcommons.Subnets())
+	}
+
+	// Compute the new subnets according to the active committees/validators.
 	myValidators := c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID())
-	mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
 	for _, v := range myValidators {
 		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
 		mySubnets[subnet] = 1

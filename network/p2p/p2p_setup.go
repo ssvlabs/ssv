@@ -238,6 +238,10 @@ func (n *p2pNetwork) ActiveSubnets() records.Subnets {
 	return n.activeSubnets
 }
 
+func (n *p2pNetwork) FixedSubnets() records.Subnets {
+	return n.fixedSubnets
+}
+
 func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
