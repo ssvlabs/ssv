@@ -547,18 +547,18 @@ func (eh *EventHandler) processClusterEvent(
 ) ([]*ssvtypes.SSVShare, []string, error) {
 	clusterID := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
 	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterIDHash(clusterID))
-	var toUpdate []*ssvtypes.SSVShare
-	var ownShares []*ssvtypes.SSVShare
-	var ownPubKeys []string
+	toUpdate := make([]*ssvtypes.SSVShare, 0, len(shares))
+	var operatorShares []*ssvtypes.SSVShare
+	var operatorValidatorPubKeys []string
 
 	for _, share := range shares {
-		isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorData().ID)
-		if isOperatorShare {
-			ownPubKeys = append(ownPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
-			ownShares = append(ownShares, share)
-		}
 		share.Liquidated = toLiquidate
 		toUpdate = append(toUpdate, share)
+
+		if isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorData().ID); isOperatorShare {
+			operatorShares = append(operatorShares, share)
+			operatorValidatorPubKeys = append(operatorValidatorPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
+		}
 	}
 
 	if len(toUpdate) > 0 {
@@ -567,7 +567,7 @@ func (eh *EventHandler) processClusterEvent(
 		}
 	}
 
-	return ownShares, ownPubKeys, nil
+	return operatorShares, operatorValidatorPubKeys, nil
 }
 
 // MalformedEventError is returned when event is malformed
