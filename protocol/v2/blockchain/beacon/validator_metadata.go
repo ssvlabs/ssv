@@ -14,7 +14,6 @@ import (
 
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
-	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *ValidatorMetadata) error
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*ValidatorMetadata) error
 }
 

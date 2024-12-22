@@ -84,17 +84,17 @@ func TestValidCommitteeSize(t *testing.T) {
 	tt := []struct {
 		name  string
 		valid bool
-		sizes []int
+		sizes []uint64
 	}{
 		{
 			name:  "valid",
 			valid: true,
-			sizes: []int{4, 7, 10, 13},
+			sizes: []uint64{4, 7, 10, 13},
 		},
 		{
 			name:  "invalid",
 			valid: false,
-			sizes: []int{0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19, -1, -4, -7},
+			sizes: []uint64{0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19},
 		},
 	}
 

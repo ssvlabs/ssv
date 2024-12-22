@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -58,7 +57,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			next = h.ticker.Next()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-			h.processExecution(currentSlot)
+			h.processExecution(ctx, currentSlot)
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
@@ -103,7 +102,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-func (h *VoluntaryExitHandler) processExecution(slot phase0.Slot) {
+func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0.Slot) {
 	var dutiesForExecution, pendingDuties []*spectypes.ValidatorDuty
 
 	for _, duty := range h.dutyQueue {
@@ -117,35 +116,11 @@ func (h *VoluntaryExitHandler) processExecution(slot phase0.Slot) {
 	h.dutyQueue = pendingDuties
 	h.duties.RemoveSlot(slot - phase0.Slot(h.network.SlotsPerEpoch()))
 
-	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(dutiesForExecution))
-		for _, d := range dutiesForExecution {
-			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleVoluntaryExit))
-		}
-
-		if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-			h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-			h.logger.Debug("executed voluntary exit duties",
-				fields.Slot(slot),
-				fields.Count(dutyCount))
-		}
-		return
-	}
-
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-		h.dutiesExecutor.ExecuteDuties(h.logger, dutiesForExecution)
+		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))
-	}
-}
-
-func (h *VoluntaryExitHandler) toGenesisSpecDuty(duty *spectypes.ValidatorDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
-	return &genesisspectypes.Duty{
-		Type:           role,
-		PubKey:         duty.PubKey,
-		Slot:           duty.Slot,
-		ValidatorIndex: duty.ValidatorIndex,
 	}
 }
 
@@ -162,7 +137,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, err
 	}
 
-	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 	for k, v := range h.blockSlots {

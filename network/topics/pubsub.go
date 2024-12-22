@@ -5,20 +5,20 @@ import (
 	"net"
 	"time"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -117,7 +117,7 @@ type CommitteesProvider interface {
 }
 
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, committeesProvider CommitteesProvider) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, committeesProvider CommitteesProvider, gossipScoreIndex peers.GossipScoreIndex) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -136,6 +136,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		pubsub.WithMaxMessageSize(validation.MaxEncodedMsgSize),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
@@ -162,10 +163,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		}
 
 		topicScoreFactory = func(t string) *pubsub.TopicScoreParams {
-			if cfg.NetworkConfig.PastAlanFork() {
-				return topicScoreParams(logger, cfg, committeesProvider)(t)
-			}
-			return validatorTopicScoreParams(logger, cfg)(t)
+			return topicScoreParams(logger, cfg, committeesProvider)(t)
 		}
 
 		// Get overall score params
@@ -176,7 +174,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 			peerConnected := func(pid peer.ID) bool {
 				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
 			}
-			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected, peerScoreParams, topicScoreFactory)
+			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected, peerScoreParams, topicScoreFactory, gossipScoreIndex)
 		}
 		if inspectInterval == 0 {
 			inspectInterval = defaultScoreInspectInterval

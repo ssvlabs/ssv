@@ -11,7 +11,7 @@ func (mv *messageValidator) validatePubSubMessage(pMsg *pubsub.Message) error {
 	}
 
 	// Rule: Pubsub.Message.Message.Data size upper limit
-	if len(pMsg.GetData()) > maxEncodedMsgSize {
+	if len(pMsg.GetData()) > MaxEncodedMsgSize {
 		e := ErrPubSubDataTooBig
 		e.got = len(pMsg.GetData())
 		return e

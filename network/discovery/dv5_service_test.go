@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -17,22 +16,14 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
 )
 
-type TestDomainTypeProvider struct {
-}
-
-func (td *TestDomainTypeProvider) DomainType() spectypes.DomainType {
-	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
-}
-
-func (td *TestDomainTypeProvider) NextDomainType() spectypes.DomainType {
-	return spectypes.DomainType{0x1, 0x2, 0x3, 0x5}
-}
-
-func (td *TestDomainTypeProvider) DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType {
-	return spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+var TestNetwork = networkconfig.NetworkConfig{
+	Beacon:     beacon.NewNetwork(spectypes.BeaconTestNetwork),
+	DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 }
 
 func TestCheckPeer(t *testing.T) {
@@ -55,38 +46,10 @@ func TestCheckPeer(t *testing.T) {
 				expectedError: errors.New("could not read domain type: not found"),
 			},
 			{
-				name:           "missing domain type but has next domain type",
-				domainType:     nil,
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-				subnets:        mySubnets,
-				expectedError:  errors.New("could not read domain type: not found"),
-			},
-			{
-				name:           "domain type mismatch",
-				domainType:     &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x6},
-				subnets:        mySubnets,
-				expectedError:  errors.New("mismatched domain type: neither 01020305 nor 01020306 match 01020304"),
-			},
-			{
-				name:          "domain type mismatch (missing next domain type)",
+				name:          "domain type mismatch",
 				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
 				subnets:       mySubnets,
-				expectedError: errors.New("mismatched domain type: neither 01020305 nor 00000000 match 01020304"),
-			},
-			{
-				name:           "only next domain type matches",
-				domainType:     &spectypes.DomainType{0x1, 0x2, 0x3, 0x3},
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-				subnets:        mySubnets,
-				expectedError:  nil,
-			},
-			{
-				name:           "both domain types match",
-				domainType:     &spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-				subnets:        mySubnets,
-				expectedError:  nil,
+				expectedError: errors.New("domain type 01020305 doesn't match 01020304"),
 			},
 			{
 				name:          "missing subnets",
@@ -140,10 +103,6 @@ func TestCheckPeer(t *testing.T) {
 				err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
 				require.NoError(t, err)
 			}
-			if test.nextDomainType != nil {
-				err := records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, *test.nextDomainType)
-				require.NoError(t, err)
-			}
 			if test.subnets != nil {
 				err := records.SetSubnetsEntry(localNode, test.subnets)
 				require.NoError(t, err)
@@ -156,11 +115,11 @@ func TestCheckPeer(t *testing.T) {
 	// Run the tests.
 	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
 	dvs := &DiscV5Service{
-		ctx:        ctx,
-		conns:      &mock.MockConnectionIndex{LimitValue: true},
-		subnetsIdx: subnetIndex,
-		domainType: &TestDomainTypeProvider{},
-		subnets:    mySubnets,
+		ctx:           ctx,
+		conns:         &mock.MockConnectionIndex{LimitValue: false},
+		subnetsIdx:    subnetIndex,
+		networkConfig: TestNetwork,
+		subnets:       mySubnets,
 	}
 
 	for _, test := range tests {
@@ -179,12 +138,11 @@ func TestCheckPeer(t *testing.T) {
 }
 
 type checkPeerTest struct {
-	name           string
-	domainType     *spectypes.DomainType
-	nextDomainType *spectypes.DomainType
-	subnets        []byte
-	localNode      *enode.LocalNode
-	expectedError  error
+	name          string
+	domainType    *spectypes.DomainType
+	subnets       []byte
+	localNode     *enode.LocalNode
+	expectedError error
 }
 
 func mockSubnets(active ...int) []byte {

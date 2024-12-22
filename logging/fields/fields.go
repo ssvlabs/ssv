@@ -17,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -77,6 +76,7 @@ const (
 	FieldPeerID              = "peer_id"
 	FieldPeerScore           = "peer_score"
 	FieldPrivKey             = "privkey"
+	FieldProtocolID          = "protocol_id"
 	FieldPubKey              = "pubkey"
 	FieldQuorumTime          = "quorum_time"
 	FieldRole                = "role"
@@ -328,6 +328,10 @@ func Domain(val spectypes.DomainType) zap.Field {
 	return zap.Stringer(FieldDomain, format.DomainType(val))
 }
 
+func ProtocolID(val [6]byte) zap.Field {
+	return zap.String(FieldProtocolID, hex.EncodeToString(val[:]))
+}
+
 func Network(val string) zap.Field {
 	return zap.String(FieldNetwork, val)
 }
@@ -352,12 +356,8 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role spectypes.RunnerRole, index phase0.ValidatorIndex) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", role.String(), epoch, slot, index)
-}
-
-func GenesisFormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role genesisspectypes.BeaconRole, index phase0.ValidatorIndex) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", role.String(), epoch, slot, index)
+func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, role string, index phase0.ValidatorIndex) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", role, epoch, slot, index)
 }
 
 func FormatCommittee(operators []spectypes.OperatorID) string {
@@ -378,7 +378,7 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		b.WriteString(FormatDutyID(epoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
+		b.WriteString(FormatDutyID(epoch, duty.Slot, duty.Type.String(), duty.ValidatorIndex))
 	}
 	return zap.String(FieldDuties, b.String())
 }

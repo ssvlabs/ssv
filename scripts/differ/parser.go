@@ -85,7 +85,9 @@ func (p *Parser) addElement(n ast.Node) bool {
 
 	// Get the code.
 	var buf bytes.Buffer
-	printer.Fprint(&buf, p.fset, n)
+	if err := printer.Fprint(&buf, p.fset, n); err != nil {
+		log.Fatal(err)
+	}
 	code := regexpRemains.ReplaceAllString(buf.String(), "")
 
 	// Get the file.
@@ -143,6 +145,9 @@ func (p *Parser) transformFuncDecl(funcDecl *ast.FuncDecl) {
 	if funcDecl.Type.Params != nil {
 		newList := []*ast.Field{}
 		for _, field := range funcDecl.Type.Params.List {
+			if len(field.Names) == 0 {
+				continue
+			}
 			if !p.containsIdent(field.Names[0].Name) {
 				newList = append(newList, field)
 			}

@@ -107,6 +107,8 @@ spec:
             value: "5003"
           - name: UDP_PORT
             value: "4003"
+          - name: NETWORK
+            value: "holesky"
         volumeMounts:
         - mountPath: /data/bootnode
           name: boot-node-holesky

@@ -25,7 +25,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	currentSlot := &SafeValue[phase0.Slot]{}
 	currentSlot.Set(0)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot, 0)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
 	startFn()
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
@@ -147,7 +147,7 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 	scheduler.executionClient.(*MockExecutionClient).EXPECT().BlockByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
 			blockByNumberCalls.Add(1)
-			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, nil, trie.NewStackTrie(nil))
+			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, trie.NewStackTrie(nil))
 			return expectedBlock, nil
 		},
 	).AnyTimes()

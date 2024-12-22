@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -13,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -23,11 +23,8 @@ import (
 )
 
 var (
-	defaultDiscoveryInterval = time.Millisecond * 100
+	defaultDiscoveryInterval = time.Millisecond * 1
 	publishENRTimeout        = time.Minute
-
-	publishStateReady   = int32(0)
-	publishStatePending = int32(1)
 )
 
 // NodeProvider is an interface for managing ENRs
@@ -39,6 +36,15 @@ type NodeProvider interface {
 // NodeFilter can be used for nodes filtering during discovery
 type NodeFilter func(*enode.Node) bool
 
+type Listener interface {
+	Lookup(enode.ID) []*enode.Node
+	RandomNodes() enode.Iterator
+	AllNodes() []*enode.Node
+	Ping(*enode.Node) error
+	LocalNode() *enode.LocalNode
+	Close()
+}
+
 // DiscV5Service wraps discover.UDPv5 with additional functionality
 // it implements go-libp2p/core/discovery.Discovery
 // currently using ENR entry (subnets) to facilitate subnets discovery
@@ -47,29 +53,31 @@ type DiscV5Service struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	dv5Listener *discover.UDPv5
+	dv5Listener Listener
 	bootnodes   []*enode.Node
 
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
-	publishState int32
-	conn         *net.UDPConn
+	conn       *net.UDPConn
+	sharedConn *SharedUDPConn
 
-	domainType networkconfig.DomainTypeProvider
-	subnets    []byte
+	networkConfig networkconfig.NetworkConfig
+	subnets       []byte
+
+	publishLock chan struct{}
 }
 
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:          ctx,
-		cancel:       cancel,
-		publishState: publishStateReady,
-		conns:        discOpts.ConnIndex,
-		subnetsIdx:   discOpts.SubnetsIdx,
-		domainType:   discOpts.DomainType,
-		subnets:      discOpts.DiscV5Opts.Subnets,
+		ctx:           ctx,
+		cancel:        cancel,
+		conns:         discOpts.ConnIndex,
+		subnetsIdx:    discOpts.SubnetsIdx,
+		networkConfig: discOpts.NetworkConfig,
+		subnets:       discOpts.DiscV5Opts.Subnets,
+		publishLock:   make(chan struct{}, 1),
 	}
 
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
@@ -88,6 +96,9 @@ func (dvs *DiscV5Service) Close() error {
 		if err := dvs.conn.Close(); err != nil {
 			return err
 		}
+	}
+	if dvs.sharedConn != nil {
+		close(dvs.sharedConn.Unhandled)
 	}
 	if dvs.dv5Listener != nil {
 		dvs.dv5Listener.Close()
@@ -127,6 +138,11 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
 
+	// Log every 10th skipped peer.
+	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
+	const logFrequency = 10
+	var skippedPeers uint64 = 0
+
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		logger := logger.With(
 			fields.ENR(e.Node),
@@ -134,7 +150,10 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		)
 		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			logger.Debug("discovered peer was dropped", zap.Error(err))
+			if skippedPeers%logFrequency == 0 {
+				logger.Debug("skipped discovered peer", zap.Error(err))
+			}
+			skippedPeers++
 			return
 		}
 		handler(e)
@@ -152,14 +171,8 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	if err != nil {
 		return errors.Wrap(err, "could not read domain type")
 	}
-	nodeNextDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyNextDomainType)
-	if err != nil && !errors.Is(err, records.ErrEntryNotFound) {
-		return errors.Wrap(err, "could not read domain type")
-	}
-	if dvs.domainType.DomainType() != nodeDomainType &&
-		dvs.domainType.DomainType() != nodeNextDomainType {
-		return fmt.Errorf("mismatched domain type: neither %x nor %x match %x",
-			nodeDomainType, nodeNextDomainType, dvs.domainType.DomainType())
+	if dvs.networkConfig.DomainType != nodeDomainType {
+		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.networkConfig.DomainType)
 	}
 
 	// Get the peer's subnets, skipping if it has none.
@@ -172,10 +185,17 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	}
 
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
-	if !dvs.limitNodeFilter(e.Node) && !dvs.sharedSubnetsFilter(1)(e.Node) {
+
+	// Filters
+	if !dvs.limitNodeFilter(e.Node) {
+		metricRejectedNodes.Inc()
+		return errors.New("reached limit")
+	}
+	if !dvs.sharedSubnetsFilter(1)(e.Node) {
 		metricRejectedNodes.Inc()
 		return errors.New("no shared subnets")
 	}
+
 	metricFoundNodes.Inc()
 	return nil
 }
@@ -200,19 +220,56 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 		return errors.Wrap(err, "could not create local node")
 	}
 
-	dv5Cfg, err := opts.DiscV5Cfg(logger)
+	// Get the protocol ID, or set to default if not provided
+	protocolID := dvs.networkConfig.DiscoveryProtocolID
+	emptyProtocolID := [6]byte{}
+	if protocolID == emptyProtocolID {
+		protocolID = DefaultSSVProtocolID
+	}
+
+	// New discovery, with ProtocolID restriction, to be kept post-fork
+	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
+	sharedConn := &SharedUDPConn{udpConn, unhandled}
+	dvs.sharedConn = sharedConn
+
+	dv5PostForkCfg, err := opts.DiscV5Cfg(logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
 	if err != nil {
 		return err
 	}
-	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
+
+	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
 	if err != nil {
 		return errors.Wrap(err, "could not create discV5 listener")
 	}
-	dvs.dv5Listener = dv5Listener
-	dvs.bootnodes = dv5Cfg.Bootnodes
 
-	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType.DomainType()))
+	logger.Debug("started discv5 post-fork listener (UDP)",
+		fields.BindIP(bindIP),
+		zap.Uint16("UdpPort", opts.Port),
+		fields.ENRLocalNode(localNode),
+		fields.Domain(discOpts.NetworkConfig.DomainType),
+		fields.ProtocolID(protocolID),
+	)
+
+	// Previous discovery, without ProtocolID restriction, to be discontinued after the fork
+	dv5PreForkCfg, err := opts.DiscV5Cfg(logger)
+	if err != nil {
+		return err
+	}
+
+	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
+	if err != nil {
+		return errors.Wrap(err, "could not create discV5 pre-fork listener")
+	}
+
+	logger.Debug("started discv5 pre-fork listener (UDP)",
+		fields.BindIP(bindIP),
+		zap.Uint16("UdpPort", opts.Port),
+		fields.ENRLocalNode(localNode),
+		fields.Domain(discOpts.NetworkConfig.DomainType),
+	)
+
+	dvs.dv5Listener = NewForkingDV5Listener(logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
+	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil
 }
@@ -232,15 +289,15 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	// selfID is used to exclude current node
 	selfID := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
 
-	t := time.NewTimer(interval)
-	defer t.Stop()
-	wait := func() {
-		t.Reset(interval)
-		<-t.C
-	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
 	for ctx.Err() == nil {
-		wait()
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return
+		}
 		exists := iterator.Next()
 		if !exists {
 			continue
@@ -263,7 +320,7 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	if len(subnets) == 0 {
 		return false, nil
 	}
@@ -280,7 +337,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) (u
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) (updated bool, err error) {
+func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	logger = logger.Named(logging.NameDiscoveryService)
 
 	if len(subnets) == 0 {
@@ -300,30 +357,45 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
-	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
-	defer done()
-	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
-		// pending
-		logger.Debug("pending publish ENR")
-		return
-	}
-
-	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.domainType.DomainType())
+	// Update own node record.
+	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.networkConfig.DomainType)
 	if err != nil {
 		logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
-	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.domainType.NextDomainType())
+	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.networkConfig.DomainType)
 	if err != nil {
 		logger.Error("could not set next domain type", zap.Error(err))
 		return
 	}
 
-	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
+	// Acquire publish lock to prevent parallel publishing.
+	// If there's an ongoing goroutine, it would now start publishing the record updated above,
+	// and if it's done before the new deadline, this goroutine would pick up where it left off.
+	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+	defer done()
+
+	select {
+	case <-ctx.Done():
+		return
+	case dvs.publishLock <- struct{}{}:
+	}
+	defer func() {
+		// Release lock.
+		<-dvs.publishLock
+	}()
+
+	// Collect some metrics.
+	start := time.Now()
+	pings, errs := 0, 0
+	peerIDs := map[peer.ID]struct{}{}
+
+	// Publish ENR.
 	dvs.discover(ctx, func(e PeerEvent) {
 		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
+			errs++
 			if err.Error() == "RPC timeout" {
 				// ignore
 				return
@@ -332,8 +404,16 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 			return
 		}
 		metricPublishEnrPongs.Inc()
-		// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
+		pings++
+		peerIDs[e.AddrInfo.ID] = struct{}{}
 	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
+
+	// Log metrics.
+	logger.Debug("done publishing ENR",
+		fields.Duration(start),
+		zap.Int("unique_peers", len(peerIDs)),
+		zap.Int("pings", pings),
+		zap.Int("errors", errs))
 }
 
 func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
@@ -350,24 +430,33 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
-		DecorateWithDomainType(records.KeyDomainType, dvs.domainType.DomainType()),
-		DecorateWithDomainType(records.KeyNextDomainType, dvs.domainType.NextDomainType()),
+		DecorateWithDomainType(records.KeyDomainType, dvs.networkConfig.DomainType),
+		DecorateWithDomainType(records.KeyNextDomainType, dvs.networkConfig.DomainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType.DomainType()), fields.Subnets(opts.Subnets))
+	logFields := []zapcore.Field{
+		fields.ENRLocalNode(localNode),
+		fields.Domain(dvs.networkConfig.DomainType),
+	}
+
+	if HasActiveSubnets(opts.Subnets) {
+		logFields = append(logFields, fields.Subnets(opts.Subnets))
+	}
+
+	logger.Debug("node record is ready", logFields...)
 
 	return localNode, nil
 }
 
 // newUDPListener creates a udp server
-func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, error) {
+func newUDPListener(bindIP net.IP, port uint16, network string) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
-		Port: port,
+		Port: int(port),
 	}
 	conn, err := net.ListenUDP(network, udpAddr)
 	if err != nil {

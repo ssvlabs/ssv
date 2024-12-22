@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/hex"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,11 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv-spec/ssv"
+	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
@@ -17,11 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv-spec/ssv"
-	"github.com/ssvlabs/ssv-spec/types"
 )
 
 type CommitteeSpecTest struct {
@@ -60,7 +61,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	}
 
 	// test output message (in asynchronous order)
-	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.Operator.Committee)
+	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
 
 	// test beacon broadcasted msgs
 	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
@@ -90,7 +91,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
-			err = test.Committee.StartDuty(logger, input.(*spectypes.CommitteeDuty))
+			err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
 			if err != nil {
 				lastErr = err
 			}
@@ -99,7 +100,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
-			err = test.Committee.ProcessMessage(logger, msg)
+			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
 				lastErr = err
 			}
@@ -180,7 +181,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	require.NoError(t, err)
 
 	committee.Shares = specCommittee.Share
-	committee.Operator = &specCommittee.CommitteeMember
+	committee.CommitteeMember = &specCommittee.CommitteeMember
 	//for _, r := range committee.Runners {
 	//	r.BaseRunner.BeaconNetwork = spectypes.BeaconTestNetwork
 	//}

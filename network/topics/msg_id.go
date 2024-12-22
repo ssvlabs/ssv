@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -53,21 +54,23 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
-	ctx    context.Context
-	added  chan addedEvent
-	ids    map[string]*msgIDEntry
-	locker sync.Locker
-	ttl    time.Duration
+	networkConfig networkconfig.NetworkConfig
+	ctx           context.Context
+	added         chan addedEvent
+	ids           map[string]*msgIDEntry
+	locker        sync.Locker
+	ttl           time.Duration
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, networkConfig networkconfig.NetworkConfig, ttl time.Duration) MsgIDHandler {
 	handler := &msgIDHandler{
-		ctx:    ctx,
-		added:  make(chan addedEvent, msgIDHandlerBufferSize),
-		ids:    make(map[string]*msgIDEntry),
-		locker: &sync.Mutex{},
-		ttl:    ttl,
+		networkConfig: networkConfig,
+		ctx:           ctx,
+		added:         make(chan addedEvent, msgIDHandlerBufferSize),
+		ids:           make(map[string]*msgIDEntry),
+		locker:        &sync.Mutex{},
+		ttl:           ttl,
 	}
 	return handler
 }
@@ -123,12 +126,10 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
-	// decodedMsg, _, _, err := spectypes.DecodeSignedSSVMessage(msg)
-	// if err != nil {
-	// 	// todo: should err here or just log and let the decode function err?
-	// } else {
-	// 	return commons.MsgID()(decodedMsg)
-	// }
+
+	// In Alan message structure the message body can be identical for all 4 operators
+	// whereas before it included a BLS signature which made it unique
+	// so we hash full message (including signer) to make it unique
 
 	return commons.MsgID()(msg)
 }

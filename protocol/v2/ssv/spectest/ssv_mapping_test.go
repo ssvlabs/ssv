@@ -14,15 +14,13 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/committee"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/partialsigcontainer"
+	runnerconstruction "github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/construction"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/exporter/convert"
 	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
@@ -34,6 +32,8 @@ import (
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -183,6 +183,19 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 			Name:  test.(map[string]interface{})["Name"].(string),
 			Tests: typedTests,
 		}
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
+			},
+		}
+
+	case reflect.TypeOf(&runnerconstruction.RunnerConstructionSpecTest{}).String():
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &RunnerConstructionSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -354,7 +367,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.DomainType = networkconfig.TestNetwork.AlanDomainType
+	base.DomainType = networkconfig.TestNetwork.DomainType
 
 	logger := logging.TestLogger(t)
 
@@ -371,7 +384,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	}
 
 	if (ret.GetBaseRunner().DomainType == spectypes.DomainType{}) {
-		ret.GetBaseRunner().DomainType = networkconfig.TestNetwork.AlanDomainType
+		ret.GetBaseRunner().DomainType = networkconfig.TestNetwork.DomainType
 	}
 
 	return ret
@@ -545,9 +558,12 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		logger,
 		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
 		&specCommittee.CommitteeMember,
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
-			return ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap).(*runner.CommitteeRunner)
+		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
+			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
+			return r.(*runner.CommitteeRunner), nil
 		},
+		specCommittee.Share,
+		validator.NewCommitteeDutyGuard(),
 	)
 	tmpSsvCommittee := &validator.Committee{}
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
@@ -565,7 +581,6 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), testingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
 	}
-	c.Shares = specCommittee.Share
 
 	return c
 }

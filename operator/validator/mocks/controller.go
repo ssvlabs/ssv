@@ -10,17 +10,18 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	common "github.com/ethereum/go-ethereum/common"
-	types "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	types0 "github.com/ssvlabs/ssv-spec/types"
+	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
+	records "github.com/ssvlabs/ssv/network/records"
 	duties "github.com/ssvlabs/ssv/operator/duties"
-	validators "github.com/ssvlabs/ssv/operator/validators"
 	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
+	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
 	gomock "go.uber.org/mock/gomock"
@@ -31,6 +32,7 @@ import (
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockControllerMockRecorder is the mock recorder for MockController.
@@ -65,72 +67,48 @@ func (mr *MockControllerMockRecorder) AllActiveIndices(epoch, afterInit any) *go
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types0.CommitteeID, duty *types0.CommitteeDuty) {
+func (m *MockController) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID types.CommitteeID, duty *types.CommitteeDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteCommitteeDuty", logger, committeeID, duty)
+	m.ctrl.Call(m, "ExecuteCommitteeDuty", ctx, logger, committeeID, duty)
 }
 
 // ExecuteCommitteeDuty indicates an expected call of ExecuteCommitteeDuty.
-func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(logger, committeeID, duty any) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(ctx, logger, committeeID, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockController)(nil).ExecuteCommitteeDuty), logger, committeeID, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockController)(nil).ExecuteCommitteeDuty), ctx, logger, committeeID, duty)
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types0.ValidatorDuty) {
+func (m *MockController) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *types.ValidatorDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
+	m.ctrl.Call(m, "ExecuteDuty", ctx, logger, duty)
 }
 
 // ExecuteDuty indicates an expected call of ExecuteDuty.
-func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty any) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExecuteDuty(ctx, logger, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
-}
-
-// ExecuteGenesisDuty mocks base method.
-func (m *MockController) ExecuteGenesisDuty(logger *zap.Logger, duty *types.Duty) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteGenesisDuty", logger, duty)
-}
-
-// ExecuteGenesisDuty indicates an expected call of ExecuteGenesisDuty.
-func (mr *MockControllerMockRecorder) ExecuteGenesisDuty(logger, duty any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuty", reflect.TypeOf((*MockController)(nil).ExecuteGenesisDuty), logger, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), ctx, logger, duty)
 }
 
 // ExitValidator mocks base method.
-func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
+func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExitValidator", pubKey, blockNumber, validatorIndex)
+	ret := m.ctrl.Call(m, "ExitValidator", pubKey, blockNumber, validatorIndex, ownValidator)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ExitValidator indicates an expected call of ExitValidator.
-func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex any) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex, ownValidator any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex)
-}
-
-// ForkListener mocks base method.
-func (m *MockController) ForkListener(logger *zap.Logger) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ForkListener", logger)
-}
-
-// ForkListener indicates an expected call of ForkListener.
-func (mr *MockControllerMockRecorder) ForkListener(logger any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkListener", reflect.TypeOf((*MockController)(nil).ForkListener), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex, ownValidator)
 }
 
 // GetOperatorShares mocks base method.
-func (m *MockController) GetOperatorShares() []*types1.SSVShare {
+func (m *MockController) GetOperatorShares() []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOperatorShares")
-	ret0, _ := ret[0].([]*types1.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 
@@ -141,10 +119,10 @@ func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
 }
 
 // GetValidator mocks base method.
-func (m *MockController) GetValidator(pubKey types0.ValidatorPK) (*validators.ValidatorContainer, bool) {
+func (m *MockController) GetValidator(pubKey types.ValidatorPK) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidator", pubKey)
-	ret0, _ := ret[0].(*validators.ValidatorContainer)
+	ret0, _ := ret[0].(*validator.Validator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -187,7 +165,7 @@ func (mr *MockControllerMockRecorder) IndicesChangeChan() *gomock.Call {
 }
 
 // LiquidateCluster mocks base method.
-func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types1.SSVShare) error {
+func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LiquidateCluster", owner, operatorIDs, toLiquidate)
 	ret0, _ := ret[0].(error)
@@ -201,7 +179,7 @@ func (mr *MockControllerMockRecorder) LiquidateCluster(owner, operatorIDs, toLiq
 }
 
 // ReactivateCluster mocks base method.
-func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types1.SSVShare) error {
+func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReactivateCluster", owner, operatorIDs, toReactivate)
 	ret0, _ := ret[0].(error)
@@ -226,20 +204,6 @@ func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers))
 }
 
-// StartValidator mocks base method.
-func (m *MockController) StartValidator(share *types1.SSVShare) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartValidator", share)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// StartValidator indicates an expected call of StartValidator.
-func (mr *MockControllerMockRecorder) StartValidator(share any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidator", reflect.TypeOf((*MockController)(nil).StartValidator), share)
-}
-
 // StartValidators mocks base method.
 func (m *MockController) StartValidators() {
 	m.ctrl.T.Helper()
@@ -253,7 +217,7 @@ func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
 }
 
 // StopValidator mocks base method.
-func (m *MockController) StopValidator(pubKey types0.ValidatorPK) error {
+func (m *MockController) StopValidator(pubKey types.ValidatorPK) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StopValidator", pubKey)
 	ret0, _ := ret[0].(error)
@@ -310,6 +274,7 @@ func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 type MockRecipients struct {
 	ctrl     *gomock.Controller
 	recorder *MockRecipientsMockRecorder
+	isgomock struct{}
 }
 
 // MockRecipientsMockRecorder is the mock recorder for MockRecipients.
@@ -349,6 +314,7 @@ func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Cal
 type MockSharesStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockSharesStorageMockRecorder
+	isgomock struct{}
 }
 
 // MockSharesStorageMockRecorder is the mock recorder for MockSharesStorage.
@@ -369,11 +335,12 @@ func (m *MockSharesStorage) EXPECT() *MockSharesStorageMockRecorder {
 }
 
 // Get mocks base method.
-func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types1.SSVShare {
+func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) (*types0.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", txn, pubKey)
-	ret0, _ := ret[0].(*types1.SSVShare)
-	return ret0
+	ret0, _ := ret[0].(*types0.SSVShare)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
@@ -383,14 +350,14 @@ func (mr *MockSharesStorageMockRecorder) Get(txn, pubKey any) *gomock.Call {
 }
 
 // List mocks base method.
-func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types1.SSVShare {
+func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	varargs := []any{txn}
 	for _, a := range filters {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "List", varargs...)
-	ret0, _ := ret[0].([]*types1.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 
@@ -402,7 +369,7 @@ func (mr *MockSharesStorageMockRecorder) List(txn any, filters ...any) *gomock.C
 }
 
 // Range mocks base method.
-func (m *MockSharesStorage) Range(txn basedb.Reader, fn func(*types1.SSVShare) bool) {
+func (m *MockSharesStorage) Range(txn basedb.Reader, fn func(*types0.SSVShare) bool) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Range", txn, fn)
 }
@@ -413,22 +380,8 @@ func (mr *MockSharesStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Range", reflect.TypeOf((*MockSharesStorage)(nil).Range), txn, fn)
 }
 
-// UpdateValidatorMetadata mocks base method.
-func (m *MockSharesStorage) UpdateValidatorMetadata(pk types0.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
-func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorMetadata), pk, metadata)
-}
-
 // UpdateValidatorsMetadata mocks base method.
-func (m *MockSharesStorage) UpdateValidatorsMetadata(arg0 map[types0.ValidatorPK]*beacon.ValidatorMetadata) error {
+func (m *MockSharesStorage) UpdateValidatorsMetadata(arg0 map[types.ValidatorPK]*beacon.ValidatorMetadata) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", arg0)
 	ret0, _ := ret[0].(error)
@@ -445,6 +398,7 @@ func (mr *MockSharesStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gom
 type MockP2PNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockP2PNetworkMockRecorder
+	isgomock struct{}
 }
 
 // MockP2PNetworkMockRecorder is the mock recorder for MockP2PNetwork.
@@ -464,8 +418,22 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 	return m.recorder
 }
 
+// ActiveSubnets mocks base method.
+func (m *MockP2PNetwork) ActiveSubnets() records.Subnets {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ActiveSubnets")
+	ret0, _ := ret[0].(records.Subnets)
+	return ret0
+}
+
+// ActiveSubnets indicates an expected call of ActiveSubnets.
+func (mr *MockP2PNetworkMockRecorder) ActiveSubnets() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).ActiveSubnets))
+}
+
 // Broadcast mocks base method.
-func (m *MockP2PNetwork) Broadcast(id types0.MessageID, message *types0.SignedSSVMessage) error {
+func (m *MockP2PNetwork) Broadcast(id types.MessageID, message *types.SignedSSVMessage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Broadcast", id, message)
 	ret0, _ := ret[0].(error)

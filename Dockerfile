@@ -5,14 +5,14 @@ FROM golang:1.22 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl=7.88.1-10+deb12u6 \
-  git=1:2.39.2-1.1 \
-  zip=3.0-13 \
-  unzip=6.0-28 \
-  g++=4:12.2.0-3 \
-  gcc-aarch64-linux-gnu=4:12.2.0-3 \
-  bzip2=1.0.8-5+b1 \
-  make=4.3-4.1 \
+  curl \
+  git \
+  zip \
+  unzip \
+  g++ \
+  gcc-aarch64-linux-gnu \
+  bzip2 \
+  make \
   && rm -rf /var/lib/apt/lists/*
 
 RUN go version
@@ -49,7 +49,7 @@ FROM golang:1.22 AS runner
 
 RUN apt-get update     && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  dnsutils=1:9.18.24-1 && \
+  dnsutils && \
   rm -rf /var/lib/apt/lists/*
 
 WORKDIR /

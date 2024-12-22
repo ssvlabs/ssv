@@ -16,7 +16,6 @@ import (
 	"github.com/aquasecurity/table"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
@@ -54,8 +53,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 	// Create a MessageValidator to accept/reject/ignore messages according to their role type.
 	const (
-		acceptedRole = spectypes.RoleProposer
-		ignoredRole  = spectypes.RoleAggregator
+		acceptedRole = spectypes.RoleCommittee
+		ignoredRole  = spectypes.RoleProposer
 		rejectedRole = spectypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
@@ -137,7 +136,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	}
 
 	// Create a VirtualNet with 4 nodes.
-	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex int) validation.MessageValidator {
+	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex uint64) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
 
@@ -148,7 +147,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Prepare a pool of broadcasters.
-	mu := sync.Mutex{}
 	height := atomic.Int64{}
 	roleBroadcasts := map[spectypes.RunnerRole]int{}
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
@@ -157,9 +155,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			for i := 0; i < 12; i++ {
 				role := roles[i%len(roles)]
 
-				mu.Lock()
+				mtx.Lock()
 				roleBroadcasts[role]++
-				mu.Unlock()
+				mtx.Unlock()
 
 				msgID, msg := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
 				err := node.Broadcast(msgID, msg)
@@ -191,10 +189,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Wait for the broadcasters to finish.
 	err := broadcasters.Wait()
 	require.NoError(t, err)
-	time.Sleep(1 * time.Second)
 
 	// Assert that the messages were distributed as expected.
-	time.Sleep(7 * time.Second)
+	time.Sleep(8 * time.Second)
 
 	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
@@ -245,11 +242,10 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			index NodeIndex
 			score float64
 		}
-		peers := make([]peerScore, 0, node.PeerScores.Len())
-		node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
+		peers := make([]peerScore, 0)
+		for index, snapshot := range *node.PeerScores.Load() {
 			peers = append(peers, peerScore{index, snapshot.Score})
-			return true
-		})
+		}
 		sort.Slice(peers, func(i, j int) bool {
 			return peers[i].score > peers[j].score
 		})
@@ -320,7 +316,7 @@ type NodeIndex int
 type VirtualNode struct {
 	Index      NodeIndex
 	Network    *p2pNetwork
-	PeerScores *hashmap.Map[NodeIndex, *pubsub.PeerScoreSnapshot]
+	PeerScores atomic.Pointer[map[NodeIndex]*pubsub.PeerScoreSnapshot]
 }
 
 func (n *VirtualNode) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
@@ -337,7 +333,7 @@ func CreateVirtualNet(
 	ctx context.Context,
 	nodes int,
 	shares []*ssvtypes.SSVShare,
-	messageValidatorProvider func(int) validation.MessageValidator,
+	messageValidatorProvider func(uint64) validation.MessageValidator,
 ) *VirtualNet {
 	var doneSetup atomic.Bool
 	vn := &VirtualNet{}
@@ -359,19 +355,16 @@ func CreateVirtualNet(
 				return
 			}
 
-			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
-				node.PeerScores.Del(index)
-				return true
-			})
+			peerScoresUpdated := make(map[NodeIndex]*pubsub.PeerScoreSnapshot, len(peerMap))
 			for peerID, peerScore := range peerMap {
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
 					t.Fatalf("peer not found (%s)", peerID)
 					return
 				}
-				node.PeerScores.Set(peerNode.Index, peerScore)
+				peerScoresUpdated[peerNode.Index] = peerScore
 			}
-
+			node.PeerScores.Store(&peerScoresUpdated)
 		},
 		PeerScoreInspectorInterval: time.Millisecond * 5,
 		Shares:                     shares,
@@ -383,9 +376,8 @@ func CreateVirtualNet(
 
 	for i, node := range ln.Nodes {
 		vn.Nodes = append(vn.Nodes, &VirtualNode{
-			Index:      NodeIndex(i),
-			Network:    node.(*p2pNetwork),
-			PeerScores: hashmap.New[NodeIndex, *pubsub.PeerScoreSnapshot](), //{}make(map[NodeIndex]*pubsub.PeerScoreSnapshot),
+			Index:   NodeIndex(i),
+			Network: node.(*p2pNetwork),
 		})
 	}
 	doneSetup.Store(true)

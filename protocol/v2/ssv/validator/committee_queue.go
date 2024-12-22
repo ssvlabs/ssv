@@ -2,22 +2,24 @@ package validator
 
 import (
 	"context"
+	"errors"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"go.uber.org/zap"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -28,9 +30,9 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 		return
 	}
 
-	v.mtx.RLock() // read v.Queues
-	q, ok := v.Queues[slot]
-	v.mtx.RUnlock()
+	c.mtx.RLock() // read v.Queues
+	q, ok := c.Queues[slot]
+	c.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
 			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
@@ -41,9 +43,9 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
-		v.mtx.Lock()
-		v.Queues[slot] = q
-		v.mtx.Unlock()
+		c.mtx.Lock()
+		c.Queues[slot] = q
+		c.mtx.Unlock()
 		logger.Debug("missing queue for slot created", fields.Slot(slot))
 	}
 
@@ -72,13 +74,13 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Committee) ConsumeQueue(
+func (c *Committee) ConsumeQueue(
 	ctx context.Context,
 	q queueContainer,
 	logger *zap.Logger,
 	slot phase0.Slot,
 	handler MessageHandler,
-	runner *runner.CommitteeRunner,
+	rnr *runner.CommitteeRunner,
 ) error {
 	state := *q.queueState
 
@@ -88,8 +90,8 @@ func (v *Committee) ConsumeQueue(
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		var runningInstance *instance.Instance
-		if runner.HasRunningDuty() {
-			runningInstance = runner.GetBaseRunner().State.RunningInstance
+		if rnr.HasRunningDuty() {
+			runningInstance = rnr.GetBaseRunner().State.RunningInstance
 			if runningInstance != nil {
 				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
@@ -138,10 +140,14 @@ func (v *Committee) ConsumeQueue(
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
+		if err := handler(ctx, logger, msg); err != nil {
+			c.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
+			if errors.Is(err, runner.ErrNoValidDuties) {
+				// Stop the queue consumer if the runner no longer has any valid duties.
+				break
+			}
 		}
 	}
 
@@ -149,21 +155,21 @@ func (v *Committee) ConsumeQueue(
 	return nil
 }
 
-func (v *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
+func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(sm.Height)),
-			zap.Int64("msg_round", int64(sm.Round)),
-			zap.Int64("consensus_msg_type", int64(sm.MsgType)),
+			zap.Uint64("msg_height", uint64(sm.Height)),
+			zap.Uint64("msg_round", uint64(sm.Round)),
+			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Messages[0].Signer)),
+			zap.Uint64("signer", psm.Messages[0].Signer),
 			fields.Slot(psm.Slot),
 		}
 	}

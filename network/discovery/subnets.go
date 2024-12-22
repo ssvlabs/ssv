@@ -15,7 +15,7 @@ var (
 )
 
 // nsToSubnet converts the given topic to subnet
-func (dvs *DiscV5Service) nsToSubnet(ns string) (int, error) {
+func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
 	r, done := regPool.Get()
 	defer done()
 
@@ -29,11 +29,11 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (int, error) {
 		return 0, err
 	}
 
-	if val >= uint64(commons.Subnets()) {
+	if val >= commons.SubnetsCount {
 		return 0, errValueOutOfRange
 	}
 
-	return int(val), nil
+	return val, nil
 }
 
 // isSubnet checks if the given string is a subnet string
@@ -41,4 +41,14 @@ func isSubnet(ns string) bool {
 	r, done := regPool.Get()
 	defer done()
 	return r.MatchString(ns)
+}
+
+// HasActiveSubnets checks if there is at least one active subnet in the provided byte slice.
+func HasActiveSubnets(subnets []byte) bool {
+	for _, val := range subnets {
+		if val > 0 {
+			return true
+		}
+	}
+	return false
 }

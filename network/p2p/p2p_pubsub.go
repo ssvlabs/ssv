@@ -15,9 +15,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/records"
-	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -56,8 +55,8 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 	} else {
-		val := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
-		if val == nil {
+		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if !exists {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
 		topics = commons.CommitteeTopicID(val.CommitteeID())
@@ -77,7 +76,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	n.fixedSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
-	for subnet := 0; subnet < commons.Subnets(); subnet++ {
+	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
 			return err
@@ -100,7 +99,8 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
 	randomSubnets = randomSubnets[:numSubnets]
 	for _, subnet := range randomSubnets {
-		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
+		// #nosec G115
+		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(uint64(subnet))) // Perm slice is [0, n)
 		if err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
@@ -123,8 +123,8 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	share := n.nodeStorage.ValidatorStore().Validator(pk[:])
-	if share == nil {
+	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	if !exists {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
@@ -132,16 +132,14 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if err != nil {
 		return fmt.Errorf("could not subscribe to committee: %w", err)
 	}
-	if !n.cfg.Network.PastAlanFork() {
-		return n.subscribeValidator(pk)
-	}
+
 	return nil
 }
 
 // subscribeCommittee handles the subscription logic for committee subnets
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	n.interfaceLogger.Debug("subscribing to committee", fields.CommitteeID(cid))
-	status, found := n.activeCommittees.GetOrInsert(string(cid[:]), validatorStatusSubscribing)
+	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
@@ -155,31 +153,14 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	return nil
 }
 
-// subscribeValidator handles the subscription logic for validator subnets
-func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
-	pkHex := hex.EncodeToString(pk[:])
-	n.interfaceLogger.Debug("subscribing to validator", zap.String("validator", pkHex))
-	status, found := n.activeValidators.GetOrInsert(pkHex, validatorStatusSubscribing)
-	if found && status != validatorStatusInactive {
-		return nil
-	}
-	for _, topic := range commons.ValidatorTopicID(pk[:]) {
-		if err := n.topicsCtrl.Subscribe(n.interfaceLogger, topic); err != nil {
-			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
-		}
-	}
-	n.activeValidators.Set(pkHex, validatorStatusSubscribed)
-	return nil
-}
-
-func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint) error {
+func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint64) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if subnet >= uint(commons.Subnets()) {
+	if subnet >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(int(subnet)), false); err != nil {
+	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(subnet), false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
 	}
 	return nil
@@ -191,22 +172,19 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	if !n.cfg.Network.PastAlanFork() {
-		pkHex := hex.EncodeToString(pk[:])
-		if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
-			return nil
-		}
-		n.activeValidators.Del(pkHex)
+	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	if !exists {
+		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
+	cmtid := share.CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
 		}
 	}
-	n.activeCommittees.Del(string(cmtid[:]))
+	n.activeCommittees.Delete(string(cmtid[:]))
 	return nil
 }
 
@@ -226,9 +204,6 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		case *queue.SSVMessage:
 			decodedMsg = m
 			metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(m.MsgType)).Inc()
-		case *genesisqueue.GenesisSSVMessage:
-			decodedMsg = m
-			metricsRouterIncoming.WithLabelValues(genesismessage.MsgTypeToString(m.MsgType)).Inc()
 		case nil:
 			return errors.New("message was not decoded")
 		default:
@@ -243,10 +218,12 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
-	if len(n.fixedSubnets) == 0 {
+	if !discovery.HasActiveSubnets(n.fixedSubnets) {
 		return nil
 	}
+
 	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
+
 	for i, val := range n.fixedSubnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)
@@ -257,5 +234,6 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 			}
 		}
 	}
+
 	return nil
 }

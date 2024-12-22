@@ -65,7 +65,7 @@ diffLoop:
 					}
 					continue diffLoop
 				}
-				si.subnets[subnet] = append(peers[:i], peers[i:]...)
+				si.subnets[subnet] = append(peers[:i], peers[i+1:]...)
 				continue diffLoop
 			}
 		}
@@ -118,7 +118,8 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 }
 
 // GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
-// subnets with low peer count would get higher score, and overloaded subnets gets a lower score.
+// subnets with low peer count would get higher score, and overloaded subnets gets a lower score (possibly negative).
+// Subnets in which the node doesn't participate receive a score of 0.
 func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets records.Subnets, topicMaxPeers int) []float64 {
 	const activeSubnetBoost = 0.2
 

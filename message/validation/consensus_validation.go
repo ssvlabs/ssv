@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -27,10 +27,10 @@ func (mv *messageValidator) validateConsensusMessage(
 ) (*specqbft.Message, error) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > maxConsensusMsgSize {
+	if len(ssvMessage.Data) > maxEncodedConsensusMsgSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = maxConsensusMsgSize
+		e.want = maxEncodedConsensusMsgSize
 		return nil, e
 	}
 
@@ -81,7 +81,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	committee []spectypes.OperatorID,
 ) error {
 	signers := signedSSVMessage.OperatorIDs
-	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	msgType := consensusMessage.MsgType
 
 	if len(signers) > 1 {
@@ -130,6 +130,30 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		e := ErrZeroRound
 		e.got = specqbft.NoRound
 		return e
+	}
+
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+
+	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
+	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
+		e := ErrUnexpectedConsensusMessage
+		e.got = role
+		return e
+	}
+
+	// Rule: Round cut-offs for roles:
+	// - 12 (committee and aggregation)
+	// - 6 (other types)
+	maxRound, err := mv.maxRound(role)
+	if err != nil {
+		return fmt.Errorf("failed to get max round: %w", err)
+	}
+
+	if consensusMessage.Round > maxRound {
+		err := ErrRoundTooHigh
+		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
+		return err
 	}
 
 	// Rule: consensus message must have the same identifier as the ssv message's identifier
@@ -228,8 +252,10 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
+	if role != spectypes.RoleCommittee { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.OperatorIDs {
 			signerStateBySlot := state.GetOrCreate(signer)
 			if maxSlot := signerStateBySlot.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
@@ -241,17 +267,9 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		}
 	}
 
-	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
-
-	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
-	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
-		e := ErrUnexpectedConsensusMessage
-		e.got = role
-		return e
-	}
-
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), msgSlot, validatorIndices); err != nil {
+	randaoMsg := false
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), msgSlot, validatorIndices, randaoMsg); err != nil {
 		return err
 	}
 
@@ -268,19 +286,9 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - else, accept
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		signerStateBySlot := state.GetOrCreate(signer)
-		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, len(validatorIndices), signerStateBySlot); err != nil {
+		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, validatorIndices, signerStateBySlot); err != nil {
 			return err
 		}
-	}
-
-	// Rule: Round cut-offs for roles:
-	// - 12 (committee and aggregation)
-	// - 6 (other types)
-	if maxRound := mv.maxRound(role); consensusMessage.Round > maxRound {
-		err := ErrRoundTooHigh
-		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
-		err.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
-		return err
 	}
 
 	return nil
@@ -326,8 +334,7 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 		signerState.SeenSigners[encodedOperators] = struct{}{}
 	}
 
-	signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
-	return nil
+	return signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
 }
 
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {
@@ -362,25 +369,33 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 	return nil
 }
 
-func (mv *messageValidator) maxRound(role spectypes.RunnerRole) specqbft.Round {
+func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round, error) {
 	switch role {
 	case spectypes.RoleCommittee, spectypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
-		return 12 // TODO: consider calculating based on quick timeout and slow timeout
+		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
-		return 6
+		return 6, nil
 	default:
-		panic("unknown role")
+		return 0, fmt.Errorf("unknown role")
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
-		return currentQuickRound
+func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (specqbft.Round, error) {
+	delta, err := casts.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	if currentQuickRound := specqbft.FirstRound + specqbft.Round(delta); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+		return currentQuickRound, nil
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
-	return estimatedRound
+	delta, err = casts.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(delta)
+	return estimatedRound, nil
 }
 
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
@@ -404,7 +419,11 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	estimatedRound := specqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
+		currentEstimatedRound, err := mv.currentEstimatedRound(sinceSlotStart)
+		if err != nil {
+			return err
+		}
+		estimatedRound = currentEstimatedRound
 	}
 
 	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
@@ -423,13 +442,13 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	return nil
 }
 
-func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) types.OperatorID {
-	firstRoundIndex := 0
+func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
+	firstRoundIndex := uint64(0)
 	if height != specqbft.FirstHeight {
-		firstRoundIndex += int(height) % len(committee)
+		firstRoundIndex += uint64(height) % uint64(len(committee))
 	}
 
-	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(committee)
+	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
 	return committee[index]
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
 )
 
@@ -14,7 +15,7 @@ import (
 type BootnodeOptions struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Bootnode private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
-	Port       int    `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
+	Port       uint16 `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
 }
 
 // Bootnode represents a bootnode used for tests
@@ -27,9 +28,9 @@ type Bootnode struct {
 }
 
 // NewBootnode creates a new bootnode
-func NewBootnode(pctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (*Bootnode, error) {
+func NewBootnode(pctx context.Context, logger *zap.Logger, networkCfg networkconfig.NetworkConfig, opts *BootnodeOptions) (*Bootnode, error) {
 	ctx, cancel := context.WithCancel(pctx)
-	disc, err := createBootnodeDiscovery(ctx, logger, opts)
+	disc, err := createBootnodeDiscovery(ctx, logger, networkCfg, opts)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -51,12 +52,13 @@ func (b *Bootnode) Close() error {
 	return nil
 }
 
-func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (Service, error) {
+func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, networkCfg networkconfig.NetworkConfig, opts *BootnodeOptions) (Service, error) {
 	privKey, err := utils.ECDSAPrivateKey(logger.Named(logging.NameBootNode), opts.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
 	discOpts := &Options{
+		NetworkConfig: networkCfg,
 		DiscV5Opts: &DiscV5Options{
 			IP:         opts.ExternalIP,
 			BindIP:     "", // net.IPv4zero.String()

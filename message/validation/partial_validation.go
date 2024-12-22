@@ -23,10 +23,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if len(ssvMessage.Data) > maxPartialSignatureMsgsSize {
+	if len(ssvMessage.Data) > maxEncodedPartialSignatureSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = maxPartialSignatureMsgsSize
+		e.want = maxEncodedPartialSignatureSize
 		return nil, e
 	}
 
@@ -55,7 +55,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, e
 	}
 
-	mv.updatePartialSignatureState(partialSignatureMessages, state, signer)
+	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer); err != nil {
+		return nil, err
+	}
 
 	return partialSignatureMessages, nil
 }
@@ -143,7 +145,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signerStateBySlot := state.GetOrCreate(signer)
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != types.RoleCommittee { // Rule only for validator runners
+	if role != types.RoleCommittee { // Rule only for validator runners
 		maxSlot := signerStateBySlot.MaxSlot()
 		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
@@ -153,7 +155,8 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		}
 	}
 
-	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.indices); err != nil {
+	randaoMsg := partialSignatureMessages.Type == spectypes.RandaoPartialSig
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.indices, randaoMsg); err != nil {
 		return err
 	}
 
@@ -178,15 +181,15 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	clusterValidatorCount := len(committeeInfo.indices)
 	// Rule: valid number of duties per epoch:
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
-	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, clusterValidatorCount, signerStateBySlot); err != nil {
+	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.indices, signerStateBySlot); err != nil {
 		return err
 	}
 
+	clusterValidatorCount := len(committeeInfo.indices)
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
@@ -208,7 +211,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
-			e.want = maxConsensusMsgSize
+			e.want = maxSignatures
 			return e
 		}
 	} else if partialSignatureMessageCount > 1 {
@@ -216,6 +219,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		e := ErrTooManyPartialSignatureMessages
 		e.got = partialSignatureMessageCount
 		e.want = 1
+		return e
 	}
 
 	return nil
@@ -225,7 +229,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
 	state *consensusState,
 	signer spectypes.OperatorID,
-) {
+) error {
 	stateBySlot := state.GetOrCreate(signer)
 	messageSlot := partialSignatureMessages.Slot
 	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
@@ -236,7 +240,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 
-	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
+	return signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

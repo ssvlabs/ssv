@@ -11,13 +11,13 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -74,12 +74,33 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	var lastErr error
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner))
+		guard := validator.NewCommitteeDutyGuard()
+		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
 
 		if test.DontStartDuty {
-			c.Runners[test.Duty.DutySlot()] = test.Runner.(*runner.CommitteeRunner)
+			r := test.Runner.(*runner.CommitteeRunner)
+			r.DutyGuard = guard
+			c.Runners[test.Duty.DutySlot()] = r
+
+			// Inform the duty guard of the running duty, if any, so that it won't reject it.
+			if r.BaseRunner.State != nil && r.BaseRunner.State.StartingDuty != nil {
+				duty, ok := r.BaseRunner.State.StartingDuty.(*spectypes.CommitteeDuty)
+				if !ok {
+					panic("starting duty not found")
+				}
+				for _, validatorDuty := range duty.ValidatorDuties {
+					err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+					if err != nil {
+						panic(err)
+					}
+					err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
 		} else {
-			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
+			lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
 
 		for _, msg := range test.Messages {
@@ -88,7 +109,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.ProcessMessage(logger, dmsg)
+			err = c.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -105,7 +126,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		v.Network = test.Runner.GetNetwork()
 
 		if !test.DontStartDuty {
-			lastErr = v.StartDuty(logger, test.Duty)
+			lastErr = v.StartDuty(ctx, logger, test.Duty)
 		}
 		for _, msg := range test.Messages {
 			dmsg, err := wrapSignedSSVMessageToDecodedSSVMessage(msg)
@@ -113,7 +134,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = v.ProcessMessage(logger, dmsg)
+			err = v.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -146,7 +167,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		}
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
-		committee = c.Operator.Committee
+		committee = c.CommitteeMember.Committee
 	default:
 		network = v.Network.(*spectestingutils.TestingNetwork)
 		committee = v.Operator.Committee
@@ -227,6 +248,7 @@ var baseCommitteeWithRunnerSample = func(
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
+	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
 
 	var keySetSample *spectestingutils.TestKeySet
@@ -240,8 +262,8 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK) *runner.CommitteeRunner {
-		return runner.NewCommitteeRunner(
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
+		r, err := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			controller.NewController(
@@ -256,7 +278,9 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetSigner(),
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
-		).(*runner.CommitteeRunner)
+			committeeDutyGuard,
+		)
+		return r.(*runner.CommitteeRunner), err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -267,8 +291,9 @@ var baseCommitteeWithRunnerSample = func(
 		runnerSample.GetBaseRunner().BeaconNetwork,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
+		shareMap,
+		committeeDutyGuard,
 	)
-	c.Shares = shareMap
 
 	return c
 }

@@ -182,7 +182,7 @@ $ make build
 By using this script, developers can simulate a real SSV environment, run multiple nodes, and start those nodes performing duties with the passed validator's keystore. This is incredibly beneficial for debugging, testing functionalities, or preparing for deployment in a live setting. It provides a realistic but controlled environment where developers can observe the interaction of multiple nodes in the SSV network. \
 The script simplifies configuration by automatically generating YAML files for each operator and an 'events.yaml' file. The 'events.yaml' emulates a 'happy flow' scenario, which includes the registration of four operators and one validator
 
-1. Download the latest executable version (v1.0.0 or later) from [ssv-keys](https://github.com/ssvlabs/ssv-keys/releases).
+1. Download the executable version 1.0.1 from [ssv-keys](https://github.com/ssvlabs/ssv-keys/releases/tag/v1.0.1).
     - After downloading, follow these [steps](https://github.com/ssvlabs/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
 
 2. Generate a local configuration using the provided [script](../scripts/generate_local_config.sh).
@@ -214,14 +214,7 @@ The script simplifies configuration by automatically generating YAML files for e
      Discovery: mdns
    ```
 
-6. To enable debugging for all components, add the debug services line in the [config.yaml](../config/config.yaml) file:
-
-   ```yaml
-   global:
-     DebugServices: ssv/.*
-   ```
-
-7. Finally, build and run 4 local nodes with this command:
+6. Finally, build and run 4 local nodes with this command:
    ```shell
    docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
    ```
@@ -253,21 +246,14 @@ These steps offer a detailed manual alternative to the script. They provide a st
    LocalEventsPath: ./config/events.yaml
    ```
 
-8. If you want to debug all components, add debug services to the [config.yaml](../config/config.yaml) file:
-
-   ```yaml
-   global:
-     DebugServices: ssv/.*
-   ```
-
-9. Add the discovery "mdns" under the p2p section in the [config.yaml](../config/config.yaml) file:
+8. Add the discovery "mdns" under the p2p section in the [config.yaml](../config/config.yaml) file:
 
    ```yaml
    p2p:
      Discovery: mdns
    ```
 
-10. Finally, build and run 4 local nodes with the following command:
+9. Finally, build and run 4 local nodes with the following command:
     ```bash
     docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
     ```

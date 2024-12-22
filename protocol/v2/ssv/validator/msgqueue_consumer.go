@@ -17,7 +17,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(logger *zap.Logger, msg *queue.SSVMessage) error
+type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -28,7 +28,7 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
+func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
@@ -150,7 +150,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
+		if err := handler(ctx, logger, msg); err != nil {
 			v.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))
@@ -168,15 +168,15 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 		qbftMsg := msg.Body.(*specqbft.Message)
 
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(qbftMsg.Height)),
-			zap.Int64("msg_round", int64(qbftMsg.Round)),
-			zap.Int64("consensus_msg_type", int64(qbftMsg.MsgType)),
+			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
+			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
+			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Messages[0].Signer)), // TODO: only one signer?
+			zap.Uint64("signer", psm.Messages[0].Signer), // TODO: only one signer?
 			fields.Slot(psm.Slot),
 		}
 	}

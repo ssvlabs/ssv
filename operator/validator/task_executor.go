@@ -11,8 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/operator/validators"
-	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -20,16 +19,6 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 	return c.logger.Named("TaskExecutor").
 		With(zap.String("task", taskName)).
 		With(fields...)
-}
-
-func (c *controller) StartValidator(share *types.SSVShare) error {
-	// logger := c.taskLogger("StartValidator", fields.PubKey(share.ValidatorPubKey))
-
-	// Since we don't yet have the Beacon metadata for this validator,
-	// we can't yet start it. Starting happens in `UpdateValidatorMetaDataLoop`,
-	// so this task is currently a no-op.
-
-	return nil
 }
 
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
@@ -90,15 +79,9 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	c.validatorsMap.ForEachValidator(func(v *validators.ValidatorContainer) bool {
-		if v.Share().OwnerAddress == owner {
-			v.UpdateShare(
-				func(s *types.SSVShare) {
-					s.FeeRecipientAddress = recipient
-				}, func(s *genesistypes.SSVShare) {
-					s.FeeRecipientAddress = recipient
-				},
-			)
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
+		if v.Share.OwnerAddress == owner {
+			v.Share.FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}
@@ -108,7 +91,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 	return nil
 }
 
-func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
 	logger := c.taskLogger("ExitValidator",
 		fields.PubKey(pubKey[:]),
 		fields.BlockNumber(blockNumber),
@@ -116,6 +99,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 	)
 
 	exitDesc := duties.ExitDescriptor{
+		OwnValidator:   ownValidator,
 		PubKey:         pubKey,
 		ValidatorIndex: validatorIndex,
 		BlockNumber:    blockNumber,

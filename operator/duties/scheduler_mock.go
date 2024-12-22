@@ -18,7 +18,6 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ethereum/go-ethereum/core/types"
-	types0 "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	types1 "github.com/ssvlabs/ssv-spec/types"
 	types2 "github.com/ssvlabs/ssv/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
@@ -49,39 +48,27 @@ func (m *MockDutiesExecutor) EXPECT() *MockDutiesExecutorMockRecorder {
 }
 
 // ExecuteCommitteeDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
+func (m *MockDutiesExecutor) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteCommitteeDuties", logger, duties)
+	m.ctrl.Call(m, "ExecuteCommitteeDuties", ctx, logger, duties)
 }
 
 // ExecuteCommitteeDuties indicates an expected call of ExecuteCommitteeDuties.
-func (mr *MockDutiesExecutorMockRecorder) ExecuteCommitteeDuties(logger, duties any) *gomock.Call {
+func (mr *MockDutiesExecutorMockRecorder) ExecuteCommitteeDuties(ctx, logger, duties any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteCommitteeDuties), logger, duties)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteCommitteeDuties), ctx, logger, duties)
 }
 
 // ExecuteDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteDuties(logger *zap.Logger, duties []*types1.ValidatorDuty) {
+func (m *MockDutiesExecutor) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*types1.ValidatorDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteDuties", logger, duties)
+	m.ctrl.Call(m, "ExecuteDuties", ctx, logger, duties)
 }
 
 // ExecuteDuties indicates an expected call of ExecuteDuties.
-func (mr *MockDutiesExecutorMockRecorder) ExecuteDuties(logger, duties any) *gomock.Call {
+func (mr *MockDutiesExecutorMockRecorder) ExecuteDuties(ctx, logger, duties any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteDuties), logger, duties)
-}
-
-// ExecuteGenesisDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteGenesisDuties(logger *zap.Logger, duties []*types0.Duty) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteGenesisDuties", logger, duties)
-}
-
-// ExecuteGenesisDuties indicates an expected call of ExecuteGenesisDuties.
-func (mr *MockDutiesExecutorMockRecorder) ExecuteGenesisDuties(logger, duties any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteGenesisDuties), logger, duties)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteDuties), ctx, logger, duties)
 }
 
 // MockDutyExecutor is a mock of DutyExecutor interface.
@@ -108,39 +95,27 @@ func (m *MockDutyExecutor) EXPECT() *MockDutyExecutorMockRecorder {
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types1.CommitteeID, duty *types1.CommitteeDuty) {
+func (m *MockDutyExecutor) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID types1.CommitteeID, duty *types1.CommitteeDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteCommitteeDuty", logger, committeeID, duty)
+	m.ctrl.Call(m, "ExecuteCommitteeDuty", ctx, logger, committeeID, duty)
 }
 
 // ExecuteCommitteeDuty indicates an expected call of ExecuteCommitteeDuty.
-func (mr *MockDutyExecutorMockRecorder) ExecuteCommitteeDuty(logger, committeeID, duty any) *gomock.Call {
+func (mr *MockDutyExecutorMockRecorder) ExecuteCommitteeDuty(ctx, logger, committeeID, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteCommitteeDuty), logger, committeeID, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteCommitteeDuty), ctx, logger, committeeID, duty)
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteDuty(logger *zap.Logger, duty *types1.ValidatorDuty) {
+func (m *MockDutyExecutor) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *types1.ValidatorDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
+	m.ctrl.Call(m, "ExecuteDuty", ctx, logger, duty)
 }
 
 // ExecuteDuty indicates an expected call of ExecuteDuty.
-func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(logger, duty any) *gomock.Call {
+func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(ctx, logger, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteDuty), logger, duty)
-}
-
-// ExecuteGenesisDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteGenesisDuty(logger *zap.Logger, duty *types0.Duty) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteGenesisDuty", logger, duty)
-}
-
-// ExecuteGenesisDuty indicates an expected call of ExecuteGenesisDuty.
-func (mr *MockDutyExecutorMockRecorder) ExecuteGenesisDuty(logger, duty any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteGenesisDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteGenesisDuty), logger, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteDuty), ctx, logger, duty)
 }
 
 // MockBeaconNode is a mock of BeaconNode interface.
@@ -343,11 +318,12 @@ func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch a
 }
 
 // Validator mocks base method.
-func (m *MockValidatorProvider) Validator(pubKey []byte) *types2.SSVShare {
+func (m *MockValidatorProvider) Validator(pubKey []byte) (*types2.SSVShare, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
 	ret0, _ := ret[0].(*types2.SSVShare)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Validator indicates an expected call of Validator.

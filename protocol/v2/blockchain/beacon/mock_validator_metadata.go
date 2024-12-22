@@ -39,20 +39,6 @@ func (m *MockValidatorMetadataStorage) EXPECT() *MockValidatorMetadataStorageMoc
 	return m.recorder
 }
 
-// UpdateValidatorMetadata mocks base method.
-func (m *MockValidatorMetadataStorage) UpdateValidatorMetadata(pk types.ValidatorPK, metadata *ValidatorMetadata) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
-func (mr *MockValidatorMetadataStorageMockRecorder) UpdateValidatorMetadata(pk, metadata any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockValidatorMetadataStorage)(nil).UpdateValidatorMetadata), pk, metadata)
-}
-
 // UpdateValidatorsMetadata mocks base method.
 func (m *MockValidatorMetadataStorage) UpdateValidatorsMetadata(arg0 map[types.ValidatorPK]*ValidatorMetadata) error {
 	m.ctrl.T.Helper()

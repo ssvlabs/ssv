@@ -39,15 +39,18 @@ type Config struct {
 	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery system to use" env-default:"discv5"`
 	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-default:"" env-description:"List of peers to connect to."`
 
-	TCPPort     int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
-	UDPPort     int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
+	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
+	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
 	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External ip node is exposed for discovery"`
 	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Connected peers limit for connections"`
-	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Connected peers limit per pubsub topic"`
+
+	MaxPeers             int  `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Connected peers limit. At the time being, this may be increased by DynamicMaxPeers until that is phased out."`
+	DynamicMaxPeers      bool `yaml:"DynamicMaxPeers" env:"P2P_DYNAMIC_MAX_PEERS" env-default:"true" env-description:"If true, MaxPeers will grow with the operator's number of committees."`
+	DynamicMaxPeersLimit int  `yaml:"DynamicMaxPeersLimit" env:"P2P_DYNAMIC_MAX_PEERS_LIMIT" env-default:"150" env-description:"Limit for MaxPeers when DynamicMaxPeers is enabled."`
+	TopicMaxPeers        int  `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Connected peers limit per pubsub topic"`
 
 	// Subnets is a static bit list of subnets that this node will register upon start.
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`

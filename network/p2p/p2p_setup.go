@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
@@ -21,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -56,8 +58,6 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 		return errors.New("could not setup network: in ready state")
 	}
 
-	// set a seed for rand values
-	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
 	logger.Info("configuring")
 
 	if err := n.initCfg(); err != nil {
@@ -108,6 +108,14 @@ func (n *p2pNetwork) initCfg() error {
 	return nil
 }
 
+// Returns whetehr a peer is bad
+func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
+	if n.idx == nil {
+		return false
+	}
+	return n.idx.IsBad(logger, peerID)
+}
+
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	opts, err := n.cfg.Libp2pOptions(logger)
@@ -121,7 +129,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -169,7 +177,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.Network.DomainType()
+	d := n.cfg.Network.DomainType
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -180,7 +188,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute)
+	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute, peers.NewGossipScoreIndex())
 	logger.Debug("peers index is ready")
 
 	var ids identify.IDService
@@ -194,38 +202,40 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		ids.Start()
 	}
 
-	subnetsProvider := func() records.Subnets {
-		return n.activeSubnets
-	}
-
+	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.Network.DomainType()
+		newDomain := n.cfg.Network.DomainType
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
+			connections.BadPeerFilter(logger, n.idx),
 		}
 	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
-		Streams:            n.streamCtrl,
-		NodeInfos:          n.idx,
-		PeerInfos:          n.idx,
-		ConnIdx:            n.idx,
-		SubnetsIdx:         n.idx,
-		IDService:          ids,
-		Network:            n.host.Network(),
-		DomainTypeProvider: n.cfg.Network,
-		SubnetsProvider:    subnetsProvider,
+		Streams:         n.streamCtrl,
+		NodeInfos:       n.idx,
+		PeerInfos:       n.idx,
+		ConnIdx:         n.idx,
+		SubnetsIdx:      n.idx,
+		IDService:       ids,
+		Network:         n.host.Network(),
+		DomainType:      n.cfg.Network.DomainType,
+		SubnetsProvider: n.ActiveSubnets,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx, n.metrics)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.metrics)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
 	return nil
+}
+
+func (n *p2pNetwork) ActiveSubnets() records.Subnets {
+	return n.activeSubnets
 }
 
 func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
@@ -244,9 +254,9 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if len(n.fixedSubnets) > 0 {
+		if discovery.HasActiveSubnets(n.fixedSubnets) {
 			discV5Opts.Subnets = n.fixedSubnets
-			logger = logger.With(zap.String("subnets", records.Subnets(n.fixedSubnets).String()))
+			logger = logger.With(fields.Subnets(n.fixedSubnets))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
@@ -255,13 +265,13 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
-		Host:        n.host,
-		DiscV5Opts:  discV5Opts,
-		ConnIndex:   n.idx,
-		SubnetsIdx:  n.idx,
-		HostAddress: n.cfg.HostAddress,
-		HostDNS:     n.cfg.HostDNS,
-		DomainType:  n.cfg.Network,
+		Host:          n.host,
+		DiscV5Opts:    discV5Opts,
+		ConnIndex:     n.idx,
+		SubnetsIdx:    n.idx,
+		HostAddress:   n.cfg.HostAddress,
+		HostDNS:       n.cfg.HostDNS,
+		NetworkConfig: n.cfg.Network,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
@@ -300,14 +310,14 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		cfg.ScoreIndex = nil
 	}
 
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
+	midHandler := topics.NewMsgIDHandler(n.ctx, n.cfg.Network, time.Minute*2)
 	n.msgResolver = midHandler
 	cfg.MsgIDHandler = midHandler
 	go cfg.MsgIDHandler.Start()
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore())
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

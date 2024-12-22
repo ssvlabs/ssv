@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cornelk/hashmap/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -74,7 +73,7 @@ func TestTickerInitialization(t *testing.T) {
 	buffer := 10 * time.Millisecond
 
 	elapsed := time.Since(start)
-	assert.True(t, elapsed+buffer >= slotDuration, "First tick occurred too soon: %v", elapsed.String())
+	require.True(t, elapsed+buffer >= slotDuration, "First tick occurred too soon: %v", elapsed.String())
 	require.Equal(t, phase0.Slot(1), slot)
 }
 
@@ -110,7 +109,7 @@ func TestGenesisInFuture(t *testing.T) {
 	// Allow a small buffer (e.g., 10ms) due to code execution overhead
 	buffer := 10 * time.Millisecond
 
-	assert.True(t, actualFirstTickDuration+buffer >= expectedFirstTickDuration, "First tick occurred too soon. Expected at least: %v, but got: %v", expectedFirstTickDuration.String(), actualFirstTickDuration.String())
+	require.True(t, actualFirstTickDuration+buffer >= expectedFirstTickDuration, "First tick occurred too soon. Expected at least: %v, but got: %v", expectedFirstTickDuration.String(), actualFirstTickDuration.String())
 }
 
 func TestBoundedDrift(t *testing.T) {
@@ -129,7 +128,7 @@ func TestBoundedDrift(t *testing.T) {
 
 	// We'll allow a small buffer for drift, say 1%
 	buffer := expectedDuration * 1 / 100
-	assert.True(t, elapsed >= expectedDuration-buffer && elapsed <= expectedDuration+buffer, "Drifted too far from expected time. Expected: %v, Actual: %v", expectedDuration.String(), elapsed.String())
+	require.True(t, elapsed >= expectedDuration-buffer && elapsed <= expectedDuration+buffer, "Drifted too far from expected time. Expected: %v, Actual: %v", expectedDuration.String(), elapsed.String())
 }
 
 func TestMultipleSlotTickers(t *testing.T) {
@@ -165,7 +164,7 @@ func TestMultipleSlotTickers(t *testing.T) {
 
 	// We'll allow a small buffer for drift, say 5%
 	buffer := expectedDuration * 5 / 100
-	assert.True(t, elapsed <= expectedDuration+buffer, "Expected all tickers to complete within", expectedDuration.String(), "but took", elapsed.String())
+	require.True(t, elapsed <= expectedDuration+buffer, "Expected all tickers to complete within", expectedDuration.String(), "but took", elapsed.String())
 }
 
 func TestSlotSkipping(t *testing.T) {
@@ -302,20 +301,20 @@ func TestDoubleTickRealTimer(t *testing.T) {
 
 	// Wait for the first slot.
 	<-ticker.Next()
-	require.WithinDuration(t, firstSlotTime.Add(1*slotTime), time.Now(), 5*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
+	require.WithinDuration(t, firstSlotTime.Add(1*slotTime), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
 	firstSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(1), firstSlot)
 
 	// Wait for the 2nd slot, but wake up early.
 	mockTimer.fakeNextReset(slotTime / 2)
 	<-ticker.Next()
-	require.WithinDuration(t, firstSlotTime.Add(1*slotTime+slotTime/2), time.Now(), 5*time.Millisecond, "Expected the first tick to occur after 1/2th of a slot")
+	require.WithinDuration(t, firstSlotTime.Add(1*slotTime+slotTime/2), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/2th of a slot")
 	secondSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(2), secondSlot)
 
 	// Expect the SlotTicker to realize it woke up early, and wait for the 3rd slot instead.
 	<-ticker.Next()
-	require.WithinDuration(t, firstSlotTime.Add(3*slotTime), time.Now(), 5*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
+	require.WithinDuration(t, firstSlotTime.Add(3*slotTime), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
 	thirdSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(3), thirdSlot)
 

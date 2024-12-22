@@ -16,10 +16,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
-	"go.uber.org/zap"
-
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
@@ -29,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 //go:generate mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -49,21 +48,19 @@ func init() {
 const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
-	blockPropagationDelay = 200 * time.Millisecond
+	blockPropagationDelay = 300 * time.Millisecond
 )
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty)
-	ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty)
-	ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap)
+	ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty)
+	ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
-	ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty)
-	ExecuteDuty(logger *zap.Logger, duty *spectypes.ValidatorDuty)
-	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
+	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 }
 
 type BeaconNode interface {
@@ -83,7 +80,7 @@ type ExecutionClient interface {
 type ValidatorProvider interface {
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
-	Validator(pubKey []byte) *types.SSVShare
+	Validator(pubKey []byte) (*types.SSVShare, bool)
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
@@ -273,7 +270,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
+			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
 			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 
@@ -358,7 +355,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		s.currentDutyDependentRoot = data.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
+		delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
 		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(data.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
@@ -375,26 +372,8 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 	}
 }
 
-func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty) {
-	for _, duty := range duties {
-		duty := duty
-		logger := s.loggerWithGenesisDutyContext(logger, duty)
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
-		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
-		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
-		go func() {
-			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(duty.Slot)
-			}
-			s.dutyExecutor.ExecuteGenesisDuty(logger, duty)
-		}()
-	}
-}
-
 // ExecuteDuties tries to execute the given duties
-func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -407,17 +386,19 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Valida
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			s.dutyExecutor.ExecuteDuty(logger, duty)
+			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
-	for committeeID, duty := range duties {
-		committeeID := committeeID
-		duty := duty
-		logger := s.loggerWithCommitteeDutyContext(logger, committeeID, duty)
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
+	for _, committee := range duties {
+		duty := committee.duty
+		logger := s.loggerWithCommitteeDutyContext(logger, committee)
+		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
+
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
@@ -425,21 +406,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeD
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			s.dutyExecutor.ExecuteCommitteeDuty(logger, committeeID, duty)
+			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
-}
-
-// loggerWithGenesisDutyContext returns an instance of logger with the given genesis duty's information
-func (s *Scheduler) loggerWithGenesisDutyContext(logger *zap.Logger, duty *genesisspectypes.Duty) *zap.Logger {
-	return logger.
-		With(zap.Stringer(fields.FieldRole, duty.Type)).
-		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
-		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
-		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
@@ -455,12 +424,15 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Va
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
-func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) *zap.Logger {
+func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
+	duty := committeeDuty.duty
 	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
+
 	return logger.
-		With(fields.CommitteeID(committeeID)).
+		With(fields.CommitteeID(committeeDuty.id)).
+		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).
-		With(fields.Duties(dutyEpoch, duty.ValidatorDuties)).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
