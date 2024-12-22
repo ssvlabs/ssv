@@ -36,9 +36,16 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 	recordRequestDuration(gc.ctx, "ProposerDuties", gc.client.Address(), http.MethodGet, time.Since(start), err)
 
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "ProposerDuties"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
 	}
 	if resp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "ProposerDuties"),
+		)
 		return nil, fmt.Errorf("proposer duties response is nil")
 	}
 
@@ -63,12 +70,22 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	recordRequestDuration(gc.ctx, "Proposal", gc.client.Address(), http.MethodGet, time.Since(reqStart), err)
 
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Proposal"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to get proposal: %w", err)
 	}
 	if proposalResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "Proposal"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("proposal response is nil")
 	}
 	if proposalResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "Proposal"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
 	}
 
@@ -172,8 +189,13 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 
 	start := time.Now()
 	err := gc.client.SubmitBlindedProposal(gc.ctx, opts)
-
 	recordRequestDuration(gc.ctx, "SubmitBlindedProposal", gc.client.Address(), http.MethodPost, time.Since(start), err)
+	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitBlindedProposal"),
+			zap.Error(err),
+		)
+	}
 
 	return err
 }
@@ -223,9 +245,13 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 
 	start := time.Now()
 	err := gc.client.SubmitProposal(gc.ctx, opts)
-
 	recordRequestDuration(gc.ctx, "SubmitProposal", gc.client.Address(), http.MethodPost, time.Since(start), err)
-
+	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitProposal"),
+			zap.Error(err),
+		)
+	}
 	return err
 }
 
@@ -243,9 +269,13 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 	}
 	start := time.Now()
 	err := gc.client.SubmitProposalPreparations(gc.ctx, preparations)
-
 	recordRequestDuration(gc.ctx, "SubmitProposalPreparations", gc.client.Address(), http.MethodPost, time.Since(start), err)
-
+	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitProposalPreparations"),
+			zap.Error(err),
+		)
+	}
 	return err
 }
 
@@ -357,6 +387,10 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 
 		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.client.Address(), http.MethodPost, time.Since(start), err)
 		if err != nil {
+			gc.log.Error(clResponseErrMsg,
+				zap.String("api", "SubmitValidatorRegistrations"),
+				zap.Error(err),
+			)
 			return err
 		}
 

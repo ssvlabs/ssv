@@ -13,6 +13,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -49,12 +50,22 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	})
 	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
 	if beaconBlockRootResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("beacon block root response is nil")
 	}
 	if beaconBlockRootResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
@@ -78,12 +89,22 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 			})
 			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(start), err)
 			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+					zap.Error(err),
+				)
 				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)
 			}
 			if syncCommitteeContrResp == nil {
+				gc.log.Error(clNilResponseErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+				)
 				return fmt.Errorf("sync committee contribution response is nil")
 			}
 			if syncCommitteeContrResp.Data == nil {
+				gc.log.Error(clNilResponseDataErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+				)
 				return fmt.Errorf("sync committee contribution data is nil")
 			}
 
@@ -106,9 +127,13 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
 	start := time.Now()
 	err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
-
 	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.client.Address(), http.MethodPost, time.Since(start), err)
-
+	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitSyncCommitteeContributions"),
+			zap.Error(err),
+		)
+	}
 	return err
 }
 

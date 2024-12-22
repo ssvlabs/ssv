@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -201,10 +202,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		ids.Start()
 	}
 
-	subnetsProvider := func() records.Subnets {
-		return n.activeSubnets
-	}
-
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
 		newDomain := n.cfg.Network.DomainType
@@ -224,17 +221,21 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		IDService:       ids,
 		Network:         n.host.Network(),
 		DomainType:      n.cfg.Network.DomainType,
-		SubnetsProvider: subnetsProvider,
+		SubnetsProvider: n.ActiveSubnets,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
 	return nil
+}
+
+func (n *p2pNetwork) ActiveSubnets() records.Subnets {
+	return n.activeSubnets
 }
 
 func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
@@ -253,9 +254,9 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if len(n.fixedSubnets) > 0 {
+		if discovery.HasActiveSubnets(n.fixedSubnets) {
 			discV5Opts.Subnets = n.fixedSubnets
-			logger = logger.With(zap.String("subnets", records.Subnets(n.fixedSubnets).String()))
+			logger = logger.With(fields.Subnets(n.fixedSubnets))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),

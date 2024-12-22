@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -22,9 +24,16 @@ func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 	})
 	recordRequestDuration(gc.ctx, "SyncCommitteeDuties", gc.client.Address(), http.MethodPost, time.Since(reqStart), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SyncCommitteeDuties"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to obtain sync committee duties: %w", err)
 	}
 	if resp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "SyncCommitteeDuties"),
+		)
 		return nil, fmt.Errorf("sync committee duties response is nil")
 	}
 
@@ -39,12 +48,23 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 	})
 	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(reqStart), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+			zap.Error(err),
+		)
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
 	if resp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
+
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("beacon block root response is nil")
 	}
 	if resp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
@@ -55,8 +75,12 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 func (gc *GoClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
 	reqStart := time.Now()
 	err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs)
-
 	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeMessages", gc.client.Address(), http.MethodPost, time.Since(reqStart), err)
-
+	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "SubmitSyncCommitteeMessages"),
+			zap.Error(err),
+		)
+	}
 	return err
 }
