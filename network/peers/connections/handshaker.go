@@ -134,7 +134,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			if r := recover(); r != nil {
 				err = errors.Errorf("panic: %v", r)
 			}
-			h.updatePeerInfo(logger, pid, err)
+			h.updatePeerInfo(pid, err)
 		}()
 
 		// Handle the handshake request.
@@ -170,7 +170,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 		if r := recover(); r != nil {
 			err = errors.Errorf("panic: %v", r)
 		}
-		h.updatePeerInfo(logger, pid, err)
+		h.updatePeerInfo(pid, err)
 	}()
 
 	nodeInfo, err = h.requestNodeInfo(logger, conn)
@@ -187,7 +187,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 	return
 }
 
-func (h *handshaker) updatePeerInfo(logger *zap.Logger, pid peer.ID, handshakeErr error) {
+func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 	h.peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
 		info.LastHandshake = time.Now()
 		info.LastHandshakeError = handshakeErr
