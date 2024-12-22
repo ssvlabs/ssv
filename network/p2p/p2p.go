@@ -52,7 +52,7 @@ const (
 	connManagerBalancingTimeout        = time.Minute
 	peersReportingInterval             = 60 * time.Second
 	peerIdentitiesReportingInterval    = 5 * time.Minute
-	topicsReportingInterval            = 180 * time.Second
+	topicsReportingInterval            = 90 * time.Second
 	maximumIrrelevantPeersToDisconnect = 3
 )
 
@@ -260,7 +260,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
 
-	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl))
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
 
 	if err := n.subscribeToSubnets(logger); err != nil {
 		return err

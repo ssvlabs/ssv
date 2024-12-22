@@ -85,9 +85,11 @@ func recordPeerCount(ctx context.Context, logger *zap.Logger, host host.Host) fu
 	}
 }
 
-func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topics.Controller) func() {
+func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topics.Controller, loggingFrequency int) func() {
+	var iterations int
 	return func() {
 		var (
+			shouldLog        = iterations%loggingFrequency == 0
 			subnetPeerCounts []int
 			deadSubnets,
 			unhealthySubnets int
@@ -97,30 +99,39 @@ func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topic
 			if err != nil {
 				return
 			}
-			subnetPeerCounts = append(subnetPeerCounts, len(peers))
-			if len(peers) == 0 {
-				deadSubnets++
-			} else if len(peers) <= 2 {
-				unhealthySubnets++
-			}
 
-			logger.Debug("topic peers status", fields.Topic(topicName), fields.Count(len(peers)), zap.Any("peers", peers))
 			peersPerTopicGauge.Record(ctx, int64(len(peers)), metric.WithAttributes(attribute.String("ssv.p2p.topic.name", topicName)))
+
+			if shouldLog {
+				subnetPeerCounts = append(subnetPeerCounts, len(peers))
+				if len(peers) == 0 {
+					deadSubnets++
+				} else if len(peers) <= 2 {
+					unhealthySubnets++
+				}
+				logger.Debug("topic peers status", fields.Topic(topicName), fields.Count(len(peers)), zap.Any("peers", peers))
+			}
 		}
 
 		// Calculate min, median, max
-		sort.Ints(subnetPeerCounts)
-		min := subnetPeerCounts[0]
-		median := subnetPeerCounts[len(subnetPeerCounts)/2]
-		max := subnetPeerCounts[len(subnetPeerCounts)-1]
+		if shouldLog {
+			sort.Ints(subnetPeerCounts)
+			var min, median, max int
+			if len(subnetPeerCounts) > 0 {
+				min = subnetPeerCounts[0]
+				median = subnetPeerCounts[len(subnetPeerCounts)/2]
+				max = subnetPeerCounts[len(subnetPeerCounts)-1]
+			}
+			logger.Debug("topic peers distribution",
+				zap.Int("min", min),
+				zap.Int("median", median),
+				zap.Int("max", max),
+				zap.Int("dead_subnets", deadSubnets),
+				zap.Int("unhealthy_subnets", unhealthySubnets),
+			)
+		}
 
-		logger.Debug("topic peers distribution",
-			zap.Int("min", min),
-			zap.Int("median", median),
-			zap.Int("max", max),
-			zap.Int("dead_subnets", deadSubnets),
-			zap.Int("unhealthy_subnets", unhealthySubnets),
-		)
+		iterations++
 	}
 }
 
