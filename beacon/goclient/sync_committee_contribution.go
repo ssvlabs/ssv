@@ -44,7 +44,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	gc.waitForOneThirdSlotDuration(slot)
 
 	scDataReqStart := time.Now()
-	beaconBlockRootResp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
+	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
 		Block: fmt.Sprint(slot),
 	})
 	if err != nil {
@@ -81,7 +81,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	for i := range subnetIDs {
 		index := i
 		g.Go(func() error {
-			syncCommitteeContrResp, err := gc.client.SyncCommitteeContribution(gc.ctx, &api.SyncCommitteeContributionOpts{
+			syncCommitteeContrResp, err := gc.multiClient.SyncCommitteeContribution(gc.ctx, &api.SyncCommitteeContributionOpts{
 				Slot:              slot,
 				SubcommitteeIndex: subnetIDs[index],
 				BeaconBlockRoot:   *blockRoot,
@@ -124,7 +124,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
-	if err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution}); err != nil {
+	if err := gc.multiClient.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution}); err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitSyncCommitteeContributions"),
 			zap.Error(err),

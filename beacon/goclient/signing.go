@@ -16,7 +16,7 @@ import (
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+	specResponse, err := gc.multiClient.Spec(gc.ctx, &api.SpecOpts{})
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Spec"),
@@ -53,7 +53,7 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
-	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
+	genesisResponse, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Genesis"),
@@ -105,7 +105,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		return gc.computeVoluntaryExitDomain(gc.ctx)
 	}
 
-	data, err := gc.client.Domain(gc.ctx, domain, epoch)
+	data, err := gc.multiClient.Domain(gc.ctx, domain, epoch)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Domain"),

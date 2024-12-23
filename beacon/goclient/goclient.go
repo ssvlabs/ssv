@@ -10,7 +10,9 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
+	eth2clientmulti "github.com/attestantio/go-eth2-client/multi"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
@@ -108,9 +110,15 @@ func ParseNodeClient(version string) NodeClient {
 
 // Client defines all go-eth2-client interfaces used in ssv
 type Client interface {
-	eth2client.Service
+	MultiClient
+
 	eth2client.NodeVersionProvider
 	eth2client.NodeClientProvider
+	eth2client.BlindedProposalSubmitter
+}
+
+type MultiClient interface {
+	eth2client.Service
 	eth2client.SpecProvider
 	eth2client.GenesisProvider
 
@@ -126,7 +134,6 @@ type Client interface {
 	eth2client.NodeSyncingProvider
 	eth2client.ProposalProvider
 	eth2client.ProposalSubmitter
-	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
 	eth2client.SyncCommitteeMessagesSubmitter
 	eth2client.BeaconBlockRootProvider
@@ -139,20 +146,13 @@ type Client interface {
 	eth2client.VoluntaryExitSubmitter
 }
 
-type NodeClientProvider interface {
-	NodeClient() NodeClient
-}
-
-var _ NodeClientProvider = (*GoClient)(nil)
-
 // GoClient implementing Beacon struct
 type GoClient struct {
 	log         *zap.Logger
 	ctx         context.Context
 	network     beaconprotocol.Network
-	client      Client
-	nodeVersion string
-	nodeClient  NodeClient
+	clients     []Client
+	multiClient MultiClient
 	gasLimit    uint64
 
 	operatorDataStore operatordatastore.OperatorDataStore
@@ -192,27 +192,53 @@ func New(
 		longTimeout = DefaultLongTimeout
 	}
 
-	httpClient, err := eth2clienthttp.New(opt.Context,
-		// WithAddress supplies the address of the beacon node, in host:port format.
-		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
-		// LogLevel supplies the level of logging to carry out.
-		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
-		eth2clienthttp.WithTimeout(commonTimeout),
-		eth2clienthttp.WithReducedMemoryUsage(true),
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ",")
+	if len(beaconAddrList) == 0 {
+		return nil, fmt.Errorf("no beacon node address provided")
+	}
+
+	var consensusClients []Client
+	var consensusClientsAsServices []eth2client.Service
+	for _, beaconAddr := range beaconAddrList {
+		httpClient, err := setupHTTPClient(opt.Context, logger, beaconAddr, commonTimeout)
+		if err != nil {
+			return nil, err
+		}
+
+		consensusClients = append(consensusClients, httpClient)
+		consensusClientsAsServices = append(consensusClientsAsServices, httpClient)
+	}
+
+	same, err := assertSameSpec(opt.Context, consensusClients...)
+	if err != nil {
+		return nil, fmt.Errorf("assert same spec: %w", err)
+	}
+	if !same {
+		return nil, fmt.Errorf("consensus clients' specs are not same")
+	}
+
+	multiClient, err := eth2clientmulti.New(
+		opt.Context,
+		eth2clientmulti.WithClients(consensusClientsAsServices),
+		eth2clientmulti.WithLogLevel(zerolog.DebugLevel),
+		eth2clientmulti.WithTimeout(commonTimeout),
 	)
 	if err != nil {
-		logger.Error("Consensus client initialization failed",
+		logger.Error("Consensus multi client initialization failed",
 			zap.String("address", opt.BeaconNodeAddr),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to create http client: %w", err)
+
+		return nil, fmt.Errorf("create multi client: %w", err)
 	}
+	consensusClient := multiClient.(*eth2clientmulti.Service)
 
 	client := &GoClient{
 		log:               logger,
 		ctx:               opt.Context,
 		network:           opt.Network,
-		client:            httpClient.(*eth2clienthttp.Service),
+		clients:           consensusClients,
+		multiClient:       consensusClient,
 		gasLimit:          opt.GasLimit,
 		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
@@ -225,7 +251,33 @@ func New(
 		longTimeout:   longTimeout,
 	}
 
-	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
+	go client.registrationSubmitter(slotTickerProvider)
+	// Start automatic expired item deletion for attestationDataCache.
+	go client.attestationDataCache.Start()
+
+	return client, nil
+}
+
+func setupHTTPClient(ctx context.Context, logger *zap.Logger, addr string, commonTimeout time.Duration) (*eth2clienthttp.Service, error) {
+	httpClient, err := eth2clienthttp.New(
+		ctx,
+		// WithAddress supplies the address of the beacon node, in host:port format.
+		eth2clienthttp.WithAddress(addr),
+		// LogLevel supplies the level of logging to carry out.
+		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
+		eth2clienthttp.WithTimeout(commonTimeout),
+		eth2clienthttp.WithReducedMemoryUsage(true),
+	)
+	if err != nil {
+		logger.Error("Consensus http client initialization failed",
+			zap.String("address", addr),
+			zap.Error(err),
+		)
+
+		return nil, fmt.Errorf("create http client: %w", err)
+	}
+
+	nodeVersionResp, err := httpClient.(*eth2clienthttp.Service).NodeVersion(ctx, &api.NodeVersionOpts{})
 	if err != nil {
 		logger.Error(clResponseErrMsg,
 			zap.String("api", "NodeVersion"),
@@ -239,31 +291,87 @@ func New(
 		)
 		return nil, fmt.Errorf("node version response is nil")
 	}
-	client.nodeVersion = nodeVersionResp.Data
-	client.nodeClient = ParseNodeClient(nodeVersionResp.Data)
 
 	logger.Info("consensus client connected",
 		fields.Name(httpClient.Name()),
 		fields.Address(httpClient.Address()),
-		zap.String("client", string(client.nodeClient)),
-		zap.String("version", client.nodeVersion),
+		zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
+		zap.String("version", nodeVersionResp.Data),
 	)
 
-	go client.registrationSubmitter(slotTickerProvider)
-	// Start automatic expired item deletion for attestationDataCache.
-	go client.attestationDataCache.Start()
-
-	return client, nil
+	return httpClient.(*eth2clienthttp.Service), nil
 }
 
-func (gc *GoClient) NodeClient() NodeClient {
-	return gc.nodeClient
+// assertSameSpec should receive a non-empty list
+func assertSameSpec(ctx context.Context, services ...Client) (bool, error) {
+	firstSpec, err := services[0].Spec(ctx, &api.SpecOpts{})
+	if err != nil {
+		return false, fmt.Errorf("get first spec: %w", err)
+	}
+
+	firstGenesis, err := services[0].Genesis(ctx, &api.GenesisOpts{})
+	if err != nil {
+		return false, fmt.Errorf("get first genesis: %w", err)
+	}
+
+	for _, service := range services[1:] {
+		srvSpec, err := service.Spec(ctx, &api.SpecOpts{})
+		if err != nil {
+			return false, fmt.Errorf("get service spec: %w", err)
+		}
+
+		srvGenesis, err := service.Genesis(ctx, &api.GenesisOpts{})
+		if err != nil {
+			return false, fmt.Errorf("get service genesis: %w", err)
+		}
+
+		if !sameSpec(firstSpec.Data, srvSpec.Data) {
+			return false, nil
+		}
+
+		if !sameGenesis(firstGenesis.Data, srvGenesis.Data) {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func sameSpec(a, b map[string]any) bool {
+	paramsToCheck := []string{
+		"CONFIG_NAME",
+		"CAPELLA_FORK_VERSION",
+		"SECONDS_PER_SLOT",
+		"SLOTS_PER_EPOCH",
+		"EPOCHS_PER_SYNC_COMMITTEE_PERIOD",
+		"SYNC_COMMITTEE_SIZE",
+		"SYNC_COMMITTEE_SUBNET_COUNT",
+		"TARGET_AGGREGATORS_PER_COMMITTEE",
+		"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE",
+		"INTERVALS_PER_SLOT",
+	}
+
+	for _, param := range paramsToCheck {
+		if a[param] != b[param] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func sameGenesis(a, b *v1.Genesis) bool {
+	if a == nil || b == nil { // Input parameters should never be nil, so the check may fail if both are nil
+		return false
+	}
+
+	return a == b
 }
 
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.multiClient.NodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "NodeSyncing"),
@@ -318,7 +426,7 @@ func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 }
 
 func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
-	if err := gc.client.Events(ctx, topics, handler); err != nil {
+	if err := gc.multiClient.Events(ctx, topics, handler); err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Events"),
 			zap.Error(err),

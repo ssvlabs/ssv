@@ -62,7 +62,7 @@ type BeaconNode interface {
 type Options struct {
 	Context        context.Context
 	Network        Network
-	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
+	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true" env-description:"Beacon node address. Supports multiple comma-separated addresses'"`
 	GasLimit       uint64
 	CommonTimeout  time.Duration // Optional.
 	LongTimeout    time.Duration // Optional.

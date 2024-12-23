@@ -9,7 +9,7 @@ import (
 
 // SubmitBeaconCommitteeSubscriptions is implementation for subscribing committee to subnet (p2p topic)
 func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error {
-	if err := gc.client.SubmitBeaconCommitteeSubscriptions(ctx, subscription); err != nil {
+	if err := gc.multiClient.SubmitBeaconCommitteeSubscriptions(ctx, subscription); err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitBeaconCommitteeSubscriptions"),
 			zap.Error(err),
@@ -22,7 +22,7 @@ func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subs
 
 // SubmitSyncCommitteeSubscriptions is implementation for subscribing sync committee to subnet (p2p topic)
 func (gc *GoClient) SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error {
-	if err := gc.client.SubmitSyncCommitteeSubscriptions(ctx, subscription); err != nil {
+	if err := gc.multiClient.SubmitSyncCommitteeSubscriptions(ctx, subscription); err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitSyncCommitteeSubscriptions"),
 			zap.Error(err),

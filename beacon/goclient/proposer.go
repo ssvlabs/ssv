@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -28,7 +29,7 @@ const (
 
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
-	resp, err := gc.client.ProposerDuties(ctx, &api.ProposerDutiesOpts{
+	resp, err := gc.multiClient.ProposerDuties(ctx, &api.ProposerDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
@@ -58,7 +59,7 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	copy(graffiti[:], graffitiBytes[:])
 
 	reqStart := time.Now()
-	proposalResp, err := gc.client.Proposal(gc.ctx, &api.ProposalOpts{
+	proposalResp, err := gc.multiClient.Proposal(gc.ctx, &api.ProposalOpts{
 		Slot:                   slot,
 		RandaoReveal:           sig,
 		Graffiti:               graffiti,
@@ -183,15 +184,82 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 		Proposal: signedBlock,
 	}
 
-	if err := gc.client.SubmitBlindedProposal(gc.ctx, opts); err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "SubmitBlindedProposal"),
-			zap.Error(err),
-		)
-		return err
+	// As gc.multiClient doesn't have a method for blinded block submission
+	// (because it must be submitted to the same node that returned that block),
+	// we need to submit it to client(s) directly.
+	if len(gc.clients) == 1 {
+		if err := gc.clients[0].SubmitBlindedProposal(gc.ctx, opts); err != nil {
+			gc.log.Error(clResponseErrMsg,
+				zap.String("api", "SubmitBlindedProposal"),
+				zap.Error(err),
+			)
+			return err
+		}
+
+		return nil
 	}
 
-	return nil
+	// Although we got a blinded block from one node and that node has to submit it,
+	// other nodes might know this payload too and have a chance to submit it successfully.
+	//
+	// So we do the following:
+	//
+	// Submit the blinded proposal to all clients concurrently.
+	// If any client succeeds, cancel the remaining submissions.
+	// Wait for all submissions to finish or timeout after 1 minute.
+	//
+	// TODO: Make sure this the above is correct. Should we submit only to the node that returned the block?
+	ctx, cancel := context.WithTimeout(gc.ctx, 1*time.Minute) // The timeout should never happen, but if it does due to some bug, the node will block, and it will be hard to debug it.
+	defer cancel()
+
+	type errWithAddress struct {
+		err     error
+		address string
+	}
+
+	results := make(chan errWithAddress, len(gc.clients))
+
+	var wg sync.WaitGroup
+	for _, client := range gc.clients {
+		wg.Add(1)
+		go func(ctx context.Context, client Client) {
+			defer wg.Done()
+
+			err := client.SubmitBlindedProposal(ctx, opts)
+			results <- errWithAddress{err: err, address: client.Address()}
+		}(ctx, client)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for {
+		select {
+		case result, ok := <-results:
+			if !ok {
+				gc.log.Error("No consensus clients have been able to submit blinded proposal. See adjacent logs for error details.",
+					zap.String("api", "SubmitBlindedProposal"),
+				)
+				return fmt.Errorf("no consensus clients have been able to submit blinded proposal")
+			}
+
+			if result.err != nil {
+				gc.log.Debug("Consensus client returned an error while submitting blinded proposal. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
+					zap.String("api", "SubmitBlindedProposal"),
+					zap.String("client_addr", result.address),
+					zap.Error(result.err),
+				)
+			} else {
+				cancel()
+				return nil
+			}
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -237,7 +305,7 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	if err := gc.client.SubmitProposal(gc.ctx, opts); err != nil {
+	if err := gc.multiClient.SubmitProposal(gc.ctx, opts); err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitProposal"),
 			zap.Error(err),
@@ -261,7 +329,7 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 		})
 	}
 
-	if err := gc.client.SubmitProposalPreparations(gc.ctx, preparations); err != nil {
+	if err := gc.multiClient.SubmitProposalPreparations(gc.ctx, preparations); err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitProposalPreparations"),
 			zap.Error(err),
@@ -375,7 +443,8 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 			bs = len(registrations)
 		}
 
-		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
+		// TODO: Do we need to submit them to all nodes?
+		if err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
 			gc.log.Error(clResponseErrMsg,
 				zap.String("api", "SubmitValidatorRegistrations"),
 				zap.Error(err),

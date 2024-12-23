@@ -6,7 +6,7 @@ import (
 )
 
 func (gc *GoClient) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
-	if err := gc.client.SubmitVoluntaryExit(gc.ctx, voluntaryExit); err != nil {
+	if err := gc.multiClient.SubmitVoluntaryExit(gc.ctx, voluntaryExit); err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitVoluntaryExit"),
 			zap.Error(err),
