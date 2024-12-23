@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -29,10 +30,13 @@ const (
 
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
+	start := time.Now()
 	resp, err := gc.multiClient.ProposerDuties(ctx, &api.ProposerDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
+	recordRequestDuration(gc.ctx, "ProposerDuties", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "ProposerDuties"),
@@ -65,6 +69,8 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
 	})
+	recordRequestDuration(gc.ctx, "Proposal", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
+
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Proposal"),
@@ -85,7 +91,6 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
 	}
 
-	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 	beaconBlock := proposalResp.Data
 
 	if beaconBlock.Blinded {
@@ -188,7 +193,10 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 	// (because it must be submitted to the same node that returned that block),
 	// we need to submit it to client(s) directly.
 	if len(gc.clients) == 1 {
-		if err := gc.clients[0].SubmitBlindedProposal(gc.ctx, opts); err != nil {
+		start := time.Now()
+		err := gc.clients[0].SubmitBlindedProposal(gc.ctx, opts)
+		recordRequestDuration(gc.ctx, "SubmitBlindedProposal", gc.clients[0].Address(), http.MethodPost, time.Since(start), err)
+		if err != nil {
 			gc.log.Error(clResponseErrMsg,
 				zap.String("api", "SubmitBlindedProposal"),
 				zap.Error(err),
@@ -305,15 +313,16 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	if err := gc.multiClient.SubmitProposal(gc.ctx, opts); err != nil {
+	start := time.Now()
+	err := gc.multiClient.SubmitProposal(gc.ctx, opts)
+	recordRequestDuration(gc.ctx, "SubmitProposal", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitProposal"),
 			zap.Error(err),
 		)
-		return err
 	}
-
-	return nil
+	return err
 }
 
 func (gc *GoClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
@@ -328,16 +337,16 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 			FeeRecipient:   recipient,
 		})
 	}
-
-	if err := gc.multiClient.SubmitProposalPreparations(gc.ctx, preparations); err != nil {
+	start := time.Now()
+	err := gc.multiClient.SubmitProposalPreparations(gc.ctx, preparations)
+	recordRequestDuration(gc.ctx, "SubmitProposalPreparations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitProposalPreparations"),
 			zap.Error(err),
 		)
-		return err
 	}
-
-	return nil
+	return err
 }
 
 func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
@@ -444,7 +453,10 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 		}
 
 		// TODO: Do we need to submit them to all nodes?
-		if err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
+		start := time.Now()
+		err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs])
+		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+		if err != nil {
 			gc.log.Error(clResponseErrMsg,
 				zap.String("api", "SubmitValidatorRegistrations"),
 				zap.Error(err),
