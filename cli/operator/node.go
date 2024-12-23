@@ -104,7 +104,7 @@ var StartNodeCmd = &cobra.Command{
 
 		logger, err := setupGlobal()
 		if err != nil {
-			log.Fatal("could not create logger", err)
+			log.Fatal("could not create logger ", err)
 		}
 
 		defer logging.CapturePanic(logger)
