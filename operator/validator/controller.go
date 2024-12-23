@@ -23,6 +23,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
+	networkcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
@@ -77,7 +79,6 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
-	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
@@ -111,7 +112,7 @@ type Controller interface {
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
-
+	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
 }
 
@@ -137,14 +138,14 @@ type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	ActiveSubnets() records.Subnets
 }
 
 // controller implements Controller
 type controller struct {
 	ctx context.Context
 
-	logger  *zap.Logger
-	metrics validator.Metrics
+	logger *zap.Logger
 
 	networkConfig     networkconfig.NetworkConfig
 	sharesStorage     SharesStorage
@@ -213,7 +214,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
-		Metrics:           options.Metrics,
 		Graffiti:          options.Graffiti,
 	}
 
@@ -226,17 +226,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
-	metrics := validator.Metrics(validator.NopMetrics{})
-	if options.Metrics != nil {
-		metrics = options.Metrics
-	}
-
 	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
-		metrics:           metrics,
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
 		operatorsStorage:  options.RegistryStorage,
@@ -455,13 +449,18 @@ func (c *controller) StartValidators() {
 		return
 	}
 
+	mySubnets := c.selfSubnets()
+
 	var ownShares []*ssvtypes.SSVShare
-	var allPubKeys = make([][]byte, 0, len(shares))
+	var pubKeysToFetch [][]byte
 	for _, share := range shares {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		allPubKeys = append(allPubKeys, share.ValidatorPubKey[:])
+		subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
+		if mySubnets[subnet] != 0 {
+			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
+		}
 	}
 
 	if c.validatorOptions.Exporter {
@@ -493,18 +492,29 @@ func (c *controller) StartValidators() {
 	}
 	if !hasMetadata {
 		start := time.Now()
-		err := c.fetchAndUpdateValidatorsMetadata(c.logger, allPubKeys, c.beacon)
+		err := c.fetchAndUpdateValidatorsMetadata(c.logger, pubKeysToFetch, c.beacon)
 		if err != nil {
 			c.logger.Error("failed to update validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
+				zap.Int("shares", len(pubKeysToFetch)),
 				fields.Took(time.Since(start)),
 				zap.Error(err))
 		} else {
 			c.logger.Debug("updated validators metadata after setup",
-				zap.Int("shares", len(allPubKeys)),
+				zap.Int("shares", len(pubKeysToFetch)),
 				fields.Took(time.Since(start)))
 		}
 	}
+}
+
+func (c *controller) selfSubnets() records.Subnets {
+	myValidators := c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID())
+	mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+	for _, v := range myValidators {
+		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+		mySubnets[subnet] = 1
+	}
+
+	return mySubnets
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -952,7 +962,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
-		c.metrics.ValidatorError(v.Share.ValidatorPubKey[:])
+		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {
@@ -970,11 +980,19 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		// Get the shares to fetch metadata for.
 		start := time.Now()
+
+		mySubnets := c.selfSubnets()
 		var existingShares, newShares []*ssvtypes.SSVShare
 		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 			if share.Liquidated {
 				return true
 			}
+
+			subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
+			if mySubnets[subnet] == 0 {
+				return true
+			}
+
 			if share.BeaconMetadata == nil && share.MetadataLastUpdated().IsZero() {
 				newShares = append(newShares, share)
 			} else if time.Since(share.MetadataLastUpdated()) > c.metadataUpdateInterval {
@@ -1047,6 +1065,55 @@ func (c *controller) fetchAndUpdateValidatorsMetadata(logger *zap.Logger, pks []
 		}
 	}
 	return nil
+}
+
+func (c *controller) ReportValidatorStatuses(ctx context.Context) {
+	ticker := time.NewTicker(time.Second * 30)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			start := time.Now()
+			validatorsPerStatus := make(map[validatorStatus]uint32)
+
+			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
+				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+					validatorsPerStatus[statusParticipating]++
+				}
+				meta := share.BeaconMetadata
+				if meta == nil {
+					validatorsPerStatus[statusNotFound]++
+				} else if meta.IsActive() {
+					validatorsPerStatus[statusActive]++
+				} else if meta.Slashed() {
+					validatorsPerStatus[statusSlashed]++
+				} else if meta.Exiting() {
+					validatorsPerStatus[statusExiting]++
+				} else if !meta.Activated() {
+					validatorsPerStatus[statusNotActivated]++
+				} else if meta.Pending() {
+					validatorsPerStatus[statusPending]++
+				} else if meta.Index == 0 {
+					validatorsPerStatus[statusNoIndex]++
+				} else {
+					validatorsPerStatus[statusUnknown]++
+				}
+			}
+			for status, count := range validatorsPerStatus {
+				c.logger.
+					With(zap.String("status", string(status))).
+					With(zap.Uint32("count", count)).
+					With(zap.Duration("elapsed_time", time.Since(start))).
+					Info("recording validator status")
+				recordValidatorStatus(ctx, count, status)
+			}
+		case <-ctx.Done():
+			c.logger.Info("stopped reporting validator statuses. Context cancelled")
+			return
+		}
+	}
+
 }
 
 func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {

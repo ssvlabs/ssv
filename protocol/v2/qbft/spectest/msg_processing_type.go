@@ -1,6 +1,7 @@
 package qbft
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
@@ -51,7 +52,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
-		_, _, _, err := preInstance.ProcessMsg(logger, spectestingutils.ToProcessingMessage(msg))
+		_, _, _, err := preInstance.ProcessMsg(context.TODO(), logger, spectestingutils.ToProcessingMessage(msg))
 		if err != nil {
 			lastErr = err
 		}

@@ -54,7 +54,7 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
+func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
 		return errors.Wrap(err, "value invalid")
@@ -71,7 +71,7 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height
 	c.Height = height
 
 	newInstance := c.addAndStoreNewInstance()
-	newInstance.Start(logger, value, height)
+	newInstance.Start(ctx, logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
 	return nil
 }
@@ -118,10 +118,10 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 		return nil, fmt.Errorf("future msg from height, could not process")
 	}
 
-	return c.UponExistingInstanceMsg(logger, msg)
+	return c.UponExistingInstanceMsg(ctx, logger, msg)
 }
 
-func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
+func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
@@ -134,7 +134,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 		return nil, errors.New("not processing consensus message since instance is already decided")
 	}
 
-	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
+	decided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
