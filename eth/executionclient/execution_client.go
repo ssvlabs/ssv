@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -46,8 +47,8 @@ type ExecutionClient struct {
 	logBatchSize                uint64
 
 	// variables
-	client *ethclient.Client
-	closed chan struct{}
+	clients []*ethclient.Client
+	closed  chan struct{}
 }
 
 // New creates a new instance of ExecutionClient.
@@ -77,18 +78,34 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 // Close shuts down ExecutionClient.
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
-	ec.client.Close()
+	for _, client := range ec.clients {
+		client.Close()
+	}
 	return nil
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	currentBlock, err := ec.client.BlockNumber(ctx)
-	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_blockNumber"),
-			zap.Error(err))
-		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
+	var currentBlock uint64
+
+	for i, client := range ec.clients {
+		cb, err := client.BlockNumber(ctx)
+		if err != nil {
+			ec.logger.Error("Execution client returned an error. Trying to use the next available one",
+				zap.Int("client_index", i),
+				zap.String("method", "eth_blockNumber"),
+				zap.Error(err))
+
+			continue
+		}
+
+		currentBlock = cb
+		break
+	}
+	if currentBlock == 0 {
+		ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
+			zap.String("method", "eth_blockNumber"))
+		return nil, nil, fmt.Errorf("failed to get current block: no clients available")
 	}
 	if currentBlock < ec.followDistance {
 		return nil, nil, ErrNothingToSync
@@ -123,16 +140,32 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			start := time.Now()
-			results, err := ec.client.FilterLogs(ctx, ethereum.FilterQuery{
-				Addresses: []ethcommon.Address{ec.contractAddress},
-				FromBlock: new(big.Int).SetUint64(fromBlock),
-				ToBlock:   new(big.Int).SetUint64(toBlock),
-			})
-			if err != nil {
-				ec.logger.Error(elResponseErrMsg,
-					zap.String("method", "eth_getLogs"),
-					zap.Error(err))
-				errors <- err
+
+			var results []ethtypes.Log
+			for i, client := range ec.clients {
+				fl, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+					Addresses: []ethcommon.Address{ec.contractAddress},
+					FromBlock: new(big.Int).SetUint64(fromBlock),
+					ToBlock:   new(big.Int).SetUint64(toBlock),
+				})
+				if err != nil {
+					ec.logger.Error("Execution client returned an error. Trying to use the next available one",
+						zap.Int("client_index", i),
+						zap.String("method", "eth_getLogs"),
+						zap.Error(err))
+
+					continue
+				}
+
+				results = fl
+				break
+			}
+
+			if results == nil {
+				ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
+					zap.String("method", "eth_getLogs"))
+				errors <- fmt.Errorf("failed to get logs: no clients available")
+
 				return
 			}
 
@@ -238,36 +271,58 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	sp, err := ec.client.SyncProgress(ctx)
-	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
+	for i, client := range ec.clients {
+		sp, err := client.SyncProgress(ctx)
+		if err == nil {
+			if sp != nil {
+				ec.logger.Error("Execution client is not synced")
+				ec.metrics.ExecutionClientSyncing()
+				return fmt.Errorf("syncing")
+			}
+
+			ec.metrics.ExecutionClientReady()
+			return nil
+		}
+
+		ec.logger.Error("Execution client returned an error. Trying to use the next available one",
+			zap.Int("client_index", i),
 			zap.String("method", "eth_syncing"),
 			zap.Error(err))
 		ec.metrics.ExecutionClientFailure()
-		return err
 	}
 
-	if sp != nil {
-		ec.logger.Error("Execution client is not synced")
-		ec.metrics.ExecutionClientSyncing()
-		return fmt.Errorf("syncing")
-	}
+	ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
+		zap.String("method", "eth_syncing"))
+	ec.metrics.ExecutionClientFailure()
 
-	ec.metrics.ExecutionClientReady()
-
-	return nil
+	return fmt.Errorf("failed to get sync state: no clients available")
 }
 
 func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	b, err := ec.client.BlockByNumber(ctx, blockNumber)
-	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_getBlockByNumber"),
-			zap.Error(err))
-		return nil, err
+	var block *ethtypes.Block
+
+	for i, client := range ec.clients {
+		b, err := client.BlockByNumber(ctx, blockNumber)
+		if err != nil {
+			ec.logger.Error("Execution client returned an error. Trying to use the next available one",
+				zap.Int("client_index", i),
+				zap.String("method", "eth_getBlockByNumber"),
+				zap.Error(err))
+
+			continue
+		}
+
+		block = b
+		break
 	}
 
-	return b, nil
+	if block == nil {
+		ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
+			zap.String("method", "eth_getBlockByNumber"))
+		return nil, fmt.Errorf("failed to get block by number: no clients available")
+	}
+
+	return block, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {
@@ -285,13 +340,28 @@ func (ec *ExecutionClient) isClosed() bool {
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
 
-	sub, err := ec.client.SubscribeNewHead(ctx, heads)
-	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("operation", "SubscribeNewHead"),
-			zap.Error(err))
-		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
+	var sub ethereum.Subscription
+	for i, client := range ec.clients {
+		s, err := client.SubscribeNewHead(ctx, heads)
+		if err != nil {
+			ec.logger.Error("Execution client returned an error. Trying to use the next available one",
+				zap.Int("client_index", i),
+				zap.String("operation", "SubscribeNewHead"),
+				zap.Error(err))
+
+			continue
+		}
+
+		sub = s
+		break
 	}
+
+	if sub == nil {
+		ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
+			zap.String("operation", "SubscribeNewHead"))
+		return fromBlock, fmt.Errorf("failed to subscribe: no clients available")
+	}
+
 	defer sub.Unsubscribe()
 
 	for {
@@ -339,17 +409,32 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	start := time.Now()
-	var err error
-	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
-	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("operation", "DialContext"),
-			zap.Error(err))
-		return err
+	addrList := strings.Split(ec.nodeAddr, ",")
+	if len(addrList) == 0 {
+		return fmt.Errorf("no node address provided")
 	}
 
-	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
+	var clients []*ethclient.Client
+
+	for _, addr := range addrList {
+		start := time.Now()
+		client, err := ethclient.DialContext(ctx, ec.nodeAddr)
+		if err != nil {
+			ec.logger.Error(elResponseErrMsg,
+				zap.String("operation", "DialContext"),
+				zap.Error(err))
+			return err
+		}
+
+		logger.Info("connected to execution client",
+			zap.String("addr", addr),
+			zap.Duration("took", time.Since(start)))
+
+		clients = append(clients, client)
+	}
+
+	ec.clients = clients
+
 	return nil
 }
 
@@ -362,7 +447,7 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	start := time.Now()
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
 		logger.Info("reconnecting")
-		if err := ec.connect(ctx); err != nil {
+		if err := ec.connect(ctx); err != nil { // TODO: handle case if some nodes are down
 			if ec.isClosed() {
 				return true, false
 			}
@@ -381,5 +466,5 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 }
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
-	return contract.NewContractFilterer(ec.contractAddress, ec.client)
+	return contract.NewContractFilterer(ec.contractAddress, ec.clients[0]) // TODO: Do we need more complex logic?
 }
