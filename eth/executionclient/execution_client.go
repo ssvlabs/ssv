@@ -12,10 +12,13 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
@@ -35,8 +38,7 @@ type ExecutionClient struct {
 	contractAddress ethcommon.Address
 
 	// optional
-	logger  *zap.Logger
-	metrics metrics
+	logger *zap.Logger
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
 	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
@@ -62,7 +64,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		nodeAddr:                    nodeAddr,
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
-		metrics:                     nopMetrics{},
 		followDistance:              DefaultFollowDistance,
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
@@ -191,8 +192,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				}
 			}
 		}
-
-		ec.metrics.ExecutionClientLastFetchedBlock(endBlock)
 	}()
 
 	return logs, errors
@@ -254,12 +253,13 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
+	start := time.Now()
 	sp, err := ec.syncProgressFn(ctx)
 	if err != nil {
+		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_syncing"),
 			zap.Error(err))
-		ec.metrics.ExecutionClientFailure()
 
 		unhealthyDuration := time.Since(ec.lastHealthy)
 		if unhealthyDuration < syncTimeTolerance {
@@ -269,11 +269,14 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 		return errors.Join(fmt.Errorf("check sync progress: %w", err), errSyncing)
 	}
+	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
 	if sp != nil {
-		ec.logger.Error("Execution client is not synced")
-		ec.metrics.ExecutionClientSyncing()
+		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
+
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
+
+		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
@@ -288,7 +291,9 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return fmt.Errorf("not synced for too long (%d): %w", unhealthyDuration, errSyncing)
 	}
 
-	ec.metrics.ExecutionClientReady()
+	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
+
+	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 	return nil
 }
@@ -361,7 +366,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
-			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
+			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
 	}
 }

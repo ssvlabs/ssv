@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -16,7 +18,9 @@ import (
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	start := time.Now()
 	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+	recordRequestDuration(gc.ctx, "Spec", gc.client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Spec"),
@@ -53,7 +57,9 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
+	start = time.Now()
 	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
+	recordRequestDuration(gc.ctx, "Genesis", gc.client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Genesis"),
@@ -73,6 +79,7 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		)
 		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
 	}
+
 	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
@@ -105,7 +112,9 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		return gc.computeVoluntaryExitDomain(gc.ctx)
 	}
 
+	start := time.Now()
 	data, err := gc.client.Domain(gc.ctx, domain, epoch)
+	recordRequestDuration(gc.ctx, "Domain", gc.client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Domain"),
@@ -113,6 +122,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		)
 		return phase0.Domain{}, err
 	}
+
 	return data, nil
 }
 

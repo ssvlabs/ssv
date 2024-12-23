@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"context"
 	"sort"
 
 	"github.com/pkg/errors"
@@ -16,7 +17,7 @@ import (
 
 // UponCommit returns true if a quorum of commit messages was received.
 // Assumes commit message is valid!
-func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *spectypes.SignedSSVMessage, error) {
+func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *spectypes.SignedSSVMessage, error) {
 	logger.Debug("📬 got commit message",
 		fields.Round(i.State.Round),
 		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
@@ -49,7 +50,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, msg *specqbft.ProcessingMessag
 			zap.Any("agg_signers", agg.OperatorIDs),
 			fields.Root(msg.QBFTMessage.Root))
 
-		i.metrics.EndStageCommit()
+		i.metrics.EndStageCommit(ctx, i.State.Round)
 
 		return true, fullData, agg, nil
 	}
