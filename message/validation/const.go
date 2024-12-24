@@ -43,7 +43,9 @@ const (
 	maxPartialSignatureMsgsSizeOld     = partialSigMsgTypeSize + slotSize + maxSizePartialSignatureMessagesOld*maxSizePartialSignatureMessage + 4
 	maxEncodedPartialSignatureSizeOld  = maxPartialSignatureMsgsSizeOld + maxPartialSignatureMsgsSizeOld/encodingOverheadDivisor
 	///
-	maxSizePartialSignatureMessages = 1512
+	maxAttestations                 = 1000
+	maxSyncCommittees               = 512
+	maxSizePartialSignatureMessages = maxAttestations + maxSyncCommittees
 	partialSigMsgTypeSize           = 8 // uint64
 	maxPartialSignatureMsgsSize     = partialSigMsgTypeSize + slotSize + maxSizePartialSignatureMessages*maxSizePartialSignatureMessage + 4
 	maxEncodedPartialSignatureSize  = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/encodingOverheadDivisor
