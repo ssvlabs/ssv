@@ -9,10 +9,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -81,6 +81,10 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		return errors.Wrap(err, "failed processing selection proof message")
 	}
+
+	// we can consider removing this log
+	logger.Debug("🧩 got partial SelectionProof signature", zap.Any("signer", signedMsg.Messages[0].Signer))
+
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -99,16 +103,13 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-
-	logger.Debug("🧩 got partial signature quorum",
-		zap.Any("signer", signedMsg.Messages[0].Signer), // TODO: always 1?
-		fields.Slot(duty.Slot),
-	)
+	logger.Debug("🧩 reconstructed partial SelectionProof signatures",
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
 
 	r.measurements.PauseDutyFlow()
 	// get block data
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")

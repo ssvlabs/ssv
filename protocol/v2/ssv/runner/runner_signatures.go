@@ -64,7 +64,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	}
 
 	if psigMsgs.Slot != slot {
-		return errors.New("invalid partial sig slot")
+		return fmt.Errorf("invalid partial sig slot %d, expected %d", psigMsgs.Slot, slot)
 	}
 
 	// Get signer
