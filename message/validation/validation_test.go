@@ -710,7 +710,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
-		for i := 0; i < 1512; i++ {
+		for i := 0; i < maxSizePartialSignatureMessages; i++ {
 			msg.Messages = append(msg.Messages, msg.Messages[0])
 		}
 
