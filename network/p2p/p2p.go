@@ -682,7 +682,7 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 
 	peerSubnets := n.idx.GetPeerSubnets(peerID)
 	sharedSubnets := records.SharedSubnets(n.activeSubnets, peerSubnets, 0)
-	for subnet := range sharedSubnets {
+	for _, subnet := range sharedSubnets {
 		subnetPeers := n.idx.GetSubnetPeers(subnet)
 		thisSubnetPeersExcluding := filterOutPeer(peerID, subnetPeers)
 		result += score(float64(targetPeersPerSubnet), float64(len(thisSubnetPeersExcluding)))
