@@ -105,7 +105,7 @@ func (n *p2pNetwork) initCfg() error {
 	}
 
 	// TODO - override config value for testing
-	n.cfg.MaxPeers = 12
+	n.cfg.MaxPeers = 10
 
 	if n.cfg.TopicMaxPeers <= 0 {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
