@@ -118,7 +118,7 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnec
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
-		sharedSubnets := records.SharedSubnets(mySubnets, peerSubnets, len(mySubnets))
+		sharedSubnets := records.SharedSubnets(mySubnets, peerSubnets, 0)
 
 		// If there's no common subnet, disconnect from peer.
 		if len(sharedSubnets) == 0 {

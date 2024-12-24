@@ -4,13 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
-	"slices"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
@@ -36,6 +29,12 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
 	"go.uber.org/zap"
+	"math"
+	"math/rand"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"time"
 )
 
 // network states
@@ -278,55 +277,11 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	}()
 	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
 	async.Interval(n.ctx, 10*time.Second, func() {
-		tpcs := n.topicsCtrl.Topics()
-		peerz := make(map[string][]peer.ID, len(tpcs)) // topic -> peers
-		for _, tpc := range tpcs {
-			var err error
-			peerz[tpc], err = n.topicsCtrl.Peers(tpc)
-			if err != nil {
-				n.interfaceLogger.Error(
-					"Cant get peers for topic",
-					zap.String("topic", tpc),
-					zap.Error(err),
-				)
-				continue
-			}
-		}
-		sharedTopics := func(peerID peer.ID) int {
-			// TODO
-			doOnce := sync.Once{}
-			doOnce.Do(func() {
-				n.interfaceLogger.Info(
-					"sharedTopics: got peer",
-					zap.String("peer_id", string(peerID)),
-					zap.String("peer_id_str", peerID.String()),
-				)
-				for _, tpc := range tpcs {
-					for _, pID := range peerz[tpc] {
-						n.interfaceLogger.Info(
-							"sharedTopics: peerz",
-							zap.String("topic", tpc),
-							zap.String("peer_id", string(pID)),
-							zap.String("peer_id_str", pID.String()),
-						)
-					}
-				}
-			})
-
-			shared := 0
-			for _, tpc := range tpcs {
-				if slices.Contains(peerz[tpc], peerID) {
-					shared++
-				}
-			}
-			return shared
-		}
-
 		// find and propose the best discovered peer we can
 		var (
 			bestProposal      peers.DiscoveredPeer
 			bestProposalFound bool
-			bestProposalScore int // how good the proposed peer is
+			bestProposalScore float64 // how good the proposed peer is
 		)
 		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
 			// TODO
@@ -345,7 +300,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 				return true
 			}
-			proposalScore := sharedTopics(item.Key())
+			proposalScore := n.peerScore(item.Key())
 			if proposalScore > bestProposalScore {
 				bestProposal = item.Value()
 				bestProposalFound = true
@@ -419,7 +374,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			maximumIrrelevantPeersToDisconnect,
 			n.host.Network(),
 			connectedPeers,
-			records.Subnets(n.activeSubnets).Clone(),
+			n.activeSubnets,
 		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
@@ -696,4 +651,55 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+// peerScore calculates scores for myPeers and returns the ID of least valuable peer.
+// The score for a peer is defined as "how valuable this peer would have been if we didn't
+// have him, but then connected with" and is a sum of component numbers - each number estimating
+// how valuable each peer's subnet to us (via `score` func).
+func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
+	const targetPeersPerSubnet = 3
+
+	filterOutPeer := func(peerID peer.ID, peerIDs []peer.ID) []peer.ID {
+		if len(peerIDs) == 0 {
+			return nil
+		}
+		result := make([]peer.ID, len(peerIDs)-1)
+		idx := 0
+		for _, elem := range peerIDs {
+			if elem == peerID {
+				continue
+			}
+			result[idx] = elem
+			idx++
+		}
+		return result
+	}
+
+	result := 0.0
+
+	peerSubnets := n.idx.GetPeerSubnets(peerID)
+	sharedSubnets := records.SharedSubnets(n.activeSubnets, peerSubnets, 0)
+	for subnet := range sharedSubnets {
+		subnetPeers := n.idx.GetSubnetPeers(subnet)
+		thisSubnetPeersExcluding := filterOutPeer(peerID, subnetPeers)
+		result += score(float64(targetPeersPerSubnet), float64(len(thisSubnetPeersExcluding)))
+	}
+
+	return result
+}
+
+// score calculates the score based on the target and input number
+func score(target, num float64) float64 {
+	const X = 3
+	if num < target {
+		// Decreasing score as numbers approach the target
+		return math.Pow(target-num+1, 1.5) * X
+	} else if num == target {
+		// Fixed score for exact match
+		return X
+	} else {
+		// Decreasing score for numbers above the target
+		return 10 / math.Pow(num-target+1, 1.5)
+	}
 }
