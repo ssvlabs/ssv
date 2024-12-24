@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -292,6 +293,26 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 		}
 		sharedTopics := func(peerID peer.ID) int {
+			// TODO
+			doOnce := sync.Once{}
+			doOnce.Do(func() {
+				n.interfaceLogger.Info(
+					"sharedTopics: got peer",
+					zap.String("peer_id", string(peerID)),
+					zap.String("peer_id_str", peerID.String()),
+				)
+				for _, tpc := range tpcs {
+					for _, pID := range peerz[tpc] {
+						n.interfaceLogger.Info(
+							"sharedTopics: peerz",
+							zap.String("topic", tpc),
+							zap.String("peer_id", string(pID)),
+							zap.String("peer_id_str", pID.String()),
+						)
+					}
+				}
+			})
+
 			shared := 0
 			for _, tpc := range tpcs {
 				if slices.Contains(peerz[tpc], peerID) {
