@@ -28,6 +28,8 @@ type AggregatorRunner struct {
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
+
+	quorum bool
 }
 
 var _ Runner = &AggregatorRunner{}
@@ -143,6 +145,8 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	if !decided {
 		return nil
 	}
+
+	r.quorum = true
 
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregator)
@@ -293,6 +297,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	r.quorum = false
 	r.measurements.StartDutyFlow()
 	r.measurements.StartPreConsensus()
 
@@ -335,6 +340,14 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial selection proof sig")
 	}
+
+	go func() {
+		time.Sleep(8 * time.Second)
+		if !r.quorum {
+			logger.Warn("❌ did not get quorum for selection proof", fields.MessageID(msgID))
+		}
+	}()
+
 	return nil
 }
 

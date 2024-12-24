@@ -43,7 +43,14 @@ func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+
+		if m, ok := msg.Body.(*spectypes.PartialSignatureMessages); ok {
+			if m.Type == spectypes.SelectionProofPartialSig {
+				logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+			}
+		}
+
+		//logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
 		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
 	}
