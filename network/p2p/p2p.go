@@ -440,7 +440,11 @@ func (n *p2pNetwork) PeerProtection(
 	protectedPeers := make(map[peer.ID]struct{})
 
 	tpcs := n.topicsCtrl.Topics()
-	peerz := make(map[string][]peer.ID, len(tpcs)) // topic -> peers
+	// peerz contains topic -> peers mapping for the topics we are subscribed to, but
+	// also it only includes peers we are connected to (as opposed to every peer known
+	// to be subscribed to a particular topic), this allows for more accurate peer
+	// classification below compared to using peers.Index
+	peerz := make(map[string][]peer.ID, len(tpcs))
 	for _, tpc := range tpcs {
 		var err error
 		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
@@ -664,14 +668,12 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 		if len(peerIDs) == 0 {
 			return nil
 		}
-		result := make([]peer.ID, len(peerIDs)-1)
-		idx := 0
+		result := make([]peer.ID, 0, len(peerIDs))
 		for _, elem := range peerIDs {
 			if elem == peerID {
 				continue
 			}
-			result[idx] = elem
-			idx++
+			result = append(result, elem)
 		}
 		return result
 	}
