@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -52,8 +53,10 @@ type ExecutionClient struct {
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	clients []*ethclient.Client
-	closed  chan struct{}
+	currentClientIndexMu sync.Mutex
+	currentClientIndex   int
+	clients              []*ethclient.Client
+	closed               chan struct{}
 }
 
 // New creates a new instance of ExecutionClient.
@@ -83,25 +86,14 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 }
 
 func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
-	for i, client := range ec.clients {
-		sp, err := client.SyncProgress(ctx)
-		if err == nil {
-			if sp != nil {
-				ec.logger.Warn("Execution client is not synced",
-					zap.Int("client_index", i))
-				continue
-			}
-
-			return nil, nil
-		}
-
-		ec.logger.Warn("Execution client returned an error. Trying to use the next available one",
-			zap.Int("client_index", i),
-			zap.String("method", "eth_syncing"),
-			zap.Error(err))
+	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
+		return client.SyncProgress(ctx)
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("failed to get sync state: no clients available")
+	return res.(*ethereum.SyncProgress), nil
 }
 
 // Close shuts down ExecutionClient.
@@ -115,27 +107,17 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	var currentBlock uint64
-
-	for i, client := range ec.clients {
-		cb, err := client.BlockNumber(ctx)
-		if err != nil {
-			ec.logger.Error("Execution client returned an error. Trying to use the next available one",
-				zap.Int("client_index", i),
-				zap.String("method", "eth_blockNumber"),
-				zap.Error(err))
-
-			continue
-		}
-
-		currentBlock = cb
-		break
+	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
+		return client.BlockNumber(ctx)
+	})
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_blockNumber"),
+			zap.Error(err))
+		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
-	if currentBlock == 0 {
-		ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
-			zap.String("method", "eth_blockNumber"))
-		return nil, nil, fmt.Errorf("failed to get current block: no clients available")
-	}
+	currentBlock := res.(uint64)
+
 	if currentBlock < ec.followDistance {
 		return nil, nil, ErrNothingToSync
 	}
@@ -169,34 +151,21 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			start := time.Now()
-
-			var results []ethtypes.Log
-			for i, client := range ec.clients {
-				fl, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+			res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
+				return client.FilterLogs(ctx, ethereum.FilterQuery{
 					Addresses: []ethcommon.Address{ec.contractAddress},
 					FromBlock: new(big.Int).SetUint64(fromBlock),
 					ToBlock:   new(big.Int).SetUint64(toBlock),
 				})
-				if err != nil {
-					ec.logger.Error("Execution client returned an error. Trying to use the next available one",
-						zap.Int("client_index", i),
-						zap.String("method", "eth_getLogs"),
-						zap.Error(err))
-
-					continue
-				}
-
-				results = fl
-				break
-			}
-
-			if results == nil {
-				ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
-					zap.String("method", "eth_getLogs"))
-				errors <- fmt.Errorf("failed to get logs: no clients available")
-
+			})
+			if err != nil {
+				ec.logger.Error(elResponseErrMsg,
+					zap.String("method", "eth_getLogs"),
+					zap.Error(err))
+				errors <- err
 				return
 			}
+			results := res.([]ethtypes.Log)
 
 			ec.logger.Info("fetched registry events",
 				fields.FromBlock(fromBlock),
@@ -332,30 +301,18 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 }
 
 func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	var block *ethtypes.Block
-
-	for i, client := range ec.clients {
-		b, err := client.BlockByNumber(ctx, blockNumber)
-		if err != nil {
-			ec.logger.Error("Execution client returned an error. Trying to use the next available one",
-				zap.Int("client_index", i),
-				zap.String("method", "eth_getBlockByNumber"),
-				zap.Error(err))
-
-			continue
-		}
-
-		block = b
-		break
+	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
+		return client.BlockByNumber(ctx, blockNumber)
+	})
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getBlockByNumber"),
+			zap.Error(err))
+		return nil, err
 	}
+	b := res.(*ethtypes.Block)
 
-	if block == nil {
-		ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
-			zap.String("method", "eth_getBlockByNumber"))
-		return nil, fmt.Errorf("failed to get block by number: no clients available")
-	}
-
-	return block, nil
+	return b, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {
@@ -373,27 +330,16 @@ func (ec *ExecutionClient) isClosed() bool {
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
 
-	var sub ethereum.Subscription
-	for i, client := range ec.clients {
-		s, err := client.SubscribeNewHead(ctx, heads)
-		if err != nil {
-			ec.logger.Error("Execution client returned an error. Trying to use the next available one",
-				zap.Int("client_index", i),
-				zap.String("operation", "SubscribeNewHead"),
-				zap.Error(err))
-
-			continue
-		}
-
-		sub = s
-		break
+	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
+		return client.SubscribeNewHead(ctx, heads)
+	})
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("operation", "SubscribeNewHead"),
+			zap.Error(err))
+		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
-
-	if sub == nil {
-		ec.logger.Error("No execution clients have been able to make request. See adjacent logs for error details.",
-			zap.String("operation", "SubscribeNewHead"))
-		return fromBlock, fmt.Errorf("failed to subscribe: no clients available")
-	}
+	sub := res.(ethereum.Subscription)
 
 	defer sub.Unsubscribe()
 
@@ -500,4 +446,46 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 	return contract.NewContractFilterer(ec.contractAddress, ec.clients[0]) // TODO: Do we need more complex logic?
+}
+
+type callFunc func(ctx context.Context, client *ethclient.Client) (any, error)
+
+// doCall carries out a call on the active clients in turn until one succeeds.
+func (ec *ExecutionClient) doCall(ctx context.Context, call callFunc) (any, error) {
+	if len(ec.clients) == 1 {
+		return call(ctx, ec.clients[0])
+	}
+
+	var errs error
+
+	for i := 0; i < len(ec.clients); i++ {
+		ec.currentClientIndexMu.Lock()
+		currentIndex := ec.currentClientIndex
+		ec.currentClientIndexMu.Unlock()
+
+		res, err := call(ctx, ec.clients[currentIndex])
+		if err != nil {
+			failedClientIndex := currentIndex
+
+			ec.currentClientIndexMu.Lock()
+			if ec.currentClientIndex == failedClientIndex { // it might have already been changed by a parallel request
+				ec.currentClientIndex = (ec.currentClientIndex + 1) % len(ec.clients)
+			}
+			newClientIndex := ec.currentClientIndex
+			ec.currentClientIndexMu.Unlock()
+
+			ec.logger.Warn("Execution client returned an error. Trying to use the next available one",
+				zap.Int("failed_client_index", failedClientIndex),
+				zap.Int("new_client_index", newClientIndex),
+				zap.Error(err))
+
+			errs = errors.Join(errs, err)
+
+			continue
+		}
+
+		return res, nil
+	}
+
+	return nil, fmt.Errorf("no clients available: %w", errs)
 }
