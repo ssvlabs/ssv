@@ -333,6 +333,18 @@ func (c *controller) handleRouterMessages() {
 				if m.MsgType == message.SSVEventMsgType {
 					continue
 				}
+
+				if n, ok := m.Body.(*spectypes.PartialSignatureMessages); ok {
+					if n.Type == spectypes.SelectionProofPartialSig {
+						c.logger.Debug("before v.HandleMessage",
+							fields.MessageID(m.MsgID),
+							zap.String("role", "AGGREGATOR_RUNNER"),
+							fields.Slot(n.Slot),
+							zap.Uint64("signer", n.Messages[0].Signer),
+							zap.Uint64("validator_index", uint64(n.Messages[0].ValidatorIndex)))
+					}
+				}
+
 				// TODO: only try copying clusterid if validator failed
 				dutyExecutorID := m.GetID().GetDutyExecutorID()
 				var cid spectypes.CommitteeID
