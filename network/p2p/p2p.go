@@ -260,6 +260,11 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// keep discovered peers in the pool so we can choose the best ones
 		for proposal := range connectorProposals {
 			if peers.DiscoveredPeersPool.Has(proposal.ID) {
+				// TODO
+				n.interfaceLogger.Info(
+					"this proposal is already on the table",
+					zap.String("peer_id", string(proposal.ID)),
+				)
 				continue // this proposal is already "on the table"
 			}
 			discoveredPeer := peers.DiscoveredPeer{
