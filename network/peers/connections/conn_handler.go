@@ -190,6 +190,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
+
+				// if this connection is the one we found through discovery - remove it from DiscoveredPeersPool
+				// so we stop retrying connecting to that same peer (because we aren't looking for duplicate connections)
+				// TODO this ^ wont always work (sometimes retries might still happen) because we need a mutex
+				// to make this operation atomic with respect to updating retry counter in DiscoveredPeersPool map
+				// to work 100%, for now it's a best-effort solution
+				peers.DiscoveredPeersPool.Delete(conn.RemotePeer())
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
