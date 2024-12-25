@@ -29,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 	"math"
 	"math/rand"
 	"slices"
@@ -439,20 +440,10 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 // - At least 2 peers per subnet.
 // - Prefer peers that you have more shared subents with.
 // - Protect at most immunityQuota peers.
-func (n *p2pNetwork) PeerProtection(
-	immunityQuota int,
-) map[peer.ID]struct{} {
-	protectedPeers := make(map[peer.ID]struct{})
-
-	tpcs := n.topicsCtrl.Topics()
-	// peerz contains topic -> peers mapping for the topics we are subscribed to, but
-	// also it only includes peers we are connected to (as opposed to every peer known
-	// to be subscribed to a particular topic), this allows for more accurate peer
-	// classification below compared to using peers.Index
-	peerz := make(map[string][]peer.ID, len(tpcs))
-	for _, tpc := range tpcs {
-		var err error
-		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
+func (n *p2pNetwork) PeerProtection(immunityQuota int) map[peer.ID]struct{} {
+	myPeersSet := make(map[peer.ID]struct{}, 0)
+	for _, tpc := range n.topicsCtrl.Topics() {
+		peerz, err := n.topicsCtrl.Peers(tpc)
 		if err != nil {
 			n.interfaceLogger.Error(
 				"Cant get peers for topic, skipping to keep the network running",
@@ -461,44 +452,30 @@ func (n *p2pNetwork) PeerProtection(
 			)
 			continue
 		}
-	}
-
-	sharedTopics := func(peerID peer.ID) int {
-		shared := 0
-		for _, tpc := range tpcs {
-			if slices.Contains(peerz[tpc], peerID) {
-				shared++
-			}
-		}
-		return shared
-	}
-
-	// for each topic we have peers in sort these peers by the number of topics they share with us
-	// and protect top 2 peers for each topic, if there's only one peer in that topic, always protect it
-	for _, tpc := range tpcs {
-		peersInTopic := peerz[tpc]
-		if len(peersInTopic) == 0 {
-			continue
-		}
-		if len(peersInTopic) == 1 {
-			protectedPeers[peersInTopic[0]] = struct{}{}
-			immunityQuota--
-			continue
-		}
-
-		slices.SortFunc(peersInTopic, func(a, b peer.ID) int {
-			x := sharedTopics(a)
-			y := sharedTopics(b)
-			return x - y // desc order
-		})
-
-		const minPeersPerTopic = 2
-		for i := 0; i < min(minPeersPerTopic, len(peersInTopic)) && immunityQuota > 0; i++ {
-			protectedPeers[peersInTopic[i]] = struct{}{}
-			immunityQuota--
+		for _, p := range peerz {
+			myPeersSet[p] = struct{}{}
 		}
 	}
 
+	myPeers := maps.Keys(myPeersSet)
+	slices.SortFunc(myPeers, func(a, b peer.ID) int {
+		// sort in desc order (peers with the highest scores come first)
+		if n.peerScore(a) < n.peerScore(b) {
+			return 1
+		}
+		if n.peerScore(a) > n.peerScore(b) {
+			return -1
+		}
+		return 0
+	})
+
+	protectedPeers := make(map[peer.ID]struct{})
+	for i, p := range myPeers {
+		if i+1 > immunityQuota {
+			break
+		}
+		protectedPeers[p] = struct{}{}
+	}
 	return protectedPeers
 }
 
