@@ -302,7 +302,6 @@ func assertSameSpec(ctx context.Context, services ...Client) error {
 }
 
 func sameSpec(a, b map[string]any) error {
-	// NOTE: not checking "INTERVALS_PER_SLOT" because it's not set on some clients
 	paramsToCheck := []string{
 		"CONFIG_NAME",
 		"CAPELLA_FORK_VERSION",
@@ -313,6 +312,7 @@ func sameSpec(a, b map[string]any) error {
 		"SYNC_COMMITTEE_SUBNET_COUNT",
 		"TARGET_AGGREGATORS_PER_COMMITTEE",
 		"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE",
+		// NOTE: not checking "INTERVALS_PER_SLOT" because it's not set on some clients
 	}
 
 	for _, param := range paramsToCheck {
@@ -329,7 +329,20 @@ func sameGenesis(a, b *apiv1.Genesis) error {
 		return fmt.Errorf("genesis is nil")
 	}
 
+	if a.GenesisTime != b.GenesisTime {
+		return fmt.Errorf("genesis time mismatch, got %v and %v", a.GenesisTime, b.GenesisTime)
+	}
+
+	if a.GenesisValidatorsRoot != b.GenesisValidatorsRoot {
+		return fmt.Errorf("genesis validators root mismatch, got %v and %v", a.GenesisValidatorsRoot, b.GenesisValidatorsRoot)
+	}
+
+	if a.GenesisForkVersion != b.GenesisForkVersion {
+		return fmt.Errorf("genesis fork version mismatch, got %v and %v", a.GenesisForkVersion, b.GenesisForkVersion)
+	}
+
 	if a != b {
+		// This should be unreachable unless *apiv1.Genesis has new fields
 		return fmt.Errorf("genesis mismatch, got %v and %v", a, b)
 	}
 
