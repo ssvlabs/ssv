@@ -264,9 +264,12 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	recordBeaconClientStatus(ctx, statusSyncing, gc.client.Address())
 	recordSyncDistance(ctx, syncState.SyncDistance, gc.client.Address())
 
+	gc.log.Debug("sync state now", zap.Uint64("distance", uint64(syncState.SyncDistance)))
+
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
 		gc.log.Error("Consensus client is not synced")
+		gc.log.Debug("failed sync state now", zap.Uint64("distance", uint64(syncState.SyncDistance)))
 		return errSyncing
 	}
 	if syncState.IsOptimistic {
