@@ -173,12 +173,9 @@ func New(
 		consensusClientsAsServices = append(consensusClientsAsServices, httpClient)
 	}
 
-	same, err := assertSameSpec(opt.Context, consensusClients...)
+	err := assertSameSpec(opt.Context, consensusClients...)
 	if err != nil {
 		return nil, fmt.Errorf("assert same spec: %w", err)
-	}
-	if !same {
-		return nil, fmt.Errorf("consensus clients' specs are not same")
 	}
 
 	multiClient, err := eth2clientmulti.New(
@@ -270,41 +267,41 @@ func setupHTTPClient(ctx context.Context, logger *zap.Logger, addr string, commo
 }
 
 // assertSameSpec should receive a non-empty list
-func assertSameSpec(ctx context.Context, services ...Client) (bool, error) {
+func assertSameSpec(ctx context.Context, services ...Client) error {
 	firstSpec, err := services[0].Spec(ctx, &api.SpecOpts{})
 	if err != nil {
-		return false, fmt.Errorf("get first spec: %w", err)
+		return fmt.Errorf("get first spec: %w", err)
 	}
 
 	firstGenesis, err := services[0].Genesis(ctx, &api.GenesisOpts{})
 	if err != nil {
-		return false, fmt.Errorf("get first genesis: %w", err)
+		return fmt.Errorf("get first genesis: %w", err)
 	}
 
 	for _, service := range services[1:] {
 		srvSpec, err := service.Spec(ctx, &api.SpecOpts{})
 		if err != nil {
-			return false, fmt.Errorf("get service spec: %w", err)
+			return fmt.Errorf("get service spec: %w", err)
 		}
 
 		srvGenesis, err := service.Genesis(ctx, &api.GenesisOpts{})
 		if err != nil {
-			return false, fmt.Errorf("get service genesis: %w", err)
+			return fmt.Errorf("get service genesis: %w", err)
 		}
 
-		if !sameSpec(firstSpec.Data, srvSpec.Data) {
-			return false, nil
+		if err := sameSpec(firstSpec.Data, srvSpec.Data); err != nil {
+			return fmt.Errorf("different spec: %w", err)
 		}
 
-		if !sameGenesis(firstGenesis.Data, srvGenesis.Data) {
-			return false, nil
+		if err := sameGenesis(firstGenesis.Data, srvGenesis.Data); err != nil {
+			return fmt.Errorf("different genesis: %w", err)
 		}
 	}
 
-	return true, nil
+	return nil
 }
 
-func sameSpec(a, b map[string]any) bool {
+func sameSpec(a, b map[string]any) error {
 	paramsToCheck := []string{
 		"CONFIG_NAME",
 		"CAPELLA_FORK_VERSION",
@@ -320,19 +317,23 @@ func sameSpec(a, b map[string]any) bool {
 
 	for _, param := range paramsToCheck {
 		if a[param] != b[param] {
-			return false
+			return fmt.Errorf("param %s mismatch, got %v and %v", param, a[param], b[param])
 		}
 	}
 
-	return true
+	return nil
 }
 
-func sameGenesis(a, b *apiv1.Genesis) bool {
+func sameGenesis(a, b *apiv1.Genesis) error {
 	if a == nil || b == nil { // Input parameters should never be nil, so the check may fail if both are nil
-		return false
+		return fmt.Errorf("genesis is nil")
 	}
 
-	return a == b
+	if a != b {
+		return fmt.Errorf("genesis mismatch, got %v and %v", a, b)
+	}
+
+	return nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
