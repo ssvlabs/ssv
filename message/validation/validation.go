@@ -99,7 +99,9 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
 		if m.Type == spectypes.SelectionProofPartialSig {
 			mv.logger.Debug("starting validating partial signature message",
-				fields.MessageID(d.MsgID), fields.Slot(m.Slot), zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+				fields.MessageID(d.MsgID), fields.Slot(m.Slot),
+				zap.Uint64("signer", m.Messages[0].Signer),
+				zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
 		}
 	}
 

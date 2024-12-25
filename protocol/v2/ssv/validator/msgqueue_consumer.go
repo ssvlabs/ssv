@@ -47,7 +47,9 @@ func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 		if m, ok := msg.Body.(*spectypes.PartialSignatureMessages); ok {
 			if m.Type == spectypes.SelectionProofPartialSig {
 				logger.Debug("📬 queue: pushed message",
-					fields.MessageID(msg.MsgID), zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+					fields.MessageID(msg.MsgID),
+					zap.Uint64("signer", m.Messages[0].Signer),
+					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
 			}
 		}
 
