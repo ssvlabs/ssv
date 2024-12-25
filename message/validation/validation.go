@@ -178,11 +178,9 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	}
 
 	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
-	mv.logger.Debug("Acquiring validation lock", zap.String("msg_id", signedSSVMessage.SSVMessage.GetID().String()))
+
 	validationMu.Lock()
-	mv.logger.Debug("Acquired validation lock", zap.String("msg_id", signedSSVMessage.SSVMessage.GetID().String()))
 	defer validationMu.Unlock()
-	mv.logger.Debug("Released validation lock", zap.String("msg_id", signedSSVMessage.SSVMessage.GetID().String()))
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
@@ -228,15 +226,20 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 
 func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) *sync.Mutex {
 	// Lock this SSV message ID to prevent concurrent access to the same state.
+	mv.logger.Debug("Attempting to acquire global validation lock", fields.MessageID(messageID))
 	mv.validationMutex.Lock()
+	mv.logger.Debug("Acquired global validation lock", fields.MessageID(messageID))
+
 	// TODO: make sure that we check that message ID exists in advance
 	mutex, ok := mv.validationLocks[messageID]
 	if !ok {
+		mv.logger.Debug("Creating new lock for message ID", fields.MessageID(messageID))
 		mutex = &sync.Mutex{}
 		mv.validationLocks[messageID] = mutex
 		// TODO: Clean the map when mutex won't be needed anymore. Now it's a mutex leak...
 	}
 	mv.validationMutex.Unlock()
+	mv.logger.Debug("Released global validation lock", fields.MessageID(messageID))
 
 	return mutex
 }
@@ -307,8 +310,10 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
+	mv.logger.Debug("Attempting to acquire consensus state lock", fields.MessageID(messageID))
 	mv.consensusStateIndexMu.Lock()
-	defer mv.consensusStateIndexMu.Unlock()
+	mv.logger.Debug("Acquired consensus state lock", fields.MessageID(messageID))
+	//defer mv.consensusStateIndexMu.Unlock()
 
 	id := consensusID{
 		DutyExecutorID: string(messageID.GetDutyExecutorID()),
@@ -316,12 +321,16 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	}
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
+		mv.logger.Debug("Creating new consensus state for message ID", fields.MessageID(messageID))
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
 			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}
+
+	mv.consensusStateIndexMu.Unlock()
+	mv.logger.Debug("Released consensus state lock", fields.MessageID(messageID))
 
 	return mv.consensusStateIndex[id]
 }
