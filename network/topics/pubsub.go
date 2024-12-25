@@ -31,9 +31,9 @@ const (
 // the following are kept in vars to allow flexibility (e.g. in tests)
 const (
 	// validationQueueSize is the size that we assign to the validation queue
-	validationQueueSize = 2048
+	validationQueueSize = 2048 * 2
 	// outboundQueueSize is the size that we assign to the outbound message queue
-	outboundQueueSize = 2048
+	outboundQueueSize = 2048 * 2
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
 	validateThrottle = 16384
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
