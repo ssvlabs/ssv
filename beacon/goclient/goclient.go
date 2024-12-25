@@ -156,7 +156,7 @@ func New(
 		longTimeout = DefaultLongTimeout
 	}
 
-	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ",")
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: temporary using ; as separator because , is used as separator by deployment bot
 	if len(beaconAddrList) == 0 {
 		return nil, fmt.Errorf("no beacon node address provided")
 	}

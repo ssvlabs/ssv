@@ -417,7 +417,7 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	addrList := strings.Split(ec.nodeAddr, ",")
+	addrList := strings.Split(ec.nodeAddr, ";") // TODO: temporary using ; as separator because , is used as separator by deployment bot
 	if len(addrList) == 0 {
 		return fmt.Errorf("no node address provided")
 	}
