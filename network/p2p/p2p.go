@@ -4,12 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
-	"slices"
-	"strings"
-	"sync/atomic"
-	"time"
-
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -34,6 +29,13 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
+	"math"
+	"math/rand"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"time"
 )
 
 // network states
@@ -253,7 +255,87 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
-	go n.startDiscovery(logger, connector)
+	connectorProposals := make(chan peer.AddrInfo)
+	go n.startDiscovery(logger, connectorProposals)
+	go func() {
+		// keep discovered peers in the pool so we can choose the best ones
+		for proposal := range connectorProposals {
+			if peers.DiscoveredPeersPool.Has(proposal.ID) {
+				// TODO
+				n.interfaceLogger.Info(
+					"this proposal is already on the table",
+					zap.String("peer_id", string(proposal.ID)),
+				)
+				continue // this proposal is already "on the table"
+			}
+			discoveredPeer := peers.DiscoveredPeer{
+				AddrInfo:       proposal,
+				ConnectRetries: 0,
+			}
+			peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer, ttlcache.DefaultTTL)
+
+			// TODO
+			n.interfaceLogger.Info(
+				"discovered new peer",
+				zap.String("peer_id", string(proposal.ID)),
+			)
+		}
+	}()
+	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
+	async.Interval(n.ctx, 10*time.Second, func() {
+		// find and propose the best discovered peer we can
+		var (
+			bestProposal      peers.DiscoveredPeer
+			bestProposalFound bool
+			bestProposalScore float64 // how good the proposed peer is
+		)
+		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
+			// TODO
+			const retryLimit = 2
+			//const retryLimit = 5
+			if item.Value().ConnectRetries >= retryLimit {
+				// this discovered peer has been tried many times already, we'll ignore him but won't
+				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
+				// peer again (essentially resetting this peer's retry attempts counter to 0)
+
+				// TODO
+				n.interfaceLogger.Info(
+					"Not gonna propose discovered peer: ran out of retries",
+					zap.String("peer_id", string(item.Key())),
+				)
+
+				return true
+			}
+			proposalScore := n.peerScore(item.Key())
+			if proposalScore > bestProposalScore {
+				bestProposal = item.Value()
+				bestProposalFound = true
+				bestProposalScore = proposalScore
+			}
+			return true
+		})
+		if !bestProposalFound {
+			// TODO
+			n.interfaceLogger.Error("No peer to propose this time around")
+			return // we have not a single peer to propose
+		}
+		// update retry counter for this peer so we eventually skip it after certain number of retries
+		// TODO ^ becase we aren't using mutex to make operations related to DiscoveredPeersPool atomic
+		// it's better to do this before we send this proposal on `connector` to minimize the chance of
+		// hitting the undesirable race condition (where we'll successfully connect to this peer but will
+		// keep retrying until last allowed retry attempt)
+		peers.DiscoveredPeersPool.Set(bestProposal.ID, peers.DiscoveredPeer{
+			AddrInfo:       bestProposal.AddrInfo,
+			ConnectRetries: bestProposal.ConnectRetries + 1,
+		}, ttlcache.DefaultTTL)
+		connector <- bestProposal.AddrInfo // try to connect to best peer
+
+		// TODO
+		n.interfaceLogger.Info(
+			"Proposed discovered peer",
+			zap.String("peer_id", string(bestProposal.ID)),
+		)
+	})
 
 	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming(logger))
 	if n.cfg.Metrics != nil { // don't report metrics in tests
@@ -298,7 +380,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			maximumIrrelevantPeersToDisconnect,
 			n.host.Network(),
 			connectedPeers,
-			records.Subnets(n.activeSubnets).Clone(),
+			n.activeSubnets,
 		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
@@ -309,7 +391,9 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// fast enough so that our node finds good set of peers within 10-20 minutes after node
 		// start; it shouldn't be too large because that would negatively affect Ethereum duty
 		// execution quality
-		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
+		//const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
+		// TODO
+		const maxPeersToDrop = 1
 
 		// see if we can accept more peer connections already (no need to trim), note we trim not
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
@@ -356,16 +440,10 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 // - At least 2 peers per subnet.
 // - Prefer peers that you have more shared subents with.
 // - Protect at most immunityQuota peers.
-func (n *p2pNetwork) PeerProtection(
-	immunityQuota int,
-) map[peer.ID]struct{} {
-	protectedPeers := make(map[peer.ID]struct{})
-
-	tpcs := n.topicsCtrl.Topics()
-	peerz := make(map[string][]peer.ID, len(tpcs)) // topic -> peers
-	for _, tpc := range tpcs {
-		var err error
-		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
+func (n *p2pNetwork) PeerProtection(immunityQuota int) map[peer.ID]struct{} {
+	myPeersSet := make(map[peer.ID]struct{}, 0)
+	for _, tpc := range n.topicsCtrl.Topics() {
+		peerz, err := n.topicsCtrl.Peers(tpc)
 		if err != nil {
 			n.interfaceLogger.Error(
 				"Cant get peers for topic, skipping to keep the network running",
@@ -374,44 +452,30 @@ func (n *p2pNetwork) PeerProtection(
 			)
 			continue
 		}
-	}
-
-	sharedTopics := func(peerID peer.ID) int {
-		shared := 0
-		for _, tpc := range tpcs {
-			if slices.Contains(peerz[tpc], peerID) {
-				shared++
-			}
-		}
-		return shared
-	}
-
-	// for each topic we have peers in sort these peers by the number of topics they share with us
-	// and protect top 2 peers for each topic, if there's only one peer in that topic, always protect it
-	for _, tpc := range tpcs {
-		peersInTopic := peerz[tpc]
-		if len(peersInTopic) == 0 {
-			continue
-		}
-		if len(peersInTopic) == 1 {
-			protectedPeers[peersInTopic[0]] = struct{}{}
-			immunityQuota--
-			continue
-		}
-
-		slices.SortFunc(peersInTopic, func(a, b peer.ID) int {
-			x := sharedTopics(a)
-			y := sharedTopics(b)
-			return x - y // desc order
-		})
-
-		const minPeersPerTopic = 2
-		for i := 0; i < min(minPeersPerTopic, len(peersInTopic)) && immunityQuota > 0; i++ {
-			protectedPeers[peersInTopic[i]] = struct{}{}
-			immunityQuota--
+		for _, p := range peerz {
+			myPeersSet[p] = struct{}{}
 		}
 	}
 
+	myPeers := maps.Keys(myPeersSet)
+	slices.SortFunc(myPeers, func(a, b peer.ID) int {
+		// sort in desc order (peers with the highest scores come first)
+		if n.peerScore(a) < n.peerScore(b) {
+			return 1
+		}
+		if n.peerScore(a) > n.peerScore(b) {
+			return -1
+		}
+		return 0
+	})
+
+	protectedPeers := make(map[peer.ID]struct{})
+	for i, p := range myPeers {
+		if i+1 > immunityQuota {
+			break
+		}
+		protectedPeers[p] = struct{}{}
+	}
 	return protectedPeers
 }
 
@@ -573,4 +637,53 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+// peerScore calculates scores for myPeers and returns the ID of least valuable peer.
+// The score for a peer is defined as "how valuable this peer would have been if we didn't
+// have him, but then connected with" and is a sum of component numbers - each number estimating
+// how valuable each peer's subnet to us (via `score` func).
+func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
+	const targetPeersPerSubnet = 3
+
+	filterOutPeer := func(peerID peer.ID, peerIDs []peer.ID) []peer.ID {
+		if len(peerIDs) == 0 {
+			return nil
+		}
+		result := make([]peer.ID, 0, len(peerIDs))
+		for _, elem := range peerIDs {
+			if elem == peerID {
+				continue
+			}
+			result = append(result, elem)
+		}
+		return result
+	}
+
+	result := 0.0
+
+	peerSubnets := n.idx.GetPeerSubnets(peerID)
+	sharedSubnets := records.SharedSubnets(n.activeSubnets, peerSubnets, 0)
+	for _, subnet := range sharedSubnets {
+		subnetPeers := n.idx.GetSubnetPeers(subnet)
+		thisSubnetPeersExcluding := filterOutPeer(peerID, subnetPeers)
+		result += score(float64(targetPeersPerSubnet), float64(len(thisSubnetPeersExcluding)))
+	}
+
+	return result
+}
+
+// score calculates the score based on the target and input number
+func score(target, num float64) float64 {
+	const X = 3
+	if num < target {
+		// Decreasing score as numbers approach the target
+		return math.Pow(target-num+1, 1.5) * X
+	} else if num == target {
+		// Fixed score for exact match
+		return X
+	} else {
+		// Decreasing score for numbers above the target
+		return 10 / math.Pow(num-target+1, 1.5)
+	}
 }
