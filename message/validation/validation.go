@@ -125,6 +125,16 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 
 	pmsg.ValidatorData = decodedMessage
 
+	if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
+		if m.Type == spectypes.SelectionProofPartialSig {
+			mv.logger.Debug("finished validating partial signature message",
+				fields.MessageID(d.MsgID), fields.Slot(m.Slot),
+				zap.String("role", "AGGREGATOR_RUNNER"),
+				zap.Uint64("signer", m.Messages[0].Signer),
+				zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+		}
+	}
+
 	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
 
@@ -192,11 +202,38 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
+
+		d, err := queue.DecodeSignedSSVMessage(signedSSVMessage)
+		if err != nil {
+			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
+			return nil, err
+		}
+
+		if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
+			if m.Type == spectypes.SelectionProofPartialSig {
+				mv.logger.Debug("before mv.validatePartialSignatureMessage",
+					fields.MessageID(d.MsgID), fields.Slot(m.Slot),
+					zap.String("role", "AGGREGATOR_RUNNER"),
+					zap.Uint64("signer", m.Messages[0].Signer),
+					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+			}
+		}
+
 		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			mv.logger.Error("failed to validate partial signature message", zap.Error(err))
 			return decodedMessage, fmt.Errorf("failed to validate partial signature message: %w", err)
+		}
+
+		if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
+			if m.Type == spectypes.SelectionProofPartialSig {
+				mv.logger.Debug("after mv.validatePartialSignatureMessage",
+					fields.MessageID(d.MsgID), fields.Slot(m.Slot),
+					zap.String("role", "AGGREGATOR_RUNNER"),
+					zap.Uint64("signer", m.Messages[0].Signer),
+					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+			}
 		}
 
 	default:
