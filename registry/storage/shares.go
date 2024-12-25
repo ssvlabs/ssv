@@ -386,7 +386,14 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 		return err
 	}
 
-	return s.saveToDB(nil, shares...)
+	tx := s.db.Begin()
+	defer tx.Discard()
+
+	if err = s.saveToDB(tx, shares...); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // Drop deletes all shares.
