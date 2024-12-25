@@ -299,6 +299,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	logger.Debug("🧩 starting duty", fields.DutySlot(duty.DutySlot()))
 	r.quorumMap[r.GetShare().ValidatorIndex] = false
 
 	r.measurements.StartDutyFlow()
@@ -307,7 +308,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	// sign selection proof
 	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(duty.DutySlot()), duty.DutySlot(), spectypes.DomainSelectionProof)
 	if err != nil {
-		return errors.Wrap(err, "could not sign randao")
+		return errors.Wrap(err, "could not sign selection proof")
 	}
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.SelectionProofPartialSig,
@@ -316,6 +317,8 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+
+	logger.Debug("🧩 starting duty", fields.MessageID(msgID), zap.Bool("quorum", r.quorumMap[r.GetShare().ValidatorIndex]))
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return err
