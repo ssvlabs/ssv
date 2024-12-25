@@ -202,38 +202,11 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-
-		d, err := queue.DecodeSignedSSVMessage(signedSSVMessage)
-		if err != nil {
-			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
-			return nil, err
-		}
-
-		if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
-			if m.Type == spectypes.SelectionProofPartialSig {
-				mv.logger.Debug("before mv.validatePartialSignatureMessage",
-					fields.MessageID(d.MsgID), fields.Slot(m.Slot),
-					zap.String("role", "AGGREGATOR_RUNNER"),
-					zap.Uint64("signer", m.Messages[0].Signer),
-					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
-			}
-		}
-
 		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			mv.logger.Error("failed to validate partial signature message", zap.Error(err))
 			return decodedMessage, fmt.Errorf("failed to validate partial signature message: %w", err)
-		}
-
-		if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
-			if m.Type == spectypes.SelectionProofPartialSig {
-				mv.logger.Debug("after mv.validatePartialSignatureMessage",
-					fields.MessageID(d.MsgID), fields.Slot(m.Slot),
-					zap.String("role", "AGGREGATOR_RUNNER"),
-					zap.Uint64("signer", m.Messages[0].Signer),
-					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
-			}
 		}
 
 	default:
@@ -263,20 +236,15 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 
 func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) *sync.Mutex {
 	// Lock this SSV message ID to prevent concurrent access to the same state.
-	mv.logger.Debug("Attempting to acquire global validation lock", fields.MessageID(messageID))
 	mv.validationMutex.Lock()
-	mv.logger.Debug("Acquired global validation lock", fields.MessageID(messageID))
-
 	// TODO: make sure that we check that message ID exists in advance
 	mutex, ok := mv.validationLocks[messageID]
 	if !ok {
-		mv.logger.Debug("Creating new lock for message ID", fields.MessageID(messageID))
 		mutex = &sync.Mutex{}
 		mv.validationLocks[messageID] = mutex
 		// TODO: Clean the map when mutex won't be needed anymore. Now it's a mutex leak...
 	}
 	mv.validationMutex.Unlock()
-	mv.logger.Debug("Released global validation lock", fields.MessageID(messageID))
 
 	return mutex
 }
