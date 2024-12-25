@@ -36,12 +36,22 @@ func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
+	if m, ok := msg.Body.(*spectypes.PartialSignatureMessages); ok {
+		if m.Type == spectypes.SelectionProofPartialSig {
+			logger.Debug("📬 handling SSV message",
+				fields.MessageID(msg.MsgID),
+				zap.String("role", "AGGREGATOR_RUNNER"),
+				fields.Slot(m.Slot),
+				zap.Uint64("signer", m.Messages[0].Signer),
+				zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+		}
+	}
+
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
-			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msg_id", msgID))
+				fields.MessageID(msg.MsgID))
 		}
 
 		if m, ok := msg.Body.(*spectypes.PartialSignatureMessages); ok {
