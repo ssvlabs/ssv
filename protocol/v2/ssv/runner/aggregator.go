@@ -29,7 +29,7 @@ type AggregatorRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
 
-	quorum bool
+	quorumMap map[phase0.ValidatorIndex]bool
 }
 
 var _ Runner = &AggregatorRunner{}
@@ -66,6 +66,7 @@ func NewAggregatorRunner(
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
 		measurements:   NewMeasurementsStore(),
+		quorumMap:      make(map[phase0.ValidatorIndex]bool),
 	}, nil
 }
 
@@ -92,7 +93,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
-	r.quorum = true
+	r.quorumMap[r.GetShare().ValidatorIndex] = true
 
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
@@ -110,7 +111,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	logger.Debug("🧩 reconstructed partial SelectionProof signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-		zap.Bool("quorum", r.quorum))
+		zap.Bool("quorum", r.quorumMap[r.GetShare().ValidatorIndex]))
 
 	r.measurements.PauseDutyFlow()
 	// get block data
@@ -298,7 +299,8 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	r.quorum = false
+	r.quorumMap[r.GetShare().ValidatorIndex] = false
+
 	r.measurements.StartDutyFlow()
 	r.measurements.StartPreConsensus()
 
@@ -343,8 +345,8 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	go func() {
-		time.Sleep(4 * time.Second)
-		if !r.quorum {
+		time.Sleep(8 * time.Second)
+		if !r.quorumMap[r.GetShare().ValidatorIndex] {
 			logger.Warn("❌ did not get quorum for selection proof", fields.MessageID(msgID))
 		}
 	}()
