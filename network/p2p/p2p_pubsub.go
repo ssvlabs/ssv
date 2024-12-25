@@ -198,6 +198,29 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return nil
 		}
 
+		signedSSVMessage := &spectypes.SignedSSVMessage{}
+		if err := signedSSVMessage.Decode(msg.GetData()); err != nil {
+			logger.Error("failed to decode signed ssv message", zap.Error(err))
+			return err
+		}
+
+		d, err := queue.DecodeSignedSSVMessage(signedSSVMessage)
+		if err != nil {
+			logger.Error("failed to decode signed ssv message", zap.Error(err))
+			return err
+		}
+
+		if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
+			if m.Type == spectypes.SelectionProofPartialSig {
+				logger.Debug("📬 queue: pushed message",
+					fields.MessageID(d.MsgID),
+					zap.String("role", "AGGREGATOR_RUNNER"),
+					fields.Slot(m.Slot),
+					zap.Uint64("signer", m.Messages[0].Signer),
+					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+			}
+		}
+
 		var decodedMsg network.DecodedSSVMessage
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
