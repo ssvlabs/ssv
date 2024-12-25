@@ -9,9 +9,11 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -278,6 +280,29 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 				metric.WithAttributes(messageTypeAttribute(uint64(m.MsgType))))
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
+		}
+
+		signedSSVMessage := &spectypes.SignedSSVMessage{}
+		if err := signedSSVMessage.Decode(msg.GetData()); err != nil {
+			logger.Error("failed to decode signed ssv message", zap.Error(err))
+			return err
+		}
+
+		d, err := queue.DecodeSignedSSVMessage(signedSSVMessage)
+		if err != nil {
+			logger.Error("failed to decode signed ssv message", zap.Error(err))
+			return err
+		}
+
+		if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
+			if m.Type == spectypes.SelectionProofPartialSig {
+				logger.Debug("before ctrl.msgHandler(ctx, topicName, msg)",
+					fields.MessageID(d.MsgID),
+					zap.String("role", "AGGREGATOR_RUNNER"),
+					fields.Slot(m.Slot),
+					zap.Uint64("signer", m.Messages[0].Signer),
+					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
+			}
 		}
 
 		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
