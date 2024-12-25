@@ -347,10 +347,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
-	mv.logger.Debug("Attempting to acquire consensus state lock", fields.MessageID(messageID))
 	mv.consensusStateIndexMu.Lock()
-	mv.logger.Debug("Acquired consensus state lock", fields.MessageID(messageID))
-	//defer mv.consensusStateIndexMu.Unlock()
+	defer mv.consensusStateIndexMu.Unlock()
 
 	id := consensusID{
 		DutyExecutorID: string(messageID.GetDutyExecutorID()),
@@ -358,16 +356,12 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	}
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
-		mv.logger.Debug("Creating new consensus state for message ID", fields.MessageID(messageID))
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
 			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}
-
-	mv.consensusStateIndexMu.Unlock()
-	mv.logger.Debug("Released consensus state lock", fields.MessageID(messageID))
 
 	return mv.consensusStateIndex[id]
 }
