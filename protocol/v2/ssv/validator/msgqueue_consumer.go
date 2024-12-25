@@ -48,6 +48,8 @@ func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 			if m.Type == spectypes.SelectionProofPartialSig {
 				logger.Debug("📬 queue: pushed message",
 					fields.MessageID(msg.MsgID),
+					zap.String("role", "AGGREGATOR_RUNNER"),
+					fields.Slot(m.Slot),
 					zap.Uint64("signer", m.Messages[0].Signer),
 					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
 			}
