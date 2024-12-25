@@ -198,6 +198,16 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return nil
 		}
 
+		var decodedMsg network.DecodedSSVMessage
+		switch m := msg.ValidatorData.(type) {
+		case *queue.SSVMessage:
+			decodedMsg = m
+		case nil:
+			return errors.New("message was not decoded")
+		default:
+			return fmt.Errorf("unknown decoded message type: %T", m)
+		}
+
 		signedSSVMessage := &spectypes.SignedSSVMessage{}
 		if err := signedSSVMessage.Decode(msg.GetData()); err != nil {
 			logger.Error("failed to decode signed ssv message", zap.Error(err))
@@ -212,23 +222,13 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 
 		if m, ok := d.Body.(*spectypes.PartialSignatureMessages); ok {
 			if m.Type == spectypes.SelectionProofPartialSig {
-				logger.Debug("📬 queue: pushed message",
+				logger.Debug("before n.msgRouter.Route",
 					fields.MessageID(d.MsgID),
 					zap.String("role", "AGGREGATOR_RUNNER"),
 					fields.Slot(m.Slot),
 					zap.Uint64("signer", m.Messages[0].Signer),
 					zap.Uint64("validator_index", uint64(m.Messages[0].ValidatorIndex)))
 			}
-		}
-
-		var decodedMsg network.DecodedSSVMessage
-		switch m := msg.ValidatorData.(type) {
-		case *queue.SSVMessage:
-			decodedMsg = m
-		case nil:
-			return errors.New("message was not decoded")
-		default:
-			return fmt.Errorf("unknown decoded message type: %T", m)
 		}
 
 		n.msgRouter.Route(ctx, decodedMsg)
