@@ -119,6 +119,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
+		mv.logger.Error("failed to handle pubsub message", zap.Error(err))
 		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
@@ -134,10 +135,17 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 
 	signedSSVMessage, err := mv.decodeSignedSSVMessage(pMsg)
 	if err != nil {
+		mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
 		return nil, err
 	}
 
-	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
+	queueSSVMessage, err := mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
+	if err != nil {
+		mv.logger.Error("failed to handle signed ssv message", zap.Error(err))
+		return nil, err
+	}
+
+	return queueSSVMessage, nil
 }
 
 func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.SSVMessage, error) {
@@ -146,43 +154,51 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	}
 
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
+		mv.logger.Error("failed to validate signed ssv message", zap.Error(err))
 		return decodedMessage, err
 	}
 
 	decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
 
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
+		mv.logger.Error("failed to validate ssv message", zap.Error(err))
 		return decodedMessage, err
 	}
 
 	// TODO: leverage the ValidatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
+		mv.logger.Error("failed to get committee and validator indices", zap.Error(err))
 		return decodedMessage, err
 	}
 
 	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
+		mv.logger.Error("failed to check committee", zap.Error(err))
 		return decodedMessage, err
 	}
 
 	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
-
+	mv.logger.Debug("Acquiring validation lock", zap.String("msg_id", signedSSVMessage.SSVMessage.GetID().String()))
 	validationMu.Lock()
+	mv.logger.Debug("Acquired validation lock", zap.String("msg_id", signedSSVMessage.SSVMessage.GetID().String()))
 	defer validationMu.Unlock()
+	mv.logger.Debug("Released validation lock", zap.String("msg_id", signedSSVMessage.SSVMessage.GetID().String()))
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
-			return decodedMessage, err
+			mv.logger.Error("failed to validate consensus message", zap.Error(err))
+			return decodedMessage, fmt.Errorf("failed to validate consensus message: %w", err)
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
 		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
-			return decodedMessage, err
+			mv.logger.Error("failed to validate partial signature message", zap.Error(err))
+			return decodedMessage, fmt.Errorf("failed to validate partial signature message: %w", err)
 		}
 
 	default:

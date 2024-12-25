@@ -11,6 +11,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
@@ -38,12 +39,14 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.indices); err != nil {
+		mv.logger.Error("Failed to validate partial signature message semantics", zap.Error(err))
 		return nil, err
 	}
 
 	msgID := ssvMessage.GetID()
 	state := mv.consensusState(msgID)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedAt, state); err != nil {
+		mv.logger.Error("Failed to validate partial signature message by duty logic", zap.Error(err))
 		return nil, err
 	}
 
@@ -56,7 +59,8 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer); err != nil {
-		return nil, err
+		mv.logger.Error("Failed to update partial signature state", zap.Error(err))
+		return nil, fmt.Errorf("failed to update partial signature state: %w", err)
 	}
 
 	return partialSignatureMessages, nil
