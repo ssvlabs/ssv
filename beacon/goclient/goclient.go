@@ -302,6 +302,7 @@ func assertSameSpec(ctx context.Context, services ...Client) error {
 }
 
 func sameSpec(a, b map[string]any) error {
+	// NOTE: not checking "INTERVALS_PER_SLOT" because it's not set on some clients
 	paramsToCheck := []string{
 		"CONFIG_NAME",
 		"CAPELLA_FORK_VERSION",
@@ -312,7 +313,6 @@ func sameSpec(a, b map[string]any) error {
 		"SYNC_COMMITTEE_SUBNET_COUNT",
 		"TARGET_AGGREGATORS_PER_COMMITTEE",
 		"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE",
-		"INTERVALS_PER_SLOT",
 	}
 
 	for _, param := range paramsToCheck {
