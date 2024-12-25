@@ -58,5 +58,5 @@ func NewService(ctx context.Context, logger *zap.Logger, topicsController topics
 	if opts.DiscV5Opts == nil {
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
-	return newDiscV5Service(ctx, logger, true, topicsController, &opts)
+	return newDiscV5Service(ctx, logger, false, topicsController, &opts)
 }
