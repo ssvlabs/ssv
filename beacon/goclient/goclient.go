@@ -341,11 +341,6 @@ func sameGenesis(a, b *apiv1.Genesis) error {
 		return fmt.Errorf("genesis fork version mismatch, got %v and %v", a.GenesisForkVersion, b.GenesisForkVersion)
 	}
 
-	if a != b {
-		// This should be unreachable unless *apiv1.Genesis has new fields
-		return fmt.Errorf("genesis mismatch, got %v and %v", a, b)
-	}
-
 	return nil
 }
 
