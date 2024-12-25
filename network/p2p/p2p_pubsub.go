@@ -195,6 +195,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return nil
 		}
 		if msg == nil {
+			logger.Debug("received nil message")
 			return nil
 		}
 
