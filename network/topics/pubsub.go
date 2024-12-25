@@ -74,7 +74,7 @@ type PubSubConfig struct {
 
 // ScoringConfig is the configuration for peer scoring
 type ScoringConfig struct {
-	IPWhilelist        []*net.IPNet
+	IPWhitelist        []*net.IPNet
 	IPColocationWeight float64
 	OneEpochDuration   time.Duration
 }
@@ -117,7 +117,7 @@ type CommitteesProvider interface {
 }
 
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics, committeesProvider CommitteesProvider, gossipScoreIndex peers.GossipScoreIndex) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, committeesProvider CommitteesProvider, gossipScoreIndex peers.GossipScoreIndex) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -167,14 +167,14 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		}
 
 		// Get overall score params
-		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
+		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhitelist...)
 
 		// Define score inspector
 		if inspector == nil {
 			peerConnected := func(pid peer.ID) bool {
 				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
 			}
-			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected, peerScoreParams, topicScoreFactory, gossipScoreIndex)
+			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, peerConnected, peerScoreParams, topicScoreFactory, gossipScoreIndex)
 		}
 		if inspectInterval == 0 {
 			inspectInterval = defaultScoreInspectInterval
