@@ -761,7 +761,7 @@ func TestDoCall_MultipleClients_FirstFail_SecondSuccess(t *testing.T) {
 			return nil, errors.New("client1 failed")
 		}
 		if client == client2 {
-			return "client2 success", nil
+			return "client2 success", nil // nolint:goconst
 		}
 		return nil, errors.New("unknown client")
 	}
@@ -769,7 +769,7 @@ func TestDoCall_MultipleClients_FirstFail_SecondSuccess(t *testing.T) {
 	res, err := ec.doCall(context.Background(), callFunc)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "client2 success", res)
+	assert.Equal(t, "client2 success", res) // nolint:goconst
 	assert.Equal(t, 1, ec.currentClientIndex)
 
 	assert.Equal(t, 1, logs.Len())
@@ -880,7 +880,7 @@ func TestDoCall_Concurrency(t *testing.T) {
 			if callCount%3 == 0 { // Fail client2 every 3rd call
 				return nil, fmt.Errorf("client2 failed")
 			}
-			return "client2 success", nil
+			return "client2 success", nil // nolint:goconst
 		}
 		return nil, fmt.Errorf("unknown client")
 	}
