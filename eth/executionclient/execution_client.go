@@ -56,7 +56,7 @@ type ExecutionClient struct {
 	closed chan struct{}
 }
 
-const syncTimeTolerance = 1 * time.Minute
+const unhealthyDurationTolerance = 1 * time.Minute
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
@@ -262,7 +262,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 			zap.Error(err))
 
 		unhealthyDuration := time.Since(ec.lastHealthy)
-		if unhealthyDuration < syncTimeTolerance {
+		if unhealthyDuration < unhealthyDurationTolerance {
 			// override error if we're in the tolerance window
 			return nil
 		}
@@ -287,7 +287,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	}
 
 	unhealthyDuration := time.Since(ec.lastHealthy)
-	if unhealthyDuration > syncTimeTolerance {
+	if unhealthyDuration > unhealthyDurationTolerance {
 		return fmt.Errorf("not synced for too long (%d): %w", unhealthyDuration, errSyncing)
 	}
 

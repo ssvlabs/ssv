@@ -118,6 +118,7 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
+	lastHealthy           time.Time
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -233,6 +234,19 @@ func (gc *GoClient) NodeClient() NodeClient {
 
 var errSyncing = errors.New("syncing")
 
+const unhealthyDurationTolerance = 1 * time.Minute
+
+// Checks if the error occurred within the tolerance window
+// and overrides it if true
+func (gc *GoClient) checkIsWithinTolerance(err error) error {
+	unhealthyDuration := time.Since(gc.lastHealthy)
+	if unhealthyDuration < unhealthyDurationTolerance {
+		return nil
+	}
+
+	return err
+}
+
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
@@ -244,35 +258,50 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 		)
 		// TODO: get rid of global variable, pass metrics to goClient
 		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
-		return fmt.Errorf("failed to obtain node syncing status: %w", err)
+		err = fmt.Errorf("failed to obtain node syncing status: %w", err)
+		return gc.checkIsWithinTolerance(err)
 	}
+
 	if nodeSyncingResp == nil {
 		gc.log.Error(clNilResponseErrMsg,
 			zap.String("api", "NodeSyncing"),
 		)
 		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
-		return fmt.Errorf("node syncing response is nil")
+		err = fmt.Errorf("node syncing response is nil")
+		return gc.checkIsWithinTolerance(err)
 	}
 	if nodeSyncingResp.Data == nil {
 		gc.log.Error(clNilResponseDataErrMsg,
 			zap.String("api", "NodeSyncing"),
 		)
 		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
-		return fmt.Errorf("node syncing data is nil")
+		err = fmt.Errorf("node syncing data is nil")
+		return gc.checkIsWithinTolerance(err)
 	}
 	syncState := nodeSyncingResp.Data
 	recordBeaconClientStatus(ctx, statusSyncing, gc.client.Address())
 	recordSyncDistance(ctx, syncState.SyncDistance, gc.client.Address())
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
-	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
-		gc.log.Error("Consensus client is not synced")
-		return errSyncing
+	if syncState.IsSyncing {
+		// check within the allowed distance
+		if syncState.SyncDistance > gc.syncDistanceTolerance {
+			gc.log.Error("Consensus client is not synced")
+			return errSyncing
+		}
+		unhealthyDuration := time.Since(gc.lastHealthy)
+		// within the distance but out of time
+		if unhealthyDuration > unhealthyDurationTolerance {
+			return fmt.Errorf("not synced for too long (%d): %w", unhealthyDuration, errSyncing)
+		}
 	}
+
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
 	}
+
+	gc.lastHealthy = time.Now()
 
 	recordBeaconClientStatus(ctx, statusSynced, gc.client.Address())
 

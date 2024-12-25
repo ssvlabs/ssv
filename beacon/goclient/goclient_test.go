@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -64,6 +66,66 @@ func TestHealthy(t *testing.T) {
 		}
 
 		client.syncDistanceTolerance = 3
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("within distance/time allowance", func(t *testing.T) {
+		lh := time.Now().Add(-59 * time.Second)
+		client.lastHealthy = lh
+		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
+			r := new(api.Response[*v1.SyncState])
+			r.Data = &v1.SyncState{
+				IsSyncing: true,
+			}
+			return r, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+		assert.True(t, client.lastHealthy.After(lh))
+	})
+
+	t.Run("outside time allowance", func(t *testing.T) {
+		lh := time.Now().Add(-time.Minute)
+		client.lastHealthy = lh
+		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
+			r := new(api.Response[*v1.SyncState])
+			r.Data = &v1.SyncState{
+				IsSyncing: true,
+			}
+			return r, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.ErrorIs(t, err, errSyncing)
+		assert.True(t, client.lastHealthy == lh)
+	})
+
+	t.Run("sync error overriden if within time limits", func(t *testing.T) {
+		client.lastHealthy = time.Now().Add(-59 * time.Second)
+		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
+			return nil, errors.New("some err")
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+	})
+	t.Run("sync nil response err overriden if within time limits", func(t *testing.T) {
+		client.lastHealthy = time.Now().Add(-59 * time.Second)
+		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
+			return nil, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+	})
+	t.Run("sync nil response data err overriden if within time ", func(t *testing.T) {
+		client.lastHealthy = time.Now().Add(-59 * time.Second)
+		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
+			return new(api.Response[*v1.SyncState]), nil
+		}
 
 		err = client.Healthy(ctx)
 		require.NoError(t, err)
