@@ -92,6 +92,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
+	r.quorum = true
+
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
 
@@ -145,8 +147,6 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	if !decided {
 		return nil
 	}
-
-	r.quorum = true
 
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregator)
