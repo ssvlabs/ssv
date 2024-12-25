@@ -109,7 +109,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	logger.Debug("🧩 reconstructed partial SelectionProof signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+		zap.Bool("quorum", r.quorum))
 
 	r.measurements.PauseDutyFlow()
 	// get block data
@@ -342,7 +343,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	go func() {
-		time.Sleep(8 * time.Second)
+		time.Sleep(4 * time.Second)
 		if !r.quorum {
 			logger.Warn("❌ did not get quorum for selection proof", fields.MessageID(msgID))
 		}
