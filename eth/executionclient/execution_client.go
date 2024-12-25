@@ -80,9 +80,38 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
 	}
 
+	same, err := assertSameChainIDs(ctx, client.clients...)
+	if err != nil {
+		return nil, fmt.Errorf("assert same chain IDs: %w", err)
+	}
+	if !same {
+		return nil, fmt.Errorf("execution clients' chain IDs are not same")
+	}
+
 	client.syncProgressFn = client.syncProgress
 
 	return client, nil
+}
+
+// assertSameChainIDs should receive a non-empty list
+func assertSameChainIDs(ctx context.Context, clients ...*ethclient.Client) (bool, error) {
+	firstChainID, err := clients[0].ChainID(ctx)
+	if err != nil {
+		return false, fmt.Errorf("get first chain ID: %w", err)
+	}
+
+	for _, client := range clients[1:] {
+		clientChainID, err := client.ChainID(ctx)
+		if err != nil {
+			return false, fmt.Errorf("get client chain ID: %w", err)
+		}
+
+		if firstChainID.Cmp(clientChainID) != 0 {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
