@@ -29,6 +29,7 @@ import (
 
 func TestOldSlotCleanup(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	t.Cleanup(func() { _ = db.Close() })
 	assert.NoError(t, err)
 
 	role := spectypes.BNRoleAttester
@@ -172,7 +173,8 @@ func TestSlotCleanupJob(t *testing.T) {
 		storage.StartCleanupJob(ctx, zap.NewNop(), tickerProv, 1)
 	}()
 
-	{ //trigger
+	// trigger
+	{
 		mockTimeChan <- time.Now()
 		mockSlotChan <- phase0.Slot(4)
 	}
@@ -188,7 +190,8 @@ func TestSlotCleanupJob(t *testing.T) {
 	assert.Equal(t, phase0.Slot(3), pp[0].Slot)
 	assert.Equal(t, phase0.Slot(9), pp[6].Slot)
 
-	{ //trigger
+	// trigger
+	{
 		mockTimeChan <- time.Now()
 		mockSlotChan <- phase0.Slot(5)
 	}

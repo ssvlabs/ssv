@@ -66,11 +66,11 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 	<-ticker.Next()
 	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
 
-	// on start we cleanup ALL slots below the threashold
+	// on start we remove ALL slots below the threashold
 	start := time.Now()
 	count := i.removeSlotsOlderThan(logger, threashold)
 
-	logger.Debug("removed stale slot entries", zap.Int("count", count), zap.Duration("took", time.Since(start)))
+	logger.Info("removed stale slot entries", zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 
 	for {
 		select {
@@ -87,10 +87,31 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 
 // removes ALL entries that have given slot in their prefix
 func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
+	var keySet [][]byte
+
 	prefix := i.makePrefix(slotToByteSlice(slot))
 
-	if err := i.db.DropPrefix(prefix); err != nil {
-		return err
+	tx := i.db.Begin()
+	defer tx.Discard()
+
+	// filter and collect keys
+	err := i.db.UsingReader(tx).GetAll(prefix, func(i int, o basedb.Obj) error {
+		keySet = append(keySet, o.Key)
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("collect keys of stale slots: %w", err)
+	}
+
+	for _, id := range keySet {
+		if err := i.db.Using(tx).Delete(append(prefix, id...), nil); err != nil {
+			return fmt.Errorf("remove slot: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit old slot removal: %w", err)
 	}
 
 	return nil
@@ -98,30 +119,42 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
 
 // removes ALL entries for any slots older or equal to given slot
 func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase0.Slot) int {
-	var keySet = make(map[phase0.Slot]struct{})
+	var keySet = make(map[phase0.Slot][]byte)
 
-	prefix := make([]byte, 0, len(participantsKey)+1)
-	prefix = append(prefix, participantsKey...)
-	prefix = append(prefix, i.prefix...)
+	prefix := i.makePrefix(nil)
 
-	// collect keys
-	err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
+	tx := i.db.Begin()
+	defer tx.Discard()
+
+	// filter and collect keys
+	err := i.db.UsingReader(tx).GetAll(prefix, func(_ int, o basedb.Obj) error {
 		dbSlot := byteSliceToSlot(o.Key[:4])
 		if dbSlot < slot {
-			keySet[dbSlot] = struct{}{}
+			keySet[dbSlot] = o.Key
 		}
 		return nil
 	})
 
 	if err != nil {
-		logger.Error("collect keys for stale slots", zap.Error(err))
+		logger.Error("collect keys of stale slots", zap.Error(err))
+		return 0
 	}
 
-	for slot := range keySet {
-		err := i.removeSlotAt(slot)
-		if err != nil {
-			logger.Error("remove slot at", zap.Error(err), fields.Slot(slot))
+	for k, id := range keySet {
+		if err = i.db.Using(tx).Delete(append(prefix, id...), nil); err != nil {
+			logger.Error("remove slot", zap.Int("slot", int(k)), zap.Error(err))
+			break
 		}
+	}
+
+	if err != nil {
+		logger.Error("delete slots", zap.Error(err))
+		return 0
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.Error("commit", zap.Error(err))
+		return 0
 	}
 
 	return len(keySet)
@@ -260,6 +293,11 @@ func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte
 		return nil, found, err
 	}
 	return obj.Value, found, nil
+}
+
+func (i *participantStorage) ID() string {
+	bnr := spectypes.BeaconRole(uint64(i.prefix[0]))
+	return bnr.String()
 }
 
 func (i *participantStorage) makePrefix(slot []byte) []byte {
