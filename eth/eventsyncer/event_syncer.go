@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"go.uber.org/zap"
@@ -80,6 +81,16 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	if time.Since(es.lastProcessedBlockChange) > es.stalenessThreshold {
 		return fmt.Errorf("syncing is stuck at block %d", lastProcessedBlock.Uint64())
 	}
+
+	// Check if the block is too old.
+	header, err := es.executionClient.(*executionclient.ExecutionClient).HeaderByNumber(ctx, big.NewInt(int64(es.lastProcessedBlock)))
+	if err != nil {
+		return fmt.Errorf("failed to get header for block %d: %w", es.lastProcessedBlock, err)
+	}
+	if header.Time < uint64(time.Now().Add(-1*time.Minute).Unix()) {
+		return fmt.Errorf("block %d is too old", es.lastProcessedBlock)
+	}
+
 	return nil
 }
 
@@ -108,6 +119,15 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	if lastProcessedBlock < fromBlock {
 		// Event replay: this should never happen!
 		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
+	}
+
+	// Check if the block is too old.
+	header, err := es.executionClient.(*executionclient.ExecutionClient).HeaderByNumber(ctx, big.NewInt(int64(es.lastProcessedBlock)))
+	if err != nil {
+		return 0, fmt.Errorf("failed to get header for block %d: %w", es.lastProcessedBlock, err)
+	}
+	if header.Time < uint64(time.Now().Add(-3*time.Minute).Unix()) {
+		return 0, fmt.Errorf("block %d is too old", es.lastProcessedBlock)
 	}
 
 	es.logger.Info("finished syncing historical events",
