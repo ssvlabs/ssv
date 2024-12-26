@@ -21,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
 var (
@@ -248,7 +247,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 
 	go func() {
 		defer close(logs)
-		tries := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -256,7 +254,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 			case <-ec.closed:
 				return
 			default:
-				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				_, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 					// Closed gracefully.
 					return
@@ -268,18 +266,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 					err = errors.New("streamLogsToChan halted without an error")
 				}
 
-				tries++
-				if tries > 2 {
-					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
-				}
-				if lastBlock > fromBlock {
-					// Successfully streamed some logs, reset tries.
-					tries = 0
-				}
-
-				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
-				ec.reconnect(ctx)
-				fromBlock = lastBlock + 1
+				ec.logger.Fatal("failed to stream registry events", zap.Error(err))
 			}
 		}
 	}()
@@ -443,33 +430,6 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	ec.clients = clients
 
 	return nil
-}
-
-// reconnect tries to reconnect multiple times with an exponent interval.
-// It panics when reconnecting limit is reached.
-// It must not be called twice in parallel.
-func (ec *ExecutionClient) reconnect(ctx context.Context) {
-	logger := ec.logger.With(fields.Address(ec.nodeAddr))
-
-	start := time.Now()
-	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
-		logger.Info("reconnecting")
-		if err := ec.connect(ctx); err != nil { // TODO: handle case if some nodes are down
-			if ec.isClosed() {
-				return true, false
-			}
-			// continue until reaching to limit, and then panic as Ethereum execution client connection is required
-			if lastTick >= ec.reconnectionMaxInterval {
-				logger.Panic("failed to reconnect", zap.Error(err))
-			} else {
-				logger.Warn("could not reconnect, still trying", zap.Error(err))
-			}
-			return false, false
-		}
-		return true, false
-	}, ec.reconnectionInitialInterval, ec.reconnectionMaxInterval+(ec.reconnectionInitialInterval))
-
-	logger.Info("reconnected to execution client", zap.Duration("took", time.Since(start)))
 }
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
