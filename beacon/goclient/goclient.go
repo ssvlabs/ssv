@@ -237,7 +237,7 @@ var errSyncing = errors.New("syncing")
 const unhealthyDurationTolerance = 1 * time.Minute
 
 // Checks if the error occurred within the tolerance window
-// and overrides it if true
+// and suppresses it if true
 func (gc *GoClient) checkIsWithinTolerance(err error) error {
 	unhealthyDuration := time.Since(gc.lastHealthy)
 	if unhealthyDuration < unhealthyDurationTolerance {

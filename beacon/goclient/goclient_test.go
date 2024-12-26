@@ -103,7 +103,18 @@ func TestHealthy(t *testing.T) {
 		assert.True(t, client.lastHealthy == lh)
 	})
 
-	t.Run("sync error overriden if within time limits", func(t *testing.T) {
+	// error suppression
+	t.Run("sync error is propagated if outside of time limits", func(t *testing.T) {
+		syncErr := errors.New("sync err")
+		client.lastHealthy = time.Now().Add(-61 * time.Second)
+		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
+			return nil, syncErr
+		}
+
+		err = client.Healthy(ctx)
+		require.ErrorIs(t, err, syncErr)
+	})
+	t.Run("sync error suppressed if within time limits", func(t *testing.T) {
 		client.lastHealthy = time.Now().Add(-59 * time.Second)
 		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
 			return nil, errors.New("some err")
@@ -112,7 +123,7 @@ func TestHealthy(t *testing.T) {
 		err = client.Healthy(ctx)
 		require.NoError(t, err)
 	})
-	t.Run("sync nil response err overriden if within time limits", func(t *testing.T) {
+	t.Run("sync nil response err suppressed if within time limits", func(t *testing.T) {
 		client.lastHealthy = time.Now().Add(-59 * time.Second)
 		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
 			return nil, nil
@@ -121,7 +132,7 @@ func TestHealthy(t *testing.T) {
 		err = client.Healthy(ctx)
 		require.NoError(t, err)
 	})
-	t.Run("sync nil response data err overriden if within time ", func(t *testing.T) {
+	t.Run("sync nil response data err suppressed if within time ", func(t *testing.T) {
 		client.lastHealthy = time.Now().Add(-59 * time.Second)
 		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
 			return new(api.Response[*v1.SyncState]), nil
