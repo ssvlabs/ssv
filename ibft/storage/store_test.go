@@ -102,6 +102,12 @@ func TestRemoveSlot(t *testing.T) {
 }
 
 func TestSlotCleanupJob(t *testing.T) {
+	// to test the slot cleanup job we insert 10 slots with two entries per slot for two
+	// each having different pks, then we configure to retain 1 slot in the past
+	// at boot the job removes ALL slots past the retained one, meaning that when we
+	// start with slot 4, slots 0,1,2 will be deleted and 3 retained
+	// and then on next tick (5) slot 3 will be removed as well keeping back slot 4.
+
 	// setup
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	assert.NoError(t, err)
@@ -119,6 +125,7 @@ func TestSlotCleanupJob(t *testing.T) {
 		oids = append(oids, o.OperatorID)
 	}
 
+	// pk 1
 	pk := sks[1].GetPublicKey()
 	decided10Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		return oids, &specqbft.Message{
@@ -134,6 +141,28 @@ func TestSlotCleanupJob(t *testing.T) {
 	storage := ibftStorage.Get(role).(*participantStorage)
 
 	// save participants
+	for _, d := range decided10Seq {
+		_, err := storage.UpdateParticipants(
+			spectypes.ValidatorPK(pk.Serialize()),
+			phase0.Slot(d.State.Height),
+			d.DecidedMessage.OperatorIDs,
+		)
+		require.NoError(t, err)
+	}
+
+	// pk 2
+	pk = sks[2].GetPublicKey()
+	decided10Seq, err = protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     height,
+			Round:      1,
+			Identifier: pk.Serialize(),
+			Root:       [32]byte{0x1, 0x2, 0x3},
+		}
+	})
+	require.NoError(t, err)
+
 	for _, d := range decided10Seq {
 		_, err := storage.UpdateParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
@@ -170,7 +199,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		storage.StartCleanupJob(ctx, zap.NewNop(), tickerProv, 2)
+		storage.StartCleanupJob(ctx, zap.NewNop(), tickerProv, 1)
 	}()
 
 	// trigger
@@ -183,12 +212,14 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
 	require.Nil(t, err)
-	require.Equal(t, 7, len(pp))
+	require.Equal(t, 14, len(pp))
 
 	// 	0	1	2	3	4	5	6	7	8	9
 	//	x   x   x	~
 	assert.Equal(t, phase0.Slot(3), pp[0].Slot)
-	assert.Equal(t, phase0.Slot(9), pp[6].Slot)
+	assert.Equal(t, phase0.Slot(3), pp[1].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[12].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[13].Slot)
 
 	// trigger
 	{
@@ -200,12 +231,14 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	pp, err = storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
 	require.Nil(t, err)
-	require.Equal(t, 6, len(pp))
+	require.Equal(t, 12, len(pp))
 
 	// 	0	1	2	3	4	5	6	7	8	9
 	//	x   x   x	x	~
 	assert.Equal(t, phase0.Slot(4), pp[0].Slot)
-	assert.Equal(t, phase0.Slot(9), pp[5].Slot)
+	assert.Equal(t, phase0.Slot(4), pp[1].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[10].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[11].Slot)
 
 	cancel()
 	wg.Wait()
