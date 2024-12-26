@@ -77,7 +77,7 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
-			threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
+			threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
 			if err := i.removeSlotAt(threashold); err != nil {
 				logger.Error("remove slot at", fields.Slot(threashold))
 			}
