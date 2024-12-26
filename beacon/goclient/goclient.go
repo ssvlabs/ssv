@@ -169,6 +169,28 @@ func New(
 			return nil, err
 		}
 
+		nodeVersionResp, err := httpClient.NodeVersion(opt.Context, &api.NodeVersionOpts{})
+		if err != nil {
+			logger.Error(clResponseErrMsg,
+				zap.String("api", "NodeVersion"),
+				zap.Error(err),
+			)
+			return nil, fmt.Errorf("failed to get node version: %w", err)
+		}
+		if nodeVersionResp == nil {
+			logger.Error(clNilResponseErrMsg,
+				zap.String("api", "NodeVersion"),
+			)
+			return nil, fmt.Errorf("node version response is nil")
+		}
+
+		logger.Info("consensus client connected",
+			fields.Name(httpClient.Name()),
+			fields.Address(httpClient.Address()),
+			zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
+			zap.String("version", nodeVersionResp.Data),
+		)
+
 		consensusClients = append(consensusClients, httpClient)
 		consensusClientsAsServices = append(consensusClientsAsServices, httpClient)
 	}
@@ -241,28 +263,6 @@ func setupHTTPClient(ctx context.Context, logger *zap.Logger, addr string, commo
 
 		return nil, fmt.Errorf("create http client: %w", err)
 	}
-
-	nodeVersionResp, err := httpClient.(*eth2clienthttp.Service).NodeVersion(ctx, &api.NodeVersionOpts{})
-	if err != nil {
-		logger.Error(clResponseErrMsg,
-			zap.String("api", "NodeVersion"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to get node version: %w", err)
-	}
-	if nodeVersionResp == nil {
-		logger.Error(clNilResponseErrMsg,
-			zap.String("api", "NodeVersion"),
-		)
-		return nil, fmt.Errorf("node version response is nil")
-	}
-
-	logger.Info("consensus client connected",
-		fields.Name(httpClient.Name()),
-		fields.Address(httpClient.Address()),
-		zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
-		zap.String("version", nodeVersionResp.Data),
-	)
 
 	return httpClient.(*eth2clienthttp.Service), nil
 }
