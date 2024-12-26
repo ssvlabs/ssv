@@ -139,7 +139,6 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 			c.writeLock.Lock()
 			n, err := c.sendMsg(message)
 			c.writeLock.Unlock()
-			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 			if err != nil {
 				logger.Warn("failed to send message", zap.Error(err))
 				return

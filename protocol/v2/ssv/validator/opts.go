@@ -1,18 +1,12 @@
 package validator
 
 import (
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/ibft/genesisstorage"
-	genesisqbftctrl "github.com/ssvlabs/ssv/protocol/genesis/qbft/controller"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
-	genesisbeacon "github.com/ssvlabs/ssv/protocol/genesis/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -28,7 +22,6 @@ type Options struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	Network           specqbft.Network
 	Beacon            beacon.BeaconNode
-	GenesisBeacon     genesisbeacon.BeaconNode
 	Storage           *storage.QBFTStores
 	SSVShare          *ssvtypes.SSVShare
 	Operator          *spectypes.CommitteeMember
@@ -41,16 +34,7 @@ type Options struct {
 	QueueSize         int
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator
-	Metrics           Metrics
 	Graffiti          []byte
-	GenesisOptions
-}
-
-type GenesisOptions struct {
-	Network           genesisspecqbft.Network
-	Storage           *genesisstorage.QBFTStores
-	Signer            genesisspectypes.KeyManager
-	NewDecidedHandler genesisqbftctrl.NewDecidedHandler
 }
 
 func (o *Options) defaults() {

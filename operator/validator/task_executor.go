@@ -11,8 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/operator/validators"
-	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -25,7 +24,7 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
-	c.metrics.ValidatorRemoved(pubKey[:])
+	validatorsRemovedCounter.Add(c.ctx, 1)
 	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
@@ -80,15 +79,9 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	c.validatorsMap.ForEachValidator(func(v *validators.ValidatorContainer) bool {
-		if v.Share().OwnerAddress == owner {
-			v.UpdateShare(
-				func(s *types.SSVShare) {
-					s.FeeRecipientAddress = recipient
-				}, func(s *genesistypes.SSVShare) {
-					s.FeeRecipientAddress = recipient
-				},
-			)
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
+		if v.Share.OwnerAddress == owner {
+			v.Share.FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}

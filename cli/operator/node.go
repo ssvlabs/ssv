@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -16,14 +17,12 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/beacon/goclient/genesisgoclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -34,21 +33,21 @@ import (
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
 	"github.com/ssvlabs/ssv/exporter/convert"
-	genesisibftstorage "github.com/ssvlabs/ssv/ibft/genesisstorage"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
-	genesisvalidation "github.com/ssvlabs/ssv/message/validation/genesis"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
+	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -58,7 +57,6 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
-	genesisssvtypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -82,7 +80,7 @@ type config struct {
 	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
 	KeyStore                   KeyStore                         `yaml:"KeyStore"`
-	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"SSV.Network" `
+	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"ssv.network" `
 	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
@@ -97,8 +95,6 @@ var cfg config
 
 var globalArgs global_config.Args
 
-var operatorNode operator.Node
-
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -108,16 +104,26 @@ var StartNodeCmd = &cobra.Command{
 
 		logger, err := setupGlobal()
 		if err != nil {
-			log.Fatal("could not create logger", err)
+			log.Fatal("could not create logger ", err)
 		}
 
 		defer logging.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		metricsReporter := metricsreporter.New(
-			metricsreporter.WithLogger(logger),
-		)
+		observabilityShutdown, err := observability.Initialize(
+			cmd.Parent().Short,
+			cmd.Parent().Version,
+			observability.WithMetrics())
+		if err != nil {
+			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+		}
+
+		defer func() {
+			if err = observabilityShutdown(cmd.Context()); err != nil {
+				logger.Error("could not shutdown observability object", zap.Error(err))
+			}
+		}()
 
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
@@ -168,7 +174,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, networkConfig.AlanForkNetworkName(), usingLocalEvents); err != nil {
+		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
@@ -202,11 +208,11 @@ var StartNodeCmd = &cobra.Command{
 			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
-			executionclient.WithMetrics(metricsReporter),
 			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+			executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 		)
 		if err != nil {
 			logger.Fatal("could not connect to execution client", zap.Error(err))
@@ -225,40 +231,18 @@ var StartNodeCmd = &cobra.Command{
 
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
-		validatorStore := nodeStorage.ValidatorStore()
-
-		var messageValidator validation.MessageValidator
-
-		alanMsgValidator := validation.New(
+		messageValidator := validation.New(
 			networkConfig,
-			validatorStore,
+			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
 		)
 
-		if networkConfig.PastAlanFork() {
-			messageValidator = alanMsgValidator
-		} else {
-			messageValidator = &validation.ForkingMessageValidation{
-				NetworkConfig: networkConfig,
-				Alan:          alanMsgValidator,
-				Genesis: genesisvalidation.New(
-					networkConfig,
-					genesisvalidation.WithNodeStorage(nodeStorage),
-					genesisvalidation.WithLogger(logger),
-					genesisvalidation.WithMetrics(metricsReporter),
-					genesisvalidation.WithDutyStore(dutyStore),
-				),
-			}
-		}
-
-		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-		p2pNetwork, genesisP2pNetwork := setupP2P(logger, db, metricsReporter)
+		p2pNetwork := setupP2P(logger, db)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -267,12 +251,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
-		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
-		cfg.SSVOptions.ValidatorOptions.GenesisBeacon = genesisgoclient.NewAdapter(consensusClient)
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
@@ -281,8 +263,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
-
-		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.KeyManager = &ekm.GenesisKeyManagerAdapter{KeyManager: keyManager}
 
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -310,40 +290,19 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
-		genesisStorageRoles := []genesisspectypes.BeaconRole{
-			genesisspectypes.BNRoleAttester,
-			genesisspectypes.BNRoleAggregator,
-			genesisspectypes.BNRoleProposer,
-			genesisspectypes.BNRoleSyncCommittee,
-			genesisspectypes.BNRoleSyncCommitteeContribution,
-			genesisspectypes.BNRoleValidatorRegistration,
-			genesisspectypes.BNRoleVoluntaryExit,
-		}
-
-		genesisStorageMap := genesisibftstorage.NewStores()
-
-		for _, storageRole := range genesisStorageRoles {
-			genesisStorageMap.Add(storageRole, genesisibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, "genesis_"+storageRole.String()))
-		}
-
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
-		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
-		cfg.SSVOptions.Metrics = metricsReporter
-
-		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.StorageMap = genesisStorageMap
-		cfg.SSVOptions.ValidatorOptions.GenesisControllerOptions.Network = &genesisP2pNetwork
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		cfg.SSVOptions.ValidatorStore = validatorStore
+		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
+		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
 		}
 
 		nodeProber := nodeprobe.NewProber(
@@ -365,14 +324,11 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber.Wait()
 		logger.Info("ethereum node(s) are healthy")
 
-		metricsReporter.SSVNodeHealthy()
-
 		eventSyncer := setupEventHandling(
 			cmd.Context(),
 			logger,
 			executionClient,
 			validatorCtrl,
-			metricsReporter,
 			networkConfig,
 			nodeStorage,
 			operatorDataStore,
@@ -383,14 +339,45 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
-		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return validatorCtrl.GetValidatorStats()
-		}
-		if err := p2pNetwork.Setup(logger); err != nil {
-			logger.Fatal("failed to setup network", zap.Error(err))
-		}
-		if err := p2pNetwork.Start(logger); err != nil {
-			logger.Fatal("failed to start network", zap.Error(err))
+		// Increase MaxPeers if the operator is subscribed to many subnets.
+		// TODO: use OperatorCommittees when it's fixed.
+		if cfg.P2pNetworkConfig.DynamicMaxPeers {
+			var (
+				baseMaxPeers        = 60
+				maxPeersLimit       = cfg.P2pNetworkConfig.DynamicMaxPeersLimit
+				idealPeersPerSubnet = 3
+			)
+			start := time.Now()
+			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorData.ID)
+			mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+			myActiveSubnets := 0
+			for _, v := range myValidators {
+				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+				if mySubnets[subnet] == 0 {
+					mySubnets[subnet] = 1
+					myActiveSubnets++
+				}
+			}
+			idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
+			if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
+				logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
+					zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
+					zap.Int("new_max_peers", idealMaxPeers),
+					zap.Int("subscribed_subnets", myActiveSubnets),
+					zap.Duration("took", time.Since(start)),
+				)
+				cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
+			}
+
+			cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+				return validatorCtrl.GetValidatorStats()
+			}
+			if err := p2pNetwork.Setup(logger); err != nil {
+				logger.Fatal("failed to setup network", zap.Error(err))
+			}
+			if err := p2pNetwork.Start(logger); err != nil {
+				logger.Fatal("failed to start network", zap.Error(err))
+			}
 		}
 
 		if cfg.SSVAPIPort > 0 {
@@ -407,6 +394,10 @@ var StartNodeCmd = &cobra.Command{
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
+				},
+				&handlers.Exporter{
+					DomainType: networkConfig.DomainType,
+					QBFTStores: storageMap,
 				},
 			)
 			go func() {
@@ -601,22 +592,22 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
 		}
-		byts, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
+		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
 			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
 		}
-		if len(byts) != 4 {
+		if len(domainBytes) != 4 {
 			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
-		networkConfig.GenesisDomainType = spectypes.DomainType(byts)
-		if networkConfig.PastAlanFork() {
-			logger.Info("custom domain type is ineffective now after Alan fork", fields.Domain(networkConfig.GenesisDomainType))
-		} else {
-			logger.Info("running with custom domain type", fields.Domain(networkConfig.GenesisDomainType))
-		}
-	}
 
-	genesisssvtypes.SetDefaultDomain(genesisspectypes.DomainType(networkConfig.GenesisDomainType))
+		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
+		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
+		binary.BigEndian.PutUint32(networkConfig.DomainType[:], postForkDomain)
+
+		logger.Info("running with custom domain type",
+			fields.Domain(networkConfig.DomainType),
+		)
+	}
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
@@ -625,7 +616,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.DomainType()),
+		fields.Domain(networkConfig.DomainType),
 		zap.String("nodeType", nodeType),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
@@ -635,7 +626,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) (network.P2PNetwork, p2pv1.GenesisP2P) {
+func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -643,11 +634,11 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	n, err := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	n, err := p2pv1.New(logger, &cfg.P2pNetworkConfig)
 	if err != nil {
 		logger.Fatal("failed to setup p2p network", zap.Error(err))
 	}
-	return n, p2pv1.GenesisP2P{Network: n}
+	return n
 }
 
 func setupConsensusClient(
@@ -669,7 +660,6 @@ func setupEventHandling(
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
 	validatorCtrl validator.Controller,
-	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
@@ -694,7 +684,6 @@ func setupEventHandling(
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
-		eventhandler.WithMetrics(metricsReporter),
 	)
 	if err != nil {
 		logger.Fatal("failed to setup event data handler", zap.Error(err))
@@ -705,7 +694,6 @@ func setupEventHandling(
 		executionClient,
 		eventHandler,
 		eventsyncer.WithLogger(logger),
-		eventsyncer.WithMetrics(metricsReporter),
 	)
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
@@ -787,10 +775,10 @@ func setupEventHandling(
 	return eventSyncer
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter metricsreporter.MetricsReporter, port int, enableProf bool) {
+func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
+	metricsHandler := metrics.NewHandler(db, enableProf, opNode)
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))

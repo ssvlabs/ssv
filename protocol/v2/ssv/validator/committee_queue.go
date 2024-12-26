@@ -19,7 +19,7 @@ import (
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	// logger.Debug("📬 handling SSV message",
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
@@ -35,7 +35,7 @@ func (c *Committee) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
 	c.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
-			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
@@ -140,7 +140,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
+		if err := handler(ctx, logger, msg); err != nil {
 			c.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.SSVMessage.MsgType),
 				zap.Error(err))

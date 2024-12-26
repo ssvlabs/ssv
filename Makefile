@@ -62,22 +62,10 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
 
-
 .PHONY: all-spec-test-raceless
 all-spec-test-raceless:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
-
-
-.PHONY: pre-fork-spec-test-raceless
-pre-fork-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/genesis/...
-
-.PHONY: post-fork-spec-test-raceless
-post-fork-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/v2/...
 
 .PHONY: spec-test-raceless
 spec-test-raceless:
@@ -132,7 +120,7 @@ docker:
 .PHONY: docker-image
 docker-image:
 	@echo "node ${NODES_ID}"
-	@sudo docker rm -f ssv_node && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000/udp 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node
+	@sudo docker rm -f ssv_node && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000/udp 'ssvlabs/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker-all

@@ -5,15 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -198,7 +197,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 		err := topic.Publish(ctx, data)
 		if err == nil {
-			metricPubsubOutbound.WithLabelValues(name).Inc()
+			outboundMessageCounter.Add(ctrl.ctx, 1)
 		}
 	}()
 
@@ -275,15 +274,8 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(m.MsgType), 10),
-			).Inc()
-		case *genesisqueue.GenesisSSVMessage:
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(m.MsgType), 10),
-			).Inc()
+			inboundMessageCounter.Add(ctrl.ctx, 1,
+				metric.WithAttributes(messageTypeAttribute(uint64(m.MsgType))))
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}

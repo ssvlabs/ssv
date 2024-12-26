@@ -130,7 +130,6 @@ func TestEventSyncer(t *testing.T) {
 		eh,
 		WithLogger(logger),
 		WithStalenessThreshold(time.Second*10),
-		WithMetrics(nopMetrics{}),
 	)
 
 	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
@@ -166,6 +165,7 @@ func setupEventHandler(
 	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
+		NetworkConfig:     testNetworkConfig,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,

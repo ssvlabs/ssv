@@ -5,11 +5,11 @@ import (
 	"math/big"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -88,7 +88,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		contractAddr,
 		WithLogger(logger),
 		WithFollowDistance(followDistance),
-		WithMetrics(nopMetrics{}),
 		WithConnectionTimeout(2*time.Second),
 		WithReconnectionInitialInterval(2*time.Second),
 	)
@@ -164,14 +163,10 @@ func TestStreamLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	logs := client.StreamLogs(ctx, 0)
-	var wg sync.WaitGroup
 	var streamedLogs []ethtypes.Log
-
-	// Receive emitted events
-	wg.Add(1)
 	var streamedLogsCount atomic.Int64
 	go func() {
-		defer wg.Done()
+		// Receive emitted events, this func will exit when test exits.
 		for block := range logs {
 			streamedLogs = append(streamedLogs, block.Logs...)
 			streamedLogsCount.Add(int64(len(block.Logs)))
@@ -189,29 +184,40 @@ func TestStreamLogs(t *testing.T) {
 	}
 
 	// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
-Unfollowed:
+Wait1:
 	for {
 		select {
 		case <-ctx.Done():
-			require.Equal(t, int64(blocksWithLogsLength-followDistance), streamedLogsCount.Load())
+			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", ctx.Err(), streamedLogsCount.Load())
 		case <-time.After(time.Millisecond * 5):
 			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
-				break Unfollowed
+				break Wait1
 			}
 		}
 	}
 
 	// Create empty blocks with no transactions to advance the chain
-	// to followDistance blocks behind the head.
+	// followDistance blocks ahead.
 	for i := 0; i < followDistance; i++ {
 		sim.Commit()
 		time.Sleep(delay)
 	}
-
-	require.NoError(t, client.Close())
-	wg.Wait()
+	// Wait for streamed logs to advance accordingly.
+Wait2:
+	for {
+		select {
+		case <-ctx.Done():
+			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", ctx.Err(), streamedLogsCount.Load())
+		case <-time.After(time.Millisecond * 5):
+			if streamedLogsCount.Load() == int64(blocksWithLogsLength) {
+				break Wait2
+			}
+		}
+	}
 	require.NotEmpty(t, streamedLogs)
 	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
+
+	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
 }
 
@@ -597,6 +603,72 @@ func TestSimSSV(t *testing.T) {
 
 	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
+}
+
+func TestSyncProgress(t *testing.T) {
+	const testTimeout = 1 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	// Create simulator instance
+	sim := simTestBackend(testAddr)
+
+	// Create JSON-RPC handler
+	rpcServer, _ := sim.Node().RPCHandler()
+	// Expose handler on a test server with ws open
+	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	defer rpcServer.Stop()
+	defer httpsrv.Close()
+	addr := httpToWebSocketURL(httpsrv.URL)
+
+	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
+
+	// Check contract code at the simulated blockchain
+	contractCode, err := sim.Client().CodeAt(ctx, contractAddr, nil)
+	if err != nil {
+		t.Errorf("getting contract code: %v", err)
+	}
+	require.NotEmpty(t, contractCode)
+
+	// Create a client and connect to the simulator
+	client, err := New(ctx, addr, contractAddr)
+	require.NoError(t, err)
+
+	err = client.Healthy(ctx)
+	require.NoError(t, err)
+
+	t.Run("out of sync", func(t *testing.T) {
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			p := new(ethereum.SyncProgress)
+			p.CurrentBlock = 5
+			p.HighestBlock = 6
+			return p, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.ErrorIs(t, err, errSyncing)
+	})
+
+	t.Run("within tolerable limits", func(t *testing.T) {
+		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
+		require.NoError(t, err)
+
+		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			p := new(ethereum.SyncProgress)
+			p.CurrentBlock = 5
+			p.HighestBlock = 7
+			return p, nil
+		}
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+	})
 }
 
 func httpToWebSocketURL(url string) string {

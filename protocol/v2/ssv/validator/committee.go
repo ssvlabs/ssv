@@ -10,11 +10,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -36,7 +35,6 @@ type Committee struct {
 
 	mtx           sync.RWMutex
 	BeaconNetwork spectypes.BeaconNetwork
-	Storage       *storage.QBFTStores
 
 	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
@@ -57,6 +55,7 @@ func NewCommittee(
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
+	dutyGuard *CommitteeDutyGuard,
 ) *Committee {
 	if shares == nil {
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
@@ -71,7 +70,7 @@ func NewCommittee(
 		Shares:          shares,
 		CommitteeMember: committeeMember,
 		CreateRunnerFn:  createRunnerFn,
-		dutyGuard:       NewCommitteeDutyGuard(),
+		dutyGuard:       dutyGuard,
 	}
 }
 
@@ -118,7 +117,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 }
 
 // StartDuty starts a new duty for the given slot
-func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -167,7 +166,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
 		c.Queues[duty.Slot] = queueContainer{
-			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
@@ -184,7 +183,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	err = runner.StartNewDuty(logger, duty, c.CommitteeMember.GetQuorum())
+	err = runner.StartNewDuty(ctx, logger, duty, c.CommitteeMember.GetQuorum())
 	if err != nil {
 		return errors.Wrap(err, "runner failed to start duty")
 	}
@@ -199,13 +198,14 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 		c.logger.Warn("cannot push to non-existing queue", zap.Uint64("slot", uint64(slot)))
 		return
 	}
+
 	if pushed := queue.Q.TryPush(dec); !pushed {
 		c.logger.Warn("dropping ExecuteDuty message because the queue is full")
 	}
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) error {
+func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	// Validate message
 	if msg.GetType() != message.SSVEventMsgType {
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
@@ -237,7 +237,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 		if !exists {
 			return errors.New("no runner found for message's slot")
 		}
-		return runner.ProcessConsensus(logger, msg.SignedSSVMessage)
+		return runner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -260,10 +260,10 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.SSVMessage) er
 			if !exists {
 				return errors.New("no runner found for message's slot")
 			}
-			return runner.ProcessPostConsensus(logger, pSigMessages)
+			return runner.ProcessPostConsensus(ctx, logger, pSigMessages)
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(logger, msg)
+		return c.handleEventMessage(ctx, logger, msg)
 	default:
 		return errors.New("unknown msg")
 	}

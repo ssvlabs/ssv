@@ -2,7 +2,12 @@ package records
 
 import (
 	"encoding/json"
+	"fmt"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
+
+const subnetsLength = int(commons.SubnetsCount) / 4 // each char in the string encodes status of 4 subnets
 
 // NodeMetadata holds node's general information
 type NodeMetadata struct {
@@ -18,6 +23,10 @@ type NodeMetadata struct {
 
 // Encode encodes the metadata into bytes
 func (nm *NodeMetadata) Encode() ([]byte, error) {
+	if len(nm.Subnets) != subnetsLength {
+		return nil, fmt.Errorf("invalid subnets length %d", len(nm.Subnets))
+	}
+
 	return json.Marshal(nm)
 }
 
@@ -25,6 +34,9 @@ func (nm *NodeMetadata) Encode() ([]byte, error) {
 func (nm *NodeMetadata) Decode(data []byte) error {
 	if err := json.Unmarshal(data, nm); err != nil {
 		return err
+	}
+	if len(nm.Subnets) != subnetsLength {
+		return fmt.Errorf("invalid subnets length %d", len(nm.Subnets))
 	}
 	return nil
 }
