@@ -19,7 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error starting TCP listener on %s: %v", listenAddr, err)
 	}
-	defer listener.Close()
+	defer listener.Close() // nolint
 	log.Printf("Proxy listening on %s and forwarding to %s", listenAddr, forwardAddr)
 
 	for {
@@ -35,14 +35,14 @@ func main() {
 }
 
 func handleConnection(clientConn net.Conn, forwardAddr string) {
-	defer clientConn.Close()
+	defer clientConn.Close() // nolint
 
 	serverConn, err := net.Dial("tcp", forwardAddr)
 	if err != nil {
 		log.Printf("Failed to connect to target %s: %v", forwardAddr, err)
 		return
 	}
-	defer serverConn.Close()
+	defer serverConn.Close() // nolint
 
 	done := make(chan struct{})
 
