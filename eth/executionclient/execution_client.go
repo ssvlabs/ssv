@@ -244,7 +244,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 // StreamLogs subscribes to events emitted by the contract.
 func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	logs := make(chan BlockLogs)
-
+	tries := 0
 	go func() {
 		defer close(logs)
 		for {
@@ -254,7 +254,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 			case <-ec.closed:
 				return
 			default:
-				_, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 					// Closed gracefully.
 					return
@@ -266,7 +266,17 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 					err = errors.New("streamLogsToChan halted without an error")
 				}
 
-				ec.logger.Fatal("failed to stream registry events", zap.Error(err))
+				tries++
+				if tries > len(ec.clients)-1 {
+					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
+				}
+				if lastBlock > fromBlock {
+					// Successfully streamed some logs, reset tries.
+					tries = 0
+				}
+
+				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
+				fromBlock = lastBlock + 1
 			}
 		}
 	}()
