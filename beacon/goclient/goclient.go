@@ -231,6 +231,7 @@ func setupHTTPClient(ctx context.Context, logger *zap.Logger, addr string, commo
 		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
 		eth2clienthttp.WithTimeout(commonTimeout),
 		eth2clienthttp.WithReducedMemoryUsage(true),
+		eth2clienthttp.WithAllowDelayedStart(true),
 	)
 	if err != nil {
 		logger.Error("Consensus http client initialization failed",
