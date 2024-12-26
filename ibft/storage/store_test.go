@@ -102,10 +102,10 @@ func TestRemoveSlot(t *testing.T) {
 }
 
 func TestSlotCleanupJob(t *testing.T) {
-	// to test the slot cleanup job we insert 10 slots with two entries per slot for two
-	// each having different pks, then we configure to retain 1 slot in the past
-	// at boot the job removes ALL slots past the retained one, meaning that when we
-	// start with slot 4, slots 0,1,2 will be deleted and 3 retained
+	// to test the slot cleanup job we insert 10 unique slots with two pubkey entries
+	// per slot, then we configure the job to retain only 1 slot in the past
+	// at boot the job removes ALL slots lower than the retained one, ex: if ticker
+	// returns slot 4 - slots 0,1 and 2 will be deleted and slot 3 retained
 	// and then on next tick (5) slot 3 will be removed as well keeping back slot 4.
 
 	// setup
