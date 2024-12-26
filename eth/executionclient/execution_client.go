@@ -412,7 +412,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 // connect connects to Ethereum execution client.
 // It must not be called twice in parallel.
 func (ec *ExecutionClient) connect(ctx context.Context) error {
-	logger := ec.logger.With(fields.Address(ec.nodeAddr))
 
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
@@ -425,17 +424,17 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	var clients []*ethclient.Client
 
 	for _, addr := range addrList {
+		logger := ec.logger.With(fields.Address(addr))
 		start := time.Now()
-		client, err := ethclient.DialContext(ctx, ec.nodeAddr)
+		client, err := ethclient.DialContext(ctx, addr)
 		if err != nil {
-			ec.logger.Error(elResponseErrMsg,
+			logger.Error(elResponseErrMsg,
 				zap.String("operation", "DialContext"),
 				zap.Error(err))
 			return err
 		}
 
 		logger.Info("connected to execution client",
-			zap.String("addr", addr),
 			zap.Duration("took", time.Since(start)))
 
 		clients = append(clients, client)
