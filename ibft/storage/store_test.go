@@ -27,7 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
-func TestOldSlotCleanup(t *testing.T) {
+func TestRemoveSlot(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	t.Cleanup(func() { _ = db.Close() })
 	assert.NoError(t, err)
@@ -170,7 +170,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		storage.StartCleanupJob(ctx, zap.NewNop(), tickerProv, 1)
+		storage.StartCleanupJob(ctx, zap.NewNop(), tickerProv, 2)
 	}()
 
 	// trigger

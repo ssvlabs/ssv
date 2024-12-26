@@ -119,7 +119,7 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
 
 // removes ALL entries for any slots older or equal to given slot
 func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase0.Slot) int {
-	var keySet = make(map[phase0.Slot][]byte)
+	var keySet [][]byte
 
 	prefix := i.makePrefix(nil)
 
@@ -127,10 +127,10 @@ func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase
 	defer tx.Discard()
 
 	// filter and collect keys
-	err := i.db.UsingReader(tx).GetAll(prefix, func(_ int, o basedb.Obj) error {
+	err := i.db.UsingReader(tx).GetAll(prefix, func(i int, o basedb.Obj) error {
 		dbSlot := byteSliceToSlot(o.Key[:4])
 		if dbSlot < slot {
-			keySet[dbSlot] = o.Key
+			keySet = append(keySet, o.Key)
 		}
 		return nil
 	})
@@ -140,16 +140,11 @@ func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase
 		return 0
 	}
 
-	for k, id := range keySet {
+	for _, id := range keySet {
 		if err = i.db.Using(tx).Delete(append(prefix, id...), nil); err != nil {
-			logger.Error("remove slot", zap.Int("slot", int(k)), zap.Error(err))
-			break
+			logger.Error("remove slot", zap.Error(err))
+			return 0
 		}
-	}
-
-	if err != nil {
-		logger.Error("delete slots", zap.Error(err))
-		return 0
 	}
 
 	if err := tx.Commit(); err != nil {
