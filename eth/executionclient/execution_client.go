@@ -32,54 +32,70 @@ var (
 
 const elResponseErrMsg = "Execution client returned an error"
 
-// ExecutionClient represents a client for interacting with Ethereum execution client.
+// ExecutionClient represents a client for interacting with Ethereum execution clients.
 type ExecutionClient struct {
 	// mandatory
-	nodeAddr        string
+	nodeAddrs       []string
 	contractAddress ethcommon.Address
 
 	// optional
 	logger *zap.Logger
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
-	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+	followDistance              uint64
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	logBatchSize                uint64
 
 	syncDistanceTolerance uint64
-	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
+	syncProgressFn        func(context.Context, *ManagedClient) (*ethereum.SyncProgress, error)
 
 	// variables
-	currentClientIndexMu sync.Mutex
-	currentClientIndex   int
-	clients              []*ethclient.Client
-	closed               chan struct{}
+	clientsMu   sync.RWMutex
+	clients     []*ManagedClient
+	closed      chan struct{}
+	closingOnce sync.Once
 }
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
+	addrList := strings.Split(nodeAddr, ";")
+	if len(addrList) == 0 {
+		return nil, fmt.Errorf("no node address provided")
+	}
+
 	client := &ExecutionClient{
-		nodeAddr:                    nodeAddr,
+		nodeAddrs:                   addrList,
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
 		followDistance:              DefaultFollowDistance,
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		logBatchSize:                DefaultHistoricalLogsBatchSize,
 		closed:                      make(chan struct{}),
 	}
+
 	for _, opt := range opts {
 		opt(client)
 	}
-	err := client.connect(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
+
+	// Initialize ManagedClients
+	for _, addr := range client.nodeAddrs {
+		mc, err := NewManagedClient(ctx, addr, client.logger, client.reconnectionInitialInterval, client.reconnectionMaxInterval)
+		if err != nil {
+			client.logger.Error("Failed to initialize ManagedClient", zap.String("address", addr), zap.Error(err))
+			// Continue initializing other clients
+		}
+		client.clients = append(client.clients, mc)
 	}
 
-	same, err := assertSameChainIDs(ctx, client.clients...)
+	if len(client.clients) == 0 {
+		return nil, fmt.Errorf("no execution clients could be initialized")
+	}
+
+	same, err := client.assertSameChainIDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("assert same chain IDs: %w", err)
 	}
@@ -92,51 +108,77 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	return client, nil
 }
 
-// assertSameChainIDs should receive a non-empty list
-func assertSameChainIDs(ctx context.Context, clients ...*ethclient.Client) (bool, error) {
-	firstChainID, err := clients[0].ChainID(ctx)
-	if err != nil {
-		return false, fmt.Errorf("get first chain ID: %w", err)
-	}
+// assertSameChainIDs checks if all healthy clients have the same chain ID.
+// It sets firstChainID to the chain ID of the first healthy client encountered.
+func (ec *ExecutionClient) assertSameChainIDs(ctx context.Context) (bool, error) {
+	ec.clientsMu.RLock()
+	defer ec.clientsMu.RUnlock()
 
-	for _, client := range clients[1:] {
-		clientChainID, err := client.ChainID(ctx)
-		if err != nil {
-			return false, fmt.Errorf("get client chain ID: %w", err)
+	var firstChainID *big.Int
+	for _, client := range ec.clients {
+		c := client.getClient()
+		if c == nil {
+			ec.logger.Warn("Skipping unhealthy client", zap.String("address", client.addr))
+			continue // Skip unhealthy clients
 		}
-
-		if firstChainID.Cmp(clientChainID) != 0 {
+		chainID, err := c.ChainID(ctx)
+		if err != nil {
+			ec.logger.Error("Failed to get chain ID", zap.String("address", client.addr), zap.Error(err))
+			return false, err
+		}
+		if firstChainID == nil {
+			firstChainID = chainID
+			continue
+		}
+		if firstChainID.Cmp(chainID) != 0 {
+			ec.logger.Warn("Chain ID mismatch",
+				zap.String("first_chain_id", firstChainID.String()),
+				zap.String("current_chain_id", chainID.String()),
+				zap.String("address", client.addr))
 			return false, nil
 		}
+	}
+
+	if firstChainID == nil {
+		return false, fmt.Errorf("no healthy clients to determine chain ID")
 	}
 
 	return true, nil
 }
 
-func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
-	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
-		return client.SyncProgress(ctx)
-	})
+// syncProgress retrieves the sync progress using a healthy client.
+func (ec *ExecutionClient) syncProgress(ctx context.Context, mc *ManagedClient) (*ethereum.SyncProgress, error) {
+	client := mc.getClient()
+	if client == nil {
+		return nil, ErrNotConnected
+	}
+	sp, err := client.SyncProgress(ctx)
 	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_syncing"),
+			zap.Error(err))
 		return nil, err
 	}
-
-	return res.(*ethereum.SyncProgress), nil
+	return sp, nil
 }
 
 // Close shuts down ExecutionClient.
 func (ec *ExecutionClient) Close() error {
-	close(ec.closed)
-	for _, client := range ec.clients {
-		client.Close()
-	}
+	ec.closingOnce.Do(func() {
+		close(ec.closed)
+		ec.clientsMu.RLock()
+		defer ec.clientsMu.RUnlock()
+		for _, client := range ec.clients {
+			client.Close()
+		}
+	})
 	return nil
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
-		return client.BlockNumber(ctx)
+	res, err := ec.doCall(ctx, func(ctx context.Context, mc *ManagedClient) (any, error) {
+		return mc.getClient().BlockNumber(ctx)
 	})
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
@@ -158,17 +200,17 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	return
 }
 
-// Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
+// fetchLogsInBatches calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
 func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan BlockLogs, <-chan error) {
-	logs := make(chan BlockLogs, defaultLogBuf)
-	errors := make(chan error, 1)
+	logsCh := make(chan BlockLogs, defaultLogBuf)
+	errorsCh := make(chan error, 1)
 
 	go func() {
-		defer close(logs)
-		defer close(errors)
+		defer close(logsCh)
+		defer close(errorsCh)
 
 		if startBlock > endBlock {
-			errors <- ErrBadInput
+			errorsCh <- ErrBadInput
 			return
 		}
 
@@ -179,8 +221,8 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			start := time.Now()
-			res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
-				return client.FilterLogs(ctx, ethereum.FilterQuery{
+			res, err := ec.doCall(ctx, func(ctx context.Context, mc *ManagedClient) (any, error) {
+				return mc.getClient().FilterLogs(ctx, ethereum.FilterQuery{
 					Addresses: []ethcommon.Address{ec.contractAddress},
 					FromBlock: new(big.Int).SetUint64(fromBlock),
 					ToBlock:   new(big.Int).SetUint64(toBlock),
@@ -190,7 +232,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				ec.logger.Error(elResponseErrMsg,
 					zap.String("method", "eth_getLogs"),
 					zap.Error(err))
-				errors <- err
+				errorsCh <- err
 				return
 			}
 			results := res.([]ethtypes.Log)
@@ -206,11 +248,11 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			select {
 			case <-ctx.Done():
-				errors <- ctx.Err()
+				errorsCh <- ctx.Err()
 				return
 
 			case <-ec.closed:
-				errors <- ErrClosed
+				errorsCh <- ErrClosed
 				return
 
 			default:
@@ -228,23 +270,22 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				}
 				if len(validLogs) == 0 {
 					// Emit empty block logs to indicate that we have advanced to this block.
-					logs <- BlockLogs{BlockNumber: toBlock}
+					logsCh <- BlockLogs{BlockNumber: toBlock}
 				} else {
 					for _, blockLogs := range PackLogs(validLogs) {
-						logs <- blockLogs
+						logsCh <- blockLogs
 					}
 				}
 			}
 		}
 	}()
 
-	return logs, errors
+	return logsCh, errorsCh
 }
 
 // StreamLogs subscribes to events emitted by the contract.
 func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	logs := make(chan BlockLogs)
-	tries := 0
 	go func() {
 		defer close(logs)
 		for {
@@ -266,21 +307,11 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 					err = errors.New("streamLogsToChan halted without an error")
 				}
 
-				tries++
-				if tries > len(ec.clients)-1 {
-					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
-				}
-				if lastBlock > fromBlock {
-					// Successfully streamed some logs, reset tries.
-					tries = 0
-				}
-
 				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 				fromBlock = lastBlock + 1
 			}
 		}
 	}()
-
 	return logs
 }
 
@@ -292,26 +323,31 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ErrClosed
 	}
 
+	mc, _, err := ec.getHealthyClient()
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
 	start := time.Now()
-	sp, err := ec.syncProgressFn(ctx)
+	sp, err := ec.syncProgressFn(ctx, mc)
 	if err != nil {
-		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+		recordExecutionClientStatus(ctx, statusFailure, mc.addr)
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_syncing"),
 			zap.Error(err))
 		return err
 	}
-	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
+	recordRequestDuration(ctx, mc.addr, time.Since(start))
 
 	if sp != nil {
-		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
+		recordExecutionClientStatus(ctx, statusSyncing, mc.addr)
 
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
 
-		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(mc.addr)))
 
 		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
@@ -319,16 +355,17 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		}
 	}
 
-	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
+	recordExecutionClientStatus(ctx, statusReady, mc.addr)
 
-	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(mc.addr)))
 
 	return nil
 }
 
+// BlockByNumber retrieves a block by its number.
 func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
-		return client.BlockByNumber(ctx, blockNumber)
+	res, err := ec.doCall(ctx, func(ctx context.Context, mc *ManagedClient) (any, error) {
+		return mc.getClient().BlockByNumber(ctx, blockNumber)
 	})
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
@@ -341,6 +378,7 @@ func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.I
 	return b, nil
 }
 
+// isClosed checks if the ExecutionClient is closed.
 func (ec *ExecutionClient) isClosed() bool {
 	select {
 	case <-ec.closed:
@@ -352,20 +390,21 @@ func (ec *ExecutionClient) isClosed() bool {
 
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
 // streamLogsToChan *always* returns the last block it fetched, even if it errored.
-// TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+	mc, client, err := ec.getHealthyClient()
+	if err != nil {
+		return fromBlock, err
+	}
+
 	heads := make(chan *ethtypes.Header)
 
-	res, err := ec.doCall(ctx, func(ctx context.Context, client *ethclient.Client) (any, error) {
-		return client.SubscribeNewHead(ctx, heads)
-	})
+	sub, err := client.SubscribeNewHead(ctx, heads)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "SubscribeNewHead"),
 			zap.Error(err))
 		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
-	sub := res.(ethereum.Subscription)
 
 	defer sub.Unsubscribe()
 
@@ -401,89 +440,69 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
-			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(mc.addr)))
 		}
 	}
 }
 
-// connect connects to Ethereum execution client.
-// It must not be called twice in parallel.
-func (ec *ExecutionClient) connect(ctx context.Context) error {
+// getHealthyClient selects the first healthy ManagedClient and returns it along with its ethclient.Client.
+func (ec *ExecutionClient) getHealthyClient() (*ManagedClient, *ethclient.Client, error) {
+	ec.clientsMu.RLock()
+	defer ec.clientsMu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
-	defer cancel()
-
-	addrList := strings.Split(ec.nodeAddr, ";") // TODO: temporary using ; as separator because , is used as separator by deployment bot
-	if len(addrList) == 0 {
-		return fmt.Errorf("no node address provided")
-	}
-
-	var clients []*ethclient.Client
-
-	for _, addr := range addrList {
-		logger := ec.logger.With(fields.Address(addr))
-		start := time.Now()
-		client, err := ethclient.DialContext(ctx, addr)
-		if err != nil {
-			logger.Error(elResponseErrMsg,
-				zap.String("operation", "DialContext"),
-				zap.Error(err))
-			return err
+	for _, mc := range ec.clients {
+		if mc.isHealthy() {
+			client := mc.getClient()
+			if client != nil {
+				return mc, client, nil
+			}
 		}
-
-		logger.Info("connected to execution client",
-			zap.Duration("took", time.Since(start)))
-
-		clients = append(clients, client)
 	}
-
-	ec.clients = clients
-
-	return nil
+	return nil, nil, ErrNotConnected
 }
 
+// Filterer returns a contract filterer using the first healthy client.
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
-	return contract.NewContractFilterer(ec.contractAddress, ec.clients[0]) // TODO: Do we need more complex logic?
+	_, client, err := ec.getHealthyClient()
+	if err != nil {
+		return nil, err
+	}
+	return contract.NewContractFilterer(ec.contractAddress, client)
 }
 
-type callFunc func(ctx context.Context, client *ethclient.Client) (any, error)
+type callFunc func(ctx context.Context, mc *ManagedClient) (any, error)
 
-// doCall carries out a call on the active clients in turn until one succeeds.
+// doCall carries out a call on the healthy clients until one succeeds.
 func (ec *ExecutionClient) doCall(ctx context.Context, call callFunc) (any, error) {
-	if len(ec.clients) == 1 {
-		return call(ctx, ec.clients[0])
-	}
+	ec.clientsMu.RLock()
+	clients := make([]*ManagedClient, len(ec.clients))
+	copy(clients, ec.clients)
+	ec.clientsMu.RUnlock()
 
 	var errs error
 
-	for i := 0; i < len(ec.clients); i++ {
-		ec.currentClientIndexMu.Lock()
-		currentIndex := ec.currentClientIndex
-		ec.currentClientIndexMu.Unlock()
-
-		res, err := call(ctx, ec.clients[currentIndex])
-		if err != nil {
-			failedClientIndex := currentIndex
-
-			ec.currentClientIndexMu.Lock()
-			if ec.currentClientIndex == failedClientIndex { // it might have already been changed by a parallel request
-				ec.currentClientIndex = (ec.currentClientIndex + 1) % len(ec.clients)
-			}
-			newClientIndex := ec.currentClientIndex
-			ec.currentClientIndexMu.Unlock()
-
-			ec.logger.Warn("Execution client returned an error. Trying to use the next available one",
-				zap.Int("failed_client_index", failedClientIndex),
-				zap.Int("new_client_index", newClientIndex),
-				zap.Error(err))
-
-			errs = errors.Join(errs, err)
-
+	for _, mc := range clients {
+		if !mc.isHealthy() {
 			continue
 		}
-
+		client := mc.getClient()
+		if client == nil {
+			continue
+		}
+		res, err := call(ctx, mc)
+		if err != nil {
+			ec.logger.Warn("Execution client returned an error. Marking as unhealthy.",
+				zap.String("address", mc.addr),
+				zap.Error(err))
+			mc.disconnect()
+			errs = errors.Join(errs, err)
+			continue
+		}
 		return res, nil
 	}
 
-	return nil, fmt.Errorf("no clients available: %w", errs)
+	if errs != nil {
+		return nil, fmt.Errorf("no clients available: %w", errs)
+	}
+	return nil, ErrNotConnected
 }

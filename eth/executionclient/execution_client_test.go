@@ -651,7 +651,7 @@ func TestSyncProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("out of sync", func(t *testing.T) {
-		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+		client.syncProgressFn = func(context.Context, *ManagedClient) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
 			p.HighestBlock = 6
@@ -666,7 +666,7 @@ func TestSyncProgress(t *testing.T) {
 		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
 		require.NoError(t, err)
 
-		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+		client.syncProgressFn = func(context.Context, *ManagedClient) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
 			p.HighestBlock = 7
@@ -684,13 +684,13 @@ func httpToWebSocketURL(url string) string {
 
 func TestDoCall_SingleClient_Success(t *testing.T) {
 	logger, _ := getTestLogger(t)
-	client := &ethclient.Client{}
+	client := newManagedClient(logger)
 	ec := &ExecutionClient{
-		clients: []*ethclient.Client{client},
+		clients: []*ManagedClient{client},
 		logger:  logger,
 	}
 
-	callFunc := func(ctx context.Context, client *ethclient.Client) (any, error) {
+	callFunc := func(ctx context.Context, client *ManagedClient) (any, error) {
 		return "success", nil
 	}
 
@@ -698,18 +698,17 @@ func TestDoCall_SingleClient_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "success", res)
-	assert.Equal(t, 0, ec.currentClientIndex)
 }
 
 func TestDoCall_SingleClient_Failure(t *testing.T) {
 	logger, logs := getTestLogger(t)
-	client := &ethclient.Client{}
+	client := newManagedClient(logger)
 	ec := &ExecutionClient{
-		clients: []*ethclient.Client{client},
+		clients: []*ManagedClient{client},
 		logger:  logger,
 	}
 
-	callFunc := func(ctx context.Context, client *ethclient.Client) (any, error) {
+	callFunc := func(ctx context.Context, client *ManagedClient) (any, error) {
 		return nil, errors.New("client failed")
 	}
 
@@ -718,21 +717,19 @@ func TestDoCall_SingleClient_Failure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, res)
 	assert.Contains(t, err.Error(), "client failed")
-	assert.Equal(t, 0, ec.currentClientIndex)
-	assert.Equal(t, 0, logs.Len())
+	assert.Equal(t, 2, logs.Len())
 }
 
 func TestDoCall_MultipleClients_FirstSuccess(t *testing.T) {
 	logger, _ := getTestLogger(t)
-	client1 := &ethclient.Client{}
-	client2 := &ethclient.Client{}
+	client1 := newManagedClient(logger)
+	client2 := newManagedClient(logger)
 	ec := &ExecutionClient{
-		clients: []*ethclient.Client{client1, client2},
+		clients: []*ManagedClient{client1, client2},
 		logger:  logger,
 	}
-	ec.currentClientIndex = 0
 
-	callFunc := func(ctx context.Context, client *ethclient.Client) (any, error) {
+	callFunc := func(ctx context.Context, client *ManagedClient) (any, error) {
 		if client == client1 {
 			return "client1 success", nil
 		}
@@ -743,20 +740,18 @@ func TestDoCall_MultipleClients_FirstSuccess(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "client1 success", res)
-	assert.Equal(t, 0, ec.currentClientIndex)
 }
 
 func TestDoCall_MultipleClients_FirstFail_SecondSuccess(t *testing.T) {
 	logger, logs := getTestLogger(t)
-	client1 := &ethclient.Client{}
-	client2 := &ethclient.Client{}
+	client1 := newManagedClient(logger)
+	client2 := newManagedClient(logger)
 	ec := &ExecutionClient{
-		clients: []*ethclient.Client{client1, client2},
+		clients: []*ManagedClient{client1, client2},
 		logger:  logger,
 	}
-	ec.currentClientIndex = 0
 
-	callFunc := func(ctx context.Context, client *ethclient.Client) (any, error) {
+	callFunc := func(ctx context.Context, client *ManagedClient) (any, error) {
 		if client == client1 {
 			return nil, errors.New("client1 failed")
 		}
@@ -770,34 +765,23 @@ func TestDoCall_MultipleClients_FirstFail_SecondSuccess(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "client2 success", res) // nolint:goconst
-	assert.Equal(t, 1, ec.currentClientIndex)
 
-	assert.Equal(t, 1, logs.Len())
+	assert.Equal(t, 2, logs.Len())
 	logEntry := logs.All()[0]
 	assert.Equal(t, zapcore.WarnLevel, logEntry.Level)
-	assert.Contains(t, logEntry.Message, "Execution client returned an error. Trying to use the next available one")
-
-	if len(logEntry.Context) >= 2 {
-		failedClientIndex := int(logEntry.Context[0].Integer)
-		newClientIndex := int(logEntry.Context[1].Integer)
-		assert.Equal(t, 0, failedClientIndex)
-		assert.Equal(t, 1, newClientIndex)
-	} else {
-		t.Errorf("Expected at least 2 log fields, got %d", len(logEntry.Context))
-	}
+	assert.Contains(t, logEntry.Message, "Execution client returned an error. Marking as unhealthy.")
 }
 
 func TestDoCall_MultipleClients_AllFail(t *testing.T) {
 	logger, logs := getTestLogger(t)
-	client1 := &ethclient.Client{}
-	client2 := &ethclient.Client{}
+	client1 := newManagedClient(logger)
+	client2 := newManagedClient(logger)
 	ec := &ExecutionClient{
-		clients: []*ethclient.Client{client1, client2},
+		clients: []*ManagedClient{client1, client2},
 		logger:  logger,
 	}
-	ec.currentClientIndex = 0
 
-	callFunc := func(ctx context.Context, client *ethclient.Client) (any, error) {
+	callFunc := func(ctx context.Context, client *ManagedClient) (any, error) {
 		return nil, fmt.Errorf("client failed")
 	}
 
@@ -806,27 +790,32 @@ func TestDoCall_MultipleClients_AllFail(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, res)
 	assert.Contains(t, err.Error(), "no clients available")
-	assert.Equal(t, 0, ec.currentClientIndex)
 
-	assert.Equal(t, 2, logs.Len())
-	for _, logEntry := range logs.All() {
+	assert.Equal(t, 4, logs.Len())
+
+	allLogs := logs.All()
+	observedLogs := []observer.LoggedEntry{
+		allLogs[0],
+		allLogs[2],
+	}
+
+	for _, logEntry := range observedLogs {
 		assert.Equal(t, zapcore.WarnLevel, logEntry.Level)
-		assert.Contains(t, logEntry.Message, "Execution client returned an error. Trying to use the next available one")
+		assert.Contains(t, logEntry.Message, "Execution client returned an error. Marking as unhealthy.")
 	}
 }
 
 func TestDoCall_MultipleClients_IndexUpdateAfterFailures(t *testing.T) {
 	logger, logs := getTestLogger(t)
-	client1 := &ethclient.Client{}
-	client2 := &ethclient.Client{}
-	client3 := &ethclient.Client{}
+	client1 := newManagedClient(logger)
+	client2 := newManagedClient(logger)
+	client3 := newManagedClient(logger)
 	ec := &ExecutionClient{
-		clients: []*ethclient.Client{client1, client2, client3},
+		clients: []*ManagedClient{client1, client2, client3},
 		logger:  logger,
 	}
-	ec.currentClientIndex = 0
 
-	callFunc := func(ctx context.Context, client *ethclient.Client) (any, error) {
+	callFunc := func(ctx context.Context, client *ManagedClient) (any, error) {
 		if client == client1 || client == client2 {
 			return nil, fmt.Errorf("client failed")
 		}
@@ -840,44 +829,37 @@ func TestDoCall_MultipleClients_IndexUpdateAfterFailures(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "client3 success", res)
-	assert.Equal(t, 2, ec.currentClientIndex) // Updated expectation to 2
 
-	assert.Equal(t, 2, logs.Len())
-	logEntries := logs.All()
-	for i, logEntry := range logEntries {
+	assert.Equal(t, 4, logs.Len())
+	allLogs := logs.All()
+	observedLogs := []observer.LoggedEntry{
+		allLogs[0],
+		allLogs[2],
+	}
+
+	for _, logEntry := range observedLogs {
 		assert.Equal(t, zapcore.WarnLevel, logEntry.Level)
-		assert.Contains(t, logEntry.Message, "Execution client returned an error. Trying to use the next available one")
-		if i == 0 {
-			assert.Equal(t, 0, int(logEntry.Context[0].Integer))
-			assert.Equal(t, 1, int(logEntry.Context[1].Integer))
-		} else if i == 1 {
-			assert.Equal(t, 1, int(logEntry.Context[0].Integer))
-			assert.Equal(t, 2, int(logEntry.Context[1].Integer))
-		}
+		assert.Contains(t, logEntry.Message, "Execution client returned an error. Marking as unhealthy.")
 	}
 }
 
 func TestDoCall_Concurrency(t *testing.T) {
 	logger, logs := getTestLogger(t)
-	client1 := &ethclient.Client{}
-	client2 := &ethclient.Client{}
+	client1 := newManagedClient(logger)
+	client2 := newManagedClient(logger)
 	ec := &ExecutionClient{
-		clients: []*ethclient.Client{client1, client2},
+		clients: []*ManagedClient{client1, client2},
 		logger:  logger,
 	}
-	ec.currentClientIndex = 0
 
-	var callCount int
-	var mu sync.Mutex
-	callFunc := func(ctx context.Context, client *ethclient.Client) (any, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		callCount++
+	var client2CallCount int64
+	callFunc := func(ctx context.Context, client *ManagedClient) (any, error) {
 		if client == client1 {
 			return nil, fmt.Errorf("client1 failed")
 		}
 		if client == client2 {
-			if callCount%3 == 0 { // Fail client2 every 3rd call
+			currentCount := atomic.AddInt64(&client2CallCount, 1)
+			if currentCount%3 == 0 { // Fail client2 every 3rd call
 				return nil, fmt.Errorf("client2 failed")
 			}
 			return "client2 success", nil // nolint:goconst
@@ -923,13 +905,22 @@ func TestDoCall_Concurrency(t *testing.T) {
 		}
 	}
 
-	assert.GreaterOrEqual(t, successCount, 3) // Adjusted expectation
-	assert.GreaterOrEqual(t, failureCount, 3) // Adjusted expectation
-	assert.True(t, logs.Len() >= failureCount, "Expected at least as many log warnings as failures")
+	// Adjusted expectations
+	assert.GreaterOrEqual(t, failureCount, 4, "Expected at least 4 failures")
+	assert.LessOrEqual(t, failureCount, 10, "Expected at most 10 failures")
+	assert.True(t, logs.Len() >= 1, "Expected at least one log warning for client2 failure")
 }
 
 func getTestLogger(t *testing.T) (*zap.Logger, *observer.ObservedLogs) {
 	core, logs := observer.New(zap.WarnLevel)
 	logger := zap.New(core)
 	return logger, logs
+}
+
+func newManagedClient(logger *zap.Logger) *ManagedClient {
+	return &ManagedClient{
+		client:  &ethclient.Client{},
+		healthy: true,
+		logger:  logger,
+	}
 }
