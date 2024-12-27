@@ -311,6 +311,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 
 				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 				fromBlock = lastBlock + 1
+				time.Sleep(ec.reconnectionInitialInterval)
 			}
 		}
 	}()
@@ -438,6 +439,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			if err == nil {
 				return fromBlock, ErrClosed
 			}
+			mc.disconnect()
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
@@ -455,6 +457,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			}
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
+				mc.disconnect()
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
