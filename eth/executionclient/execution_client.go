@@ -169,7 +169,9 @@ func (ec *ExecutionClient) Close() error {
 		ec.clientsMu.RLock()
 		defer ec.clientsMu.RUnlock()
 		for _, client := range ec.clients {
-			client.Close()
+			if err := client.Close(); err != nil {
+				ec.logger.Debug("Failed to close client", zap.String("address", client.addr), zap.Error(err))
+			}
 		}
 	})
 	return nil
