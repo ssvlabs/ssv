@@ -19,17 +19,19 @@ type ManagedClient struct {
 	logger                      *zap.Logger
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
+	syncDistanceTolerance       uint64
 	quit                        chan struct{}
 	wg                          sync.WaitGroup
 }
 
 // NewManagedClient creates and starts a new ManagedClient.
-func NewManagedClient(ctx context.Context, addr string, logger *zap.Logger, initialInterval, maxInterval time.Duration) (*ManagedClient, error) {
+func NewManagedClient(ctx context.Context, addr string, logger *zap.Logger, initialInterval, maxInterval time.Duration, syncDistanceTolerance uint64) (*ManagedClient, error) {
 	mc := &ManagedClient{
 		addr:                        addr,
 		logger:                      logger,
 		reconnectionInitialInterval: initialInterval,
 		reconnectionMaxInterval:     maxInterval,
+		syncDistanceTolerance:       syncDistanceTolerance,
 		quit:                        make(chan struct{}),
 	}
 
@@ -119,8 +121,27 @@ func (mc *ManagedClient) checkHealth(ctx context.Context) error {
 	}
 
 	// Simple health check: try to get the chain ID
-	_, err := client.ChainID(ctx)
-	return err
+	sp, err := client.SyncProgress(ctx)
+	if err != nil {
+		return err
+	}
+
+	if sp != nil {
+		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
+
+		if syncDistance > mc.syncDistanceTolerance {
+			mc.logger.Warn("sync distance exceeds tolerance",
+				zap.Uint64("sync_distance", syncDistance),
+				zap.Uint64("tolerance", mc.syncDistanceTolerance),
+				zap.String("address", mc.addr),
+				zap.String("method", "eth_syncing"),
+			)
+
+			return err
+		}
+	}
+
+	return nil
 }
 
 // attemptReconnect tries to reconnect with exponential backoff.

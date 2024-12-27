@@ -83,7 +83,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 
 	// Initialize ManagedClients
 	for _, addr := range client.nodeAddrs {
-		mc, err := NewManagedClient(ctx, addr, client.logger, client.reconnectionInitialInterval, client.reconnectionMaxInterval)
+		mc, err := NewManagedClient(ctx, addr, client.logger, client.reconnectionInitialInterval, client.reconnectionMaxInterval, client.syncDistanceTolerance)
 		if err != nil {
 			client.logger.Error("Failed to initialize ManagedClient", zap.String("address", addr), zap.Error(err))
 			return nil, fmt.Errorf("create managed client: %w", err)
