@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -214,6 +215,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 
 			network.EXPECT().ActiveSubnets().Return(subnets[:]).AnyTimes()
+			network.EXPECT().FixedSubnets().Return(make(records.Subnets, commons.SubnetsCount)).AnyTimes()
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
