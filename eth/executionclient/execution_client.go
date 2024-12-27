@@ -86,7 +86,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		mc, err := NewManagedClient(ctx, addr, client.logger, client.reconnectionInitialInterval, client.reconnectionMaxInterval)
 		if err != nil {
 			client.logger.Error("Failed to initialize ManagedClient", zap.String("address", addr), zap.Error(err))
-			// Continue initializing other clients
+			return nil, fmt.Errorf("create managed client: %w", err)
 		}
 		client.clients = append(client.clients, mc)
 	}
@@ -118,20 +118,20 @@ func (ec *ExecutionClient) assertSameChainIDs(ctx context.Context) (bool, error)
 	for _, client := range ec.clients {
 		c := client.getClient()
 		if c == nil {
-			ec.logger.Warn("Skipping unhealthy client", zap.String("address", client.addr))
-			continue // Skip unhealthy clients
+			ec.logger.Warn("Client is not healthy", zap.String("address", client.addr))
+			return false, fmt.Errorf("client is not healthy")
 		}
 		chainID, err := c.ChainID(ctx)
 		if err != nil {
 			ec.logger.Error("Failed to get chain ID", zap.String("address", client.addr), zap.Error(err))
-			return false, err
+			return false, fmt.Errorf("get chain ID: %w", err)
 		}
 		if firstChainID == nil {
 			firstChainID = chainID
 			continue
 		}
 		if firstChainID.Cmp(chainID) != 0 {
-			ec.logger.Warn("Chain ID mismatch",
+			ec.logger.Error("Chain ID mismatch",
 				zap.String("first_chain_id", firstChainID.String()),
 				zap.String("current_chain_id", chainID.String()),
 				zap.String("address", client.addr))

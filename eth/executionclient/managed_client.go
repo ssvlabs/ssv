@@ -2,6 +2,7 @@ package executionclient
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -35,7 +36,7 @@ func NewManagedClient(ctx context.Context, addr string, logger *zap.Logger, init
 	err := mc.connect(ctx)
 	if err != nil {
 		mc.logger.Error("Initial connection failed", zap.String("address", addr), zap.Error(err))
-		// Continue without a connected client; health monitoring will attempt reconnection
+		return nil, fmt.Errorf("connect: %w", err)
 	}
 
 	mc.wg.Add(1)
