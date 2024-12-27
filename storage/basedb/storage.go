@@ -11,7 +11,7 @@ type Options struct {
 	Path              string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Path for storage"`
 	Reporting         bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Flag to run on-off db size reporting"`
 	GCInterval        time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection cycles. Set to 0 to disable."`
-	RetainedSlotCount int           `yaml:"RetainedSlotCount" env:"RETAINED_SLOT_COUNT" env-default:"72000" env-description:"How many slots we want to keep back"`
+	RetainedSlotCount int           `yaml:"RetainedSlotCount" env:"DB_RETAINED_SLOT_COUNT" env-default:"7200" env-description:"How many slots we want to keep back"`
 }
 
 // Reader is a read-only accessor to the database.
