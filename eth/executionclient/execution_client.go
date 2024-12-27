@@ -315,7 +315,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 	return logs
 }
 
-var errSyncing = fmt.Errorf("syncing")
+var errSyncing = fmt.Errorf("syncing: no nodes have sync distance within tolerance")
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
@@ -323,41 +323,57 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ErrClosed
 	}
 
-	mc, _, err := ec.getHealthyClient()
-	if err != nil {
-		return err
+	var healthyClients []*ManagedClient
+	for _, mc := range ec.clients {
+		if mc.isHealthy() {
+			healthyClients = append(healthyClients, mc)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	start := time.Now()
-	sp, err := ec.syncProgressFn(ctx, mc)
-	if err != nil {
-		recordExecutionClientStatus(ctx, statusFailure, mc.addr)
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_syncing"),
-			zap.Error(err))
-		return err
-	}
-	recordRequestDuration(ctx, mc.addr, time.Since(start))
+	atLeastOneHealthy := false
 
-	if sp != nil {
-		recordExecutionClientStatus(ctx, statusSyncing, mc.addr)
-
-		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
-
-		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(mc.addr)))
-
-		// block out of sync distance tolerance
-		if syncDistance > ec.syncDistanceTolerance {
-			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
+	for _, mc := range healthyClients {
+		start := time.Now()
+		sp, err := ec.syncProgressFn(ctx, mc)
+		if err != nil {
+			recordExecutionClientStatus(ctx, statusFailure, mc.addr)
+			ec.logger.Error(elResponseErrMsg,
+				zap.String("method", "eth_syncing"),
+				zap.Error(err))
+			return err
 		}
+		recordRequestDuration(ctx, mc.addr, time.Since(start))
+
+		if sp != nil {
+			recordExecutionClientStatus(ctx, statusSyncing, mc.addr)
+
+			syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
+
+			observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(mc.addr)))
+
+			if syncDistance > ec.syncDistanceTolerance {
+				ec.logger.Warn("sync distance exceeds tolerance",
+					zap.Uint64("sync_distance", syncDistance),
+					zap.Uint64("tolerance", ec.syncDistanceTolerance),
+					zap.String("address", mc.addr),
+					zap.String("method", "eth_syncing"),
+				)
+
+				continue
+			}
+		}
+
+		atLeastOneHealthy = true
+		recordExecutionClientStatus(ctx, statusReady, mc.addr)
+		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(mc.addr)))
 	}
 
-	recordExecutionClientStatus(ctx, statusReady, mc.addr)
-
-	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(mc.addr)))
+	if !atLeastOneHealthy {
+		return errSyncing
+	}
 
 	return nil
 }
