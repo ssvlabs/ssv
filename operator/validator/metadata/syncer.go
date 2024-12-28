@@ -156,6 +156,9 @@ func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorUpdate {
 			}
 
 			if len(update.Validators) == 0 {
+				if slept := u.sleep(ctx, u.streamInterval); !slept {
+					return
+				}
 				continue
 			}
 
