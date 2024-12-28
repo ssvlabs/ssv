@@ -223,6 +223,7 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 	}
 
 	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
+
 	for i, val := range n.fixedSubnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)

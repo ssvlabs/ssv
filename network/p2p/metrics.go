@@ -96,6 +96,7 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 				unhealthySubnets++
 			}
 		}
+
 		// Calculate min, median, max
 		sort.Ints(subnetPeerCounts)
 		min := subnetPeerCounts[0]
@@ -135,6 +136,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 			nodeType = "exporter"
 		}
 	}
+
 	if pubKey, ok := n.operatorPKHashToPKCache.Get(opPKHash); ok {
 		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey)
 		if opDataErr == nil && found {

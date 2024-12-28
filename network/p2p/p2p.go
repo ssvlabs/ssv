@@ -106,11 +106,13 @@ type p2pNetwork struct {
 func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
+	logger = logger.Named(logging.NameP2PNetwork)
+
 	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		interfaceLogger:         logger.Named(logging.NameP2PNetwork),
+		interfaceLogger:         logger,
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
