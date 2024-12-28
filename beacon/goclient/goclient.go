@@ -10,17 +10,17 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -41,45 +41,6 @@ const (
 	clNilResponseErrMsg     = "Consensus client returned a nil response"
 	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
 )
-
-type beaconNodeStatus int32
-
-var (
-	allMetrics = []prometheus.Collector{
-		metricsBeaconNodeStatus,
-		metricsBeaconDataRequest,
-	}
-	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_beacon_status",
-		Help: "Status of the connected beacon node",
-	})
-
-	// metricsBeaconDataRequest is located here to avoid including waiting for 1/3 or 2/3 of slot time into request duration.
-	metricsBeaconDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_beacon_data_request_duration_seconds",
-		Help:    "Beacon data request duration (seconds)",
-		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-
-	metricsAttesterDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAttester.String())
-	metricsAggregatorDataRequest                = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAggregator.String())
-	metricsProposerDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleProposer.String())
-	metricsSyncCommitteeDataRequest             = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommittee.String())
-	metricsSyncCommitteeContributionDataRequest = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommitteeContribution.String())
-
-	statusUnknown beaconNodeStatus = 0
-	statusSyncing beaconNodeStatus = 1
-	statusOK      beaconNodeStatus = 2
-)
-
-func init() {
-	logger := zap.L()
-	for _, c := range allMetrics {
-		if err := prometheus.Register(c); err != nil {
-			logger.Debug("could not register prometheus collector")
-		}
-	}
-}
 
 // NodeClient is the type of the Beacon node.
 type NodeClient string
@@ -155,6 +116,9 @@ type GoClient struct {
 	nodeClient  NodeClient
 	gasLimit    uint64
 
+	syncDistanceTolerance phase0.Slot
+	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
+
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	registrationMu       sync.Mutex
@@ -209,13 +173,14 @@ func New(
 	}
 
 	client := &GoClient{
-		log:               logger,
-		ctx:               opt.Context,
-		network:           opt.Network,
-		client:            httpClient.(*eth2clienthttp.Service),
-		gasLimit:          opt.GasLimit,
-		operatorDataStore: operatorDataStore,
-		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		log:                   logger,
+		ctx:                   opt.Context,
+		network:               opt.Network,
+		client:                httpClient.(*eth2clienthttp.Service),
+		gasLimit:              opt.GasLimit,
+		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
+		operatorDataStore:     operatorDataStore,
+		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
@@ -224,6 +189,8 @@ func New(
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
 	}
+
+	client.nodeSyncingFn = client.nodeSyncing
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 	if err != nil {
@@ -256,51 +223,59 @@ func New(
 	return client, nil
 }
 
+func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
+	return gc.client.NodeSyncing(ctx, opts)
+}
+
 func (gc *GoClient) NodeClient() NodeClient {
 	return gc.nodeClient
 }
 
+var errSyncing = errors.New("syncing")
+
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "NodeSyncing"),
 			zap.Error(err),
 		)
 		// TODO: get rid of global variable, pass metrics to goClient
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
 		return fmt.Errorf("failed to obtain node syncing status: %w", err)
 	}
 	if nodeSyncingResp == nil {
 		gc.log.Error(clNilResponseErrMsg,
 			zap.String("api", "NodeSyncing"),
 		)
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
 		return fmt.Errorf("node syncing response is nil")
 	}
 	if nodeSyncingResp.Data == nil {
 		gc.log.Error(clNilResponseDataErrMsg,
 			zap.String("api", "NodeSyncing"),
 		)
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		recordBeaconClientStatus(ctx, statusUnknown, gc.client.Address())
 		return fmt.Errorf("node syncing data is nil")
 	}
 	syncState := nodeSyncingResp.Data
+	recordBeaconClientStatus(ctx, statusSyncing, gc.client.Address())
+	recordSyncDistance(ctx, syncState.SyncDistance, gc.client.Address())
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
-	metricsBeaconNodeStatus.Set(float64(statusSyncing))
-	if syncState.IsSyncing {
+	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
 		gc.log.Error("Consensus client is not synced")
-		return fmt.Errorf("syncing")
+		return errSyncing
 	}
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
 	}
 
-	metricsBeaconNodeStatus.Set(float64(statusOK))
+	recordBeaconClientStatus(ctx, statusSynced, gc.client.Address())
+
 	return nil
 }
 

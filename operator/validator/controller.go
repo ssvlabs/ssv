@@ -80,7 +80,6 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	ValidatorStore             registrystorage.ValidatorStore
-	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
@@ -114,7 +113,7 @@ type Controller interface {
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
-
+	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
 }
 
@@ -140,14 +139,14 @@ type P2PNetwork interface {
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	ActiveSubnets() records.Subnets
+	FixedSubnets() records.Subnets
 }
 
 // controller implements Controller
 type controller struct {
 	ctx context.Context
 
-	logger  *zap.Logger
-	metrics validator.Metrics
+	logger *zap.Logger
 
 	networkConfig     networkconfig.NetworkConfig
 	sharesStorage     SharesStorage
@@ -216,7 +215,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
-		Metrics:           options.Metrics,
 		Graffiti:          options.Graffiti,
 	}
 
@@ -229,17 +227,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
-	metrics := validator.Metrics(validator.NopMetrics{})
-	if options.Metrics != nil {
-		metrics = options.Metrics
-	}
-
 	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
-		metrics:           metrics,
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
 		operatorsStorage:  options.RegistryStorage,
@@ -916,7 +908,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
-		c.metrics.ValidatorError(v.Share.ValidatorPubKey[:])
+		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {
@@ -968,6 +960,55 @@ func (c *controller) reportIndicesChange(ctx context.Context, timeout time.Durat
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+func (c *controller) ReportValidatorStatuses(ctx context.Context) {
+	ticker := time.NewTicker(time.Second * 30)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			start := time.Now()
+			validatorsPerStatus := make(map[validatorStatus]uint32)
+
+			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
+				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
+					validatorsPerStatus[statusParticipating]++
+				}
+				meta := share.BeaconMetadata
+				if meta == nil {
+					validatorsPerStatus[statusNotFound]++
+				} else if meta.IsActive() {
+					validatorsPerStatus[statusActive]++
+				} else if meta.Slashed() {
+					validatorsPerStatus[statusSlashed]++
+				} else if meta.Exiting() {
+					validatorsPerStatus[statusExiting]++
+				} else if !meta.Activated() {
+					validatorsPerStatus[statusNotActivated]++
+				} else if meta.Pending() {
+					validatorsPerStatus[statusPending]++
+				} else if meta.Index == 0 {
+					validatorsPerStatus[statusNoIndex]++
+				} else {
+					validatorsPerStatus[statusUnknown]++
+				}
+			}
+			for status, count := range validatorsPerStatus {
+				c.logger.
+					With(zap.String("status", string(status))).
+					With(zap.Uint32("count", count)).
+					With(zap.Duration("elapsed_time", time.Since(start))).
+					Info("recording validator status")
+				recordValidatorStatus(ctx, count, status)
+			}
+		case <-ctx.Done():
+			c.logger.Info("stopped reporting validator statuses. Context cancelled")
+			return
+		}
+	}
+
 }
 
 func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {

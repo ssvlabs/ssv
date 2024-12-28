@@ -41,13 +41,13 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/monitoring/metrics"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -81,7 +81,7 @@ type config struct {
 	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
 	KeyStore                   KeyStore                         `yaml:"KeyStore"`
-	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"SSV.Network" `
+	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"ssv.network" `
 	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
@@ -96,8 +96,6 @@ var cfg config
 
 var globalArgs global_config.Args
 
-var operatorNode operator.Node
-
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -107,16 +105,26 @@ var StartNodeCmd = &cobra.Command{
 
 		logger, err := setupGlobal()
 		if err != nil {
-			log.Fatal("could not create logger", err)
+			log.Fatal("could not create logger ", err)
 		}
 
 		defer logging.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		metricsReporter := metricsreporter.New(
-			metricsreporter.WithLogger(logger),
-		)
+		observabilityShutdown, err := observability.Initialize(
+			cmd.Parent().Short,
+			cmd.Parent().Version,
+			observability.WithMetrics())
+		if err != nil {
+			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+		}
+
+		defer func() {
+			if err = observabilityShutdown(cmd.Context()); err != nil {
+				logger.Error("could not shutdown observability object", zap.Error(err))
+			}
+		}()
 
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
@@ -201,11 +209,11 @@ var StartNodeCmd = &cobra.Command{
 			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
-			executionclient.WithMetrics(metricsReporter),
 			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+			executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 		)
 		if err != nil {
 			logger.Fatal("could not connect to execution client", zap.Error(err))
@@ -230,14 +238,12 @@ var StartNodeCmd = &cobra.Command{
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
 		)
 
-		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-		p2pNetwork := setupP2P(logger, db, metricsReporter)
+		p2pNetwork := setupP2P(logger, db)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -285,11 +291,9 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
-		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
-		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorSyncer := metadata.NewValidatorSyncer(
 			logger,
@@ -304,10 +308,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
+		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
 		}
 
 		nodeProber := nodeprobe.NewProber(
@@ -329,14 +333,11 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber.Wait()
 		logger.Info("ethereum node(s) are healthy")
 
-		metricsReporter.SSVNodeHealthy()
-
 		eventSyncer := syncContractEvents(
 			cmd.Context(),
 			logger,
 			executionClient,
 			validatorCtrl,
-			metricsReporter,
 			networkConfig,
 			nodeStorage,
 			operatorDataStore,
@@ -638,7 +639,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) network.P2PNetwork {
+func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -646,7 +647,7 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	n, err := p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
+	n, err := p2pv1.New(logger, &cfg.P2pNetworkConfig)
 	if err != nil {
 		logger.Fatal("failed to setup p2p network", zap.Error(err))
 	}
@@ -673,7 +674,6 @@ func syncContractEvents(
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
 	validatorCtrl validator.Controller,
-	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
@@ -698,7 +698,6 @@ func syncContractEvents(
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
-		eventhandler.WithMetrics(metricsReporter),
 	)
 	if err != nil {
 		logger.Fatal("failed to setup event data handler", zap.Error(err))
@@ -709,7 +708,6 @@ func syncContractEvents(
 		executionClient,
 		eventHandler,
 		eventsyncer.WithLogger(logger),
-		eventsyncer.WithMetrics(metricsReporter),
 	)
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
@@ -791,10 +789,10 @@ func syncContractEvents(
 	return eventSyncer
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter metricsreporter.MetricsReporter, port int, enableProf bool) {
+func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
+	metricsHandler := metrics.NewHandler(db, enableProf, opNode)
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))

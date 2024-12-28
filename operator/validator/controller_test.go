@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -58,7 +59,6 @@ type MockControllerOptions struct {
 	network           P2PNetwork
 	recipientsStorage Recipients
 	sharesStorage     SharesStorage
-	metrics           validator.Metrics
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
 	signer            spectypes.BeaconSigner
@@ -83,7 +83,6 @@ func TestNewController(t *testing.T) {
 	controllerOptions := ControllerOptions{
 		NetworkConfig:     networkconfig.TestNetwork,
 		Beacon:            bc,
-		Metrics:           nil,
 		FullNode:          true,
 		Network:           network,
 		OperatorDataStore: operatorDataStore,
@@ -195,6 +194,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 
 			network.EXPECT().ActiveSubnets().Return(subnets[:]).AnyTimes()
+			network.EXPECT().FixedSubnets().Return(make(records.Subnets, commons.SubnetsCount)).AnyTimes()
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
@@ -237,7 +237,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				validatorOptions: validator.Options{
 					Exporter: true,
 				},
-				metrics: validator.NopMetrics{},
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
@@ -564,7 +563,6 @@ func TestSetupValidators(t *testing.T) {
 					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
 				},
-				metrics: validator.NopMetrics{},
 			}
 
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
@@ -875,7 +873,6 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		logger:                  logger,
 		beacon:                  opts.beacon,
 		network:                 opts.network,
-		metrics:                 opts.metrics,
 		ibftStorageMap:          opts.StorageMap,
 		operatorDataStore:       opts.operatorDataStore,
 		sharesStorage:           opts.sharesStorage,

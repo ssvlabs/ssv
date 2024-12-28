@@ -32,7 +32,6 @@ import (
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
-	isgomock struct{}
 }
 
 // MockControllerMockRecorder is the mock recorder for MockController.
@@ -192,6 +191,18 @@ func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toRe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReactivateCluster", reflect.TypeOf((*MockController)(nil).ReactivateCluster), owner, operatorIDs, toReactivate)
 }
 
+// ReportValidatorStatuses mocks base method.
+func (m *MockController) ReportValidatorStatuses(ctx context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReportValidatorStatuses", ctx)
+}
+
+// ReportValidatorStatuses indicates an expected call of ReportValidatorStatuses.
+func (mr *MockControllerMockRecorder) ReportValidatorStatuses(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportValidatorStatuses", reflect.TypeOf((*MockController)(nil).ReportValidatorStatuses), ctx)
+}
+
 // StartNetworkHandlers mocks base method.
 func (m *MockController) StartNetworkHandlers() {
 	m.ctrl.T.Helper()
@@ -262,7 +273,6 @@ func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 type MockRecipients struct {
 	ctrl     *gomock.Controller
 	recorder *MockRecipientsMockRecorder
-	isgomock struct{}
 }
 
 // MockRecipientsMockRecorder is the mock recorder for MockRecipients.
@@ -302,7 +312,6 @@ func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Cal
 type MockSharesStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockSharesStorageMockRecorder
-	isgomock struct{}
 }
 
 // MockSharesStorageMockRecorder is the mock recorder for MockSharesStorage.
@@ -386,7 +395,6 @@ func (mr *MockSharesStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gom
 type MockP2PNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockP2PNetworkMockRecorder
-	isgomock struct{}
 }
 
 // MockP2PNetworkMockRecorder is the mock recorder for MockP2PNetwork.
@@ -432,6 +440,20 @@ func (m *MockP2PNetwork) Broadcast(id types.MessageID, message *types.SignedSSVM
 func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
+}
+
+// FixedSubnets mocks base method.
+func (m *MockP2PNetwork) FixedSubnets() records.Subnets {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FixedSubnets")
+	ret0, _ := ret[0].(records.Subnets)
+	return ret0
+}
+
+// FixedSubnets indicates an expected call of FixedSubnets.
+func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FixedSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).FixedSubnets))
 }
 
 // SubscribeRandoms mocks base method.
