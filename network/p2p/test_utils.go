@@ -182,6 +182,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
 		nodeStorage.ValidatorStore(),
+		nodeStorage,
 		dutyStore,
 		signatureVerifier,
 	)
@@ -207,6 +208,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.MessageValidator = validation.New(
 			networkconfig.TestNetwork,
 			nodeStorage.ValidatorStore(),
+			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			validation.WithSelfAccept(selfPeerID, true),

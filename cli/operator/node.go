@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -234,6 +235,7 @@ var StartNodeCmd = &cobra.Command{
 		messageValidator := validation.New(
 			networkConfig,
 			nodeStorage.ValidatorStore(),
+			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
