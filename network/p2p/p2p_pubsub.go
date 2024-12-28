@@ -63,7 +63,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
+			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
@@ -137,14 +137,14 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 
 // subscribeCommittee handles the subscription logic for committee subnets
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
-	n.interfaceLogger.Debug("subscribing to committee", fields.CommitteeID(cid))
+	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid))
 	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
 
 	for _, topic := range commons.CommitteeTopicID(cid) {
-		if err := n.topicsCtrl.Subscribe(n.interfaceLogger, topic); err != nil {
+		if err := n.topicsCtrl.Subscribe(n.logger, topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
@@ -188,10 +188,10 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 }
 
 // handlePubsubMessages reads messages from the given channel and calls the router, note that this function blocks.
-func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.Context, topic string, msg *pubsub.Message) error {
+func (n *p2pNetwork) handlePubsubMessages() func(ctx context.Context, topic string, msg *pubsub.Message) error {
 	return func(ctx context.Context, topic string, msg *pubsub.Message) error {
 		if n.msgRouter == nil {
-			logger.Debug("msg router is not configured")
+			n.logger.Debug("msg router is not configured")
 			return nil
 		}
 		if msg == nil {
