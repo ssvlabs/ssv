@@ -61,33 +61,33 @@ func init() {
 
 var unknown = "unknown"
 
-func (n *p2pNetwork) reportAllPeers() func() {
+func (n *p2pNetwork) reportAllPeers(logger *zap.Logger) func() {
 	return func() {
 		pids := n.host.Network().Peers()
-		n.logger.Debug("connected peers status", fields.Count(len(pids)))
+		logger.Debug("connected peers status", fields.Count(len(pids)))
 		MetricsAllConnectedPeers.Set(float64(len(pids)))
 	}
 }
 
-func (n *p2pNetwork) reportPeerIdentities() func() {
+func (n *p2pNetwork) reportPeerIdentities(logger *zap.Logger) func() {
 	return func() {
 		pids := n.host.Network().Peers()
 		for _, pid := range pids {
-			n.reportPeerIdentity(pid)
+			n.reportPeerIdentity(logger, pid)
 		}
 	}
 }
 
-func (n *p2pNetwork) reportTopics() func() {
+func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 	return func() {
 		topics := n.topicsCtrl.Topics()
-		n.logger.Debug("connected topics", fields.Count(len(topics)))
+		logger.Debug("connected topics", fields.Count(len(topics)))
 
 		subnetPeerCounts := []int{}
 		deadSubnets := 0
 		unhealthySubnets := 0
 		for _, name := range topics {
-			count := n.reportTopicPeers(name)
+			count := n.reportTopicPeers(logger, name)
 			subnetPeerCounts = append(subnetPeerCounts, count)
 
 			if count == 0 {
@@ -96,14 +96,13 @@ func (n *p2pNetwork) reportTopics() func() {
 				unhealthySubnets++
 			}
 		}
-
 		// Calculate min, median, max
 		sort.Ints(subnetPeerCounts)
 		min := subnetPeerCounts[0]
 		median := subnetPeerCounts[len(subnetPeerCounts)/2]
 		max := subnetPeerCounts[len(subnetPeerCounts)-1]
 
-		n.logger.Debug("topic peers distribution",
+		logger.Debug("topic peers distribution",
 			zap.Int("min", min),
 			zap.Int("median", median),
 			zap.Int("max", max),
@@ -113,18 +112,18 @@ func (n *p2pNetwork) reportTopics() func() {
 	}
 }
 
-func (n *p2pNetwork) reportTopicPeers(name string) (peerCount int) {
+func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) (peerCount int) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
-		n.logger.Warn("could not get topic peers", fields.Topic(name), zap.Error(err))
+		logger.Warn("could not get topic peers", fields.Topic(name), zap.Error(err))
 		return 0
 	}
-	n.logger.Debug("topic peers status", fields.Topic(name), fields.Count(len(peers)), zap.Any("peers", peers))
+	logger.Debug("topic peers status", fields.Topic(name), fields.Count(len(peers)), zap.Any("peers", peers))
 	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 	return len(peers)
 }
 
-func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
+func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	opPKHash, opID, nodeVersion, nodeType := unknown, unknown, unknown, unknown
 	ni := n.idx.NodeInfo(pid)
 	if ni != nil {
@@ -136,7 +135,6 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 			nodeType = "exporter"
 		}
 	}
-
 	if pubKey, ok := n.operatorPKHashToPKCache.Get(opPKHash); ok {
 		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey)
 		if opDataErr == nil && found {
@@ -145,7 +143,7 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	} else {
 		operators, err := n.nodeStorage.ListOperators(nil, 0, 0)
 		if err != nil {
-			n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+			logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		}
 
 		for _, operator := range operators {
@@ -158,7 +156,7 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	}
 
 	state := n.idx.State(pid)
-	n.logger.Debug("peer identity",
+	logger.Debug("peer identity",
 		fields.PeerID(pid),
 		zap.String("node_version", nodeVersion),
 		zap.String("operator_id", opID),

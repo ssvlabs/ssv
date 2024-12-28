@@ -36,9 +36,9 @@ type P2PNetwork interface {
 	protocolp2p.Network
 	MessageRouting
 	// Setup initialize the network layer and starts the libp2p host
-	Setup() error
+	Setup(logger *zap.Logger) error
 	// Start starts the network
-	Start() error
+	Start(logger *zap.Logger) error
 	// UpdateSubnets will update the registered subnets according to active validators
 	UpdateSubnets(logger *zap.Logger)
 	// SubscribeAll subscribes to all subnets
