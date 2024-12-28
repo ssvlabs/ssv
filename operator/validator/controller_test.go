@@ -110,27 +110,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	operatorStore, done := newOperatorStorageForTest(zap.NewNop())
 	defer done()
 
-	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
-		2: {
-			Balance: 0,
-			Status:  3,
-			Index:   2,
-			Validator: &phase0.Validator{
-				ActivationEpoch: passedEpoch,
-				PublicKey:       phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),
-			},
-		},
-		3: {
-			Balance: 0,
-			Status:  3,
-			Index:   3,
-			Validator: &phase0.Validator{
-				ActivationEpoch: passedEpoch,
-				PublicKey:       phase0.BLSPubKey(secretKey2.GetPublicKey().Serialize()),
-			},
-		},
-	}
-
 	sharesWithMetadata := []*types.SSVShare{
 		{
 			Share: spectypes.Share{
@@ -236,8 +215,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 						}
 					}
 				}).AnyTimes()
-				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).AnyTimes()
-				bc.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
@@ -263,7 +240,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators()
+			ctr.StartValidators(context.TODO())
 		})
 	}
 }
@@ -338,122 +315,6 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	}()
 
 	wg.Wait()
-}
-
-func TestUpdateValidatorMetadata(t *testing.T) {
-	secretKey := &bls.SecretKey{}
-	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
-
-	passedEpoch := phase0.Epoch(1)
-	validatorKey, err := createKey()
-	require.NoError(t, err)
-
-	operatorIds := []uint64{1, 2, 3, 4}
-	operators := make([]*spectypes.ShareMember, len(operatorIds))
-	for i, id := range operatorIds {
-		operatorKey, keyError := createKey()
-		require.NoError(t, keyError)
-		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
-	}
-
-	firstValidator := &validator.Validator{
-		DutyRunners: runner.ValidatorDutyRunners{},
-		Share: &types.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
-			},
-		},
-	}
-	shareWithMetaData := &types.SSVShare{
-		Share: spectypes.Share{
-			Committee:       operators,
-			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
-		},
-		Metadata: types.Metadata{
-			OwnerAddress: common.BytesToAddress([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			BeaconMetadata: &beacon.ValidatorMetadata{
-				Balance:         0,
-				Status:          3, // ValidatorStateActiveOngoing
-				Index:           1,
-				ActivationEpoch: passedEpoch,
-			},
-		},
-	}
-
-	validatorMetaData := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
-
-	testCases := []struct {
-		name                      string
-		metadata                  *beacon.ValidatorMetadata
-		sharesStorageExpectReturn any
-		getShareError             bool
-		operatorDataId            uint64
-		testPublicKey             spectypes.ValidatorPK
-		mockRecipientTimes        int
-	}{
-		{"Empty metadata", nil, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Valid metadata", validatorMetaData, nil, false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Share wasn't found", validatorMetaData, nil, true, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Share not belong to operator", validatorMetaData, nil, false, 2, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-		{"Metadata with error", validatorMetaData, fmt.Errorf("error"), false, 1, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()), 0},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Initialize common setup
-			ctrl, logger, sharesStorage, network, signer, recipientStorage, _ := setupCommonTestComponents(t)
-			defer ctrl.Finish()
-			operatorDataStore := operatordatastore.New(buildOperatorData(tc.operatorDataId, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-			recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
-			firstValidatorPublicKey := secretKey.GetPublicKey().Serialize()
-
-			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-				(spectypes.ValidatorPK)(firstValidatorPublicKey): firstValidator,
-			}
-			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
-
-			// Assuming controllerOptions is set up correctly
-			controllerOptions := MockControllerOptions{
-				// keyManager:          km,
-				signer:            signer,
-				network:           network,
-				operatorDataStore: operatorDataStore,
-				sharesStorage:     sharesStorage,
-				recipientsStorage: recipientStorage,
-				validatorsMap:     mockValidatorsMap,
-			}
-
-			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
-				if tc.getShareError {
-					return nil, false
-				}
-				return shareWithMetaData, true
-			}).AnyTimes()
-			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(tc.mockRecipientTimes)
-			sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(tc.sharesStorageExpectReturn).AnyTimes()
-			sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-
-			ctr := setupController(logger, controllerOptions)
-
-			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
-				return true, nil
-			}
-			ctr.validatorStartFunc = validatorStartFunc
-
-			data := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata)
-			data[tc.testPublicKey] = tc.metadata
-
-			err := ctr.UpdateValidatorsMetadata(data)
-
-			if tc.sharesStorageExpectReturn != nil {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
 }
 
 func TestSetupValidators(t *testing.T) {
@@ -1009,7 +870,6 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 	}
 
 	return controller{
-		metadataUpdateInterval:  0,
 		logger:                  logger,
 		beacon:                  opts.beacon,
 		network:                 opts.network,
