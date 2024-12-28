@@ -34,6 +34,7 @@ type Operators interface {
 	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*OperatorData, bool, error)
 	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*OperatorData, bool, error)
 	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+	QuorumExists(r basedb.Reader, ids []spectypes.OperatorID, quorum uint64) (bool, error)
 	SaveOperatorData(rw basedb.ReadWriter, operatorData *OperatorData) (bool, error)
 	DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error
 	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
@@ -95,6 +96,14 @@ func (s *operatorsStorage) OperatorsExist(
 	defer s.lock.RUnlock()
 
 	return s.operatorsExist(r, ids)
+}
+
+// QuorumExists returns if existing operators from the list build a quorum
+func (s *operatorsStorage) QuorumExists(r basedb.Reader, ids []spectypes.OperatorID, quorum uint64) (bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.quorumExists(r, ids, quorum)
 }
 
 // GetOperatorDataByPubKey returns data of the given operator by public key
@@ -160,6 +169,28 @@ func (s *operatorsStorage) operatorsExist(
 	}
 
 	return seen == len(ids), nil
+}
+
+func (s *operatorsStorage) quorumExists(
+	r basedb.Reader,
+	ids []spectypes.OperatorID,
+	quorum uint64,
+) (bool, error) {
+	var keys [][]byte
+	for _, id := range ids {
+		keys = append(keys, buildOperatorKey(id))
+	}
+
+	seen := uint64(0)
+	err := s.db.UsingReader(r).GetMany(s.prefix, keys, func(obj basedb.Obj) error {
+		seen++
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return seen > quorum, nil
 }
 
 func (s *operatorsStorage) listOperators(r basedb.Reader, from, to uint64) ([]OperatorData, error) {

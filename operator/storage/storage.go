@@ -106,6 +106,10 @@ func (s *storage) OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (b
 	return s.operatorStore.OperatorsExist(r, ids)
 }
 
+func (s *storage) QuorumExists(r basedb.Reader, ids []spectypes.OperatorID, quorum uint64) (bool, error) {
+	return s.operatorStore.QuorumExists(r, ids, quorum)
+}
+
 func (s *storage) SaveOperatorData(rw basedb.ReadWriter, operatorData *registrystorage.OperatorData) (bool, error) {
 	return s.operatorStore.SaveOperatorData(rw, operatorData)
 }

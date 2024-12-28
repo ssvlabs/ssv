@@ -99,7 +99,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 			continue
 		}
 
-		var existingOperatorsCount int
+		var existingOperatorsCount uint64
 		for _, shareMember := range share.Committee {
 			if shareMember.Signer == event.OperatorId {
 				existingOperatorsCount++
@@ -116,7 +116,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 			}
 		}
 
-		if existingOperatorsCount == len(share.Committee) {
+		if existingOperatorsCount >= share.Quorum() {
 			share.Liquidated = false
 			modifiedShares = append(modifiedShares, share)
 		}
@@ -166,8 +166,14 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 
 	var modifiedShares []*ssvtypes.SSVShare
 	for _, share := range eh.nodeStorage.Shares().List(txn, registrystorage.ByOperatorID(event.OperatorId)) {
-		share.Liquidated = true
-		modifiedShares = append(modifiedShares, share)
+		exists, err := eh.nodeStorage.QuorumExists(txn, share.OperatorIDs(), share.Quorum())
+		if err != nil {
+			return fmt.Errorf("check if operator exists: %w", err)
+		}
+		if !exists {
+			share.Liquidated = true
+			modifiedShares = append(modifiedShares, share)
+		}
 	}
 
 	if len(modifiedShares) > 0 {
