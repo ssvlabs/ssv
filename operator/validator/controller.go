@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
@@ -451,7 +452,9 @@ func (c *controller) StartValidators() {
 		return
 	}
 
-	mySubnets := c.selfSubnets()
+	cidInt := new(big.Int)
+
+	mySubnets := c.selfSubnets(cidInt)
 
 	var ownShares []*ssvtypes.SSVShare
 	var pubKeysToFetch [][]byte
@@ -459,7 +462,7 @@ func (c *controller) StartValidators() {
 		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
+		subnet := networkcommons.SetCommitteeSubnet(cidInt, share.CommitteeID())
 		if mySubnets[subnet] != 0 {
 			pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey[:])
 		}
@@ -508,15 +511,22 @@ func (c *controller) StartValidators() {
 	}
 }
 
-func (c *controller) selfSubnets() records.Subnets {
+// selfSubnets calculates the operator's subnets by adding up the fixed subnets and the active committees
+// it recvs big int to avoid unnecessary conversions, if intCid is nil it will allocate a new big int
+func (c *controller) selfSubnets(intCid *big.Int) records.Subnets {
 	// Start off with a copy of the fixed subnets (e.g., exporter subscribed to all subnets).
+	localInt := intCid
+	if localInt == nil {
+		localInt = new(big.Int)
+	}
+
 	mySubnets := make(records.Subnets, networkcommons.Subnets())
 	copy(mySubnets, c.network.FixedSubnets())
 
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID())
 	for _, v := range myValidators {
-		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+		subnet := networkcommons.SetCommitteeSubnet(localInt, v.CommitteeID())
 		mySubnets[subnet] = 1
 	}
 
@@ -983,18 +993,20 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	const batchSize = 512
 	var sleep = 2 * time.Second
 
+	cidInt := new(big.Int)
+
 	for {
 		// Get the shares to fetch metadata for.
 		start := time.Now()
 
-		mySubnets := c.selfSubnets()
+		mySubnets := c.selfSubnets(cidInt)
 		var existingShares, newShares []*ssvtypes.SSVShare
 		c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 			if share.Liquidated {
 				return true
 			}
 
-			subnet := networkcommons.CommitteeSubnet(share.CommitteeID())
+			subnet := networkcommons.SetCommitteeSubnet(cidInt, share.CommitteeID())
 			if mySubnets[subnet] == 0 {
 				return true
 			}

@@ -25,6 +25,13 @@ const (
 	topicPrefix = "ssv.v2"
 )
 
+// BigIntSubnetsCount is the big.Int representation of SubnetsCount
+var bigIntSubnetsCount *big.Int
+
+func init() {
+	bigIntSubnetsCount = new(big.Int).SetUint64(SubnetsCount)
+}
+
 const (
 	signatureSize    = 256
 	signatureOffset  = 0
@@ -57,8 +64,14 @@ func GetTopicBaseName(topicName string) string {
 
 // CommitteeSubnet returns the subnet for the given committee
 func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
-	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(SubnetsCount))
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
 	return subnet.Uint64()
+}
+
+// SetCommitteeSubnet returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
+func SetCommitteeSubnet(bigInst *big.Int, cid spectypes.CommitteeID) uint64 {
+	bigInst.SetBytes(cid[:])
+	return bigInst.Mod(bigInst, bigIntSubnetsCount).Uint64()
 }
 
 // MsgIDFunc is the function that maps a message to a msg_id
