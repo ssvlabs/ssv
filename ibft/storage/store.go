@@ -61,7 +61,7 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 }
 
 func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int) {
-	logger.Debug("start stale slot cleanup job", zap.Int("retain", retain))
+	logger.Debug("start initial stale slot cleanup", zap.String("store", i.ID()), zap.Int("retain", retain))
 	ticker := slotTickerProvider()
 	<-ticker.Next()
 	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
@@ -72,17 +72,20 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 
 	logger.Info("removed stale slot entries", zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.Next():
-			threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
-			if err := i.removeSlotAt(threashold); err != nil {
-				logger.Error("remove slot at", fields.Slot(threashold))
+	go func() {
+		logger.Info("start stale slot cleanup background job", zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.Next():
+				threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
+				if err := i.removeSlotAt(threashold); err != nil {
+					logger.Error("remove slot at", fields.Slot(threashold))
+				}
 			}
 		}
-	}
+	}()
 }
 
 // removes ALL entries that have given slot in their prefix
@@ -138,10 +141,10 @@ func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase
 				return true
 			}
 
-			logger.Debug("count prefix", fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
+			logger.Debug("count prefix", zap.String("store", i.ID()), fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
 
 			if count == 0 {
-				logger.Debug("no more keys at slot", fields.Slot(current))
+				logger.Debug("no more keys at slot", zap.String("store", i.ID()), fields.Slot(current))
 				return true
 			}
 
@@ -151,14 +154,14 @@ func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase
 				return true
 			}
 
-			logger.Debug("drop prefix", fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
+			logger.Debug("drop prefix", zap.String("store", i.ID()), fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
 			total += int(count)
 
 			return false
 		}()
 
 		if stop {
-			logger.Debug("done cleanup stale slots", fields.Took(time.Since(begin)))
+			logger.Debug("done cleanup stale slots", zap.String("store", i.ID()), zap.Int("total", total), fields.Took(time.Since(begin)))
 			break
 		}
 	}
