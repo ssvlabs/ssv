@@ -71,7 +71,7 @@ func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
 // SetCommitteeSubnet returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
 func SetCommitteeSubnet(bigInst *big.Int, cid spectypes.CommitteeID) {
 	bigInst.SetBytes(cid[:])
-	bigInst.Set(bigInst.Mod(bigInst, bigIntSubnetsCount))
+	bigInst.Mod(bigInst, bigIntSubnetsCount)
 }
 
 // MsgIDFunc is the function that maps a message to a msg_id
