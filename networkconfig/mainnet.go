@@ -13,6 +13,7 @@ var Mainnet = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.MainNetwork),
 	DomainType:           spectypes.AlanMainnet,
 	GenesisEpoch:         218450,
+	BlossomEpoch:         999999999,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: "0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1",
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},

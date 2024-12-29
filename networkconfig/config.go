@@ -35,6 +35,7 @@ type NetworkConfig struct {
 	Beacon               beacon.BeaconNetwork
 	DomainType           spectypes.DomainType
 	GenesisEpoch         phase0.Epoch
+	BlossomEpoch         phase0.Epoch
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address
 	Bootnodes            []string
