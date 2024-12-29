@@ -74,24 +74,26 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 	logger.Info("removed stale slot entries", fields.Slot(threashold), zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 
 	go func() {
-		logger.Info("start stale slot cleanup background job", zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+		logger.Info("start stale slot cleanup background job", zap.String("store", i.ID()))
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.Next():
 				threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
-				logger.Debug("remove stale slot", fields.Slot(threashold), zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
-				if err := i.removeSlotAt(threashold); err != nil {
+				count, err := i.removeSlotAt(threashold)
+				if err != nil {
 					logger.Error("remove slot at", fields.Slot(threashold))
 				}
+
+				logger.Debug("removed stale slot", fields.Slot(threashold), zap.Int("count", count), zap.String("store", i.ID()))
 			}
 		}
 	}()
 }
 
 // removes ALL entries that have given slot in their prefix
-func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
+func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 	var keySet [][]byte
 
 	prefix := i.makePrefix(slotToByteSlice(slot))
@@ -106,24 +108,24 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("collect keys of stale slots: %w", err)
+		return 0, fmt.Errorf("collect keys of stale slots: %w", err)
 	}
 
 	if len(keySet) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	for _, id := range keySet {
 		if err := i.db.Using(tx).Delete(append(prefix, id...), nil); err != nil {
-			return fmt.Errorf("remove slot: %w", err)
+			return 0, fmt.Errorf("remove slot: %w", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit old slot removal: %w", err)
+		return 0, fmt.Errorf("commit old slot removal: %w", err)
 	}
 
-	return nil
+	return len(keySet), nil
 }
 
 var dropPrefixMu sync.Mutex

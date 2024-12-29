@@ -93,8 +93,9 @@ func TestRemoveSlot(t *testing.T) {
 	})
 
 	t.Run("remove slot at", func(t *testing.T) {
-		err = storage.removeSlotAt(phase0.Slot(150))
+		count, err := storage.removeSlotAt(phase0.Slot(150))
 		require.Nil(t, err)
+		assert.Equal(t, 1, count)
 		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
 		require.Nil(t, err)
 		require.Equal(t, 150, len(pp)) // seq 0 - 149
