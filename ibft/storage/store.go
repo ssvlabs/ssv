@@ -61,16 +61,17 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 }
 
 func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int) {
-	logger.Debug("start initial stale slot cleanup", zap.String("store", i.ID()), zap.Int("retain", retain))
 	ticker := slotTickerProvider()
 	<-ticker.Next()
 	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
+
+	logger.Info("start initial stale slot cleanup", fields.Slot(threashold), zap.String("store", i.ID()), zap.Int("retain", retain))
 
 	// on start we remove ALL slots below the threashold
 	start := time.Now()
 	count := i.removeSlotsOlderThan(logger, threashold)
 
-	logger.Info("removed stale slot entries", zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+	logger.Info("removed stale slot entries", fields.Slot(threashold), zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 
 	go func() {
 		logger.Info("start stale slot cleanup background job", zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
@@ -80,6 +81,7 @@ func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Lo
 				return
 			case <-ticker.Next():
 				threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
+				logger.Debug("remove stale slot", fields.Slot(threashold), zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 				if err := i.removeSlotAt(threashold); err != nil {
 					logger.Error("remove slot at", fields.Slot(threashold))
 				}
@@ -105,6 +107,10 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
 
 	if err != nil {
 		return fmt.Errorf("collect keys of stale slots: %w", err)
+	}
+
+	if len(keySet) == 0 {
+		return nil
 	}
 
 	for _, id := range keySet {
