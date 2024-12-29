@@ -117,42 +117,53 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) error {
 	return nil
 }
 
+var dropPrefixMu sync.Mutex
+
 // removes ALL entries for any slots older or equal to given slot
 func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase0.Slot) int {
-	var keySet [][]byte
+	current := slot
+	begin := time.Now()
+	var total int
+	for {
+		current-- // slots are incremental
+		prefix := i.makePrefix(slotToByteSlice(current))
+		stop := func() bool {
+			dropPrefixMu.Lock()
+			defer dropPrefixMu.Unlock()
+			start := time.Now()
 
-	prefix := i.makePrefix(nil)
+			count, err := i.db.CountPrefix(prefix)
+			if err != nil {
+				logger.Error("count prefix of stale slots", zap.Error(err), fields.Slot(current))
+				return true
+			}
 
-	tx := i.db.Begin()
-	defer tx.Discard()
+			logger.Debug("count prefix", fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
 
-	// filter and collect keys
-	err := i.db.UsingReader(tx).GetAll(prefix, func(i int, o basedb.Obj) error {
-		dbSlot := byteSliceToSlot(o.Key[:4])
-		if dbSlot < slot {
-			keySet = append(keySet, o.Key)
+			if count == 0 {
+				logger.Debug("no more keys at slot", fields.Slot(current))
+				return true
+			}
+
+			start = time.Now()
+			if err := i.db.DropPrefix(prefix); err != nil {
+				logger.Error("drop prefix of stale slots", zap.Error(err), fields.Slot(current))
+				return true
+			}
+
+			logger.Debug("drop prefix", fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
+			total += int(count)
+
+			return false
+		}()
+
+		if stop {
+			logger.Debug("done cleanup stale slots", fields.Took(time.Since(begin)))
+			break
 		}
-		return nil
-	})
-
-	if err != nil {
-		logger.Error("collect keys of stale slots", zap.Error(err))
-		return 0
 	}
 
-	for _, id := range keySet {
-		if err = i.db.Using(tx).Delete(append(prefix, id...), nil); err != nil {
-			logger.Error("remove slot", zap.Error(err))
-			return 0
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		logger.Error("commit", zap.Error(err))
-		return 0
-	}
-
-	return len(keySet)
+	return total
 }
 
 // CleanAllInstances removes all records in old format.
@@ -311,11 +322,6 @@ func slotToByteSlice(v phase0.Slot) []byte {
 
 	binary.LittleEndian.PutUint32(b, slot)
 	return b
-}
-
-func byteSliceToSlot(in []byte) phase0.Slot {
-	slot := uint64(binary.LittleEndian.Uint32(in))
-	return phase0.Slot(slot)
 }
 
 func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
