@@ -17,7 +17,17 @@ import (
 var config Config
 
 func Initialize(appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
-	shutdown = func(ctx context.Context) error { return nil }
+	var shutDownFuncs []func(context.Context) error
+
+	shutdown = func(ctx context.Context) error {
+		var joinedErr error
+		for _, f := range shutDownFuncs {
+			if err := f(ctx); err != nil {
+				joinedErr = errors.Join(joinedErr, err)
+			}
+		}
+		return joinedErr
+	}
 
 	for _, option := range options {
 		option(&config)
@@ -44,7 +54,7 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 			metric.WithReader(promExporter),
 		)
 		otel.SetMeterProvider(meterProvider)
-		shutdown = meterProvider.Shutdown
+		shutDownFuncs = append(shutDownFuncs, promExporter.Shutdown)
 	}
 
 	if config.tracesEnabled {
@@ -60,8 +70,8 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 			trace.WithResource(resources),
 			trace.WithBatcher(gRPCExporter, trace.WithBatchTimeout(time.Second)),
 		)
-		shutdown = gRPCExporter.Shutdown
 		otel.SetTracerProvider(traceProvider)
+		shutDownFuncs = append(shutDownFuncs, gRPCExporter.Shutdown)
 	}
 
 	return shutdown, err
