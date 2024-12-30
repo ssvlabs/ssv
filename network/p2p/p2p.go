@@ -72,8 +72,8 @@ type p2pNetwork struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	interfaceLogger *zap.Logger // struct logger to log in interface methods that do not accept a logger
-	cfg             *Config
+	logger *zap.Logger
+	cfg    *Config
 
 	host         host.Host
 	streamCtrl   streams.StreamController
@@ -108,13 +108,11 @@ type p2pNetwork struct {
 func New(logger *zap.Logger, cfg *Config) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
-	logger = logger.Named(logging.NameP2PNetwork)
-
 	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		interfaceLogger:         logger,
+		logger:                  logger.Named(logging.NameP2PNetwork),
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
@@ -169,13 +167,13 @@ func (n *p2pNetwork) PeersByTopic() ([]peer.ID, map[string][]peer.ID) {
 	for _, tpc := range tpcs {
 		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
 		if err != nil {
-			n.interfaceLogger.Error("Cant get peers from topics")
+			n.logger.Error("Cant get peers from topics")
 			return nil, nil
 		}
 	}
 	allpeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
-		n.interfaceLogger.Error("Cant all peers")
+		n.logger.Error("Cant all peers")
 		return nil, nil
 	}
 	return allpeers, peerz
@@ -187,16 +185,16 @@ func (n *p2pNetwork) Close() error {
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.libConnManager.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.disc.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.idx.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close index", zap.Error(err))
+		n.logger.Warn("could not close index", zap.Error(err))
 	}
 	if err := n.topicsCtrl.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close topics controller", zap.Error(err))
+		n.logger.Warn("could not close topics controller", zap.Error(err))
 	}
 	return n.host.Close()
 }
@@ -223,9 +221,7 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start(logger *zap.Logger) error {
-	logger = logger.Named(logging.NameP2PNetwork)
-
+func (n *p2pNetwork) Start() error {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
 		return nil
@@ -241,28 +237,28 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		Addrs: n.host.Addrs(),
 	})
 	if err != nil {
-		logger.Fatal("could not get my address", zap.Error(err))
+		n.logger.Fatal("could not get my address", zap.Error(err))
 	}
 	maStrs := make([]string, len(pAddrs))
 	for i, ima := range pAddrs {
 		maStrs[i] = ima.String()
 	}
-	logger.Info("starting p2p",
+	n.logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
-	go n.startDiscovery(logger, connector)
+	go n.startDiscovery(n.logger, connector)
 
-	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
+	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing())
 
-	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, logger, n.host))
+	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, n.logger, n.host))
 
 	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
 
-	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.logger, n.topicsCtrl, 2))
 
-	if err := n.subscribeToSubnets(logger); err != nil {
+	if err := n.subscribeToSubnets(n.logger); err != nil {
 		return err
 	}
 
@@ -274,13 +270,13 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 // - Dropping peers with bad Gossip score.
 // - Dropping irrelevant peers that don't have any subnet in common.
 // - Tagging the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removing the worst peer.
-func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
+func (n *p2pNetwork) peersBalancing() func() {
 	return func() {
 		allPeers := n.host.Network().Peers()
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
+		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
 
 		// Disconnect from bad peers
-		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
+		connMgr.DisconnectFromBadPeers(n.logger, n.host.Network(), allPeers)
 
 		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
@@ -294,14 +290,14 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
 
 		// Disconnect from irrelevant peers
-		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
+		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(n.logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
 		if disconnectedPeers > 0 {
 			return
 		}
 
 		// Trim peers according to subnet participation (considering the subnet size)
-		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
-		connMgr.TrimPeers(ctx, logger, n.host.Network())
+		connMgr.TagBestPeers(n.logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+		connMgr.TrimPeers(ctx, n.logger, n.host.Network())
 	}
 }
 
