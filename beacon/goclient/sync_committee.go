@@ -37,8 +37,6 @@ func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 		return nil, fmt.Errorf("sync committee duties response is nil")
 	}
 
-	recordRequestDuration(gc.ctx, "SyncCommitteeDuties", gc.client.Address(), http.MethodPost, time.Since(reqStart))
-
 	return resp.Data, nil
 }
 
@@ -69,8 +67,6 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 		)
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
-
-	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(reqStart))
 
 	return *resp.Data, spec.DataVersionAltair, nil
 }

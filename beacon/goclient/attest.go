@@ -36,8 +36,6 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 		return nil, fmt.Errorf("attester duties response is nil")
 	}
 
-	recordRequestDuration(gc.ctx, "AttesterDuties", gc.client.Address(), http.MethodPost, time.Since(start))
-
 	return resp.Data, nil
 }
 

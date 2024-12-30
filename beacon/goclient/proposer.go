@@ -49,8 +49,6 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		return nil, fmt.Errorf("proposer duties response is nil")
 	}
 
-	recordRequestDuration(gc.ctx, "ProposerDuties", gc.client.Address(), http.MethodGet, time.Since(start))
-
 	return resp.Data, nil
 }
 
@@ -395,7 +393,6 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 			)
 			return err
 		}
-		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.client.Address(), http.MethodPost, time.Since(start))
 
 		registrations = registrations[bs:]
 
