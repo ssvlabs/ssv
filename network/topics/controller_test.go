@@ -30,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -82,7 +83,13 @@ func TestTopicManager(t *testing.T) {
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
-		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier)
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+
+		nodeStorage, err := storage.NewNodeStorage(logger, db)
+		require.NoError(t, err)
+
+		validator := validation.New(networkconfig.TestNetwork, validatorStore, nodeStorage, dutyStore, signatureVerifier)
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
