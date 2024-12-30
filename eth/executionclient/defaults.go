@@ -12,4 +12,7 @@ const (
 	// TODO ALAN: revert
 	DefaultHistoricalLogsBatchSize = 500
 	defaultLogBuf                  = 8 * 1024
+	maxReconnectionAttempts        = 5000
+	reconnectionBackoffFactor      = 2
+	healthCheckInterval            = 30 * time.Second
 )

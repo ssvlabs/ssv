@@ -14,13 +14,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestGoClient_GetAttestationData(t *testing.T) {
@@ -44,6 +45,29 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 			t.Logf("mock server handling request: %s", r.URL.Path)
 
 			expInitRequests := map[string][]byte{
+				"/eth/v1/config/spec": []byte(`{
+				  "data": {
+					"CONFIG_NAME": "holesky",
+					"GENESIS_FORK_VERSION": "0x01017000",
+					"CAPELLA_FORK_VERSION": "0x04017000",
+					"MIN_GENESIS_TIME": "1695902100",
+					"SECONDS_PER_SLOT": "12",
+					"SLOTS_PER_EPOCH": "32",
+					"EPOCHS_PER_SYNC_COMMITTEE_PERIOD": "256",
+					"SYNC_COMMITTEE_SIZE": "512",
+					"SYNC_COMMITTEE_SUBNET_COUNT": "4",
+					"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
+					"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
+					"INTERVALS_PER_SLOT": "3"
+				  }
+				}`),
+				"/eth/v1/beacon/genesis": []byte(`{
+				  "data": {
+					"genesis_time": "1695902400",
+					"genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
+					"genesis_fork_version": "0x01017000"
+				  }
+				}`),
 				"/eth/v1/node/syncing": []byte(`{
 				  "data": {
 					"head_slot": "4239945",

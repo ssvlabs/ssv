@@ -11,7 +11,7 @@ import (
 
 // GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
 func (gc *GoClient) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
-	resp, err := gc.client.Validators(gc.ctx, &api.ValidatorsOpts{
+	resp, err := gc.multiClient.Validators(gc.ctx, &api.ValidatorsOpts{
 		State:   "head", // TODO maybe need to get the chainId (head) as var
 		PubKeys: validatorPubKeys,
 		Common:  api.CommonOpts{Timeout: gc.longTimeout},

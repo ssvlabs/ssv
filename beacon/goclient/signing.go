@@ -19,8 +19,8 @@ import (
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
 	start := time.Now()
-	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
-	recordRequestDuration(gc.ctx, "Spec", gc.client.Address(), http.MethodGet, time.Since(start), err)
+	specResponse, err := gc.multiClient.Spec(gc.ctx, &api.SpecOpts{})
+	recordRequestDuration(gc.ctx, "Spec", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Spec"),
@@ -58,8 +58,8 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	}
 
 	start = time.Now()
-	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
-	recordRequestDuration(gc.ctx, "Genesis", gc.client.Address(), http.MethodGet, time.Since(start), err)
+	genesisResponse, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
+	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Genesis"),
@@ -113,8 +113,8 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 	}
 
 	start := time.Now()
-	data, err := gc.client.Domain(gc.ctx, domain, epoch)
-	recordRequestDuration(gc.ctx, "Domain", gc.client.Address(), http.MethodGet, time.Since(start), err)
+	data, err := gc.multiClient.Domain(gc.ctx, domain, epoch)
+	recordRequestDuration(gc.ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Domain"),
