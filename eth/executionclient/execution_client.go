@@ -49,11 +49,14 @@ type ExecutionClient struct {
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
+	lastHealthy           time.Time
 
 	// variables
 	client *ethclient.Client
 	closed chan struct{}
 }
+
+const unhealthyDurationTolerance = 1 * time.Minute
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
@@ -67,6 +70,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
+		lastHealthy:                 time.Now(),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -256,7 +260,14 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_syncing"),
 			zap.Error(err))
-		return err
+
+		unhealthyDuration := time.Since(ec.lastHealthy)
+		if unhealthyDuration < unhealthyDurationTolerance {
+			// override error if we're in the tolerance window
+			return nil
+		}
+
+		return errors.Join(fmt.Errorf("check sync progress: %w", err), errSyncing)
 	}
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
@@ -271,6 +282,13 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		if syncDistance > ec.syncDistanceTolerance {
 			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
+	} else {
+		ec.lastHealthy = time.Now()
+	}
+
+	unhealthyDuration := time.Since(ec.lastHealthy)
+	if unhealthyDuration > unhealthyDurationTolerance {
+		return fmt.Errorf("not synced for too long (%d): %w", unhealthyDuration, errSyncing)
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
