@@ -90,7 +90,6 @@ func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 		fmt.Sprintf("%s.runner.start_new_duty", observabilityNamespace),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			attribute.Int64("ssv.validator.quorum", int64(quorum)),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
@@ -224,7 +223,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
 		trace.WithAttributes(
 			attribute.String("ssv.validator.msg_id", msg.SSVMessage.MsgID.String()),
-			attribute.Int64("ssv.validator.msg_type", int64(msg.SSVMessage.MsgType)),
+			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.MsgType),
 			observability.RunnerRoleAttribute(msg.SSVMessage.GetID().GetRoleType()),
 		))
 	defer span.End()
@@ -239,6 +238,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
 		span.AddEvent("instance is not decided")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -259,7 +259,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	validDuties := 0
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		span.SetAttributes(
-			attribute.Int64("ssv.validator.index", int64(duty.ValidatorIndex)),
+			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
 			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
 			observability.BeaconRoleAttribute(duty.Type),
 		)
@@ -360,14 +360,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.runner.process_post_consensus", observabilityNamespace),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
-			attribute.Int64("ssv.validator.signer", int64(signedMsg.Messages[0].Signer)),
-			attribute.Int64("ssv.validator.msg_type", int64(signedMsg.Type)),
+			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
 		))
 	defer span.End()
 
-	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
+	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
 	span.SetAttributes(
-		attribute.Bool("ssv.validator.quorum", quorum),
+		attribute.Bool("ssv.validator.has_quorum", hasQuorum),
 		attribute.Int("ssv.validator.signatures", len(roots)),
 	)
 	if err != nil {
@@ -389,13 +388,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	eventMsg := "got partial signatures"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
-		zap.Bool("quorum", quorum),
+		zap.Bool("quorum", hasQuorum),
 		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
 		zap.Int("sigs", len(roots)),
 		zap.Uint64s("validators", indices))
 
-	if !quorum {
+	if !hasQuorum {
 		span.AddEvent("no quorum")
 		span.SetStatus(codes.Ok, "")
 		return nil
@@ -548,7 +547,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		}
 		eventMsg := "✅ successfully submitted attestations"
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
+			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
@@ -592,7 +591,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		}
 		eventMsg := "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			attribute.Int64("ssv.validator.duty.height", int64(cr.BaseRunner.QBFTController.Height)),
+			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(attestations[0].Data.BeaconBlockRoot[:])),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),

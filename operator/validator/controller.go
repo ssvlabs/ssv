@@ -1129,9 +1129,6 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 					validatorsPerStatus[statusParticipating]++
 				}
-				if share.IsParticipating(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
-					validatorsPerStatus[statusParticipating]++
-				}
 				meta := share.BeaconMetadata
 				if meta == nil {
 					validatorsPerStatus[statusNotFound]++

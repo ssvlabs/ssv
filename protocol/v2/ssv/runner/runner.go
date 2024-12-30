@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -152,8 +151,7 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 		fmt.Sprintf("%s.base_runner.start_new_duty", observabilityNamespace),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot()),
-			attribute.Int64("ssv.validator.quorum", int64(quorum))))
+			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
 	if err := b.ShouldProcessDuty(duty); err != nil {

@@ -171,7 +171,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		share, exists := c.Shares[beaconDuty.ValidatorIndex]
 		if !exists {
 			span.AddEvent("no share for validator duty", trace.WithAttributes(
-				attribute.Int64("ssv.validator.index", int64(beaconDuty.ValidatorIndex)),
+				observability.ValidatorIndexAttribute(beaconDuty.ValidatorIndex),
 				observability.BeaconRoleAttribute(beaconDuty.Type),
 				attribute.String("ssv.validator.pubkey", beaconDuty.PubKey.String()),
 			))
@@ -249,7 +249,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
 		trace.WithAttributes(
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
-			attribute.Int64("ssv.validator.msg_type", int64(msg.GetType())),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
 		))
 	defer span.End()

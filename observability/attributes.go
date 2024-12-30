@@ -7,8 +7,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 )
@@ -47,6 +47,41 @@ func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.duty.round",
 		Value: Uint64AttributeValue(uint64(round)),
+	}
+}
+
+func DutyPeriodAttribute(period uint64) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.duty.period",
+		Value: Uint64AttributeValue(period),
+	}
+}
+
+func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.msg_type",
+		Value: Uint64AttributeValue(uint64(msgType)),
+	}
+}
+
+func ValidatorPartialSigMsgTypeAttribute(msgType types.PartialSigMsgType) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.partial_sig_msg_type",
+		Value: Uint64AttributeValue(uint64(msgType)),
+	}
+}
+
+func ValidatorIndexAttribute(index phase0.ValidatorIndex) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.index",
+		Value: Uint64AttributeValue(uint64(index)),
+	}
+}
+
+func ValidatorSignerAttribute(signer types.OperatorID) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.signer",
+		Value: Uint64AttributeValue(signer),
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
@@ -94,7 +95,10 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 			fields.Height(i.State.Height))
 
 		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
-		span.SetAttributes(attribute.Int64("ssv.validator.duty.proposer", int64(proposerID)))
+		propID, err := casts.Uint64ToInt64(proposerID)
+		if err == nil {
+			span.SetAttributes(attribute.Int64("ssv.validator.duty.proposer", propID))
+		}
 
 		span.AddEvent("starting QBFT instance")
 

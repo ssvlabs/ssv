@@ -170,7 +170,7 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 		fmt.Sprintf("%s.sync_committee.process_execution", observabilityNamespace),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
-			attribute.Int64("ssv.validator.duty.period", int64(period)),
+			observability.DutyPeriodAttribute(period),
 		))
 	defer span.End()
 

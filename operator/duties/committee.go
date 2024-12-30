@@ -6,7 +6,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -81,7 +80,7 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconEpochAttribute(epoch),
-			attribute.Int64("ssv.validator.duty.period", int64(period)),
+			observability.DutyPeriodAttribute(period),
 		))
 
 	defer span.End()

@@ -126,7 +126,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
 		trace.WithLinks(trace.LinkFromContext(msg.Context,
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
-			attribute.Int64("ssv.validator.msg_type", int64(msg.GetType())),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))),
 	)
 
