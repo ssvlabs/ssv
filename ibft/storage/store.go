@@ -132,44 +132,37 @@ var dropPrefixMu sync.Mutex
 
 // removes ALL entries for any slots older or equal to given slot
 func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase0.Slot) int {
-	current := slot
-	begin := time.Now()
 	var total int
 	for {
-		current-- // slots are incremental
-		prefix := i.makePrefix(slotToByteSlice(current))
+		slot-- // slots are incremental
+		prefix := i.makePrefix(slotToByteSlice(slot))
 		stop := func() bool {
 			dropPrefixMu.Lock()
 			defer dropPrefixMu.Unlock()
-			start := time.Now()
 
 			count, err := i.db.CountPrefix(prefix)
 			if err != nil {
-				logger.Error("count prefix of stale slots", zap.Error(err), fields.Slot(current))
+				logger.Error("count prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
 				return true
 			}
-
-			logger.Debug("count prefix", zap.String("store", i.ID()), fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
 
 			if count == 0 {
-				logger.Debug("no more keys at slot", zap.String("store", i.ID()), fields.Slot(current))
+				logger.Debug("no more keys at slot", zap.String("store", i.ID()), fields.Slot(slot))
 				return true
 			}
 
-			start = time.Now()
 			if err := i.db.DropPrefix(prefix); err != nil {
-				logger.Error("drop prefix of stale slots", zap.Error(err), fields.Slot(current))
+				logger.Error("drop prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
 				return true
 			}
 
-			logger.Debug("drop prefix", zap.String("store", i.ID()), fields.Took(time.Since(start)), zap.Int64("count", count), fields.Slot(current))
+			logger.Debug("drop prefix", zap.String("store", i.ID()), zap.Int64("count", count), fields.Slot(slot))
 			total += int(count)
 
 			return false
 		}()
 
 		if stop {
-			logger.Debug("done cleanup stale slots", zap.String("store", i.ID()), zap.Int("total", total), fields.Took(time.Since(begin)))
 			break
 		}
 	}
