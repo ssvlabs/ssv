@@ -6,6 +6,13 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"log"
+	"math/big"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -56,12 +63,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
 	"go.uber.org/zap"
-	"log"
-	"math/big"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 )
 
 type KeyStore struct {
