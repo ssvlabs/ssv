@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -19,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -32,7 +34,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -58,6 +59,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -268,27 +270,29 @@ var StartNodeCmd = &cobra.Command{
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(networkConfig, logger, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []convert.RunnerRole{
-			convert.RoleCommittee,
-			convert.RoleAttester,
-			convert.RoleProposer,
-			convert.RoleSyncCommittee,
-			convert.RoleAggregator,
-			convert.RoleSyncCommitteeContribution,
-			convert.RoleValidatorRegistration,
-			convert.RoleVoluntaryExit,
+		storageRoles := []spectypes.BeaconRole{
+			spectypes.BNRoleAttester,
+			spectypes.BNRoleProposer,
+			spectypes.BNRoleSyncCommittee,
+			spectypes.BNRoleAggregator,
+			spectypes.BNRoleSyncCommitteeContribution,
+			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
+			s := ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole)
+			storageMap.Add(storageRole, s)
 		}
+
+		initSlotCleanup(cmd.Context(), logger, storageMap, slotTickerProvider, cfg.DBOptions.RetainedSlotCount)
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
@@ -396,8 +400,9 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					DomainType: networkConfig.DomainType,
-					QBFTStores: storageMap,
+					DomainType:        networkConfig.DomainType,
+					NetworkConfig:     networkConfig,
+					ParticipantStores: storageMap,
 				},
 			)
 			go func() {
@@ -783,4 +788,31 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
+}
+
+func initSlotCleanup(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, retain int) {
+	var wg sync.WaitGroup
+
+	ticker := slotTickerProvider()
+	<-ticker.Next()
+
+	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
+
+	// async perform initial slot gc
+	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			store.InitialSlotGC(ctx, logger, threashold)
+		}()
+		return nil
+	})
+
+	wg.Wait()
+
+	// start background job for removing old slots on every tick
+	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+		go store.SlotGC(ctx, logger, slotTickerProvider, retain)
+		return nil
+	})
 }
