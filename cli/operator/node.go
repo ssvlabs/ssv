@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -19,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -57,6 +59,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -287,8 +290,9 @@ var StartNodeCmd = &cobra.Command{
 		for _, storageRole := range storageRoles {
 			s := ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole)
 			storageMap.Add(storageRole, s)
-			// s.StartCleanupJob(cmd.Context(), logger, slotTickerProvider, cfg.DBOptions.RetainedSlotCount)
 		}
+
+		initSlotCleanup(cmd.Context(), logger, storageMap, slotTickerProvider, cfg.DBOptions.RetainedSlotCount)
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
@@ -784,4 +788,31 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
+}
+
+func initSlotCleanup(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, retain int) {
+	var wg sync.WaitGroup
+
+	ticker := slotTickerProvider()
+	<-ticker.Next()
+
+	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
+
+	// async perform initial slot gc
+	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			store.InitialSlotGC(ctx, logger, threashold)
+		}()
+		return nil
+	})
+
+	wg.Wait()
+
+	// start background job for removing old slots on every tick
+	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+		go store.SlotGC(ctx, logger, slotTickerProvider, retain)
+		return nil
+	})
 }

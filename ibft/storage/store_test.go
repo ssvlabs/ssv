@@ -195,21 +195,8 @@ func TestSlotCleanupJob(t *testing.T) {
 		return ticker
 	}
 
-	// start cleanup job that retains 1 slot
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		storage.StartCleanupJob(ctx, zap.NewNop(), tickerProv, 1)
-	}()
-
-	// trigger
-	{
-		mockTimeChan <- time.Now()
-		mockSlotChan <- phase0.Slot(4)
-	}
-
-	time.Sleep(100 * time.Millisecond)
+	// initial cleanup removes ALL slots below 3
+	storage.InitialSlotGC(ctx, zap.NewNop(), 3)
 
 	pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
 	require.Nil(t, err)
@@ -222,13 +209,19 @@ func TestSlotCleanupJob(t *testing.T) {
 	assert.Equal(t, phase0.Slot(9), pp[12].Slot)
 	assert.Equal(t, phase0.Slot(9), pp[13].Slot)
 
-	// trigger
-	{
-		mockTimeChan <- time.Now()
-		mockSlotChan <- phase0.Slot(5)
-	}
+	// run normal gc
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		storage.SlotGC(ctx, zap.NewNop(), tickerProv, 1)
+	}()
 
-	time.Sleep(100 * time.Millisecond)
+	mockTimeChan <- time.Now()
+	mockSlotChan <- phase0.Slot(5)
+
+	cancel()
+	wg.Wait()
 
 	pp, err = storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
 	require.Nil(t, err)
@@ -240,9 +233,6 @@ func TestSlotCleanupJob(t *testing.T) {
 	assert.Equal(t, phase0.Slot(4), pp[1].Slot)
 	assert.Equal(t, phase0.Slot(9), pp[10].Slot)
 	assert.Equal(t, phase0.Slot(9), pp[11].Slot)
-
-	cancel()
-	wg.Wait()
 }
 
 func TestEncodeDecodeOperators(t *testing.T) {

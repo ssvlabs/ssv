@@ -58,7 +58,9 @@ type ParticipantStore interface {
 	// GetParticipants returns participants in quorum for the given slot.
 	GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
 
-	// StartCleanupJob performs an initial cleanup (blocking) then starts a background job to
-	// make sure that only a given number of slots will be kept back in the db
-	StartCleanupJob(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int)
+	// InitialSlotGC performs an initial cleanup (blocking) of slots bellow the retained threshold
+	InitialSlotGC(ctx context.Context, logger *zap.Logger, threashold phase0.Slot)
+
+	// SlotGC continuously removes old slots
+	SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int)
 }

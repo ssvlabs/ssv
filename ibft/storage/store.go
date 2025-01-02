@@ -60,36 +60,35 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 	}
 }
 
-func (i *participantStorage) StartCleanupJob(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int) {
-	ticker := slotTickerProvider()
-	<-ticker.Next()
-	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
+// InitialSlotGC waits for the initial tick and then removes all slots below the tickSlot - retain
+func (i *participantStorage) InitialSlotGC(ctx context.Context, logger *zap.Logger, threashold phase0.Slot) {
+	logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threashold))
 
-	logger.Info("start initial stale slot cleanup", fields.Slot(threashold), zap.String("store", i.ID()), zap.Int("retain", retain))
-
-	// on start we remove ALL slots below the threashold
+	// remove ALL slots below the threashold
 	start := time.Now()
 	count := i.removeSlotsOlderThan(logger, threashold)
 
-	logger.Info("removed stale slot entries", fields.Slot(threashold), zap.String("store", i.ID()), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+	logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threashold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+}
 
-	go func() {
-		logger.Info("start stale slot cleanup background job", zap.String("store", i.ID()))
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.Next():
-				threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
-				count, err := i.removeSlotAt(threashold)
-				if err != nil {
-					logger.Error("remove slot at", fields.Slot(threashold))
-				}
-
-				logger.Debug("removed stale slot", fields.Slot(threashold), zap.Int("count", count), zap.String("store", i.ID()))
+// SlotGC on every tick looks up and removes the slots that fall below the retain threashold
+func (i *participantStorage) SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int) {
+	ticker := slotTickerProvider()
+	logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.Next():
+			threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
+			count, err := i.removeSlotAt(threashold)
+			if err != nil {
+				logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threashold))
 			}
+
+			logger.Debug("removed stale slots", zap.String("store", i.ID()), fields.Slot(threashold), zap.Int("count", count))
 		}
-	}()
+	}
 }
 
 // removes ALL entries that have given slot in their prefix
