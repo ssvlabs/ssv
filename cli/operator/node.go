@@ -472,6 +472,7 @@ func setupGlobal() (*zap.Logger, error) {
 }
 
 func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+	cfg.DBOptions.Path = "./data/db-resync-2025-01-02"
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
