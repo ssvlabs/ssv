@@ -5,18 +5,16 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"go.uber.org/mock/gomock"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
-
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // const rawOperatorAdded = `{
@@ -149,6 +147,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{
+		"checking if jemalloc allocator will be used",
 		"setting up validator controller",
 		"malformed event: failed to verify signature",
 		"processed events from block",

@@ -1,16 +1,16 @@
 package logging
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"runtime/debug"
 	"time"
 
-	"gopkg.in/natefinch/lumberjack.v2"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func parseConfigLevel(levelName string) (zapcore.Level, error) {
@@ -72,16 +72,17 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 		},
 	}
 
-	var usedcore zapcore.Core
-
+	var zapCore zapcore.Core
 	if logFormat == "console" {
-		usedcore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
+		zapCore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
 	} else if logFormat == "json" {
-		usedcore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
+		zapCore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
+	} else {
+		return fmt.Errorf("unknown log format: %s", logFormat)
 	}
 
 	if fileOptions == nil {
-		zap.ReplaceGlobals(zap.New(usedcore))
+		zap.ReplaceGlobals(zap.New(zapCore))
 		return nil
 	}
 
@@ -93,7 +94,7 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 	fileWriter := fileOptions.writer(fileOptions)
 	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
 
-	zap.ReplaceGlobals(zap.New(zapcore.NewTee(usedcore, fileCore)))
+	zap.ReplaceGlobals(zap.New(zapcore.NewTee(zapCore, fileCore)))
 	return nil
 }
 
@@ -115,13 +116,12 @@ func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
 
 func CapturePanic(logger *zap.Logger) {
 	if r := recover(); r != nil {
-		// defer logger.Sync()
 		defer func() {
 			if err := logger.Sync(); err != nil {
 				log.Println("failed to sync zap.Logger", err)
 			}
 		}()
 		stackTrace := string(debug.Stack())
-		logger.Panic("Recovered from panic", zap.Any("panic", r), zap.String("stackTrace", stackTrace))
+		logger.Fatal("Recovered from panic", zap.Any("panic", r), zap.String("stackTrace", stackTrace))
 	}
 }
