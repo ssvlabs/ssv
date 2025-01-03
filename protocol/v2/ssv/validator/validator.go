@@ -127,8 +127,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		trace.WithLinks(trace.LinkFromContext(msg.Context,
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))),
-	)
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))))
 
 	defer span.End()
 
