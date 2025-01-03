@@ -672,7 +672,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.BeaconRoleAttribute(duty.Type),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
+			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 		))
 	defer span.End()
 

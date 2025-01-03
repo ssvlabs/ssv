@@ -85,6 +85,10 @@ func ValidatorSignerAttribute(signer types.OperatorID) attribute.KeyValue {
 	}
 }
 
+func ValidatorPublicKeyAttribute(pubKey phase0.BLSPubKey) attribute.KeyValue {
+	return attribute.String("ssv.validator.pubkey", pubKey.String())
+}
+
 func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {
 	return attribute.String("ssv.p2p.connection.direction", strings.ToLower(direction.String()))
 }

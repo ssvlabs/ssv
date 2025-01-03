@@ -173,7 +173,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 			span.AddEvent("no share for validator duty", trace.WithAttributes(
 				observability.ValidatorIndexAttribute(beaconDuty.ValidatorIndex),
 				observability.BeaconRoleAttribute(beaconDuty.Type),
-				attribute.String("ssv.validator.pubkey", beaconDuty.PubKey.String()),
+				observability.ValidatorPublicKeyAttribute(beaconDuty.PubKey),
 			))
 			continue
 		}

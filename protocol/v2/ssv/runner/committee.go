@@ -260,7 +260,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		span.SetAttributes(
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
-			attribute.String("ssv.validator.pubkey", duty.PubKey.String()),
+			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 			observability.BeaconRoleAttribute(duty.Type),
 		)
 		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
