@@ -64,6 +64,10 @@ func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
 	}
 }
 
+func ValidatorMsgIDAttribute(msgID types.MessageID) attribute.KeyValue {
+	return attribute.String("ssv.validator.msg_id", msgID.String())
+}
+
 func ValidatorPartialSigMsgTypeAttribute(msgType types.PartialSigMsgType) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.partial_sig_msg_type",

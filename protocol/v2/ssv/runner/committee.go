@@ -222,7 +222,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
 		trace.WithAttributes(
-			attribute.String("ssv.validator.msg_id", msg.SSVMessage.MsgID.String()),
+			observability.ValidatorMsgIDAttribute(msg.SSVMessage.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.MsgType),
 			observability.RunnerRoleAttribute(msg.SSVMessage.GetID().GetRoleType()),
 		))

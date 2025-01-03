@@ -7,7 +7,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -125,7 +124,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
 		trace.WithLinks(trace.LinkFromContext(msg.Context,
-			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))))
 
