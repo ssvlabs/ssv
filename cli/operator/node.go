@@ -114,7 +114,8 @@ var StartNodeCmd = &cobra.Command{
 		observabilityShutdown, err := observability.Initialize(
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			observability.WithMetrics())
+			observability.WithMetrics(),
+			observability.WithTraces())
 		if err != nil {
 			logger.Fatal("could not initialize observability configuration", zap.Error(err))
 		}

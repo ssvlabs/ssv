@@ -16,11 +16,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -156,12 +159,26 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 }
 
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
+			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
+			observability.RunnerRoleAttribute(signedMsg.SSVMessage.GetID().GetRoleType()),
+		))
+	defer span.End()
+
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		err := errors.Wrap(err, "failed processing consensus message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		span.AddEvent("instance is not decided")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -174,19 +191,30 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	var blkToSign ssz.HashRoot
 
 	cd := decidedValue.(*spectypes.ValidatorConsensusData)
+	span.SetAttributes(
+		observability.BeaconSlotAttribute(cd.Duty.Slot),
+		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
+	)
 
 	if r.decidedBlindedBlock() {
+		span.AddEvent("decided has a blinded block")
 		_, blkToSign, err = cd.GetBlindedBlockData()
 		if err != nil {
-			return errors.Wrap(err, "could not get blinded block data")
+			err := errors.Wrap(err, "could not get blinded block data")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	} else {
+		span.AddEvent("decided does not has a blinded block")
 		_, blkToSign, err = cd.GetBlockData()
 		if err != nil {
-			return errors.Wrap(err, "could not get block data")
+			err := errors.Wrap(err, "could not get block data")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 
+	span.AddEvent("signing post consensus")
 	msg, err := r.BaseRunner.signBeaconObject(
 		r,
 		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
@@ -195,8 +223,11 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		spectypes.DomainProposer,
 	)
 	if err != nil {
-		return errors.Wrap(err, "failed signing attestation data")
+		err := errors.Wrap(err, "failed signing attestation data")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
 		Slot:     cd.Duty.Slot,
@@ -206,6 +237,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -215,9 +247,12 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		Data:    encodedMsg,
 	}
 
+	span.AddEvent("signing post consensus partial signature message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return errors.Wrap(err, "could not sign SSVMessage")
+		err := errors.Wrap(err, "could not sign post-consensus partial signature message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -226,9 +261,14 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		SSVMessage:  ssvMsg,
 	}
 
+	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial post consensus sig")
+		err := errors.Wrap(err, "can't broadcast partial post consensus sig")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

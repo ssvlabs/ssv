@@ -7,6 +7,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -14,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -119,15 +122,28 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	if msg.GetType() != message.SSVEventMsgType {
-		// Validate message
+	msgType := msg.GetType()
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
+		trace.WithLinks(trace.LinkFromContext(msg.Context,
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))))
+
+	defer span.End()
+
+	if msgType != message.SSVEventMsgType {
+		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			err = errors.Wrap(err, "invalid SignedSSVMessage")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			err = errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 
@@ -135,53 +151,92 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	// Get runner
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
-		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
+		err := fmt.Errorf("could not get duty runner for msg ID %v", messageID)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// Validate message for runner
 	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
+		err := fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
-	switch msg.GetType() {
+	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
-			return errors.New("could not decode consensus message from network message")
+			err := errors.New("could not decode consensus message from network message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		if err := qbftMsg.Validate(); err != nil {
-			return errors.Wrap(err, "invalid qbft Message")
+			err := errors.Wrap(err, "invalid qbft Message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		logger = v.loggerForDuty(logger, messageID.GetRoleType(), phase0.Slot(qbftMsg.Height))
 		logger = logger.With(fields.Height(qbftMsg.Height))
-		return dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
+
+		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		span.SetStatus(codes.Ok, "")
+		return nil
 	case spectypes.SSVPartialSignatureMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
-			return errors.New("could not decode post consensus message from network message")
+			err := errors.New("could not decode post consensus message from network message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
+
+		span.SetAttributes(observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type))
 		logger = v.loggerForDuty(logger, messageID.GetRoleType(), signedMsg.Slot)
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return errors.New("PartialSignatureMessage has more than 1 signer")
+			err := errors.New("PartialSignatureMessage has more than 1 signer")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return errors.Wrap(err, "invalid PartialSignatureMessages")
+			err := errors.Wrap(err, "invalid PartialSignatureMessages")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
-			return dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg)
+			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
+				span.SetStatus(codes.Error, err.Error())
+				return err
+			}
+			span.SetStatus(codes.Ok, "")
+			return nil
 		}
-		return dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg)
+		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		span.SetStatus(codes.Ok, "")
+		return nil
 	case message.SSVEventMsgType:
-		return v.handleEventMessage(ctx, logger, msg, dutyRunner)
+		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		span.SetStatus(codes.Ok, "")
+		return nil
 	default:
-		return errors.New("unknown msg")
+		err := errors.New("unknown msg")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 }
 

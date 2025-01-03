@@ -7,6 +7,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
@@ -16,13 +17,30 @@ const (
 	RunnerRoleAttrKey = "ssv.runner.role"
 )
 
+type Slot interface {
+	qbft.Height | phase0.Slot
+}
+
 func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
-	const eventNameAttrName = "ssv.beacon.role"
-	return attribute.String(eventNameAttrName, role.String())
+	return attribute.String("ssv.beacon.role", role.String())
+}
+
+func BeaconEpochAttribute(epoch phase0.Epoch) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.beacon.epoch",
+		Value: Uint64AttributeValue(uint64(epoch)),
+	}
 }
 
 func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
 	return attribute.String(RunnerRoleAttrKey, role.String())
+}
+
+func BeaconSlotAttribute[T Slot](slot T) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.beacon.slot",
+		Value: Uint64AttributeValue(uint64(slot)),
+	}
 }
 
 func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
@@ -30,6 +48,49 @@ func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
 		Key:   "ssv.validator.duty.round",
 		Value: Uint64AttributeValue(uint64(round)),
 	}
+}
+
+func DutyPeriodAttribute(period uint64) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.duty.period",
+		Value: Uint64AttributeValue(period),
+	}
+}
+
+func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.msg_type",
+		Value: Uint64AttributeValue(uint64(msgType)),
+	}
+}
+
+func ValidatorMsgIDAttribute(msgID types.MessageID) attribute.KeyValue {
+	return attribute.String("ssv.validator.msg_id", msgID.String())
+}
+
+func ValidatorPartialSigMsgTypeAttribute(msgType types.PartialSigMsgType) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.partial_sig_msg_type",
+		Value: Uint64AttributeValue(uint64(msgType)),
+	}
+}
+
+func ValidatorIndexAttribute(index phase0.ValidatorIndex) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.index",
+		Value: Uint64AttributeValue(uint64(index)),
+	}
+}
+
+func ValidatorSignerAttribute(signer types.OperatorID) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.signer",
+		Value: Uint64AttributeValue(signer),
+	}
+}
+
+func ValidatorPublicKeyAttribute(pubKey phase0.BLSPubKey) attribute.KeyValue {
+	return attribute.String("ssv.validator.pubkey", pubKey.String())
 }
 
 func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {

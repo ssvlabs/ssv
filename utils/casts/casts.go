@@ -13,6 +13,7 @@ import (
 var (
 	ErrNegativeTime        = fmt.Errorf("time can't be negative")
 	ErrMaxDurationOverflow = fmt.Errorf("duration can't exceed max int64")
+	ErrInt64Overflow       = fmt.Errorf("value exceeds int64 range")
 )
 
 // DurationFromUint64 converts uint64 to time.Duration
@@ -21,6 +22,13 @@ func DurationFromUint64(t uint64) time.Duration {
 		return time.Duration(math.MaxInt64) // todo: error handling refactor
 	}
 	return time.Duration(t) // #nosec G115
+}
+
+func Uint64ToInt64(value uint64) (int64, error) {
+	if value > math.MaxInt64 {
+		return 0, ErrInt64Overflow
+	}
+	return int64(value), nil
 }
 
 func BeaconRoleToConvertRole(beaconRole spectypes.BeaconRole) convert.RunnerRole {
