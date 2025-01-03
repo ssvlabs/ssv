@@ -196,6 +196,8 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
+
+		span.SetAttributes(observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type))
 		logger = v.loggerForDuty(logger, messageID.GetRoleType(), signedMsg.Slot)
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
@@ -211,7 +213,12 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
-			return dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg)
+			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
+				span.SetStatus(codes.Error, err.Error())
+				return err
+			}
+			span.SetStatus(codes.Ok, "")
+			return nil
 		}
 		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
 			span.SetStatus(codes.Error, err.Error())
