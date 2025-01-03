@@ -220,10 +220,10 @@ func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
+		fmt.Sprintf("%s.committee_runner.process_consensus", observabilityNamespace),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.SSVMessage.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.MsgType),
+			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.GetType()),
 			observability.RunnerRoleAttribute(msg.SSVMessage.GetID().GetRoleType()),
 		))
 	defer span.End()
@@ -333,6 +333,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return err
 	}
 
+	span.AddEvent("signing post consensus partial signature message")
 	sig, err := cr.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
 		err = errors.Wrap(err, "could not sign SSVMessage")
@@ -346,11 +347,13 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		SSVMessage:  ssvMsg,
 	}
 
+	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		err = errors.Wrap(err, "can't broadcast partial post consensus sig")
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	
 	span.SetStatus(codes.Ok, "")
 	return nil
 }
