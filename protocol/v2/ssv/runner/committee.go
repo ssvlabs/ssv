@@ -220,7 +220,7 @@ func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.committee_runner.process_consensus", observabilityNamespace),
+		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.SSVMessage.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.GetType()),
@@ -353,7 +353,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	
+
 	span.SetStatus(codes.Ok, "")
 	return nil
 }
