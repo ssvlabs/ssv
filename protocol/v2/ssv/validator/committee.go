@@ -246,7 +246,7 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_committee_message", observabilityNamespace),
 		trace.WithLinks(trace.LinkFromContext(msg.Context,
 			attribute.String("ssv.validator.msg_id", msg.GetID().String()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
