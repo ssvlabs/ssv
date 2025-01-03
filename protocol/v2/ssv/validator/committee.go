@@ -246,15 +246,17 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
 
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	msgType := msg.GetType()
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_committee_message", observabilityNamespace),
 		trace.WithLinks(trace.LinkFromContext(msg.Context,
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.ValidatorMsgTypeAttribute(msgType),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))))
 	defer span.End()
 
 	// Validate message
-	if msg.GetType() != message.SSVEventMsgType {
+	if msgType != message.SSVEventMsgType {
+		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
 			err := errors.Wrap(err, "invalid SignedSSVMessage")
 			span.SetStatus(codes.Error, err.Error())
@@ -275,7 +277,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 	}
 
-	switch msg.GetType() {
+	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &qbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {

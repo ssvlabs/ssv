@@ -122,16 +122,17 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	msgType := msg.GetType()
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
 		trace.WithLinks(trace.LinkFromContext(msg.Context,
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.ValidatorMsgTypeAttribute(msgType),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))))
 
 	defer span.End()
 
-	if msg.GetType() != message.SSVEventMsgType {
-		// Validate message
+	if msgType != message.SSVEventMsgType {
+		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
 			err = errors.Wrap(err, "invalid SignedSSVMessage")
 			span.SetStatus(codes.Error, err.Error())
@@ -162,7 +163,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		return err
 	}
 
-	switch msg.GetType() {
+	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
