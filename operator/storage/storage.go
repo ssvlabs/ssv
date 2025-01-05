@@ -21,7 +21,7 @@ var HashedPrivateKey = "hashed-private-key"
 var (
 	storagePrefix         = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
-	highestSeenBlockKey   = []byte("seenOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
+	highestSeenBlockKey   = []byte("lastSeen")
 	configKey             = []byte("config")
 )
 
@@ -180,7 +180,7 @@ func (s *storage) SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) 
 }
 
 func (s *storage) SaveHighestSeenBlock(rw basedb.ReadWriter, offset *big.Int) error {
-	return s.db.Using(rw).Set(storagePrefix, lastProcessedBlockKey, offset.Bytes())
+	return s.db.Using(rw).Set(storagePrefix, highestSeenBlockKey, offset.Bytes())
 }
 
 func (s *storage) dropLastProcessedBlock() error {
