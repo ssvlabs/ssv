@@ -24,13 +24,7 @@ func newTracer(logger *zap.Logger) pubsub.EventTracer {
 
 // Trace handles events, implementation of pubsub.EventTracer
 func (pst *psTracer) Trace(evt *ps_pb.TraceEvent) {
-	pst.report(evt)
 	pst.log(pst.logger, evt)
-}
-
-// report reports metric
-func (pst *psTracer) report(evt *ps_pb.TraceEvent) {
-	metricPubsubTrace.WithLabelValues(evt.GetType().String()).Inc()
 }
 
 // log prints event to log
