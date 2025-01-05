@@ -296,7 +296,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 }
 
 func (c *Committee) Stopped() bool {
-	return c.ctx.Err() == context.Canceled
+	return c.ctx.Err() != nil
 }
 
 func (c *Committee) stop() {
