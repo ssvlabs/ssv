@@ -64,7 +64,7 @@ type Options struct {
 	Context        context.Context
 	Network        Network
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	GasLimit       uint64
+	GasLimit       uint64 `yaml:"GasLimit" env:"BEACON_GAS_LIMIT" env-default:"30000000" env-description:"The gas limit for beacon node transactions"`
 
 	SyncDistanceTolerance uint64 `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"The number of out-of-sync slots we can tolerate"`
 
