@@ -292,7 +292,9 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
-		initSlotCleanup(cmd.Context(), logger, storageMap, slotTickerProvider, cfg.DBOptions.RetainedSlotCount)
+		if false { // temporary disable
+			initSlotCleanup(cmd.Context(), logger, storageMap, slotTickerProvider, cfg.DBOptions.RetainedSlotCount)
+		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
