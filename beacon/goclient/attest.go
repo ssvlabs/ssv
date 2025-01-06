@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -15,10 +16,12 @@ import (
 
 // AttesterDuties returns attester duties for a given epoch.
 func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+	start := time.Now()
 	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
+	recordRequestDuration(gc.ctx, "AttesterDuties", gc.client.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "AttesterDuties"),
@@ -61,7 +64,9 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
 		})
-		metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
+
+		recordRequestDuration(gc.ctx, "AttestationData", gc.client.Address(), http.MethodGet, time.Since(attDataReqStart), err)
+
 		if err != nil {
 			gc.log.Error(clResponseErrMsg,
 				zap.String("api", "AttestationData"),
@@ -117,7 +122,10 @@ func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.Comm
 
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error {
-	if err := gc.client.SubmitAttestations(gc.ctx, attestations); err != nil {
+	start := time.Now()
+	err := gc.client.SubmitAttestations(gc.ctx, attestations)
+	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.client.Address(), http.MethodPost, time.Since(start), err)
+	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitAttestations"),
 			zap.Error(err),
@@ -125,5 +133,5 @@ func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error
 		return err
 	}
 
-	return nil
+	return err
 }
