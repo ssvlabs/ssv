@@ -52,6 +52,7 @@ type signer interface {
 // BeaconNode interface for all beacon duty calls
 type BeaconNode interface {
 	specssv.BeaconNode // spec beacon interface
+	GasLimit() uint64
 	beaconDuties
 	beaconSubscriber
 	beaconValidator

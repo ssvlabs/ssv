@@ -200,7 +200,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(duty specty
 
 	return &v1.ValidatorRegistration{
 		FeeRecipient: share.FeeRecipientAddress,
-		GasLimit:     spectypes.DefaultGasLimit,
+		GasLimit:     r.beacon.GasLimit(),
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil

@@ -353,6 +353,20 @@ func (mr *MockBeaconNodeMockRecorder) Events(ctx, topics, handler any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockBeaconNode)(nil).Events), ctx, topics, handler)
 }
 
+// GasLimit mocks base method.
+func (m *MockBeaconNode) GasLimit() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GasLimit")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// GasLimit indicates an expected call of GasLimit.
+func (mr *MockBeaconNodeMockRecorder) GasLimit() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit", reflect.TypeOf((*MockBeaconNode)(nil).GasLimit))
+}
+
 // GetAttestationData mocks base method.
 func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
 	m.ctrl.T.Helper()

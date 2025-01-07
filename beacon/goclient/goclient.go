@@ -279,6 +279,11 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	return nil
 }
 
+// GasLimit configured on the client construction
+func (gc *GoClient) GasLimit() uint64 {
+	return gc.gasLimit
+}
+
 // GetBeaconNetwork returns the beacon network the node is on
 func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return gc.network.BeaconNetwork
