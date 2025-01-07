@@ -198,7 +198,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
-		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
