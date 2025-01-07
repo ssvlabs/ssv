@@ -214,6 +214,7 @@ func New(
 		fields.Address(httpClient.Address()),
 		zap.String("client", string(client.nodeClient)),
 		zap.String("version", client.nodeVersion),
+		zap.Uint64("gas_limit", client.gasLimit),
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)
