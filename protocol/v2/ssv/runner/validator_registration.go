@@ -141,6 +141,8 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		return errors.Wrap(err, "could not calculate validator registration")
 	}
 
+	logger.Debug("sending validator registration", fields.Slot(duty.DutySlot()), zap.String("fee_recipient", vr.FeeRecipient.String()), zap.Uint64("gas_limit", vr.GasLimit))
+
 	// sign partial randao
 	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), vr, duty.DutySlot(),
 		spectypes.DomainApplicationBuilder)
