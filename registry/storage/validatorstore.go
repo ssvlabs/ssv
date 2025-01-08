@@ -256,7 +256,14 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 		c.byCommitteeID[committee.ID] = committee
 
 		// Update byOperatorID
+		seenOperators := make(map[spectypes.OperatorID]struct{})
 		for _, operator := range share.Committee {
+			if _, seen := seenOperators[operator.Signer]; seen {
+				// Corrupt state.
+				return fmt.Errorf("duplicate operator in share. operator_id=%d", operator.Signer)
+			}
+			seenOperators[operator.Signer] = struct{}{}
+
 			data, exists := c.byOperatorID[operator.Signer]
 			if !exists {
 				data = &sharesAndCommittees{
@@ -484,8 +491,6 @@ func removeShareFromOperator(data *sharesAndCommittees, share *types.SSVShare) (
 }
 
 func buildCommittee(shares []*types.SSVShare) *Committee {
-	// TODO: verify all shares are of the same committee.
-
 	committee := &Committee{
 		ID:         shares[0].CommitteeID(),
 		Operators:  make([]spectypes.OperatorID, 0, len(shares)),
