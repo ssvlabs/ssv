@@ -16,13 +16,6 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
-// WithMetrics enables reporting metrics.
-func WithMetrics(metrics metrics) Option {
-	return func(s *ExecutionClient) {
-		s.metrics = metrics
-	}
-}
-
 // WithFollowDistance sets finalization offset (a block at this offset into the past
 // from the head block will be considered as very likely finalized).
 func WithFollowDistance(offset uint64) Option {
@@ -56,5 +49,12 @@ func WithReconnectionMaxInterval(interval time.Duration) Option {
 func WithLogBatchSize(size uint64) Option {
 	return func(s *ExecutionClient) {
 		s.logBatchSize = size
+	}
+}
+
+// WithSyncDistanceTolerance sets the number of blocks that is acceptable to lag behind.
+func WithSyncDistanceTolerance(count uint64) Option {
+	return func(s *ExecutionClient) {
+		s.syncDistanceTolerance = count
 	}
 }
