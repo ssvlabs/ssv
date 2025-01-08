@@ -348,7 +348,8 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 		}
 
 		// Copy `committees` to avoid shared state issues.
-		newCommittees := append([]*Committee(nil), data.committees...)
+		newCommittees := make([]*Committee, len(data.committees))
+		copy(newCommittees, data.committees)
 		for i, c := range newCommittees {
 			if c.ID == committeeID {
 				if committeeRemoved {
@@ -421,7 +422,9 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 			}
 
 			// Copy `committees` to avoid shared state issues.
-			newCommittees := append([]*Committee(nil), data.committees...)
+			// newCommittees := append([]*Committee(nil), data.committees...)
+			newCommittees := make([]*Committee, len(data.committees))
+			copy(newCommittees, data.committees)
 			for i, c := range newCommittees {
 				if c.ID == committeeID {
 					newCommittees[i] = newCommittee
@@ -488,15 +491,14 @@ func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShar
 }
 
 func updateCommitteeWithShare(committee *Committee, shareToUpdate *types.SSVShare) (*Committee, error) {
-	var shares []*types.SSVShare
-	updated := false
+	shares := make([]*types.SSVShare, len(committee.Validators))
+	copy(shares, committee.Validators)
 
-	for _, share := range committee.Validators {
+	updated := false
+	for i, share := range shares {
 		if share.ValidatorPubKey == shareToUpdate.ValidatorPubKey {
+			shares[i] = shareToUpdate
 			updated = true
-			shares = append(shares, shareToUpdate)
-		} else {
-			shares = append(shares, share)
 		}
 	}
 
