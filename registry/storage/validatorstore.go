@@ -454,74 +454,58 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 	return false
 }
 
-func removeShareFromCommittee(committee *Committee, share *types.SSVShare) (*Committee, error) {
-	// Create new slices to avoid modifying the original slices directly
-	newValidators := make([]*types.SSVShare, 0, len(committee.Validators))
-	newIndices := make([]phase0.ValidatorIndex, 0, len(committee.Indices))
-
+func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShare) (*Committee, error) {
+	var shares []*types.SSVShare
 	removed := false
-	for i, validator := range committee.Validators {
-		if validator.ValidatorPubKey == share.ValidatorPubKey {
-			if validator.ValidatorIndex != committee.Indices[i] {
+
+	for i, share := range committee.Validators {
+		if share.ValidatorPubKey == shareToRemove.ValidatorPubKey {
+			if share.ValidatorIndex != committee.Indices[i] {
 				// Corrupt state.
 				return nil, fmt.Errorf("share index mismatch. validator_pubkey=%s committee_id=%s validator_index=%d committee_index=%d",
-					hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]), validator.ValidatorIndex, committee.Indices[i])
+					hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]), share.ValidatorIndex, committee.Indices[i])
 			}
 			removed = true
-			continue // Skip adding this validator and its index to the new slices
+			continue // Skip adding this share
 		}
 
-		// Add remaining validators and indices to the new slices
-		newValidators = append(newValidators, validator)
-		newIndices = append(newIndices, committee.Indices[i])
+		shares = append(shares, share)
 	}
 
 	if !removed {
 		// Corrupt state.
 		return nil, fmt.Errorf("share not found in committee. validator_pubkey=%s committee_id=%s",
-			hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
+			hex.EncodeToString(shareToRemove.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
 	}
 
-	// Replace the original slices with the newly created slices
-	committee.Validators = newValidators
-	committee.Indices = newIndices
-
-	newCommittee := &Committee{
-		ID:         committee.ID,
-		Operators:  committee.Operators,
-		Validators: newValidators,
-		Indices:    newIndices,
+	if len(shares) == 0 {
+		return &Committee{
+			ID: committee.ID,
+		}, nil
 	}
-	return newCommittee, nil
+
+	return buildCommittee(shares), nil
 }
 
-func updateCommitteeWithShare(committee *Committee, share *types.SSVShare) (*Committee, error) {
-	newValidators := make([]*types.SSVShare, len(committee.Validators))
-	newIndices := make([]phase0.ValidatorIndex, len(committee.Indices))
-	copy(newValidators, committee.Validators)
-	copy(newIndices, committee.Indices)
-
+func updateCommitteeWithShare(committee *Committee, shareToUpdate *types.SSVShare) (*Committee, error) {
+	var shares []*types.SSVShare
 	updated := false
-	for i, validator := range newValidators {
-		if validator.ValidatorPubKey == share.ValidatorPubKey {
-			newValidators[i] = share
-			newIndices[i] = share.ValidatorIndex
+
+	for _, share := range committee.Validators {
+		if share.ValidatorPubKey == shareToUpdate.ValidatorPubKey {
 			updated = true
-			break
+			shares = append(shares, shareToUpdate)
+		} else {
+			shares = append(shares, share)
 		}
 	}
 
 	if !updated {
 		return nil, fmt.Errorf("share not found in committee. validator_pubkey=%s committee_id=%s",
-			hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
+			hex.EncodeToString(shareToUpdate.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
 	}
 
-	return &Committee{
-		ID:         committee.ID,
-		Operators:  committee.Operators,
-		Validators: newValidators,
-		Indices:    newIndices,
-	}, nil
+	return buildCommittee(shares), nil
 }
 
 func removeShareFromOperator(data *sharesAndCommittees, share *types.SSVShare) (found bool) {
