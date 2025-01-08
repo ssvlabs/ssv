@@ -479,20 +479,22 @@ func requireEqualShare(t *testing.T, expected, actual *ssvtypes.SSVShare, msgAnd
 func requireEqualShares(t *testing.T, expected, actual []*ssvtypes.SSVShare, msgAndArgs ...any) {
 	require.Equal(t, len(expected), len(actual), msgAndArgs...)
 
-	// Sort shares by validator pubkey.
+	// Sort shares by validator pubkey for comparison without mutating input slices.
 	expectedSorted := make([]*ssvtypes.SSVShare, len(expected))
 	copy(expectedSorted, expected)
 	slices.SortFunc(expectedSorted, func(a, b *ssvtypes.SSVShare) int {
 		return strings.Compare(string(a.ValidatorPubKey[:]), string(b.ValidatorPubKey[:]))
 	})
+
 	actualSorted := make([]*ssvtypes.SSVShare, len(actual))
 	copy(actualSorted, actual)
-	slices.SortFunc(actual, func(a, b *ssvtypes.SSVShare) int {
+	slices.SortFunc(actualSorted, func(a, b *ssvtypes.SSVShare) int {
 		return strings.Compare(string(a.ValidatorPubKey[:]), string(b.ValidatorPubKey[:]))
 	})
 
+	// Compare the sorted shares
 	for i, share := range expectedSorted {
-		requireEqualShare(t, share, actual[i], msgAndArgs...)
+		requireEqualShare(t, share, actualSorted[i], msgAndArgs...)
 	}
 }
 

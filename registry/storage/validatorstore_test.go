@@ -736,7 +736,9 @@ func TestValidatorStore_AddDuplicateShares(t *testing.T) {
 	require.NoError(t, store.handleSharesAdded(share1))
 
 	t.Run("validate store after adding duplicate shares", func(t *testing.T) {
-		require.NoError(t, store.handleSharesAdded(share1)) // Add duplicate
+		err := store.handleSharesAdded(share1)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "share already exists in committe")
 		require.Len(t, store.Validators(), 1)
 		require.Contains(t, store.Validators(), share1)
 	})
@@ -921,9 +923,11 @@ func TestValidatorStore_MixedOperations(t *testing.T) {
 	require.NoError(t, store.handleSharesAdded(share1, share2))
 
 	// Mixed operations
-	require.NoError(t, store.handleSharesAdded(share1))
 	shareMap[share1.ValidatorPubKey] = share1 // Re-add share1
-	require.NoError(t, store.handleSharesAdded(share1))
+	err := store.handleSharesAdded(share1)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "share already exists in committee")
+
 	shareMap[updatedShare2.ValidatorPubKey] = updatedShare2
 	require.NoError(t, store.handleSharesUpdated(updatedShare2)) // Update share2
 
@@ -949,9 +953,11 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 
 	invalidCommitteeShare := &ssvtypes.SSVShare{
 		Share: spectypes.Share{
-			ValidatorIndex:      phase0.ValidatorIndex(10),
-			ValidatorPubKey:     spectypes.ValidatorPK{10, 20, 30},
-			SharePubKey:         spectypes.ShareValidatorPK{40, 50, 60},
+			ValidatorIndex:  phase0.ValidatorIndex(10),
+			ValidatorPubKey: spectypes.ValidatorPK{10, 20, 30},
+			SharePubKey:     spectypes.ShareValidatorPK{40, 50, 60},
+			// Invalid committee with duplicate members.
+			// This scenario is included for testing purposes only, as the event handler should validate and prevent duplicate members.
 			Committee:           []*spectypes.ShareMember{{Signer: 1}, {Signer: 1}}, // Duplicate members
 			FeeRecipientAddress: [20]byte{70, 80, 90},
 			Graffiti:            []byte("invalid_committee"),
@@ -968,16 +974,7 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 	}
 
 	shareMap[invalidCommitteeShare.ValidatorPubKey] = invalidCommitteeShare
-	require.NoError(t, store.handleSharesAdded(invalidCommitteeShare))
-
-	t.Run("check invalid committee handling", func(t *testing.T) {
-		require.Len(t, store.Validators(), 1)
-		require.Contains(t, store.Validators(), invalidCommitteeShare)
-		committee, exists := store.Committee(invalidCommitteeShare.CommitteeID())
-		require.True(t, exists)
-		require.NotNil(t, committee)
-		require.Len(t, committee.Operators, 1) // Should handle duplicates
-	})
+	require.Error(t, store.handleSharesAdded(invalidCommitteeShare))
 }
 
 func TestValidatorStore_BulkAddUpdate(t *testing.T) {
@@ -1062,6 +1059,7 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 			Index: phase0.ValidatorIndex(10),
 		},
 	}
+	noMetadataShare.ValidatorIndex = phase0.ValidatorIndex(10)
 
 	t.Run("update share with metadata", func(t *testing.T) {
 		require.NoError(t, store.handleSharesUpdated(noMetadataShare))
@@ -1125,7 +1123,10 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 
 	// Add the same share multiple times
 	require.NoError(t, store.handleSharesAdded(duplicateShare))
-	require.NoError(t, store.handleSharesAdded(duplicateShare))
+
+	err := store.handleSharesAdded(duplicateShare)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "share already exists in committee")
 
 	t.Run("check no duplicates in data.shares", func(t *testing.T) {
 		// Validate the internal state for operator ID
