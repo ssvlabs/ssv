@@ -26,7 +26,7 @@ func TestAddShareToCommittee(t *testing.T) {
 			},
 		}
 
-		vc, added := vm.AddShareToCommittee(share)
+		vc, added := vm.AddShareToCommittee(share, func() *validator.Committee { return nil })
 
 		assert.Nil(t, vc)
 		assert.False(t, added)
@@ -52,10 +52,10 @@ func TestAddShareToCommittee(t *testing.T) {
 		}
 
 		var cmtID = share.CommitteeID()
-		vm.PutCommittee(cmtID, cmt)
+		vm.PutCommitteeUnsafe(cmtID, cmt)
 		assert.Equal(t, 1, vm.SizeCommittees())
 
-		vc, added := vm.AddShareToCommittee(share)
+		vc, added := vm.AddShareToCommittee(share, func() *validator.Committee { return nil })
 
 		assert.Equal(t, cmt, vc)
 		assert.True(t, added)
@@ -86,7 +86,7 @@ func TestRemoveShareFromCommittee(t *testing.T) {
 			}, validator.NewCommitteeDutyGuard())
 
 		var cmtID = share.CommitteeID()
-		vm.PutCommittee(cmtID, cmt)
+		vm.PutCommitteeUnsafe(cmtID, cmt)
 		assert.Equal(t, 1, vm.SizeCommittees())
 
 		_, removed := vm.RemoveShareFromCommittee(share)
@@ -122,7 +122,7 @@ func TestRemoveShareFromCommittee(t *testing.T) {
 		)
 
 		var cmtID = share.CommitteeID()
-		vm.PutCommittee(cmtID, cmt)
+		vm.PutCommitteeUnsafe(cmtID, cmt)
 		assert.Equal(t, 1, vm.SizeCommittees())
 
 		_, removed := vm.RemoveShareFromCommittee(share)

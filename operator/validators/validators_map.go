@@ -150,10 +150,7 @@ func (vm *ValidatorsMap) GetCommittee(pubKey spectypes.CommitteeID) (*validator.
 }
 
 // PutCommittee creates a new committee instance
-func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.CommitteeID, v *validator.Committee) {
-	vm.mlock.Lock()
-	defer vm.mlock.Unlock()
-
+func (vm *ValidatorsMap) PutCommitteeUnsafe(pubKey spectypes.CommitteeID, v *validator.Committee) {
 	vm.committees[pubKey] = v
 }
 
@@ -178,17 +175,17 @@ func (vm *ValidatorsMap) RemoveShareFromCommittee(share *types.SSVShare) (*valid
 }
 
 // AddShareToCommittee adds share to its committee
-func (vm *ValidatorsMap) AddShareToCommittee(share *types.SSVShare) (*validator.Committee, bool) {
+func (vm *ValidatorsMap) AddShareToCommittee(share *types.SSVShare, onMissingCommittee func() *validator.Committee) (*validator.Committee, bool) {
 	vm.mlock.Lock()
 	defer vm.mlock.Unlock()
 
 	vc, found := vm.committees[share.CommitteeID()]
 	if !found || vc.Stopped() {
-		return nil, false
+		vc = onMissingCommittee()
+		return vc, false
 	}
 
 	vc.AddShare(&share.Share)
-
 	return vc, true
 }
 

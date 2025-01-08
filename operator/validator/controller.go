@@ -636,7 +636,7 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 				c.logger.Warn("could not start validator", zap.Error(err))
 			}
 
-			_, found = c.validatorsMap.AddShareToCommittee(share)
+			_, found = c.validatorsMap.AddShareToCommittee(share, func() *validator.Committee { return nil })
 
 			if !found {
 				c.logger.Warn("committee not found", fields.PubKey(share.ValidatorPubKey[:]))
@@ -828,9 +828,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	}
 
 	// Start a committee validator.
-	vc, found := c.validatorsMap.AddShareToCommittee(share)
-
-	if !found {
+	vc, found := c.validatorsMap.AddShareToCommittee(share, func() *validator.Committee {
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(c.ctx)
@@ -847,7 +845,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
-		vc = validator.NewCommittee(
+		comittee := validator.NewCommittee(
 			ctx,
 			cancel,
 			logger,
@@ -857,9 +855,12 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 			nil,
 			c.dutyGuard,
 		)
-		vc.AddShare(&share.Share)
-		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
+		comittee.AddShare(&share.Share)
+		c.validatorsMap.PutCommitteeUnsafe(operator.CommitteeID, comittee)
+		return comittee
+	})
 
+	if !found {
 		c.printShare(share, "setup committee done")
 	} else {
 		c.printShare(share, "added share to committee")
