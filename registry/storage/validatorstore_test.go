@@ -666,21 +666,21 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 
 	// Add nil share - this should be a no-op or handled gracefully
 	t.Run("add nil share", func(t *testing.T) {
-		require.Error(t, store.handleSharesAdded(nil))
+		require.ErrorContains(t, store.handleSharesAdded(nil), "nil share")
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
 	})
 
 	// Update nil share - this should be a no-op or handled gracefully
 	t.Run("update nil share", func(t *testing.T) {
-		require.Error(t, store.handleSharesUpdated(nil))
+		require.ErrorContains(t, store.handleSharesUpdated(nil), "nil share")
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
 	})
 
 	// Delete nil share - this should be a no-op or handled gracefully
 	t.Run("delete nil share", func(t *testing.T) {
-		require.Error(t, store.handleShareRemoved(nil))
+		require.ErrorContains(t, store.handleShareRemoved(nil), "nil share")
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
 	})
@@ -737,8 +737,7 @@ func TestValidatorStore_AddDuplicateShares(t *testing.T) {
 
 	t.Run("validate store after adding duplicate shares", func(t *testing.T) {
 		err := store.handleSharesAdded(share1)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "share already exists in committe")
+		require.ErrorContains(t, err, "share already exists in committee")
 		require.Len(t, store.Validators(), 1)
 		require.Contains(t, store.Validators(), share1)
 	})
@@ -761,8 +760,7 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 	t.Run("update non-existing share", func(t *testing.T) {
 		require.NotPanics(t, func() {
 			err := store.handleSharesUpdated(share1)
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "committee not found")
+			require.ErrorContains(t, err, "committee not found")
 		})
 		require.Len(t, store.Validators(), 0)
 
@@ -925,8 +923,7 @@ func TestValidatorStore_MixedOperations(t *testing.T) {
 	// Mixed operations
 	shareMap[share1.ValidatorPubKey] = share1 // Re-add share1
 	err := store.handleSharesAdded(share1)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "share already exists in committee")
+	require.ErrorContains(t, err, "share already exists in committee")
 
 	shareMap[updatedShare2.ValidatorPubKey] = updatedShare2
 	require.NoError(t, store.handleSharesUpdated(updatedShare2)) // Update share2
@@ -974,7 +971,8 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 	}
 
 	shareMap[invalidCommitteeShare.ValidatorPubKey] = invalidCommitteeShare
-	require.Error(t, store.handleSharesAdded(invalidCommitteeShare))
+	err := store.handleSharesAdded(invalidCommitteeShare)
+	require.ErrorContains(t, err, "duplicate operator in share. operator_id=1")
 }
 
 func TestValidatorStore_BulkAddUpdate(t *testing.T) {
@@ -1125,8 +1123,7 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 	require.NoError(t, store.handleSharesAdded(duplicateShare))
 
 	err := store.handleSharesAdded(duplicateShare)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "share already exists in committee")
+	require.ErrorContains(t, err, "share already exists in committee")
 
 	t.Run("check no duplicates in data.shares", func(t *testing.T) {
 		// Validate the internal state for operator ID
