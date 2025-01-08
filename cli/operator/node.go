@@ -402,7 +402,6 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					DomainType:        networkConfig.DomainType,
 					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
 				},

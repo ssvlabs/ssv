@@ -14,7 +14,6 @@ import (
 )
 
 type Exporter struct {
-	DomainType        spectypes.DomainType
 	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
 }
