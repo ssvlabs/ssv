@@ -455,7 +455,7 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 func removeShareFromCommittee(committee *Committee, share *types.SSVShare) error {
 	for i, validator := range committee.Validators {
 		if validator.ValidatorPubKey == share.ValidatorPubKey {
-			if validator.BeaconMetadata.Index != committee.Indices[i] {
+			if validator.ValidatorIndex != committee.Indices[i] {
 				// Corrupt state.
 				return fmt.Errorf("share index mismatch. validator_pubkey=%s committee_id=%s validator_index=%d committee_index=%d",
 					hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]), validator.ValidatorIndex, committee.Indices[i])
