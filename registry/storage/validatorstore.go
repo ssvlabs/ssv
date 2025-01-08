@@ -460,6 +460,11 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 }
 
 func removeShareFromCommittee(committee *Committee, share *types.SSVShare) error {
+	// Create new slices to avoid modifying the original slices directly
+	newValidators := make([]*types.SSVShare, 0, len(committee.Validators))
+	newIndices := make([]phase0.ValidatorIndex, 0, len(committee.Indices))
+
+	removed := false
 	for i, validator := range committee.Validators {
 		if validator.ValidatorPubKey == share.ValidatorPubKey {
 			if validator.ValidatorIndex != committee.Indices[i] {
@@ -467,17 +472,25 @@ func removeShareFromCommittee(committee *Committee, share *types.SSVShare) error
 				return fmt.Errorf("share index mismatch. validator_pubkey=%s committee_id=%s validator_index=%d committee_index=%d",
 					hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]), validator.ValidatorIndex, committee.Indices[i])
 			}
-
-			// Remove share.
-			committee.Validators = append(committee.Validators[:i], committee.Validators[i+1:]...)
-			committee.Indices = append(committee.Indices[:i], committee.Indices[i+1:]...)
-			return nil
+			removed = true
+			continue // Skip adding this validator and its index to the new slices
 		}
+
+		// Add remaining validators and indices to the new slices
+		newValidators = append(newValidators, validator)
+		newIndices = append(newIndices, committee.Indices[i])
 	}
 
-	// Corrupt state.
-	return fmt.Errorf("share not found in committee. validator_pubkey=%s committee_id=%s",
-		hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
+	if !removed {
+		// Corrupt state.
+		return fmt.Errorf("share not found in committee. validator_pubkey=%s committee_id=%s",
+			hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
+	}
+
+	// Replace the original slices with the newly created slices
+	committee.Validators = newValidators
+	committee.Indices = newIndices
+	return nil
 }
 
 func removeShareFromOperator(data *sharesAndCommittees, share *types.SSVShare) (found bool) {
