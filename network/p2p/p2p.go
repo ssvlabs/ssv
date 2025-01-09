@@ -4,6 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"math/rand"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
@@ -30,12 +37,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/tasks"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
-	"math"
-	"math/rand"
-	"slices"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 // network states

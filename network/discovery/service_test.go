@@ -2,10 +2,10 @@ package discovery
 
 import (
 	"context"
-	"github.com/ethereum/go-ethereum/p2p/discover"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/records"

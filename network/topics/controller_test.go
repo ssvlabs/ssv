@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ssvlabs/ssv/network/topics"
 	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -19,20 +19,21 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 // TODO: fix this test to run post-fork
@@ -387,7 +388,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			p.saveMsg(topic, msg)
 			return nil
 		},
-		Scoring: &ScoringConfig{
+		Scoring: &topics.ScoringConfig{
 			IPWhitelist:        nil,
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
@@ -405,13 +406,13 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		t.Fatal(err)
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, validatorStore, nil)
+	ps, tm, err := topics.NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)
 
 	p = &P{
 		host:     h,
 		ps:       ps,
-		tm:       tm.(*topicsCtrl),
+		tm:       tm,
 		msgs:     make(map[string][]*pubsub.Message),
 		msgsLock: &sync.Mutex{},
 	}

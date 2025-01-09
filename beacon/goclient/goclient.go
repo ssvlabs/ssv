@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"

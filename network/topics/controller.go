@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"io"
 	"time"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.opentelemetry.io/otel/metric"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
