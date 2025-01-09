@@ -52,10 +52,10 @@ const (
 	// should be low enough for our node to find good set of peers reasonably fast (10-20 minutes)
 	// after node start, but it shouldn't be too low since that might negatively affect Ethereum
 	// duty execution quality.
-	peersTrimmingInterval           = 60 * time.Second
+	peersTrimmingInterval           = 30 * time.Second
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute
-	topicsReportingInterval         = 180 * time.Second
+	topicsReportingInterval         = 60 * time.Second
 )
 
 // PeersIndexProvider holds peers index instance
@@ -281,7 +281,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 	}()
 	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
-	async.Interval(n.ctx, 10*time.Second, func() {
+	async.Interval(n.ctx, 15*time.Second, func() {
 		// find and propose the best discovered peer we can
 		var (
 			bestProposal      peers.DiscoveredPeer
@@ -290,7 +290,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		)
 		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
 			// TODO
-			const retryLimit = 2
+			const retryLimit = 3
 			//const retryLimit = 5
 			if item.Value().ConnectRetries >= retryLimit {
 				// this discovered peer has been tried many times already, we'll ignore him but won't
