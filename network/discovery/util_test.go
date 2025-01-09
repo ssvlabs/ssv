@@ -74,7 +74,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 // Testing discovery with a given NetworkConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, netConfig)
-	service, err := newDiscV5Service(testCtx, testLogger, false, nil, opts)
+	service, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, service)
 
@@ -191,6 +191,7 @@ func CustomNode(t *testing.T,
 	record := enr.Record{}
 
 	// Set entries
+	record.Set(enr.WithEntry("ssv", true)) // marks node as SSV-related (we filter out SSV-unrelated ones)
 	record.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
 	record.Set(enr.UDP(12000))
 	record.Set(enr.TCP(13000))

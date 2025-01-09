@@ -49,7 +49,7 @@ const (
 	connectorQueueSize = 256
 	// inboundLimitRatio is the ratio of inbound connections to the total connections
 	// we allow (both inbound and outbound).
-	inboundLimitRatio = float64(0.6)
+	inboundLimitRatio = float64(0.5)
 )
 
 // Setup is used to setup the network
@@ -159,14 +159,14 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 	if err := n.setupStreamCtrl(logger); err != nil {
 		return errors.Wrap(err, "could not setup stream controller")
 	}
-	topicsController, err := n.setupPubsub(logger)
+	_, err := n.setupPubsub(logger)
 	if err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
 	if err := n.setupPeerServices(logger); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
-	if err := n.setupDiscovery(logger, topicsController); err != nil {
+	if err := n.setupDiscovery(logger); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
 	}
 
@@ -245,7 +245,7 @@ func (n *p2pNetwork) ActiveSubnets() records.Subnets {
 	return n.activeSubnets
 }
 
-func (n *p2pNetwork) setupDiscovery(logger *zap.Logger, topicsController topics.Controller) error {
+func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
 		return errors.Wrap(err, "could not get ip addr")
@@ -280,7 +280,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger, topicsController topics.
 		HostDNS:       n.cfg.HostDNS,
 		NetworkConfig: n.cfg.Network,
 	}
-	disc, err := discovery.NewService(n.ctx, logger, topicsController, discOpts)
+	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
 		return err
 	}
