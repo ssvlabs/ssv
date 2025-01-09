@@ -353,20 +353,6 @@ func (mr *MockBeaconNodeMockRecorder) Events(ctx, topics, handler any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockBeaconNode)(nil).Events), ctx, topics, handler)
 }
 
-// GasLimit mocks base method.
-func (m *MockBeaconNode) GasLimit() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GasLimit")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// GasLimit indicates an expected call of GasLimit.
-func (mr *MockBeaconNodeMockRecorder) GasLimit() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit", reflect.TypeOf((*MockBeaconNode)(nil).GasLimit))
-}
-
 // GetAttestationData mocks base method.
 func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
@@ -633,17 +619,17 @@ func (mr *MockBeaconNodeMockRecorder) SubmitSyncMessages(msgs any) *gomock.Call 
 }
 
 // SubmitValidatorRegistration mocks base method.
-func (m *MockBeaconNode) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+func (m *MockBeaconNode) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", pubkey, feeRecipient, sig)
+	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", registration)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitValidatorRegistration indicates an expected call of SubmitValidatorRegistration.
-func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(pubkey, feeRecipient, sig any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(registration any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistration), pubkey, feeRecipient, sig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistration), registration)
 }
 
 // SubmitVoluntaryExit mocks base method.
