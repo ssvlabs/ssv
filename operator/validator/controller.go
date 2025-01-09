@@ -89,7 +89,7 @@ type ControllerOptions struct {
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
 	QueueBufferSize int    `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Buffer size for message workers"`
-	GasLimit        uint64 `yaml:"GasLimit" env:"GAS_LIMIT" env-default:"34000000" env-description:"The gas limit for beacon node transactions"`
+	GasLimit        uint64 `yaml:"GasLimit" env:"GAS_LIMIT" env-default:"30000000" env-description:"The gas limit for beacon node transactions"`
 }
 
 // Controller represent the validators controller,
