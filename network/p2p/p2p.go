@@ -391,9 +391,9 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// fast enough so that our node finds good set of peers within 10-20 minutes after node
 		// start; it shouldn't be too large because that would negatively affect Ethereum duty
 		// execution quality
-		//const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
+		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 		// TODO
-		const maxPeersToDrop = 1
+		//const maxPeersToDrop = 1
 
 		// see if we can accept more peer connections already (no need to trim), note we trim not
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
