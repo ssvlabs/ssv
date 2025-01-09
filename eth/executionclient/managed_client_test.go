@@ -87,22 +87,3 @@ func TestManagedClient_Close(t *testing.T) {
 	// No change should occur; `ManagedClient` remains unhealthy
 	assert.False(t, mc.isHealthy(), "ManagedClient should remain unhealthy after Close")
 }
-
-// waitForCondition waits until the condition function returns true or the timeout is reached.
-func waitForCondition(timeout time.Duration, condition func() bool) bool {
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if condition() {
-				return true
-			}
-		case <-timer.C:
-			return false
-		}
-	}
-}
