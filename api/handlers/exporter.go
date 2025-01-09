@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/http"
 
@@ -90,7 +91,7 @@ func transformToParticipantResponse(role spectypes.BeaconRole, entry qbftstorage
 	response := &ParticipantResponse{
 		Role:      role.String(),
 		Slot:      uint64(entry.Slot),
-		PublicKey: fmt.Sprintf("%#x", entry.PubKey),
+		PublicKey: hex.EncodeToString(entry.PubKey[:]),
 	}
 	response.Message.Signers = entry.Signers
 
