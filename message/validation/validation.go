@@ -242,7 +242,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeInfo{}, ErrValidatorLiquidated
 	}
 
-	if !share.HasBeaconMetadata() {
+	if !share.HasOnChainData() {
 		return CommitteeInfo{}, ErrNoShareMetadata
 	}
 

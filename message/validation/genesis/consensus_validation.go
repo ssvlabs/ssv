@@ -303,7 +303,7 @@ func (mv *messageValidator) validateBeaconDuty(
 ) error {
 	switch role {
 	case genesisspectypes.BNRoleProposer:
-		if !share.HasBeaconMetadata() {
+		if !share.HasOnChainData() {
 			return ErrNoShareMetadata
 		}
 
@@ -315,7 +315,7 @@ func (mv *messageValidator) validateBeaconDuty(
 		return nil
 
 	case genesisspectypes.BNRoleSyncCommittee, genesisspectypes.BNRoleSyncCommitteeContribution:
-		if !share.HasBeaconMetadata() {
+		if !share.HasOnChainData() {
 			return ErrNoShareMetadata
 		}
 

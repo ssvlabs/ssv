@@ -425,7 +425,7 @@ func (mv *messageValidator) validateSSVMessage(msg *genesisqueue.GenesisSSVMessa
 			return nil, descriptor, ErrValidatorLiquidated
 		}
 
-		if !share.HasBeaconMetadata() {
+		if !share.HasOnChainData() {
 			return nil, descriptor, ErrNoShareMetadata
 		}
 

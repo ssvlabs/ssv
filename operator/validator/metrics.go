@@ -15,7 +15,7 @@ func (c *controller) reportValidatorStatus(share *types.SSVShare) {
 	pk := share.ValidatorPubKey[:]
 	logger := c.logger.With(fields.PubKey(pk), zap.Any("share", share))
 
-	if !share.HasBeaconMetadata() {
+	if !share.HasOnChainData() {
 		c.logger.Debug("checking validator: validator has no beacon metadata")
 		c.metrics.ValidatorNotFound(pk)
 	} else if share.IsActive() {
