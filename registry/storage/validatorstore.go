@@ -279,10 +279,10 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 			}
 			data.shares = append(data.shares, share)
 
-			// Update committee at index.
-			// Replace with a new reference to avoid shared state issues.
-			newCommittees := append([]*Committee(nil), data.committees...)
+			// Copy `committees` to avoid shared state issues.
 			updated := false
+			newCommittees := make([]*Committee, len(data.committees))
+			copy(newCommittees, data.committees)
 			for i, c := range newCommittees {
 				if c.ID == committee.ID {
 					newCommittees[i] = committee
@@ -295,7 +295,6 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 				newCommittees = append(newCommittees, committee)
 			}
 			data.committees = newCommittees
-
 			c.byOperatorID[operator.Signer] = data
 		}
 	}
@@ -422,7 +421,6 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 			}
 
 			// Copy `committees` to avoid shared state issues.
-			// newCommittees := append([]*Committee(nil), data.committees...)
 			newCommittees := make([]*Committee, len(data.committees))
 			copy(newCommittees, data.committees)
 			for i, c := range newCommittees {
