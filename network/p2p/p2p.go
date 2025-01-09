@@ -281,7 +281,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 	}()
 	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
-	async.Interval(n.ctx, 15*time.Second, func() {
+	async.Interval(n.ctx, 5*time.Second, func() {
 		// find and propose the best discovered peer we can
 		var (
 			bestProposal      peers.DiscoveredPeer
@@ -290,7 +290,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		)
 		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
 			// TODO
-			const retryLimit = 3
+			const retryLimit = 6
 			//const retryLimit = 5
 			if item.Value().ConnectRetries >= retryLimit {
 				// this discovered peer has been tried many times already, we'll ignore him but won't
