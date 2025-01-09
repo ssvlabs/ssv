@@ -146,6 +146,16 @@ func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionc
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
+	if len(block.Logs) == 0 {
+		if err := eh.nodeStorage.SaveHighestSeenBlock(txn, new(big.Int).SetUint64(block.BlockNumber)); err != nil {
+			return nil, fmt.Errorf("set last processed block: %w", err)
+		}
+		if err := txn.Commit(); err != nil {
+			return nil, fmt.Errorf("commit transaction: %w", err)
+		}
+		return nil, nil
+	}
+
 	lastProcessedBlock, found, err := eh.nodeStorage.GetLastProcessedBlock(txn)
 	if err != nil {
 		return nil, fmt.Errorf("get last processed block: %w", err)

@@ -178,13 +178,19 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					}
 					validLogs = append(validLogs, log)
 				}
-				if len(validLogs) == 0 {
-					// Emit empty block logs to indicate that we have advanced to this block.
-					logs <- BlockLogs{BlockNumber: toBlock}
-				} else {
-					for _, blockLogs := range PackLogs(validLogs) {
-						logs <- blockLogs
+
+				var highestBlock uint64
+				for _, blockLogs := range PackLogs(validLogs) {
+					logs <- blockLogs
+					if blockLogs.BlockNumber > highestBlock {
+						highestBlock = blockLogs.BlockNumber
 					}
+				}
+
+				// Emit empty block logs to indicate that we have advanced to this block.
+				logs <- BlockLogs{BlockNumber: toBlock}
+				if highestBlock < toBlock {
+					logs <- BlockLogs{BlockNumber: toBlock}
 				}
 			}
 		}
@@ -290,6 +296,18 @@ func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.I
 	}
 
 	return b, nil
+}
+
+func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
+	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getBlockByNumber"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return h, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {

@@ -51,6 +51,16 @@ func (m NodeStorage) GetLastProcessedBlock(txn basedb.Reader) (*big.Int, bool, e
 	panic("implement me")
 }
 
+func (m NodeStorage) SaveHighestSeenBlock(txn basedb.ReadWriter, offset *big.Int) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) GetHighestSeenBlock(txn basedb.Reader) (*big.Int, bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m NodeStorage) DropRegistryData() error {
 	//TODO implement me
 	panic("implement me")
