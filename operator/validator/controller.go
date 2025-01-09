@@ -950,13 +950,14 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, validatorMap meta
 }
 
 func (c *controller) reportIndicesChange(ctx context.Context, timeout time.Duration) bool {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	select {
-	case <-ctx.Done():
+	case <-timeoutCtx.Done():
 		return false
 	case c.indicesChange <- struct{}{}:
 		return true
-	case <-time.After(timeout):
-		return false
 	}
 }
 
