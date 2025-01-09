@@ -114,7 +114,6 @@ type GoClient struct {
 	client      Client
 	nodeVersion string
 	nodeClient  NodeClient
-	gasLimit    uint64
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -177,7 +176,6 @@ func New(
 		ctx:                   opt.Context,
 		network:               opt.Network,
 		client:                httpClient.(*eth2clienthttp.Service),
-		gasLimit:              opt.GasLimit,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		operatorDataStore:     operatorDataStore,
 		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
@@ -214,7 +212,6 @@ func New(
 		fields.Address(httpClient.Address()),
 		zap.String("client", string(client.nodeClient)),
 		zap.String("version", client.nodeVersion),
-		zap.Uint64("gas_limit", client.gasLimit),
 	)
 
 	go client.registrationSubmitter(slotTickerProvider)
@@ -278,11 +275,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	recordBeaconClientStatus(ctx, statusSynced, gc.client.Address())
 
 	return nil
-}
-
-// GasLimit configured on the client construction
-func (gc *GoClient) GasLimit() uint64 {
-	return gc.gasLimit
 }
 
 // GetBeaconNetwork returns the beacon network the node is on

@@ -261,7 +261,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
-		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
