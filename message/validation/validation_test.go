@@ -710,12 +710,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < 1512; i++ {
 			msg.Messages = append(msg.Messages, msg.Messages[0])
 		}
 
 		_, err := msg.Encode()
-		require.ErrorContains(t, err, "max expected 1000 and 1001 found")
+		require.ErrorContains(t, err, "max expected 1512 and 1513 found")
 	})
 
 	// Get error when receiving message from operator who is not affiliated with the validator
