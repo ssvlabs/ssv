@@ -97,7 +97,7 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	}
 
 	// #nosec G115
-	if header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
 		return fmt.Errorf("block %d is too old", es.lastProcessedBlock)
 	}
 
@@ -138,7 +138,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 		return 0, fmt.Errorf("failed to get header for block %d: %w", es.lastProcessedBlock, err)
 	}
 	// #nosec G115
-	if header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
 		return 0, fmt.Errorf("block %d is too old", es.lastProcessedBlock)
 	}
 
