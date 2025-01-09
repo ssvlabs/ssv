@@ -183,7 +183,7 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 		Graffiti:   string(share.Graffiti),
 		Liquidated: share.Liquidated,
 	}
-	if share.HasBeaconMetadata() {
+	if share.HasOnChainData() {
 		v.Index = share.ValidatorIndex
 		v.Status = share.Status.String()
 		v.ActivationEpoch = share.ActivationEpoch

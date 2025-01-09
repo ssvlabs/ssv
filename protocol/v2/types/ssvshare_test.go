@@ -67,7 +67,7 @@ func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			require.Equal(t, tc.Result, tc.ShareMetadata.HasBeaconMetadata())
+			require.Equal(t, tc.Result, tc.ShareMetadata.HasOnChainData())
 		})
 	}
 }

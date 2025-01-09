@@ -727,7 +727,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 }
 
 func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator, *validator.Committee, error) {
-	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
+	if !share.HasOnChainData() { // fetching index and status in case not exist
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey[:]))
 		return nil, nil, nil
 	}
@@ -1079,7 +1079,7 @@ func SetupRunners(
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
 
-	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
+	if options.SSVShare == nil || !options.SSVShare.HasOnChainData() {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
 	}

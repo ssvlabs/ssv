@@ -24,7 +24,19 @@ const (
 // SSVShare is a spectypes.Share with extra data that fully describes SSV validator share.
 type SSVShare struct {
 	spectypes.Share
+	ShareOnChainData
 
+	// lastUpdated is used to keep track of share last update time. Note, we don't
+	// store this field in DB - it just serves as a helper-indicator for when we might want
+	// to update SSVShare data so it doesn't get super stale.
+	lastUpdated time.Time
+
+	// committeeID is a cached value for committee ID so we don't recompute it every time.
+	committeeID atomic.Pointer[spectypes.CommitteeID]
+}
+
+// ShareOnChainData is share-related data pulled from blockchain.
+type ShareOnChainData struct {
 	// Balance is validator (this share belongs to) balance.
 	Balance phase0.Gwei
 	// Status is validator (this share belongs to) state.
@@ -62,13 +74,13 @@ func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 	})
 }
 
-// HasBeaconMetadata checks whether SSVShare has been enriched with respective Beacon metadata.
-func (s *SSVShare) HasBeaconMetadata() bool {
+// HasOnChainData checks whether SSVShare has been enriched with respective Beacon metadata.
+func (s *SSVShare) HasOnChainData() bool {
 	return s != nil && s.Status != eth2apiv1.ValidatorStateUnknown
 }
 
 func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
-	return s.HasBeaconMetadata() &&
+	return s.HasOnChainData() &&
 		(s.Status.IsAttesting() || (s.Status == eth2apiv1.ValidatorStatePendingQueued && s.ActivationEpoch <= epoch))
 }
 
