@@ -536,7 +536,7 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-func (c *controller) startValidatorsForMetadata(_ context.Context, validators metadata.Validators) (count int) {
+func (c *controller) startValidatorsForMetadata(_ context.Context, validators metadata.ValidatorMap) (count int) {
 	// TODO: use context
 
 	shares := c.sharesStorage.List(
@@ -919,23 +919,21 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
-	for update := range c.metadataUpdater.Stream(ctx) {
-		if err := c.handleMetadataUpdate(ctx, update); err != nil {
+	for validatorMap := range c.metadataUpdater.Stream(ctx) {
+		if err := c.handleMetadataUpdate(ctx, validatorMap); err != nil {
 			c.logger.Warn("could not handle metadata update", zap.Error(err))
 		}
 	}
 }
 
-func (c *controller) handleMetadataUpdate(ctx context.Context, update metadata.ValidatorUpdate) error {
+func (c *controller) handleMetadataUpdate(ctx context.Context, validatorMap metadata.ValidatorMap) error {
 	startedValidators := 0
 	if c.operatorDataStore.GetOperatorID() != 0 {
-		startedValidators = c.startValidatorsForMetadata(ctx, update.Validators)
+		startedValidators = c.startValidatorsForMetadata(ctx, validatorMap)
 	}
 
-	if startedValidators > 0 || hasNewValidators(update.IndicesBefore, update.IndicesAfter) {
+	if startedValidators > 0 {
 		c.logger.Debug("new validators found after metadata update",
-			zap.Int("before", len(update.IndicesBefore)),
-			zap.Int("after", len(update.IndicesAfter)),
 			zap.Int("started_validators", startedValidators),
 		)
 		// Refresh duties if there are any new active validators.
@@ -1009,19 +1007,6 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 		}
 	}
 
-}
-
-func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {
-	m := make(map[phase0.ValidatorIndex]struct{})
-	for _, v := range before {
-		m[v] = struct{}{}
-	}
-	for _, v := range after {
-		if _, ok := m[v]; !ok {
-			return true
-		}
-	}
-	return false
 }
 
 func SetupCommitteeRunners(

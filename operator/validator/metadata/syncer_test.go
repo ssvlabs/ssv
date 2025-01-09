@@ -129,7 +129,7 @@ func TestSyncer_Sync(t *testing.T) {
 		}
 
 		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
-		metadata := Validators{
+		metadata := ValidatorMap{
 			pubKeys[0]: &beacon.ValidatorMetadata{},
 			pubKeys[1]: &beacon.ValidatorMetadata{},
 		}
@@ -178,7 +178,7 @@ func TestSyncer_Sync(t *testing.T) {
 		}
 
 		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
-		metadata := Validators{
+		metadata := ValidatorMap{
 			pubKeys[0]: &beacon.ValidatorMetadata{},
 			pubKeys[1]: &beacon.ValidatorMetadata{},
 		}
@@ -204,7 +204,7 @@ func TestSyncer_Sync(t *testing.T) {
 		}
 
 		pubKeys := []spectypes.ValidatorPK{}
-		metadata := Validators{}
+		metadata := ValidatorMap{}
 
 		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
@@ -329,7 +329,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
 
 		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
-		metadata := Validators{
+		metadata := ValidatorMap{
 			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
 			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
 		}
@@ -387,7 +387,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
 
 		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
-		metadata := Validators{
+		metadata := ValidatorMap{
 			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
 			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
 		}
@@ -508,7 +508,7 @@ func TestSyncer_Stream(t *testing.T) {
 
 		// Mock fetcher.Fetch
 		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey}
-		metadata := Validators{
+		metadata := ValidatorMap{
 			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{
 				Index:           1,
 				Status:          eth2apiv1.ValidatorStateActiveOngoing,
@@ -525,15 +525,13 @@ func TestSyncer_Stream(t *testing.T) {
 
 		// Read from updates channel using a goroutine
 		go func() {
-			update, ok := <-updates
+			validators, ok := <-updates
 			if !ok {
 				t.Error("Updates channel was closed unexpectedly")
 				return
 			}
 			// Verify the update
-			assert.Equal(t, []phase0.ValidatorIndex{1}, update.IndicesBefore)
-			assert.Equal(t, []phase0.ValidatorIndex{1}, update.IndicesAfter)
-			assert.Equal(t, metadata, update.Validators)
+			assert.Equal(t, metadata, validators)
 			// Signal that the update was received
 			close(updateSent)
 		}()

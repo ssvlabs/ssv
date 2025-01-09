@@ -109,10 +109,10 @@ func (m *Mockfetcher) EXPECT() *MockfetcherMockRecorder {
 }
 
 // Fetch mocks base method.
-func (m *Mockfetcher) Fetch(ctx context.Context, pubKeys []types.ValidatorPK) (Validators, error) {
+func (m *Mockfetcher) Fetch(ctx context.Context, pubKeys []types.ValidatorPK) (ValidatorMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Fetch", ctx, pubKeys)
-	ret0, _ := ret[0].(Validators)
+	ret0, _ := ret[0].(ValidatorMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

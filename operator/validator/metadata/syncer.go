@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -42,7 +41,7 @@ type shareStorage interface {
 }
 
 type fetcher interface {
-	Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error)
+	Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error)
 }
 
 func NewValidatorSyncer(
@@ -103,7 +102,7 @@ func (u *ValidatorSyncer) SyncOnStartup(ctx context.Context) (map[spectypes.Vali
 	return u.Sync(ctx, allPubKeys)
 }
 
-func (u *ValidatorSyncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Validators, error) {
+func (u *ValidatorSyncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
 	fetchStart := time.Now()
 	metadata, err := u.fetcher.Fetch(ctx, pubKeys)
 	if err != nil {
@@ -132,19 +131,17 @@ func (u *ValidatorSyncer) Sync(ctx context.Context, pubKeys []spectypes.Validato
 }
 
 type ValidatorUpdate struct {
-	IndicesBefore []phase0.ValidatorIndex
-	IndicesAfter  []phase0.ValidatorIndex
-	Validators    Validators
+	Validators ValidatorMap
 }
 
-func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorUpdate {
-	metadataUpdates := make(chan ValidatorUpdate)
+func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorMap {
+	metadataUpdates := make(chan ValidatorMap)
 
 	go func() {
 		defer close(metadataUpdates)
 
 		for {
-			update, done, err := u.prepareUpdate(ctx)
+			validators, done, err := u.prepareUpdate(ctx)
 			if err != nil {
 				u.logger.Warn("failed to prepare validators metadata",
 					zap.Error(err),
@@ -155,7 +152,7 @@ func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorUpdate {
 				continue
 			}
 
-			if len(update.Validators) == 0 {
+			if len(validators) == 0 {
 				if slept := u.sleep(ctx, u.streamInterval); !slept {
 					return
 				}
@@ -164,7 +161,7 @@ func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorUpdate {
 
 			timer := time.NewTimer(u.updateSendTimeout)
 			select {
-			case metadataUpdates <- update:
+			case metadataUpdates <- validators:
 				// Only sleep for the last batch.
 				if done {
 					if slept := u.sleep(ctx, u.streamInterval); !slept {
@@ -189,17 +186,17 @@ func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorUpdate {
 // It is used only by Stream method.
 // The maximal size is batchSize as we want to reduce the load while streaming.
 // Therefore, prepareUpdate should be called in a loop, so the rest will be prepared by next calls.
-func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorUpdate, bool, error) {
+func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) {
 	// TODO: Methods called here don't handle context, so this is a workaround to handle done context. It should be removed once ctx is handled gracefully.
 	select {
 	case <-ctx.Done():
-		return ValidatorUpdate{}, false, ctx.Err()
+		return ValidatorMap{}, false, ctx.Err()
 	default:
 	}
 
 	shares := u.sharesBatchForUpdate(ctx)
 	if len(shares) == 0 {
-		return ValidatorUpdate{}, false, nil
+		return ValidatorMap{}, false, nil
 	}
 
 	pubKeys := make([]spectypes.ValidatorPK, len(shares))
@@ -207,22 +204,12 @@ func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorUpdate, b
 		pubKeys[i] = s.ValidatorPubKey
 	}
 
-	indicesBefore := u.allActiveIndices(ctx, u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
-
 	validators, err := u.Sync(ctx, pubKeys)
 	if err != nil {
-		return ValidatorUpdate{}, false, fmt.Errorf("update metadata: %w", err)
+		return ValidatorMap{}, false, fmt.Errorf("update metadata: %w", err)
 	}
 
-	indicesAfter := u.allActiveIndices(ctx, u.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
-
-	update := ValidatorUpdate{
-		IndicesBefore: indicesBefore,
-		IndicesAfter:  indicesAfter,
-		Validators:    validators,
-	}
-
-	return update, len(shares) < batchSize, nil
+	return validators, len(shares) < batchSize, nil
 }
 
 // sharesBatchForUpdate returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
@@ -258,21 +245,6 @@ func (u *ValidatorSyncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SS
 		share.SetMetadataLastUpdated(time.Now())
 	}
 	return shares
-}
-
-// TODO: Create a wrapper for share storage that contains all common methods like AllActiveIndices and use the wrapper.
-func (u *ValidatorSyncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase0.ValidatorIndex {
-	var indices []phase0.ValidatorIndex
-
-	// TODO: use context, return if it's done
-	u.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if share.IsParticipating(epoch) {
-			indices = append(indices, share.BeaconMetadata.Index)
-		}
-		return true
-	})
-
-	return indices
 }
 
 func (u *ValidatorSyncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
