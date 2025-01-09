@@ -9,7 +9,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"go.uber.org/zap"
 )
@@ -54,9 +53,9 @@ type Service interface {
 }
 
 // NewService creates new discovery.Service
-func NewService(ctx context.Context, logger *zap.Logger, topicsController topics.Controller, opts Options) (Service, error) {
+func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
 	if opts.DiscV5Opts == nil {
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
-	return newDiscV5Service(ctx, logger, false, topicsController, &opts)
+	return newDiscV5Service(ctx, logger, &opts)
 }
