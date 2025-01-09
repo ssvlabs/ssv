@@ -147,7 +147,7 @@ func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionc
 	defer txn.Discard()
 
 	if len(block.Logs) == 0 {
-		if err := eh.nodeStorage.SaveHighestSeenBlock(txn, new(big.Int).SetUint64(block.BlockNumber)); err != nil {
+		if err := eh.nodeStorage.SaveHighestSeenBlock(txn, new(big.Int).SetUint64(block.LastSeen)); err != nil {
 			return nil, fmt.Errorf("set last processed block: %w", err)
 		}
 		if err := txn.Commit(); err != nil {
