@@ -87,13 +87,13 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return fmt.Errorf("failed to read last processed block: %w", err)
 	}
 	if !found || highestSeenBlock == nil || highestSeenBlock.Uint64() == 0 {
-		return fmt.Errorf("last processed block is not set")
+		return fmt.Errorf("last seen block is not set")
 	}
 
 	// Check if the block is too old.
 	header, err := es.executionClient.(*executionclient.ExecutionClient).HeaderByNumber(ctx, highestSeenBlock)
 	if err != nil {
-		return fmt.Errorf("failed to get header for block %d: %w", highestSeenBlock, err) ?
+		return fmt.Errorf("failed to get header for block %d: %w", highestSeenBlock, err)
 	}
 
 	// #nosec G115
