@@ -103,10 +103,10 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 	return node
 }
 
+// Start starts to stream duties and run IBFT instances
 func (n *Node) Start(logger *zap.Logger) error {
 	logger = logger.Named(logging.NameOperator)
 
-	// Start starts to stream duties and run IBFT instances
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {

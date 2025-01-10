@@ -159,6 +159,7 @@ func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorMap {
 				continue
 			}
 
+			// TODO: use time.After when Go is updated to 1.23
 			timer := time.NewTimer(u.updateSendTimeout)
 			select {
 			case metadataUpdates <- validators:
@@ -248,6 +249,7 @@ func (u *ValidatorSyncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SS
 }
 
 func (u *ValidatorSyncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
+	// TODO: use time.After when Go is updated to 1.23
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 

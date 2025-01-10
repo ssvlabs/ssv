@@ -349,7 +349,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if _, err := validatorSyncer.SyncOnStartup(cmd.Context()); err != nil {
-			logger.Fatal("failed to update metadata on startup", zap.Error(err))
+			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
 		}
 
 		// Increase MaxPeers if the operator is subscribed to many subnets.
