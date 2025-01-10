@@ -93,7 +93,7 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	// Check if the block is too old.
 	header, err := es.executionClient.(*executionclient.ExecutionClient).HeaderByNumber(ctx, highestSeenBlock)
 	if err != nil {
-		return fmt.Errorf("failed to get header for block %d: %w", es.lastProcessedBlock, err)
+		return fmt.Errorf("failed to get header for block %d: %w", highestSeenBlock, err) ?
 	}
 
 	// #nosec G115
