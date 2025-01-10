@@ -254,7 +254,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
-	connectorProposals := make(chan peer.AddrInfo)
+	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
 	go n.startDiscovery(logger, connectorProposals)
 	go func() {
 		// keep discovered peers in the pool so we can choose the best ones
