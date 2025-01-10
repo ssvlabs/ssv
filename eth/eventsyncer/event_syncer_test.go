@@ -3,6 +3,7 @@ package eventsyncer
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
@@ -197,7 +197,7 @@ func setupEventHandler(
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 	return simulator.NewBackend(
-		types.GenesisAlloc{
+		ethtypes.GenesisAlloc{
 			testAddr: {Balance: big.NewInt(10000000000000000)},
 		}, simulated.WithBlockGasLimit(10000000),
 	)
@@ -239,4 +239,33 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 	}
 
 	return nodeStorage, operatorData
+}
+
+func TestBlockBelowThreashold(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	m := NewMockExecutionClient(ctrl)
+	ctx := context.Background()
+
+	s := New(nil, m, nil)
+
+	t.Run("fails on EC error", func(t *testing.T) {
+		err1 := errors.New("ec err")
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(nil, err1)
+		err := s.blockBelowThreashold(ctx, big.NewInt(1))
+		require.ErrorIs(t, err, err1)
+	})
+
+	t.Run("fails if outside threashold", func(t *testing.T) {
+		header := &ethtypes.Header{Time: uint64(time.Now().Add(-151 * time.Second).Unix())}
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
+		err := s.blockBelowThreashold(ctx, big.NewInt(1))
+		require.Error(t, err)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		header := &ethtypes.Header{Time: uint64(time.Now().Add(-149 * time.Second).Unix())}
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
+		err := s.blockBelowThreashold(ctx, big.NewInt(1))
+		require.NoError(t, err)
+	})
 }
