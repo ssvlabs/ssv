@@ -27,6 +27,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.11.0
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/multiformats/go-multiaddr v0.13.0
+	github.com/oleiade/lane/v2 v2.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5

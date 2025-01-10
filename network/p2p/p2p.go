@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/oleiade/lane/v2"
 	"math"
 	"math/rand"
 	"slices"
@@ -281,17 +282,27 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 	}()
 	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
-	async.Interval(n.ctx, 5*time.Second, func() {
-		// find and propose the best discovered peer we can
-		var (
-			bestProposal      peers.DiscoveredPeer
-			bestProposalFound bool
-			bestProposalScore float64 // how good the proposed peer is
-		)
+	async.Interval(n.ctx, 30*time.Second, func() {
+		// see how many vacant slots (for outbound connections) we have, note that we always
+		// prefer outbound connections over inbound and hence we check against MaxPeers and
+		// not some outbound-specific limit value (we don't even define such a value)
+		inbound, outbound := n.connectionStats()
+		vacantOutboundSlotCnt := n.cfg.MaxPeers - (inbound + outbound)
+		if vacantOutboundSlotCnt <= 0 {
+			n.interfaceLogger.Info(
+				"Not gonna propose discovered peers: ran out of peer slots",
+				zap.Int("inbound_peers", inbound),
+				zap.Int("outbound_peers", outbound),
+				zap.Int("max_peers", n.cfg.MaxPeers),
+			)
+			return
+		}
+
+		// TODO - building priority queue from scratch here might not be the best in terms
+		// of CPU/GC overhead, should we optimize this ?
+		priorityQueue := lane.NewMaxPriorityQueue[peers.DiscoveredPeer, float64]()
 		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
-			// TODO
-			const retryLimit = 6
-			//const retryLimit = 5
+			const retryLimit = 3
 			if item.Value().ConnectRetries >= retryLimit {
 				// this discovered peer has been tried many times already, we'll ignore him but won't
 				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
@@ -306,34 +317,30 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				return true
 			}
 			proposalScore := n.peerScore(item.Key())
-			if proposalScore > bestProposalScore {
-				bestProposal = item.Value()
-				bestProposalFound = true
-				bestProposalScore = proposalScore
-			}
+			priorityQueue.Push(item.Value(), proposalScore)
 			return true
 		})
-		if !bestProposalFound {
-			// TODO
-			n.interfaceLogger.Error("No peer to propose this time around")
-			return // we have not a single peer to propose
-		}
-		// update retry counter for this peer so we eventually skip it after certain number of retries
-		// TODO ^ becase we aren't using mutex to make operations related to DiscoveredPeersPool atomic
-		// it's better to do this before we send this proposal on `connector` to minimize the chance of
-		// hitting the undesirable race condition (where we'll successfully connect to this peer but will
-		// keep retrying until last allowed retry attempt)
-		peers.DiscoveredPeersPool.Set(bestProposal.ID, peers.DiscoveredPeer{
-			AddrInfo:       bestProposal.AddrInfo,
-			ConnectRetries: bestProposal.ConnectRetries + 1,
-		}, ttlcache.DefaultTTL)
-		connector <- bestProposal.AddrInfo // try to connect to best peer
 
-		// TODO
-		n.interfaceLogger.Info(
-			"Proposed discovered peer",
-			zap.String("peer_id", string(bestProposal.ID)),
-		)
+		// propose only half as many peers as we have outbound slots available because this
+		// leaves some vacant slots for the next iteration - on the next iteration better
+		// peers might show up (so we don't want to "spend" all of these vacant slots at once)
+		peersToProposeCnt := max(vacantOutboundSlotCnt/2, 1)
+		peersToProposeCnt = min(peersToProposeCnt, int(priorityQueue.Size()))
+		for i := 0; i < peersToProposeCnt; i++ {
+			peerCandidate, _, _ := priorityQueue.Pop()
+			// update retry counter for this peer so we eventually skip it after certain number of retries
+			// TODO ^ because we aren't using mutex to make operations related to DiscoveredPeersPool atomic
+			// it's better to do this before we send this proposal on `connector` to minimize the chance of
+			// hitting the undesirable race condition (where we'll successfully connect to this peer but will
+			// keep retrying until last allowed retry attempt)
+			peers.DiscoveredPeersPool.Set(peerCandidate.ID, peers.DiscoveredPeer{
+				AddrInfo:       peerCandidate.AddrInfo,
+				ConnectRetries: peerCandidate.ConnectRetries + 1,
+			}, ttlcache.DefaultTTL)
+			connector <- peerCandidate.AddrInfo // try to connect to best peer
+		}
+
+		n.interfaceLogger.Info("Proposed discovered peers", zap.Int("count", peersToProposeCnt))
 	})
 
 	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming(logger))
@@ -409,8 +416,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			// connections will be trimmed in this case, since we don't differentiate between incoming/outgoing
 			// when trimming)
 			in, _ := n.connectionStats()
-			inboundLimit := int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
-			if in < inboundLimit {
+			if in < n.inboundLimit() {
 				return // skip trim iteration
 			}
 			// we don't want to trim incoming connections as often as outgoing connections (since trimming

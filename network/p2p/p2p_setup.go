@@ -347,7 +347,7 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 
 func (n *p2pNetwork) atInboundLimit() bool {
 	in, _ := n.connectionStats()
-	inboundLimit := int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
+	inboundLimit := n.inboundLimit()
 	if in >= inboundLimit {
 		n.interfaceLogger.Debug(
 			"Preventing inbound connections due to reaching inbound limit",
@@ -359,6 +359,10 @@ func (n *p2pNetwork) atInboundLimit() bool {
 	}
 
 	return false
+}
+
+func (n *p2pNetwork) inboundLimit() int {
+	return int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
 }
 
 func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
