@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"time"
 
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -91,26 +90,22 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return fmt.Errorf("last seen block is not set")
 	}
 
+	return es.blockBelowThreashold(ctx, highestSeenBlock)
+}
+
+func (es *EventSyncer) blockBelowThreashold(ctx context.Context, block *big.Int) error {
 	// Check if the block is too old.
-	header, err := es.executionClient.(*executionclient.ExecutionClient).HeaderByNumber(ctx, highestSeenBlock)
+	header, err := es.executionClient.(*executionclient.ExecutionClient).HeaderByNumber(ctx, block)
 	if err != nil {
-		return fmt.Errorf("failed to get header for block %d: %w", highestSeenBlock, err)
+		return fmt.Errorf("failed to get header for block %d: %w", block, err)
 	}
 
-	if es.blockBelowThreashold(header) {
-		return fmt.Errorf("block %d is too old", highestSeenBlock)
+	// #nosec G115
+	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+		return fmt.Errorf("block %d is too old", block)
 	}
 
 	return nil
-}
-
-func (es *EventSyncer) blockBelowThreashold(header *ethtypes.Header) bool {
-	// #nosec G115
-	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
-		return true
-	}
-
-	return false
 }
 
 // SyncHistory reads and processes historical events since the given fromBlock.
@@ -141,14 +136,10 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	}
 
 	// Check if the block is too old.
-	b := big.NewInt(int64(es.lastProcessedBlock)) // #nosec G115
-	header, err := es.executionClient.(*executionclient.ExecutionClient).HeaderByNumber(ctx, b)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get header for block %d: %w", es.lastProcessedBlock, err)
-	}
-
-	if es.blockBelowThreashold(header) {
-		return 0, fmt.Errorf("block %d is too old", es.lastProcessedBlock)
+	// #nosec G115
+	b := big.NewInt(int64(es.lastProcessedBlock))
+	if err := es.blockBelowThreashold(ctx, b); err != nil {
+		return 0, err
 	}
 
 	es.logger.Info("finished syncing historical events",
