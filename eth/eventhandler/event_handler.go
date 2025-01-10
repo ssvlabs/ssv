@@ -151,7 +151,7 @@ func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionc
 			return nil, fmt.Errorf("set last processed block %d: %w", block.LastSeen, err)
 		}
 		if err := txn.Commit(); err != nil {
-			return nil, fmt.Errorf("commit transaction: %w", err)
+			return nil, fmt.Errorf("commit transaction for block %d: %w", block.LastSeen, err)
 		}
 		return nil, nil
 	}
