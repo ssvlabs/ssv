@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"time"
 
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -96,12 +97,20 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return fmt.Errorf("failed to get header for block %d: %w", highestSeenBlock, err)
 	}
 
-	// #nosec G115
-	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
-		return fmt.Errorf("block %d is too old", es.lastProcessedBlock)
+	if es.blockBelowThreashold(header) {
+		return fmt.Errorf("block %d is too old", highestSeenBlock)
 	}
 
 	return nil
+}
+
+func (es *EventSyncer) blockBelowThreashold(header *ethtypes.Header) bool {
+	// #nosec G115
+	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+		return true
+	}
+
+	return false
 }
 
 // SyncHistory reads and processes historical events since the given fromBlock.
@@ -137,8 +146,8 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	if err != nil {
 		return 0, fmt.Errorf("failed to get header for block %d: %w", es.lastProcessedBlock, err)
 	}
-	// #nosec G115
-	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+
+	if es.blockBelowThreashold(header) {
 		return 0, fmt.Errorf("block %d is too old", es.lastProcessedBlock)
 	}
 
