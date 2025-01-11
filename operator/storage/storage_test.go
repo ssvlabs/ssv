@@ -14,7 +14,9 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -52,6 +54,30 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 	require.True(t, true, found)
 	require.NoError(t, err)
 	require.Equal(t, parsedPrivKeyHash, extractedHash)
+}
+
+func TestLastSeenBlock(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	storage, err := NewNodeStorage(zap.NewNop(), db)
+	require.NoError(t, err)
+
+	_, found, err := storage.GetHighestSeenBlock(nil)
+	assert.False(t, found)
+	require.NoError(t, err)
+
+	got := big.NewInt(1)
+	err = storage.SaveHighestSeenBlock(nil, got)
+	require.NoError(t, err)
+
+	want, found, err := storage.GetHighestSeenBlock(nil)
+	assert.True(t, found)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
 }
 
 func TestDropRegistryData(t *testing.T) {
