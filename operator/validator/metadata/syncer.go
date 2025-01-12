@@ -24,7 +24,7 @@ const (
 	batchSize                = 512
 )
 
-type ValidatorSyncer struct {
+type Syncer struct {
 	logger            *zap.Logger
 	shareStorage      shareStorage
 	beaconNetwork     beacon.BeaconNetwork
@@ -50,8 +50,8 @@ func NewValidatorSyncer(
 	beaconNetwork beacon.BeaconNetwork,
 	beaconNode beacon.BeaconNode,
 	opts ...Option,
-) *ValidatorSyncer {
-	u := &ValidatorSyncer{
+) *Syncer {
+	u := &Syncer{
 		logger:            logger,
 		shareStorage:      shareStorage,
 		beaconNetwork:     beaconNetwork,
@@ -68,15 +68,15 @@ func NewValidatorSyncer(
 	return u
 }
 
-type Option func(*ValidatorSyncer)
+type Option func(*Syncer)
 
 func WithSyncInterval(interval time.Duration) Option {
-	return func(u *ValidatorSyncer) {
+	return func(u *Syncer) {
 		u.syncInterval = interval
 	}
 }
 
-func (u *ValidatorSyncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+func (u *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
 	// Load non-liquidated shares.
 	shares := u.shareStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
@@ -102,7 +102,7 @@ func (u *ValidatorSyncer) SyncOnStartup(ctx context.Context) (map[spectypes.Vali
 	return u.Sync(ctx, allPubKeys)
 }
 
-func (u *ValidatorSyncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
+func (u *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
 	fetchStart := time.Now()
 	metadata, err := u.fetcher.Fetch(ctx, pubKeys)
 	if err != nil {
@@ -130,11 +130,7 @@ func (u *ValidatorSyncer) Sync(ctx context.Context, pubKeys []spectypes.Validato
 	return metadata, nil
 }
 
-type ValidatorUpdate struct {
-	Validators ValidatorMap
-}
-
-func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorMap {
+func (u *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 	metadataUpdates := make(chan ValidatorMap)
 
 	go func() {
@@ -187,7 +183,7 @@ func (u *ValidatorSyncer) Stream(ctx context.Context) <-chan ValidatorMap {
 // It is used only by Stream method.
 // The maximal size is batchSize as we want to reduce the load while streaming.
 // Therefore, prepareUpdate should be called in a loop, so the rest will be prepared by next calls.
-func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) {
+func (u *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) {
 	// TODO: Methods called here don't handle context, so this is a workaround to handle done context. It should be removed once ctx is handled gracefully.
 	select {
 	case <-ctx.Done():
@@ -214,7 +210,7 @@ func (u *ValidatorSyncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool
 }
 
 // sharesBatchForUpdate returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (u *ValidatorSyncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SSVShare {
+func (u *Syncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SSVShare {
 	// TODO: use context, return if it's done
 	var staleShares, newShares []*ssvtypes.SSVShare
 	u.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
@@ -248,7 +244,7 @@ func (u *ValidatorSyncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SS
 	return shares
 }
 
-func (u *ValidatorSyncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
+func (u *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 	// TODO: use time.After when Go is updated to 1.23
 	timer := time.NewTimer(d)
 	defer timer.Stop()

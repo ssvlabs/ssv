@@ -122,7 +122,7 @@ func TestSyncer_Sync(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -148,7 +148,7 @@ func TestSyncer_Sync(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -171,7 +171,7 @@ func TestSyncer_Sync(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -197,7 +197,7 @@ func TestSyncer_Sync(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -226,7 +226,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		mockShareStorage := NewMockshareStorage(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 		}
@@ -249,7 +249,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		mockShareStorage := NewMockshareStorage(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 		}
@@ -295,7 +295,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -353,7 +353,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -411,7 +411,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		syncer := &ValidatorSyncer{
+		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
 			fetcher:      mockFetcher,
@@ -468,8 +468,8 @@ func TestSyncer_Stream(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		// ValidatorSyncer instance
-		syncer := &ValidatorSyncer{
+		// Syncer instance
+		syncer := &Syncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
 			fetcher:           mockFetcher,
@@ -563,8 +563,8 @@ func TestSyncer_Stream(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		// ValidatorSyncer instance
-		syncer := &ValidatorSyncer{
+		// Syncer instance
+		syncer := &Syncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
 			fetcher:           mockFetcher,
@@ -646,8 +646,8 @@ func TestSyncer_Stream(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockFetcher := NewMockfetcher(ctrl)
 
-		// ValidatorSyncer instance
-		syncer := &ValidatorSyncer{
+		// Syncer instance
+		syncer := &Syncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
 			fetcher:           mockFetcher,
@@ -714,7 +714,7 @@ func TestWithUpdateInterval(t *testing.T) {
 	// Define the interval we want to set
 	interval := testSyncInterval * 2
 
-	// Create an ValidatorSyncer with the WithSyncInterval option
+	// Create an Syncer with the WithSyncInterval option
 	syncer := NewValidatorSyncer(
 		logger,
 		mockShareStorage,
@@ -737,8 +737,8 @@ func TestSyncer_sleep(t *testing.T) {
 	// Initialize a no-operation logger to avoid actual logging during tests.
 	logger := zap.NewNop()
 
-	// Instantiate the ValidatorSyncer with the no-op logger.
-	syncer := &ValidatorSyncer{
+	// Instantiate the Syncer with the no-op logger.
+	syncer := &Syncer{
 		logger: logger,
 	}
 

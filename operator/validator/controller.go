@@ -83,7 +83,7 @@ type ControllerOptions struct {
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	NetworkConfig              networkconfig.NetworkConfig
-	ValidatorSyncer            *metadata.ValidatorSyncer
+	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
 
 	// worker flags
@@ -167,7 +167,7 @@ type controller struct {
 	committeeValidatorSetup chan struct{}
 	dutyGuard               *validator.CommitteeDutyGuard
 
-	metadataUpdater *metadata.ValidatorSyncer
+	metadataUpdater *metadata.Syncer
 
 	operatorsIDs         *sync.Map
 	network              P2PNetwork
