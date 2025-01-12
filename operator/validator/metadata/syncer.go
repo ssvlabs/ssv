@@ -84,26 +84,25 @@ func WithSyncInterval(interval time.Duration) Option {
 }
 
 func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
-	// Load non-liquidated shares.
-	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated())
-	if len(shares) == 0 {
-		s.logger.Info("could not find non-liquidated validator shares on initial metadata retrieval")
-		return nil, nil
-	}
-
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
+
+	// Load non-liquidated shares.
+	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated(), func(share *ssvtypes.SSVShare) bool {
+		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
+		subnet := subnetsBuf.Uint64()
+		return ownSubnets[subnet] != 0
+	})
+	if len(shares) == 0 {
+		s.logger.Info("could not find non-liquidated own subnets validator shares on initial metadata retrieval")
+		return nil, nil
+	}
 
 	// Skip syncing if metadata was already fetched before
 	// to prevent blocking startup after first sync.
 	needToSync := false
 	pubKeysToFetch := make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
-		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
-		subnet := subnetsBuf.Uint64()
-		if ownSubnets[subnet] == 0 {
-			continue
-		}
 		pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey)
 		if !share.HasBeaconMetadata() {
 			needToSync = true
