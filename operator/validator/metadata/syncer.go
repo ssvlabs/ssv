@@ -167,7 +167,7 @@ func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 		defer close(metadataUpdates)
 
 		for {
-			validators, done, err := s.prepareUpdate(ctx)
+			validators, done, err := s.syncNextBatch(ctx)
 			if err != nil {
 				s.logger.Warn("failed to prepare validators metadata",
 					zap.Error(err),
@@ -209,11 +209,11 @@ func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 	return metadataUpdates
 }
 
-// prepareUpdate prepares the next batch for update.
+// syncNextBatch syncs the next batch.
 // It is used only by Stream method.
 // The maximal size is batchSize as we want to reduce the load while streaming.
-// Therefore, prepareUpdate should be called in a loop, so the rest will be prepared by next calls.
-func (s *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) {
+// Therefore, syncNextBatch should be called in a loop, so the rest will be prepared by next calls.
+func (s *Syncer) syncNextBatch(ctx context.Context) (ValidatorMap, bool, error) {
 	// TODO: Methods called here don't handle context, so this is a workaround to handle done context. It should be removed once ctx is handled gracefully.
 	select {
 	case <-ctx.Done():
@@ -221,7 +221,7 @@ func (s *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) 
 	default:
 	}
 
-	shares := s.sharesBatchForUpdate(ctx)
+	shares := s.nextBatch(ctx)
 	if len(shares) == 0 {
 		return ValidatorMap{}, false, nil
 	}
@@ -239,8 +239,8 @@ func (s *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) 
 	return validators, len(shares) < batchSize, nil
 }
 
-// sharesBatchForUpdate returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (s *Syncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SSVShare {
+// nextBatch returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
+func (s *Syncer) nextBatch(_ context.Context) []*ssvtypes.SSVShare {
 	// TODO: use context, return if it's done
 	var staleShares, newShares []*ssvtypes.SSVShare
 	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
