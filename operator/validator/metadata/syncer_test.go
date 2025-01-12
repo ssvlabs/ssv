@@ -9,7 +9,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,18 +28,8 @@ const (
 	testUpdateSendTimeout = 3 * time.Millisecond
 )
 
-// This test is copied from validator controller (TestUpdateValidatorMetadata) and may require further refactoring.
+// This test is copied from validator controller (TestUpdateValidatorMetadata) with minor changes and may require further refactoring.
 func TestUpdateValidatorMetadata(t *testing.T) {
-	const (
-		sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-		sk2Str = "3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	)
-
-	secretKey := &bls.SecretKey{}
-	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
-
 	passedEpoch := phase0.Epoch(1)
 
 	operatorIDs := []uint64{1, 2, 3, 4}
@@ -53,17 +42,19 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
 
+	pubKey := spectypes.ValidatorPK{0x1}
+
 	testCases := []struct {
 		name             string
 		metadata         *beacon.ValidatorMetadata
 		sharesStorageErr error
 		testPublicKey    spectypes.ValidatorPK
 	}{
-		{"Empty metadata", nil, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Valid metadata", validatorMetadata, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Share wasn't found", validatorMetadata, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Share not belong to operator", validatorMetadata, nil, spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
-		{"Metadata with error", validatorMetadata, fmt.Errorf("error"), spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize())},
+		{"Empty metadata", nil, nil, pubKey},
+		{"Valid metadata", validatorMetadata, nil, pubKey},
+		{"Share wasn't found", validatorMetadata, nil, pubKey},
+		{"Share not belong to operator", validatorMetadata, nil, pubKey},
+		{"Metadata with error", validatorMetadata, fmt.Errorf("error"), pubKey},
 	}
 
 	for _, tc := range testCases {
