@@ -84,6 +84,8 @@ func (u *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 		return nil, nil
 	}
 
+	// Skip syncing if metadata was already fetched before
+	// to prevent blocking startup after first sync.
 	needToSync := false
 	allPubKeys := make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
@@ -92,9 +94,8 @@ func (u *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 			needToSync = true
 		}
 	}
-
 	if !needToSync {
-		// No need to fetch metadata if all shares have it. It's going to be updated by Stream method afterwards.
+		// Stream should take it over from here.
 		return nil, nil
 	}
 
