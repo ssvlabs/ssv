@@ -339,7 +339,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		assert.Equal(t, metadata, result)
 	})
 
-	// Subtest: ValidatorUpdate returns error
+	// Subtest: SyncBatch returns error
 	t.Run("UpdateError", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 
@@ -400,6 +400,8 @@ func TestSyncer_Stream(t *testing.T) {
 		for i, pk := range validatorPubKeys {
 			results[phase0.ValidatorIndex(i+1)] = &eth2apiv1.Validator{
 				Validator: &phase0.Validator{PublicKey: pk},
+				Index:     1,
+				Status:    eth2apiv1.ValidatorStateActiveOngoing,
 			}
 		}
 		return results, nil
@@ -431,8 +433,12 @@ func TestSyncer_Stream(t *testing.T) {
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
 			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{},
-				Liquidated:     false,
+				BeaconMetadata: &beacon.ValidatorMetadata{
+					Index:           1,
+					Status:          eth2apiv1.ValidatorStateActiveOngoing,
+					ActivationEpoch: 0,
+				},
+				Liquidated: false,
 			},
 		}
 
@@ -452,18 +458,24 @@ func TestSyncer_Stream(t *testing.T) {
 
 		// Read from updates channel using a goroutine
 		go func() {
-			validators, ok := <-updates
+			batch, ok := <-updates
 			if !ok {
 				t.Error("Updates channel was closed unexpectedly")
 				return
 			}
 
 			expected := ValidatorMap{
-				share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+				share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{
+					Index:           1,
+					Status:          eth2apiv1.ValidatorStateActiveOngoing,
+					ActivationEpoch: 0,
+				},
 			}
 
 			// Verify the update
-			assert.Equal(t, expected, validators)
+			assert.Equal(t, []phase0.ValidatorIndex{1}, batch.IndicesBefore)
+			assert.Equal(t, []phase0.ValidatorIndex{1}, batch.IndicesAfter)
+			assert.Equal(t, expected, batch.Validators)
 			// Signal that the update was received
 			close(updateSent)
 		}()
@@ -471,7 +483,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Wait for the update to be received or timeout
 		select {
 		case <-updateSent:
-			// ValidatorUpdate received, proceed to cancel the context
+			// SyncBatch received, proceed to cancel the context
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("Did not receive update in time")
 		}
@@ -547,7 +559,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Wait for the update attempt to complete or timeout
 		select {
 		case <-updateAttempted:
-			// ValidatorUpdate attempt completed, proceed to cancel the context
+			// SyncBatch attempt completed, proceed to cancel the context
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("Timeout waiting for update attempt")
 		}
@@ -608,7 +620,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Wait for the update attempt to complete or timeout
 		select {
 		case <-updateAttempted:
-			// ValidatorUpdate attempt completed, proceed to cancel the context
+			// SyncBatch attempt completed, proceed to cancel the context
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("Timeout waiting for update attempt")
 		}

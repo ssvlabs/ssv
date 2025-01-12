@@ -1013,6 +1013,19 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 
 }
 
+func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {
+	m := make(map[phase0.ValidatorIndex]struct{})
+	for _, v := range before {
+		m[v] = struct{}{}
+	}
+	for _, v := range after {
+		if _, ok := m[v]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
 func SetupCommitteeRunners(
 	ctx context.Context,
 	options validator.Options,

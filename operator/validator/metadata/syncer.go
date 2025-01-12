@@ -100,6 +100,12 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 	return s.Sync(ctx, allPubKeys)
 }
 
+type SyncBatch struct {
+	IndicesBefore []phase0.ValidatorIndex
+	IndicesAfter  []phase0.ValidatorIndex
+	Validators    ValidatorMap
+}
+
 type ValidatorMap = map[spectypes.ValidatorPK]*beacon.ValidatorMetadata
 
 func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
@@ -160,14 +166,14 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Vali
 	return results, nil
 }
 
-func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
-	metadataUpdates := make(chan ValidatorMap)
+func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
+	metadataUpdates := make(chan SyncBatch)
 
 	go func() {
 		defer close(metadataUpdates)
 
 		for {
-			validators, done, err := s.syncNextBatch(ctx)
+			batch, done, err := s.syncNextBatch(ctx)
 			if err != nil {
 				s.logger.Warn("failed to prepare validators metadata",
 					zap.Error(err),
@@ -178,7 +184,7 @@ func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 				continue
 			}
 
-			if len(validators) == 0 {
+			if len(batch.Validators) == 0 {
 				if slept := s.sleep(ctx, s.streamInterval); !slept {
 					return
 				}
@@ -188,7 +194,7 @@ func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 			// TODO: use time.After when Go is updated to 1.23
 			timer := time.NewTimer(s.updateSendTimeout)
 			select {
-			case metadataUpdates <- validators:
+			case metadataUpdates <- batch:
 				// Only sleep for the last batch.
 				if done {
 					if slept := s.sleep(ctx, s.streamInterval); !slept {
@@ -213,30 +219,40 @@ func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 // It is used only by Stream method.
 // The maximal size is batchSize as we want to reduce the load while streaming.
 // Therefore, syncNextBatch should be called in a loop, so the rest will be prepared by next calls.
-func (s *Syncer) syncNextBatch(ctx context.Context) (ValidatorMap, bool, error) {
+func (s *Syncer) syncNextBatch(ctx context.Context) (SyncBatch, bool, error) {
 	// TODO: Methods called here don't handle context, so this is a workaround to handle done context. It should be removed once ctx is handled gracefully.
 	select {
 	case <-ctx.Done():
-		return ValidatorMap{}, false, ctx.Err()
+		return SyncBatch{}, false, ctx.Err()
 	default:
 	}
 
 	shares := s.nextBatch(ctx)
 	if len(shares) == 0 {
-		return ValidatorMap{}, false, nil
+		return SyncBatch{}, false, nil
 	}
 
 	pubKeys := make([]spectypes.ValidatorPK, len(shares))
-	for i, s := range shares {
-		pubKeys[i] = s.ValidatorPubKey
+	for i, share := range shares {
+		pubKeys[i] = share.ValidatorPubKey
 	}
+
+	indicesBefore := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
 
 	validators, err := s.Sync(ctx, pubKeys)
 	if err != nil {
-		return ValidatorMap{}, false, fmt.Errorf("update metadata: %w", err)
+		return SyncBatch{}, false, fmt.Errorf("sync: %w", err)
 	}
 
-	return validators, len(shares) < batchSize, nil
+	indicesAfter := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
+
+	update := SyncBatch{
+		IndicesBefore: indicesBefore,
+		IndicesAfter:  indicesAfter,
+		Validators:    validators,
+	}
+
+	return update, len(shares) < batchSize, nil
 }
 
 // nextBatch returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
@@ -272,6 +288,21 @@ func (s *Syncer) nextBatch(_ context.Context) []*ssvtypes.SSVShare {
 		share.SetMetadataLastUpdated(time.Now())
 	}
 	return shares
+}
+
+// TODO: Create a wrapper for share storage that contains all common methods like AllActiveIndices and use the wrapper.
+func (s *Syncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase0.ValidatorIndex {
+	var indices []phase0.ValidatorIndex
+
+	// TODO: use context, return if it's done
+	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
+		if share.IsParticipating(epoch) {
+			indices = append(indices, share.BeaconMetadata.Index)
+		}
+		return true
+	})
+
+	return indices
 }
 
 func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
