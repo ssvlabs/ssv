@@ -919,6 +919,9 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
+	// TODO: Consider getting rid of `Stream` method because it adds complexity.
+	// Instead, metadataUpdater could return the next batch, which would be passed to handleMetadataUpdate afterwards.
+	// There doesn't seem to exist any logic that requires these processes to be parallel.
 	for validatorMap := range c.metadataUpdater.Stream(ctx) {
 		if err := c.handleMetadataUpdate(ctx, validatorMap); err != nil {
 			c.logger.Warn("could not handle metadata update", zap.Error(err))
