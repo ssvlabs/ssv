@@ -41,7 +41,7 @@ type shareStorage interface {
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error
 }
 
-func NewValidatorSyncer(
+func NewSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	beaconNetwork beacon.BeaconNetwork,

@@ -295,7 +295,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 
-		validatorSyncer := metadata.NewValidatorSyncer(
+		validatorSyncer := metadata.NewSyncer(
 			logger,
 			nodeStorage.Shares(),
 			networkConfig.Beacon,

@@ -92,9 +92,8 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			validatorSyncer := NewValidatorSyncer(logger, sharesStorage, networkconfig.TestNetwork.Beacon, beaconNode)
-
-			_, err := validatorSyncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
+			syncer := NewSyncer(logger, sharesStorage, networkconfig.TestNetwork.Beacon, beaconNode)
+			_, err := syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
 			} else {
@@ -640,7 +639,7 @@ func TestWithUpdateInterval(t *testing.T) {
 	interval := testSyncInterval * 2
 
 	// Create an Syncer with the WithSyncInterval option
-	syncer := NewValidatorSyncer(
+	syncer := NewSyncer(
 		logger,
 		mockShareStorage,
 		networkconfig.TestNetwork.Beacon,
