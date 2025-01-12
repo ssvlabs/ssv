@@ -76,11 +76,11 @@ func WithSyncInterval(interval time.Duration) Option {
 	}
 }
 
-func (u *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
 	// Load non-liquidated shares.
-	shares := u.shareStorage.List(nil, registrystorage.ByNotLiquidated())
+	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
-		u.logger.Info("could not find non-liquidated validator shares on initial metadata retrieval")
+		s.logger.Info("could not find non-liquidated validator shares on initial metadata retrieval")
 		return nil, nil
 	}
 
@@ -100,17 +100,17 @@ func (u *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 	}
 
 	// Sync all pubkeys. We don't need to batch them because we need to wait here until all of them are synced.
-	return u.Sync(ctx, allPubKeys)
+	return s.Sync(ctx, allPubKeys)
 }
 
-func (u *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
+func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
 	fetchStart := time.Now()
-	metadata, err := u.fetcher.Fetch(ctx, pubKeys)
+	metadata, err := s.fetcher.Fetch(ctx, pubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
 
-	u.logger.Debug("🆕 fetched metadata for validator shares",
+	s.logger.Debug("🆕 fetched metadata for validator shares",
 		fields.Took(time.Since(fetchStart)),
 		zap.Int("metadata_cnt", len(metadata)),
 		zap.Int("shares_cnt", len(pubKeys)),
@@ -118,11 +118,11 @@ func (u *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
-	if err := u.shareStorage.UpdateValidatorsMetadata(metadata); err != nil {
+	if err := s.shareStorage.UpdateValidatorsMetadata(metadata); err != nil {
 		return metadata, fmt.Errorf("update metadata: %w", err)
 	}
 
-	u.logger.Debug("🆕 updated validators metadata in storage",
+	s.logger.Debug("🆕 updated validators metadata in storage",
 		fields.Took(time.Since(updateStart)),
 		zap.Int("metadata_count", len(metadata)),
 		zap.Int("shares_cnt", len(pubKeys)),
@@ -131,38 +131,38 @@ func (u *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 	return metadata, nil
 }
 
-func (u *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
+func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 	metadataUpdates := make(chan ValidatorMap)
 
 	go func() {
 		defer close(metadataUpdates)
 
 		for {
-			validators, done, err := u.prepareUpdate(ctx)
+			validators, done, err := s.prepareUpdate(ctx)
 			if err != nil {
-				u.logger.Warn("failed to prepare validators metadata",
+				s.logger.Warn("failed to prepare validators metadata",
 					zap.Error(err),
 				)
-				if slept := u.sleep(ctx, u.streamInterval); !slept {
+				if slept := s.sleep(ctx, s.streamInterval); !slept {
 					return
 				}
 				continue
 			}
 
 			if len(validators) == 0 {
-				if slept := u.sleep(ctx, u.streamInterval); !slept {
+				if slept := s.sleep(ctx, s.streamInterval); !slept {
 					return
 				}
 				continue
 			}
 
 			// TODO: use time.After when Go is updated to 1.23
-			timer := time.NewTimer(u.updateSendTimeout)
+			timer := time.NewTimer(s.updateSendTimeout)
 			select {
 			case metadataUpdates <- validators:
 				// Only sleep for the last batch.
 				if done {
-					if slept := u.sleep(ctx, u.streamInterval); !slept {
+					if slept := s.sleep(ctx, s.streamInterval); !slept {
 						timer.Stop()
 						return
 					}
@@ -171,7 +171,7 @@ func (u *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 				timer.Stop()
 				return
 			case <-timer.C:
-				u.logger.Warn("timed out waiting for sending update")
+				s.logger.Warn("timed out waiting for sending update")
 			}
 			timer.Stop()
 		}
@@ -184,7 +184,7 @@ func (u *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {
 // It is used only by Stream method.
 // The maximal size is batchSize as we want to reduce the load while streaming.
 // Therefore, prepareUpdate should be called in a loop, so the rest will be prepared by next calls.
-func (u *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) {
+func (s *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) {
 	// TODO: Methods called here don't handle context, so this is a workaround to handle done context. It should be removed once ctx is handled gracefully.
 	select {
 	case <-ctx.Done():
@@ -192,7 +192,7 @@ func (u *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) 
 	default:
 	}
 
-	shares := u.sharesBatchForUpdate(ctx)
+	shares := s.sharesBatchForUpdate(ctx)
 	if len(shares) == 0 {
 		return ValidatorMap{}, false, nil
 	}
@@ -202,7 +202,7 @@ func (u *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) 
 		pubKeys[i] = s.ValidatorPubKey
 	}
 
-	validators, err := u.Sync(ctx, pubKeys)
+	validators, err := s.Sync(ctx, pubKeys)
 	if err != nil {
 		return ValidatorMap{}, false, fmt.Errorf("update metadata: %w", err)
 	}
@@ -211,15 +211,15 @@ func (u *Syncer) prepareUpdate(ctx context.Context) (ValidatorMap, bool, error) 
 }
 
 // sharesBatchForUpdate returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (u *Syncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SSVShare {
+func (s *Syncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SSVShare {
 	// TODO: use context, return if it's done
 	var staleShares, newShares []*ssvtypes.SSVShare
-	u.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
+	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 		if share.Liquidated {
 			return true
 		}
 
-		shareMetadataStaleAfter := u.syncInterval
+		shareMetadataStaleAfter := s.syncInterval
 		// also check last metadata update to differentiate new shares from stale ones
 		if !share.HasBeaconMetadata() && share.MetadataLastUpdated().IsZero() {
 			newShares = append(newShares, share)
@@ -245,7 +245,7 @@ func (u *Syncer) sharesBatchForUpdate(_ context.Context) []*ssvtypes.SSVShare {
 	return shares
 }
 
-func (u *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
+func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 	// TODO: use time.After when Go is updated to 1.23
 	timer := time.NewTimer(d)
 	defer timer.Stop()
