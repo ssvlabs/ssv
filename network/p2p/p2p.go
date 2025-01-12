@@ -284,7 +284,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 	}()
 	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
-	async.Interval(n.ctx, 30*time.Second, func() {
+	async.Interval(n.ctx, 15*time.Second, func() {
 		// give discovery some time to find best peers it can since node start
 		if time.Since(p2pStartTime) < 5*time.Minute {
 			return
@@ -309,7 +309,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// of CPU/GC overhead, should we optimize this ?
 		priorityQueue := lane.NewMaxPriorityQueue[peers.DiscoveredPeer, float64]()
 		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
-			const retryLimit = 3
+			const retryLimit = 2
 			if item.Value().ConnectRetries >= retryLimit {
 				// this discovered peer has been tried many times already, we'll ignore him but won't
 				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
