@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -28,7 +29,7 @@ type Syncer struct {
 	logger            *zap.Logger
 	shareStorage      shareStorage
 	beaconNetwork     beacon.BeaconNetwork
-	fetcher           fetcher
+	beaconNode        beacon.BeaconNode
 	syncInterval      time.Duration
 	streamInterval    time.Duration
 	updateSendTimeout time.Duration
@@ -38,10 +39,6 @@ type shareStorage interface {
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error
-}
-
-type fetcher interface {
-	Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error)
 }
 
 func NewValidatorSyncer(
@@ -55,7 +52,7 @@ func NewValidatorSyncer(
 		logger:            logger,
 		shareStorage:      shareStorage,
 		beaconNetwork:     beaconNetwork,
-		fetcher:           NewFetcher(logger, beaconNode),
+		beaconNode:        beaconNode,
 		syncInterval:      defaultSyncInterval,
 		streamInterval:    defaultStreamInterval,
 		updateSendTimeout: defaultUpdateSendTimeout,
@@ -103,9 +100,11 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 	return s.Sync(ctx, allPubKeys)
 }
 
+type ValidatorMap = map[spectypes.ValidatorPK]*beacon.ValidatorMetadata
+
 func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
 	fetchStart := time.Now()
-	metadata, err := s.fetcher.Fetch(ctx, pubKeys)
+	metadata, err := s.Fetch(ctx, pubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
@@ -129,6 +128,36 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 	)
 
 	return metadata, nil
+}
+
+func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
+	if len(pubKeys) == 0 {
+		return nil, nil
+	}
+
+	var blsPubKeys []phase0.BLSPubKey
+	for _, pk := range pubKeys {
+		blsPubKeys = append(blsPubKeys, phase0.BLSPubKey(pk))
+	}
+
+	// TODO: Refactor beacon.BeaconNode to support passing context.
+	validatorsIndexMap, err := s.beaconNode.GetValidatorData(blsPubKeys)
+	if err != nil {
+		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
+	}
+
+	results := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, len(validatorsIndexMap))
+	for _, v := range validatorsIndexMap {
+		meta := &beacon.ValidatorMetadata{
+			Balance:         v.Balance,
+			Status:          v.Status,
+			Index:           v.Index,
+			ActivationEpoch: v.Validator.ActivationEpoch,
+		}
+		results[spectypes.ValidatorPK(v.Validator.PublicKey)] = meta
+	}
+
+	return results, nil
 }
 
 func (s *Syncer) Stream(ctx context.Context) <-chan ValidatorMap {

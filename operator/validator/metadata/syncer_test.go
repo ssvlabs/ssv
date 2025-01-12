@@ -115,17 +115,30 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 func TestSyncer_Sync(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	logger := zap.NewNop()
+
+	defaultMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+		results := map[phase0.ValidatorIndex]*eth2apiv1.Validator{}
+		for i, pk := range validatorPubKeys {
+			results[phase0.ValidatorIndex(i+1)] = &eth2apiv1.Validator{
+				Validator: &phase0.Validator{PublicKey: pk},
+			}
+		}
+		return results, nil
+	}).AnyTimes()
 
 	// Subtest: Successful update
 	t.Run("Success", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil)
 
 		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
-			fetcher:      mockFetcher,
+			beaconNode:   defaultMockBeaconNode,
 		}
 
 		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
@@ -134,11 +147,7 @@ func TestSyncer_Sync(t *testing.T) {
 			pubKeys[1]: &beacon.ValidatorMetadata{},
 		}
 
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
-
 		result, err := syncer.Sync(context.Background(), pubKeys)
-
 		require.NoError(t, err)
 		require.Equal(t, metadata, result)
 	})
@@ -146,22 +155,22 @@ func TestSyncer_Sync(t *testing.T) {
 	// Subtest: Fetch error
 	t.Run("FetchError", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
+		// UpdateValidatorsMetadata should not be called in this case
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Times(0)
+
+		errMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+			return nil, fmt.Errorf("fetch error")
+		})
 
 		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
-			fetcher:      mockFetcher,
+			beaconNode:   errMockBeaconNode,
 		}
 
 		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
-
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error"))
-		// UpdateValidatorsMetadata should not be called in this case
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Times(0)
-
 		result, err := syncer.Sync(context.Background(), pubKeys)
-
 		assert.Error(t, err)
 		assert.Nil(t, result)
 	})
@@ -169,12 +178,12 @@ func TestSyncer_Sync(t *testing.T) {
 	// Subtest: UpdateValidatorsMetadata error
 	t.Run("UpdateValidatorsMetadataError", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(fmt.Errorf("update error"))
 
 		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
-			fetcher:      mockFetcher,
+			beaconNode:   defaultMockBeaconNode,
 		}
 
 		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
@@ -183,11 +192,7 @@ func TestSyncer_Sync(t *testing.T) {
 			pubKeys[1]: &beacon.ValidatorMetadata{},
 		}
 
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(fmt.Errorf("update error"))
-
 		result, err := syncer.Sync(context.Background(), pubKeys)
-
 		assert.Error(t, err)
 		assert.Equal(t, metadata, result)
 	})
@@ -195,35 +200,44 @@ func TestSyncer_Sync(t *testing.T) {
 	// Subtest: Empty pubKeys
 	t.Run("EmptyPubKeys", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil)
+
+		unusedMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+		// GetValidatorData should not be called in this case
+		unusedMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).Times(0)
 
 		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
-			fetcher:      mockFetcher,
+			beaconNode:   unusedMockBeaconNode,
 		}
 
 		pubKeys := []spectypes.ValidatorPK{}
-		metadata := ValidatorMap{}
-
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
-
 		result, err := syncer.Sync(context.Background(), pubKeys)
-
 		assert.NoError(t, err)
-		assert.Equal(t, metadata, result)
+		assert.Nil(t, result)
 	})
 }
 
 func TestSyncer_UpdateOnStartup(t *testing.T) {
 	logger := zap.NewNop()
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	defaultMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+		results := map[phase0.ValidatorIndex]*eth2apiv1.Validator{}
+		for i, pk := range validatorPubKeys {
+			results[phase0.ValidatorIndex(i+1)] = &eth2apiv1.Validator{
+				Validator: &phase0.Validator{PublicKey: pk},
+			}
+		}
+		return results, nil
+	}).AnyTimes()
+
 	// Subtest: No shares returned by shareStorage.List
 	t.Run("NoShares", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		mockShareStorage := NewMockshareStorage(ctrl)
 
 		syncer := &Syncer{
@@ -244,9 +258,6 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 	// Subtest: All shares are non-liquidated and have BeaconMetadata
 	t.Run("AllSharesHaveMetadata", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		mockShareStorage := NewMockshareStorage(ctrl)
 
 		syncer := &Syncer{
@@ -289,16 +300,12 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 	// Subtest: At least one share lacks BeaconMetadata
 	t.Run("ShareLacksBeaconMetadata", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
 
 		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
-			fetcher:      mockFetcher,
+			beaconNode:   defaultMockBeaconNode,
 		}
 
 		// Create shares
@@ -326,74 +333,13 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		// Set expectations
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
 
-		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
-
 		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
 		metadata := ValidatorMap{
 			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
 			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
 		}
 
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
-
-		// Call method
-		result, err := syncer.SyncOnStartup(context.Background())
-
-		// Assert
-		assert.NoError(t, err)
-		assert.Equal(t, metadata, result)
-	})
-
-	// Subtest: At least one share lacks BeaconMetadata
-	t.Run("ShareLacksBeaconMetadata", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
-
-		syncer := &Syncer{
-			logger:       logger,
-			shareStorage: mockShareStorage,
-			fetcher:      mockFetcher,
-		}
-
-		// Create shares
-		share1 := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK{0x1},
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{},
-				Liquidated:     false,
-			},
-		}
-		share2 := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK{0x2},
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: nil, // Lacks BeaconMetadata
-				Liquidated:     false,
-			},
-		}
-
-		shares := []*ssvtypes.SSVShare{share1, share2}
-
-		// Set expectations
-		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
-
-		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
-
-		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
-		metadata := ValidatorMap{
-			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
-			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
-		}
-
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil)
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil)
 
 		// Call method
 		result, err := syncer.SyncOnStartup(context.Background())
@@ -405,16 +351,17 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 	// Subtest: ValidatorUpdate returns error
 	t.Run("UpdateError", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
+
+		errMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+			return nil, fmt.Errorf("error")
+		})
 
 		syncer := &Syncer{
 			logger:       logger,
 			shareStorage: mockShareStorage,
-			fetcher:      mockFetcher,
+			beaconNode:   errMockBeaconNode,
 		}
 
 		// Create shares
@@ -441,11 +388,6 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		// Set expectations
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
-
-		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey, share2.Share.ValidatorPubKey}
-
-		// Mock fetcher.Fetch to return an error
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error"))
 
 		// Call method
 		result, err := syncer.SyncOnStartup(context.Background())
@@ -459,20 +401,30 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 func TestSyncer_Stream(t *testing.T) {
 	logger := zap.NewNop()
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	defaultMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+		results := map[phase0.ValidatorIndex]*eth2apiv1.Validator{}
+		for i, pk := range validatorPubKeys {
+			results[phase0.ValidatorIndex(i+1)] = &eth2apiv1.Validator{
+				Validator: &phase0.Validator{PublicKey: pk},
+			}
+		}
+		return results, nil
+	}).AnyTimes()
+
 	// Subtest: Stream sends updates and stops when context is canceled
 	t.Run("SendsUpdatesAndStopsOnContextCancel", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		// Mocks
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
 
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
-			fetcher:           mockFetcher,
+			beaconNode:        defaultMockBeaconNode,
 			beaconNetwork:     networkconfig.TestNetwork.Beacon,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
@@ -489,12 +441,8 @@ func TestSyncer_Stream(t *testing.T) {
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
 			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Index:           1,
-					Status:          eth2apiv1.ValidatorStateActiveOngoing,
-					ActivationEpoch: 0,
-				},
-				Liquidated: false,
+				BeaconMetadata: &beacon.ValidatorMetadata{},
+				Liquidated:     false,
 			},
 		}
 
@@ -506,19 +454,8 @@ func TestSyncer_Stream(t *testing.T) {
 			fn(share1)
 		}).AnyTimes()
 
-		// Mock fetcher.Fetch
-		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey}
-		metadata := ValidatorMap{
-			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{
-				Index:           1,
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
-				ActivationEpoch: 0,
-			},
-		}
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(metadata, nil).AnyTimes()
-
 		// Mock shareStorage.UpdateValidatorsMetadata
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(metadata).Return(nil).AnyTimes()
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 
 		// Start Stream
 		updates := syncer.Stream(ctx)
@@ -530,8 +467,13 @@ func TestSyncer_Stream(t *testing.T) {
 				t.Error("Updates channel was closed unexpectedly")
 				return
 			}
+
+			expected := ValidatorMap{
+				share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			}
+
 			// Verify the update
-			assert.Equal(t, metadata, validators)
+			assert.Equal(t, expected, validators)
 			// Signal that the update was received
 			close(updateSent)
 		}()
@@ -556,18 +498,19 @@ func TestSyncer_Stream(t *testing.T) {
 
 	// Subtest: Stream handles errors from prepareUpdate
 	t.Run("HandlesSendUpdateError", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		// Mocks
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
+
+		errMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+			return nil, fmt.Errorf("fetch error")
+		}).AnyTimes()
 
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
-			fetcher:           mockFetcher,
+			beaconNode:        errMockBeaconNode,
 			beaconNetwork:     networkconfig.TestNetwork.Beacon,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
@@ -584,12 +527,8 @@ func TestSyncer_Stream(t *testing.T) {
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
 			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Index:           1,
-					Status:          eth2apiv1.ValidatorStateActiveOngoing,
-					ActivationEpoch: 0,
-				},
-				Liquidated: false,
+				BeaconMetadata: &beacon.ValidatorMetadata{},
+				Liquidated:     false,
 			},
 		}
 
@@ -597,10 +536,6 @@ func TestSyncer_Stream(t *testing.T) {
 		mockShareStorage.EXPECT().Range(nil, gomock.Any()).DoAndReturn(func(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool) {
 			fn(share1)
 		}).AnyTimes()
-
-		// Mock fetcher.Fetch to return an error
-		pubKeys := []spectypes.ValidatorPK{share1.Share.ValidatorPubKey}
-		mockFetcher.EXPECT().Fetch(gomock.Any(), pubKeys).Return(nil, fmt.Errorf("fetch error")).AnyTimes()
 
 		// Start Stream
 		updates := syncer.Stream(ctx)
@@ -644,13 +579,12 @@ func TestSyncer_Stream(t *testing.T) {
 
 		// Mocks
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockFetcher := NewMockfetcher(ctrl)
 
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
 			shareStorage:      mockShareStorage,
-			fetcher:           mockFetcher,
+			beaconNode:        defaultMockBeaconNode,
 			beaconNetwork:     networkconfig.TestNetwork.Beacon,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
