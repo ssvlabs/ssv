@@ -13,7 +13,7 @@ const (
 	clockErrorTolerance     = time.Millisecond * 50
 	allowedRoundsInFuture   = 1
 	allowedRoundsInPast     = 2
-	lateSlotAllowance       = 2
+	LateSlotAllowance       = 2
 	syncCommitteeSize       = 512
 	rsaSignatureSize        = 256
 	operatorIDSize          = 8 // uint64
