@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/libp2p/go-libp2p/core/host"
 	"math/rand"
 	"net"
 	"strings"
@@ -46,7 +47,7 @@ const (
 	// connectTimeout is the timeout used for connections
 	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
-	connectorQueueSize = 256
+	connectorQueueSize = 1024
 	// inboundLimitRatio is the ratio of inbound connections to the total connections
 	// we allow (both inbound and outbound).
 	inboundLimitRatio = float64(0.5)
@@ -366,10 +367,11 @@ func (n *p2pNetwork) inboundLimit() int {
 }
 
 func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
-	for _, cn := range n.host.Network().Conns() {
-		if n.host.Network().Connectedness(cn.RemotePeer()) != network.Connected {
-			continue
-		}
+	return connectionStats(n.host)
+}
+
+func connectionStats(host host.Host) (inbound, outbound int) {
+	for _, cn := range host.Network().Conns() {
 		dir := cn.Stat().Direction
 		if dir == network.DirUnknown {
 			continue // TODO: how can it happen?

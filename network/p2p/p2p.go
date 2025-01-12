@@ -227,6 +227,8 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start(logger *zap.Logger) error {
+	p2pStartTime := time.Now()
+
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
@@ -261,8 +263,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// keep discovered peers in the pool so we can choose the best ones
 		for proposal := range connectorProposals {
 			if peers.DiscoveredPeersPool.Has(proposal.ID) {
-				// TODO
-				n.interfaceLogger.Info(
+				// TODO - comment out
+				// this log line is commented out as it is too spammy
+				n.interfaceLogger.Debug(
 					"this proposal is already on the table",
 					zap.String("peer_id", string(proposal.ID)),
 				)
@@ -274,8 +277,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 			peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer, ttlcache.DefaultTTL)
 
-			// TODO
-			n.interfaceLogger.Info(
+			n.interfaceLogger.Debug(
 				"discovered new peer",
 				zap.String("peer_id", string(proposal.ID)),
 			)
@@ -283,14 +285,19 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	}()
 	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
 	async.Interval(n.ctx, 30*time.Second, func() {
+		// give discovery some time to find best peers it can since node start
+		if time.Since(p2pStartTime) < 5*time.Minute {
+			return
+		}
+
 		// see how many vacant slots (for outbound connections) we have, note that we always
 		// prefer outbound connections over inbound and hence we check against MaxPeers and
 		// not some outbound-specific limit value (we don't even define such a value)
 		inbound, outbound := n.connectionStats()
 		vacantOutboundSlotCnt := n.cfg.MaxPeers - (inbound + outbound)
 		if vacantOutboundSlotCnt <= 0 {
-			n.interfaceLogger.Info(
-				"Not gonna propose discovered peers: ran out of peer slots",
+			n.interfaceLogger.Debug(
+				"Not gonna propose discovered peers: ran out of vacant peer slots",
 				zap.Int("inbound_peers", inbound),
 				zap.Int("outbound_peers", outbound),
 				zap.Int("max_peers", n.cfg.MaxPeers),
@@ -307,13 +314,12 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				// this discovered peer has been tried many times already, we'll ignore him but won't
 				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
 				// peer again (essentially resetting this peer's retry attempts counter to 0)
-
-				// TODO
-				n.interfaceLogger.Info(
+				// TODO - comment out ??
+				// this log line is commented out as it is too spammy
+				n.interfaceLogger.Debug(
 					"Not gonna propose discovered peer: ran out of retries",
 					zap.String("peer_id", string(item.Key())),
 				)
-
 				return true
 			}
 			proposalScore := n.peerScore(item.Key())
