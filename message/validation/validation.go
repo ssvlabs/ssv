@@ -37,6 +37,7 @@ type messageValidator struct {
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
+	operatorStore         storage.Operators
 	dutyStore             *dutystore.Store
 	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
@@ -53,6 +54,7 @@ type messageValidator struct {
 func New(
 	netCfg networkconfig.NetworkConfig,
 	validatorStore storage.ValidatorStore,
+	operatorStore storage.Operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	opts ...Option,
@@ -63,6 +65,7 @@ func New(
 		consensusStateIndex: make(map[consensusID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
 		validatorStore:      validatorStore,
+		operatorStore:       operatorStore,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
 	}
@@ -140,6 +143,16 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 
 	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
 		return decodedMessage, err
+	}
+
+	exist, err := mv.operatorStore.OperatorsExist(nil, signedSSVMessage.OperatorIDs)
+	if err != nil {
+		return decodedMessage, fmt.Errorf("check operators existance: %w", err)
+	}
+	if !exist {
+		e := ErrUnknownOperator
+		e.got = signedSSVMessage.OperatorIDs
+		return decodedMessage, e
 	}
 
 	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())

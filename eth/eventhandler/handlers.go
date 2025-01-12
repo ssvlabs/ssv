@@ -73,6 +73,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	if err != nil {
 		return fmt.Errorf("could not get operator data by public key: %w", err)
 	}
+
 	if pubkeyExists {
 		logger.Warn("malformed event: operator public key already exists",
 			fields.OperatorPubKey(operatorData.PublicKey))
@@ -83,9 +84,48 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	if err != nil {
 		return fmt.Errorf("save operator data: %w", err)
 	}
+
 	if exists {
 		logger.Debug("operator data already exists")
 		return nil
+	}
+
+	var modifiedShares []*ssvtypes.SSVShare
+	for _, share := range eh.nodeStorage.Shares().List(txn, registrystorage.ByOperatorID(event.OperatorId)) {
+		if !share.Liquidated {
+			// Skip non-liquidated shares since they are already active.
+			// A share may become liquidated on OperatorRemoved or ClusterLiquidated events.
+			// On ValidatorRemoved the share is removed from the storage, so it won't be reactivated on OperatorAdded.
+			continue
+		}
+
+		var existingOperatorsCount uint64
+		for _, shareMember := range share.Committee {
+			if shareMember.Signer == event.OperatorId {
+				existingOperatorsCount++
+				continue
+			}
+
+			_, ok, err := eh.nodeStorage.GetOperatorData(txn, shareMember.Signer)
+			if err != nil {
+				return fmt.Errorf("get operator data: %w", err)
+			}
+
+			if ok {
+				existingOperatorsCount++
+			}
+		}
+
+		if existingOperatorsCount >= share.Quorum() {
+			share.Liquidated = false
+			modifiedShares = append(modifiedShares, share)
+		}
+	}
+
+	if len(modifiedShares) > 0 {
+		if err := eh.nodeStorage.Shares().Save(txn, modifiedShares...); err != nil {
+			return fmt.Errorf("save shares: %w", err)
+		}
 	}
 
 	if bytes.Equal(event.PublicKey, eh.operatorDataStore.GetOperatorData().PublicKey) {
@@ -120,7 +160,27 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		fields.Owner(od.OwnerAddress),
 	)
 
-	// This function is currently no-op and it will do nothing. Operator removed event is not used in the current implementation.
+	if err := eh.nodeStorage.DeleteOperatorData(txn, od.ID); err != nil {
+		return fmt.Errorf("delete operator data: %w", err)
+	}
+
+	var modifiedShares []*ssvtypes.SSVShare
+	for _, share := range eh.nodeStorage.Shares().List(txn, registrystorage.ByOperatorID(event.OperatorId)) {
+		exists, err := eh.nodeStorage.QuorumExists(txn, share.OperatorIDs(), share.Quorum())
+		if err != nil {
+			return fmt.Errorf("check if operator exists: %w", err)
+		}
+		if !exists {
+			share.Liquidated = true
+			modifiedShares = append(modifiedShares, share)
+		}
+	}
+
+	if len(modifiedShares) > 0 {
+		if err := eh.nodeStorage.Shares().Save(txn, modifiedShares...); err != nil {
+			return fmt.Errorf("save shares: %w", err)
+		}
+	}
 
 	logger.Debug("processed event")
 	return nil
