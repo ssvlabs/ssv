@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -94,8 +95,11 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork.Beacon, beaconNode)
-			_, err := syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
+			noSubnets, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
+			require.NoError(t, err)
+
+			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork.Beacon, beaconNode, noSubnets)
+			_, err = syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
 			} else {
@@ -241,6 +245,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		// Set expectations
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return([]*ssvtypes.SSVShare{})
+		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{}).AnyTimes()
 
 		// Call method
 		result, err := syncer.SyncOnStartup(context.Background())
@@ -676,6 +681,9 @@ func TestWithUpdateInterval(t *testing.T) {
 	// Define the interval we want to set
 	interval := testSyncInterval * 2
 
+	noSubnets, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
+	require.NoError(t, err)
+
 	// Create an Syncer with the WithSyncInterval option
 	syncer := NewSyncer(
 		logger,
@@ -683,6 +691,7 @@ func TestWithUpdateInterval(t *testing.T) {
 		mockValidatorStore,
 		networkconfig.TestNetwork.Beacon,
 		mockBeaconNode,
+		noSubnets,
 		WithSyncInterval(interval),
 	)
 

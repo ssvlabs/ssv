@@ -34,6 +34,7 @@ type Syncer struct {
 	validatorStore    selfValidatorStore
 	beaconNetwork     beacon.BeaconNetwork
 	beaconNode        beacon.BeaconNode
+	fixedSubnets      records.Subnets
 	syncInterval      time.Duration
 	streamInterval    time.Duration
 	updateSendTimeout time.Duration
@@ -55,6 +56,7 @@ func NewSyncer(
 	validatorStore selfValidatorStore,
 	beaconNetwork beacon.BeaconNetwork,
 	beaconNode beacon.BeaconNode,
+	fixedSubnets records.Subnets,
 	opts ...Option,
 ) *Syncer {
 	u := &Syncer{
@@ -63,6 +65,7 @@ func NewSyncer(
 		validatorStore:    validatorStore,
 		beaconNetwork:     beaconNetwork,
 		beaconNode:        beaconNode,
+		fixedSubnets:      fixedSubnets,
 		syncInterval:      defaultSyncInterval,
 		streamInterval:    defaultStreamInterval,
 		updateSendTimeout: defaultUpdateSendTimeout,
@@ -354,8 +357,11 @@ func (s *Syncer) selfSubnets(buf *big.Int) records.Subnets {
 		localBuf = new(big.Int)
 	}
 
-	myValidators := s.validatorStore.SelfValidators()
 	mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+	copy(mySubnets, s.fixedSubnets)
+
+	// Compute the new subnets according to the active committees/validators.
+	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
 		networkcommons.SetCommitteeSubnet(localBuf, v.CommitteeID())
 		mySubnets[localBuf.Uint64()] = 1
