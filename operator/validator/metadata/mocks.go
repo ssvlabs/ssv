@@ -88,3 +88,41 @@ func (mr *MockshareStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockshareStorage)(nil).UpdateValidatorsMetadata), arg0)
 }
+
+// MockselfValidatorStore is a mock of selfValidatorStore interface.
+type MockselfValidatorStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockselfValidatorStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockselfValidatorStoreMockRecorder is the mock recorder for MockselfValidatorStore.
+type MockselfValidatorStoreMockRecorder struct {
+	mock *MockselfValidatorStore
+}
+
+// NewMockselfValidatorStore creates a new mock instance.
+func NewMockselfValidatorStore(ctrl *gomock.Controller) *MockselfValidatorStore {
+	mock := &MockselfValidatorStore{ctrl: ctrl}
+	mock.recorder = &MockselfValidatorStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockselfValidatorStore) EXPECT() *MockselfValidatorStoreMockRecorder {
+	return m.recorder
+}
+
+// SelfValidators mocks base method.
+func (m *MockselfValidatorStore) SelfValidators() []*types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SelfValidators")
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	return ret0
+}
+
+// SelfValidators indicates an expected call of SelfValidators.
+func (mr *MockselfValidatorStoreMockRecorder) SelfValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfValidators", reflect.TypeOf((*MockselfValidatorStore)(nil).SelfValidators))
+}

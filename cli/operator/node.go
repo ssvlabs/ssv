@@ -298,6 +298,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorSyncer := metadata.NewSyncer(
 			logger,
 			nodeStorage.Shares(),
+			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
 			networkConfig.Beacon,
 			consensusClient,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
