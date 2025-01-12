@@ -167,7 +167,7 @@ type controller struct {
 	committeeValidatorSetup chan struct{}
 	dutyGuard               *validator.CommitteeDutyGuard
 
-	metadataUpdater *metadata.Syncer
+	validatorSyncer *metadata.Syncer
 
 	operatorsIDs         *sync.Map
 	network              P2PNetwork
@@ -248,7 +248,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
 
-		metadataUpdater: options.ValidatorSyncer,
+		validatorSyncer: options.ValidatorSyncer,
 
 		operatorsIDs: operatorsIDs,
 
@@ -577,7 +577,7 @@ func (c *controller) startValidatorsForMetadata(_ context.Context, validators me
 			}
 			if started {
 				startedValidators++
-				c.logger.Debug("started share after metadata update", zap.Bool("started", started))
+				c.logger.Debug("started share after metadata sync", zap.Bool("started", started))
 			}
 		}
 	}
@@ -920,23 +920,23 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
 	// TODO: Consider getting rid of `Stream` method because it adds complexity.
-	// Instead, metadataUpdater could return the next batch, which would be passed to handleMetadataUpdate afterwards.
+	// Instead, validatorSyncer could return the next batch, which would be passed to handleMetadataUpdate afterwards.
 	// There doesn't seem to exist any logic that requires these processes to be parallel.
-	for validatorMap := range c.metadataUpdater.Stream(ctx) {
-		if err := c.handleMetadataUpdate(ctx, validatorMap); err != nil {
-			c.logger.Warn("could not handle metadata update", zap.Error(err))
+	for syncBatch := range c.validatorSyncer.Stream(ctx) {
+		if err := c.handleMetadataUpdate(ctx, syncBatch); err != nil {
+			c.logger.Warn("could not handle metadata sync", zap.Error(err))
 		}
 	}
 }
 
-func (c *controller) handleMetadataUpdate(ctx context.Context, validatorMap metadata.ValidatorMap) error {
+func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadata.SyncBatch) error {
 	startedValidators := 0
 	if c.operatorDataStore.GetOperatorID() != 0 {
-		startedValidators = c.startValidatorsForMetadata(ctx, validatorMap)
+		startedValidators = c.startValidatorsForMetadata(ctx, syncBatch.Validators)
 	}
 
-	if startedValidators > 0 {
-		c.logger.Debug("new validators found after metadata update",
+	if startedValidators > 0 || hasNewValidators(syncBatch.IndicesBefore, syncBatch.IndicesAfter) {
+		c.logger.Debug("new validators found after metadata sync",
 			zap.Int("started_validators", startedValidators),
 		)
 		// Refresh duties if there are any new active validators.
@@ -945,7 +945,7 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, validatorMap meta
 		}
 	}
 
-	c.logger.Debug("started validators after metadata update",
+	c.logger.Debug("started validators after metadata sync",
 		fields.Count(startedValidators),
 	)
 
