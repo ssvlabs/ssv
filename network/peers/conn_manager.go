@@ -28,7 +28,9 @@ type DiscoveredPeer struct {
 var (
 	// DiscoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
 	// the best candidates to connect to.
-	DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](30 * time.Minute))
+	//DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](30 * time.Minute))
+	// TODO - for debugging, can remove later
+	DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](120 * time.Minute))
 	TrimmedRecently     = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](30 * time.Minute))
 )
 

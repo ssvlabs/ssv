@@ -262,12 +262,18 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go func() {
 		// keep discovered peers in the pool so we can choose the best ones
 		for proposal := range connectorProposals {
+			// TODO - for debugging, can remove later
+			gotProposalStartTime := time.Now()
+			n.interfaceLogger.Debug("got proposal", zap.Time("proposal_start_time", gotProposalStartTime))
 			if peers.DiscoveredPeersPool.Has(proposal.ID) {
 				// TODO - comment out
 				// this log line is commented out as it is too spammy
 				n.interfaceLogger.Debug(
-					"this proposal is already on the table",
+					"got proposal, this proposal is already on the table",
 					zap.String("peer_id", string(proposal.ID)),
+					// TODO - for debugging, can remove later
+					zap.Time("proposal_end_time", time.Now()),
+					zap.Duration("proposal_handling_duration", time.Since(gotProposalStartTime)),
 				)
 				continue // this proposal is already "on the table"
 			}
@@ -278,8 +284,11 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer, ttlcache.DefaultTTL)
 
 			n.interfaceLogger.Debug(
-				"discovered new peer",
+				"got proposal, discovered new peer",
 				zap.String("peer_id", string(proposal.ID)),
+				// TODO - for debugging, can remove later
+				zap.Time("proposal_end_time", time.Now()),
+				zap.Duration("proposal_handling_duration", time.Since(gotProposalStartTime)),
 			)
 		}
 	}()
