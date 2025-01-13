@@ -191,7 +191,7 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 		return nil, nil
 	}
 
-	if _, err := ec.call(ctx, f); err != nil {
+	if _, err := ec.call(ec.setMethod(ctx, "FetchHistoricalLogs"), f); err != nil {
 		if int(nothingToSyncCount.Load()) == len(ec.clients) {
 			// All clients returned ErrNothingToSync
 			return nil, nil, ErrNothingToSync
@@ -237,7 +237,7 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					return nil, err
 				}
 
-				_, err := ec.call(ctx, f)
+				_, err := ec.call(ec.setMethod(ctx, "StreamLogs"), f)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 					// Closed gracefully.
 					return
@@ -258,7 +258,7 @@ func (ec *MultiClient) Healthy(ctx context.Context) error {
 		return nil, client.Healthy(ctx)
 	}
 
-	if _, err := ec.call(ctx, f); err != nil {
+	if _, err := ec.call(ec.setMethod(ctx, "Healthy"), f); err != nil {
 		return err
 	}
 
@@ -270,7 +270,7 @@ func (ec *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) 
 	f := func(client SingleClientProvider) (any, error) {
 		return client.BlockByNumber(ctx, blockNumber)
 	}
-	res, err := ec.call(ctx, f)
+	res, err := ec.call(ec.setMethod(ctx, "BlockNumber"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (ec *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.Filte
 	f := func(client SingleClientProvider) (any, error) {
 		return client.SubscribeFilterLogs(ctx, q, ch)
 	}
-	res, err := ec.call(ctx, f)
+	res, err := ec.call(ec.setMethod(ctx, "SubscribeFilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func (ec *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) (
 	f := func(client SingleClientProvider) (any, error) {
 		return client.FilterLogs(ctx, q)
 	}
-	res, err := ec.call(ctx, f)
+	res, err := ec.call(ec.setMethod(ctx, "FilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +338,10 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		}
 
 		if err != nil {
-			// TODO: log
+			ec.logger.Error("call failed, trying another client",
+				zap.String("method", ec.getMethod(ctx)),
+				zap.String("addr", ec.nodeAddrs[currentIdx]),
+				zap.Error(err))
 
 			ec.currClientMu.Lock()
 			idx := ec.currClientIdx
@@ -357,4 +360,16 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	}
 
 	return nil, fmt.Errorf("all clients returned an error")
+}
+
+func (ec *MultiClient) setMethod(ctx context.Context, method string) context.Context {
+	return context.WithValue(ctx, "method", method)
+}
+
+func (ec *MultiClient) getMethod(ctx context.Context) string {
+	v, ok := ctx.Value("method").(string)
+	if !ok {
+		return ""
+	}
+	return v
 }
