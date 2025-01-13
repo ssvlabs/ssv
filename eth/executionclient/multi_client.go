@@ -278,14 +278,32 @@ func (ec *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) 
 	return res.(*ethtypes.Block), nil
 }
 
-func (ec *MultiClient) Filterer() (*contract.ContractFilterer, error) {
-	ec.currClientMu.Lock()
-	client := ec.clients[ec.currClientIdx]
-	ec.currClientMu.Unlock()
+func (ec *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
+	f := func(client SingleClientProvider) (any, error) {
+		return client.SubscribeFilterLogs(ctx, q, ch)
+	}
+	res, err := ec.call(ctx, f)
+	if err != nil {
+		return nil, err
+	}
 
-	// TODO: return client.Filterer() won't handle client failure, we need to implement ethereum.LogFilterer on MultiClient and use the line below
-	// return contract.NewContractFilterer(ec.contractAddress, ec)
-	return client.Filterer()
+	return res.(ethereum.Subscription), nil
+}
+
+func (ec *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+	f := func(client SingleClientProvider) (any, error) {
+		return client.FilterLogs(ctx, q)
+	}
+	res, err := ec.call(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.([]ethtypes.Log), nil
+}
+
+func (ec *MultiClient) Filterer() (*contract.ContractFilterer, error) {
+	return contract.NewContractFilterer(ec.contractAddress, ec)
 }
 
 func (ec *MultiClient) ChainID(_ context.Context) (*big.Int, error) {

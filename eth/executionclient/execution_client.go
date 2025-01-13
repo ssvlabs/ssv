@@ -29,6 +29,8 @@ type Provider interface {
 	BlockByNumber(ctx context.Context, number *big.Int) (*ethtypes.Block, error)
 	ChainID(ctx context.Context) (*big.Int, error)
 	Healthy(ctx context.Context) error
+	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error)
+	FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error)
 	Close() error
 }
 
@@ -307,6 +309,30 @@ func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.I
 	}
 
 	return b, nil
+}
+
+func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
+	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "EthSubscribe"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return logs, nil
+}
+
+func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+	logs, err := ec.client.FilterLogs(ctx, q)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getLogs"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return logs, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {
