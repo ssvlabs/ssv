@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	networkconfig "github.com/ssvlabs/ssv/network/config"
+	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"

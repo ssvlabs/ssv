@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	networkconfig "github.com/ssvlabs/ssv/network/config"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 

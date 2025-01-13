@@ -8,7 +8,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"go.uber.org/zap"
 
-	networkconfig "github.com/ssvlabs/ssv/network/config"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/genesis/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/genesis/ssv/runner"
 )

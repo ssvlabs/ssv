@@ -10,7 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/logging/fields"
-	networkconfig "github.com/ssvlabs/ssv/network/config"
+	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
