@@ -285,7 +285,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	}()
 	// choose the best peer(s) from the pool of discovered peers to propose connecting to it
 	async.Interval(n.ctx, 15*time.Second, func() {
-		// give discovery some time to find best peers it can since node start
+		// give discovery some time to find the best peers right after node start, the exact
+		// best time to wait is arrived at experimentally
 		if time.Since(p2pStartTime) < 5*time.Minute {
 			return
 		}
@@ -305,9 +306,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			return
 		}
 
-		// TODO - building priority queue from scratch here might not be the best in terms
-		// of CPU/GC overhead, should we optimize this ?
-		priorityQueue := lane.NewMaxPriorityQueue[peers.DiscoveredPeer, float64]()
+		// peersByPriority keeps track of best peers (by their peer score)
+		peersByPriority := lane.NewMaxPriorityQueue[peers.DiscoveredPeer, float64]()
 		peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
 			const retryLimit = 2
 			if item.Value().ConnectRetries >= retryLimit {
@@ -323,7 +323,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				return true
 			}
 			proposalScore := n.peerScore(item.Key())
-			priorityQueue.Push(item.Value(), proposalScore)
+			peersByPriority.Push(item.Value(), proposalScore)
 			return true
 		})
 
@@ -331,9 +331,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// leaves some vacant slots for the next iteration - on the next iteration better
 		// peers might show up (so we don't want to "spend" all of these vacant slots at once)
 		peersToProposeCnt := max(vacantOutboundSlotCnt/2, 1)
-		peersToProposeCnt = min(peersToProposeCnt, int(priorityQueue.Size()))
+		peersToProposeCnt = min(peersToProposeCnt, int(peersByPriority.Size()))
 		for i := 0; i < peersToProposeCnt; i++ {
-			peerCandidate, _, _ := priorityQueue.Pop()
+			peerCandidate, _, _ := peersByPriority.Pop()
 			// update retry counter for this peer so we eventually skip it after certain number of retries
 			// TODO ^ because we aren't using mutex to make operations related to DiscoveredPeersPool atomic
 			// it's better to do this before we send this proposal on `connector` to minimize the chance of
