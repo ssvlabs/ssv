@@ -251,21 +251,21 @@ func TestBlockBelowThreashold(t *testing.T) {
 	t.Run("fails on EC error", func(t *testing.T) {
 		err1 := errors.New("ec err")
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(nil, err1)
-		err := s.blockBelowThreashold(ctx, big.NewInt(1))
+		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.ErrorIs(t, err, err1)
 	})
 
 	t.Run("fails if outside threashold", func(t *testing.T) {
 		header := &ethtypes.Header{Time: uint64(time.Now().Add(-151 * time.Second).Unix())}
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
-		err := s.blockBelowThreashold(ctx, big.NewInt(1))
+		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.Error(t, err)
 	})
 
 	t.Run("success", func(t *testing.T) {
 		header := &ethtypes.Header{Time: uint64(time.Now().Add(-149 * time.Second).Unix())}
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
-		err := s.blockBelowThreashold(ctx, big.NewInt(1))
+		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.NoError(t, err)
 	})
 }

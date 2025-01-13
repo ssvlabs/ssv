@@ -94,10 +94,10 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return fmt.Errorf("last seen block is not set")
 	}
 
-	return es.blockBelowThreashold(ctx, highestSeenBlock)
+	return es.blockBelowThreshold(ctx, highestSeenBlock)
 }
 
-func (es *EventSyncer) blockBelowThreashold(ctx context.Context, block *big.Int) error {
+func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) error {
 	header, err := es.executionClient.HeaderByNumber(ctx, block)
 	if err != nil {
 		return fmt.Errorf("failed to get header for block %d: %w", block, err)
@@ -141,7 +141,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	// Check if the block is too old.
 	// #nosec G115
 	b := big.NewInt(int64(es.lastProcessedBlock))
-	if err := es.blockBelowThreashold(ctx, b); err != nil {
+	if err := es.blockBelowThreshold(ctx, b); err != nil {
 		return 0, err
 	}
 
