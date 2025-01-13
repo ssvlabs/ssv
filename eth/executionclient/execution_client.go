@@ -32,14 +32,6 @@ type Provider interface {
 	Close() error
 }
 
-type SingleClientProvider interface {
-	Provider
-	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
-	connect(ctx context.Context) error
-	reconnect(ctx context.Context)
-	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
-}
-
 var _ Provider = &ExecutionClient{}
 
 var (

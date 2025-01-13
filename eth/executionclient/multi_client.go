@@ -6,8 +6,10 @@ import (
 	"math/big"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
@@ -17,8 +19,25 @@ import (
 
 var _ Provider = &MultiClient{}
 
+type SingleClientProvider interface {
+	Provider
+	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
+	connect(ctx context.Context) error
+	reconnect(ctx context.Context)
+	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
+}
+
 type MultiClient struct {
+	// optional
 	logger *zap.Logger
+	// followDistance defines an offset into the past from the head block such that the block
+	// at this offset will be considered as very likely finalized.
+	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+	connectionTimeout           time.Duration
+	reconnectionInitialInterval time.Duration
+	reconnectionMaxInterval     time.Duration
+	logBatchSize                uint64
+	syncDistanceTolerance       uint64
 
 	contractAddress ethcommon.Address
 	nodeAddrs       []string
@@ -30,20 +49,38 @@ type MultiClient struct {
 }
 
 // NewMulti creates a new instance of MultiClient.
-// TODO: pass logger as option
-func NewMulti(ctx context.Context, logger *zap.Logger, nodeAddrs []string, contractAddr ethcommon.Address, opts ...Option) (*MultiClient, error) {
+func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Address, opts ...OptionMulti) (*MultiClient, error) {
 	if len(nodeAddrs) == 0 {
 		return nil, fmt.Errorf("no node address provided")
 	}
 
 	multiClient := &MultiClient{
-		nodeAddrs:       nodeAddrs,
-		contractAddress: contractAddr,
-		logger:          logger,
+		nodeAddrs:                   nodeAddrs,
+		contractAddress:             contractAddr,
+		logger:                      zap.NewNop(),
+		followDistance:              DefaultFollowDistance,
+		connectionTimeout:           DefaultConnectionTimeout,
+		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
+		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
+		logBatchSize:                DefaultHistoricalLogsBatchSize,
+	}
+
+	for _, opt := range opts {
+		opt(multiClient)
 	}
 
 	for _, nodeAddr := range nodeAddrs {
-		singleClient, err := New(ctx, nodeAddr, contractAddr, opts...)
+		singleClient, err := New(
+			ctx,
+			nodeAddr,
+			contractAddr,
+			WithLogger(multiClient.logger),
+			WithFollowDistance(multiClient.followDistance),
+			WithConnectionTimeout(multiClient.connectionTimeout),
+			WithReconnectionInitialInterval(multiClient.reconnectionInitialInterval),
+			WithReconnectionMaxInterval(multiClient.reconnectionMaxInterval),
+			WithSyncDistanceTolerance(multiClient.syncDistanceTolerance),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("create single client: %w", err)
 		}

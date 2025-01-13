@@ -231,15 +231,14 @@ var StartNodeCmd = &cobra.Command{
 		} else {
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
-				logger.Named("execution_client_multi"),
 				executionAddrList,
 				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
-				executionclient.WithLogger(logger),
-				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
-				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
-				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
+				executionclient.WithLoggerMulti(logger),
+				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
+				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReconnectionInitialIntervalMulti(executionclient.DefaultReconnectionInitialInterval),
+				executionclient.WithReconnectionMaxIntervalMulti(executionclient.DefaultReconnectionMaxInterval),
+				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
 			if err != nil {
 				logger.Fatal("could not connect to execution client", zap.Error(err))
