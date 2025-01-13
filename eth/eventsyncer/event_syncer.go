@@ -96,7 +96,7 @@ func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) 
 	}
 
 	// #nosec G115
-	if header.Time > 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+	if header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
 		return fmt.Errorf("block %d is too old", block)
 	}
 
