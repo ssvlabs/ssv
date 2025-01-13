@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/oleiade/lane/v2"
-	"math"
 	"math/rand"
 	"slices"
 	"strings"
@@ -660,13 +659,23 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	return n.cfg.TopicMaxPeers
 }
 
-// peerScore calculates scores for myPeers and returns the ID of least valuable peer.
-// The score for a peer is defined as "how valuable this peer would have been if we didn't
-// have him, but then connected with" and is a sum of component numbers - each number estimating
-// how valuable each peer's subnet to us (via `score` func).
+// peerScore calculates a score for peerID based on how valuable this peer's contribution
+// to us is based on each subnet contribution he offers to us (as calculated by score func).
 func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
-	const targetPeersPerSubnet = 3
+	result := 0.0
 
+	peerSubnets := n.idx.GetPeerSubnets(peerID)
+	sharedSubnets := records.SharedSubnets(n.activeSubnets, peerSubnets, 0)
+	for _, subnet := range sharedSubnets {
+		result += n.score(peerID, subnet)
+	}
+
+	return result
+}
+
+// score assesses how valuable the contribution of peerID to specified subnet is by calculating
+// "how valuable this peer would have been if we didn't have him, but then connected with".
+func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
 	filterOutPeer := func(peerID peer.ID, peerIDs []peer.ID) []peer.ID {
 		if len(peerIDs) == 0 {
 			return nil
@@ -681,30 +690,26 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 		return result
 	}
 
-	result := 0.0
+	subnetPeers := n.idx.GetSubnetPeers(subnet)
+	subnetPeersExcluding := len(filterOutPeer(peerID, subnetPeers))
 
-	peerSubnets := n.idx.GetPeerSubnets(peerID)
-	sharedSubnets := records.SharedSubnets(n.activeSubnets, peerSubnets, 0)
-	for _, subnet := range sharedSubnets {
-		subnetPeers := n.idx.GetSubnetPeers(subnet)
-		thisSubnetPeersExcluding := filterOutPeer(peerID, subnetPeers)
-		result += score(float64(targetPeersPerSubnet), float64(len(thisSubnetPeersExcluding)))
-	}
-
-	return result
+	const targetPeersPerSubnet = 3
+	return score(targetPeersPerSubnet, subnetPeersExcluding)
 }
 
-// score calculates the score based on the target and input number
-func score(target, num float64) float64 {
-	const X = 3
-	if num < target {
-		// Decreasing score as numbers approach the target
-		return math.Pow(target-num+1, 1.5) * X
-	} else if num == target {
-		// Fixed score for exact match
-		return X
-	} else {
-		// Decreasing score for numbers above the target
-		return 10 / math.Pow(num-target+1, 1.5)
+func score(desired, actual int) float64 {
+	if actual > desired {
+		return float64(desired) / float64(actual) // is always less than 1.0
 	}
+	if actual == desired {
+		return 2 // at least 2x better than when `actual > desired`
+	}
+	// make every unit of difference count, starting with 2x of when `actual == desired` and
+	// increasing exponentially
+	diff := desired - actual
+	result := 2.0
+	for i := 1; i <= diff; i++ {
+		result *= float64(2.0 + i)
+	}
+	return result
 }
