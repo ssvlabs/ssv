@@ -217,9 +217,11 @@ func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 			timer := time.NewTimer(s.updateSendTimeout)
 			select {
 			case metadataUpdates <- batch:
-				// Only sleep for the last batch.
+				// Only sleep if there aren't more validators to fetch metadata for.
+				// It's done to wait for some data to appear. Without sleep, the next batch would likely be empty.
 				if done {
 					if slept := s.sleep(ctx, s.streamInterval); !slept {
+						// canceled context
 						timer.Stop()
 						return
 					}
