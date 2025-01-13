@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -203,19 +204,48 @@ var StartNodeCmd = &cobra.Command{
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
-		executionClient, err := executionclient.New(
-			cmd.Context(),
-			cfg.ExecutionClient.Addr,
-			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
-			executionclient.WithLogger(logger),
-			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
-			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
-			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
-			executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
-		)
-		if err != nil {
-			logger.Fatal("could not connect to execution client", zap.Error(err))
+		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: temporary using ; as separator because , is used as separator by deployment bot
+		if len(executionAddrList) == 0 {
+			logger.Fatal("no execution node address provided")
+		}
+
+		var executionClient executionclient.Provider
+
+		if len(executionAddrList) == 1 {
+			ec, err := executionclient.New(
+				cmd.Context(),
+				executionAddrList[0],
+				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				executionclient.WithLogger(logger),
+				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
+				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
+				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
+			)
+			if err != nil {
+				logger.Fatal("could not connect to execution client", zap.Error(err))
+			}
+
+			executionClient = ec
+		} else {
+			ec, err := executionclient.NewMulti(
+				cmd.Context(),
+				logger.Named("execution_client_multi"),
+				executionAddrList,
+				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				executionclient.WithLogger(logger),
+				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
+				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
+				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
+			)
+			if err != nil {
+				logger.Fatal("could not connect to execution client", zap.Error(err))
+			}
+
+			executionClient = ec
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
@@ -658,7 +688,7 @@ func setupConsensusClient(
 func setupEventHandling(
 	ctx context.Context,
 	logger *zap.Logger,
-	executionClient *executionclient.ExecutionClient,
+	executionClient executionclient.Provider,
 	validatorCtrl validator.Controller,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
