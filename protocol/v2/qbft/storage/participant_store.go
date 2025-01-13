@@ -62,5 +62,5 @@ type ParticipantStore interface {
 	InitialSlotGC(ctx context.Context, logger *zap.Logger, threashold phase0.Slot)
 
 	// SlotGC continuously removes old slots
-	SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int)
+	SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain uint64)
 }

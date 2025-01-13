@@ -72,7 +72,7 @@ func (i *participantStorage) InitialSlotGC(ctx context.Context, logger *zap.Logg
 }
 
 // SlotGC on every tick looks up and removes the slots that fall below the retain threashold
-func (i *participantStorage) SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain int) {
+func (i *participantStorage) SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain uint64) {
 	ticker := slotTickerProvider()
 	logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
 	for {
@@ -80,7 +80,7 @@ func (i *participantStorage) SlotGC(ctx context.Context, logger *zap.Logger, slo
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
-			threashold := ticker.Slot() - phase0.Slot(retain) - 1 // #nosec G115
+			threashold := ticker.Slot() - phase0.Slot(retain) - 1
 			count, err := i.removeSlotAt(threashold)
 			if err != nil {
 				logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threashold))
