@@ -178,8 +178,10 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
-		logger = v.loggerForDuty(logger, messageID.GetRoleType(), phase0.Slot(qbftMsg.Height))
-		logger = logger.With(fields.Height(qbftMsg.Height))
+
+		logger = v.
+			loggerForDuty(logger, messageID.GetRoleType(), phase0.Slot(qbftMsg.Height)).
+			With(fields.Height(qbftMsg.Height))
 
 		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -213,6 +215,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
+			span.AddEvent("processing post-consensus message")
 			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
 				span.SetStatus(codes.Error, err.Error())
 				return err
@@ -220,6 +223,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			span.SetStatus(codes.Ok, "")
 			return nil
 		}
+		span.AddEvent("processing pre-consensus message")
 		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			return err
