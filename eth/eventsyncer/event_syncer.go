@@ -131,7 +131,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	}
 
 	// Check if the block is too old.
-	b := new(big.Int).SetUint64(es.lastProcessedBlock)
+	b := new(big.Int).SetUint64(lastProcessedBlock)
 	if err := es.blockBelowThreshold(ctx, b); err != nil {
 		return 0, err
 	}
