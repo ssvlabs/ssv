@@ -21,7 +21,6 @@ var HashedPrivateKey = "hashed-private-key"
 var (
 	storagePrefix         = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
-	highestSeenBlockKey   = []byte("lastSeen")
 	configKey             = []byte("config")
 )
 
@@ -177,10 +176,6 @@ func (s *storage) SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) 
 	return s.db.Using(rw).Set(storagePrefix, lastProcessedBlockKey, offset.Bytes())
 }
 
-func (s *storage) SaveHighestSeenBlock(rw basedb.ReadWriter, offset *big.Int) error {
-	return s.db.Using(rw).Set(storagePrefix, highestSeenBlockKey, offset.Bytes())
-}
-
 func (s *storage) dropLastProcessedBlock() error {
 	return s.db.DropPrefix(append(storagePrefix, lastProcessedBlockKey...))
 }
@@ -200,20 +195,6 @@ func (s *storage) DropShares() error {
 // GetLastProcessedBlock returns the last processed block.
 func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error) {
 	obj, found, err := s.db.UsingReader(r).Get(storagePrefix, lastProcessedBlockKey)
-	if !found {
-		return nil, found, nil
-	}
-	if err != nil {
-		return nil, found, err
-	}
-
-	offset := new(big.Int).SetBytes(obj.Value)
-	return offset, found, nil
-}
-
-// GetHighestSeenBlock returns the highest received block with or without events.
-func (s *storage) GetHighestSeenBlock(r basedb.Reader) (*big.Int, bool, error) {
-	obj, found, err := s.db.UsingReader(r).Get(storagePrefix, highestSeenBlockKey)
 	if !found {
 		return nil, found, nil
 	}
