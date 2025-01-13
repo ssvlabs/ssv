@@ -9,7 +9,6 @@ import (
 // BlockLogs holds a block's number and it's logs.
 type BlockLogs struct {
 	BlockNumber uint64
-	LastSeen    uint64
 	Logs        []ethtypes.Log
 }
 
