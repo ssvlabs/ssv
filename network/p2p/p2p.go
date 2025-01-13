@@ -340,7 +340,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// leaves some vacant slots for the next iteration - on the next iteration better
 		// peers might show up (so we don't want to "spend" all of these vacant slots at once)
 		peersToProposeCnt := max(vacantOutboundSlotCnt/2, 1)
-		peersToProposeCnt = min(peersToProposeCnt, int(peersByPriority.Size()))
+		peersToProposeCnt = min(peersToProposeCnt, int(peersByPriority.Size())) // nolint: gosec
 		for i := 0; i < peersToProposeCnt; i++ {
 			peerCandidate, _, _ := peersByPriority.Pop()
 			// update retry counter for this peer so we eventually skip it after certain number of retries
