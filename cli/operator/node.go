@@ -292,7 +292,8 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
-		initSlotCleanup(cmd.Context(), logger, storageMap, slotTickerProvider, cfg.DBOptions.RetainedSlotCount)
+		threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
+		initSlotCleanup(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, cfg.DBOptions.RetainedSlotCount)
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
@@ -789,13 +790,11 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotCleanup(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, retain int) {
+func initSlotCleanup(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain int) {
 	var wg sync.WaitGroup
 
-	ticker := slotTickerProvider()
-	<-ticker.Next()
-
-	threashold := ticker.Slot() - phase0.Slot(retain) // #nosec G115
+	// #nosec G115
+	threashold := slot - phase0.Slot(retain)
 
 	// async perform initial slot gc
 	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
