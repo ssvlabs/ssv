@@ -382,6 +382,13 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 		}
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
+		span.AddEvent("executing duty", trace.WithAttributes(
+			observability.BeaconEpochAttribute(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)),
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.ValidatorPublicKeyAttribute(duty.PubKey),
+			observability.BeaconRoleAttribute(duty.Type),
+			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
+		))
 
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
@@ -414,7 +421,16 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 				trace.WithAttributes(
 					attribute.Int64("slot_delay_ms", slotDelay.Milliseconds())))
 		}
+
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
+		span.AddEvent("executing duty", trace.WithAttributes(
+			observability.DutyIDAttribute(fields.FormatCommitteeDutyID(committee.operatorIDs, dutyEpoch, duty.Slot)),
+			observability.BeaconEpochAttribute(dutyEpoch),
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.CommitteeIDAttribute(committee.id),
+		))
+
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
 			recordDutyExecuted(ctx, duty.RunnerRole())

@@ -124,10 +124,11 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
-		trace.WithLinks(trace.LinkFromContext(msg.Context,
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))))
+		trace.WithLinks(
+			trace.LinkFromContext(msg.Context,
+				observability.ValidatorMsgIDAttribute(msg.GetID()),
+				observability.ValidatorMsgTypeAttribute(msgType),
+				observability.RunnerRoleAttribute(msg.GetID().GetRoleType()))))
 
 	defer span.End()
 

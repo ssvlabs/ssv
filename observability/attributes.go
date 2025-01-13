@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"encoding/hex"
 	"math"
 	"strconv"
 	"strings"
@@ -50,11 +51,26 @@ func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
 	}
 }
 
+func DutyIDAttribute(id string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.id", id)
+}
+
 func DutyPeriodAttribute(period uint64) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.duty.period",
 		Value: Uint64AttributeValue(period),
 	}
+}
+
+func CommitteeIndexAttribute(index phase0.CommitteeIndex) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.duty.committee.index",
+		Value: Uint64AttributeValue(uint64(index)),
+	}
+}
+
+func CommitteeIDAttribute(id types.CommitteeID) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.committee.id", hex.EncodeToString(id[:]))
 }
 
 func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {

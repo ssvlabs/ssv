@@ -17,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -669,6 +668,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 	ctx, span := tracer.Start(ctx,
 		fmt.Sprintf("%s.execute_duty", observabilityNamespace),
 		trace.WithAttributes(
+			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.BeaconRoleAttribute(duty.Type),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
@@ -709,7 +709,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		fmt.Sprintf("%s.execute_committee_duty", observabilityNamespace),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(duty.Slot),
-			attribute.String("ssv.comittee.id", hex.EncodeToString(committeeID[:])),
+			observability.CommitteeIDAttribute(committeeID),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 		))
 	defer span.End()
