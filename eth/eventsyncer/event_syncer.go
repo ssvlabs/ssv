@@ -86,15 +86,7 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return fmt.Errorf("syncing is stuck at block %d", lastProcessedBlock.Uint64())
 	}
 
-	highestSeenBlock, found, err := es.nodeStorage.GetHighestSeenBlock(nil)
-	if err != nil {
-		return fmt.Errorf("failed to read last processed block: %w", err)
-	}
-	if !found || highestSeenBlock == nil || highestSeenBlock.Uint64() == 0 {
-		return fmt.Errorf("last seen block is not set")
-	}
-
-	return es.blockBelowThreshold(ctx, highestSeenBlock)
+	return es.blockBelowThreshold(ctx, lastProcessedBlock)
 }
 
 func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) error {
@@ -104,7 +96,7 @@ func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) 
 	}
 
 	// #nosec G115
-	if header.Time != 0 && header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+	if header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
 		return fmt.Errorf("block %d is too old", block)
 	}
 

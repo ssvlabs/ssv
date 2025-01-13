@@ -178,14 +178,16 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					}
 					validLogs = append(validLogs, log)
 				}
-
-				if len(validLogs) == 0 {
-					logs <- BlockLogs{LastSeen: toBlock}
-					continue
-				}
-
+				var highestBlock uint64
 				for _, blockLogs := range PackLogs(validLogs) {
 					logs <- blockLogs
+					if blockLogs.BlockNumber > highestBlock {
+						highestBlock = blockLogs.BlockNumber
+					}
+				}
+				// Emit empty block logs to indicate that we have advanced to this block.
+				if highestBlock < toBlock {
+					logs <- BlockLogs{BlockNumber: toBlock}
 				}
 			}
 		}

@@ -241,7 +241,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 	return nodeStorage, operatorData
 }
 
-func TestBlockBelowThreashold(t *testing.T) {
+func TestBlockBelowThreshold(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := NewMockExecutionClient(ctrl)
 	ctx := context.Background()

@@ -34,8 +34,6 @@ type Storage interface {
 
 	SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) error
 	GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
-	SaveHighestSeenBlock(rw basedb.ReadWriter, offset *big.Int) error
-	GetHighestSeenBlock(r basedb.Reader) (*big.Int, bool, error)
 
 	GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error)
 	SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error
