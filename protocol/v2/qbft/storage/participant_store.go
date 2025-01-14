@@ -59,8 +59,8 @@ type ParticipantStore interface {
 	GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
 
 	// InitialSlotGC performs an initial cleanup (blocking) of slots bellow the retained threshold
-	InitialSlotGC(ctx context.Context, logger *zap.Logger, threashold phase0.Slot)
+	Prune(ctx context.Context, logger *zap.Logger, below phase0.Slot)
 
 	// SlotGC continuously removes old slots
-	SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain uint64)
+	PruneContinously(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain phase0.Slot)
 }
