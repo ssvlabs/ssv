@@ -295,7 +295,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 
-		validatorSyncer := metadata.NewSyncer(
+		metadataSyncer := metadata.NewSyncer(
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
@@ -304,7 +304,7 @@ var StartNodeCmd = &cobra.Command{
 			p2pNetwork.FixedSubnets(),
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 		)
-		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = validatorSyncer
+		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
@@ -350,7 +350,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
-		if _, err := validatorSyncer.SyncOnStartup(cmd.Context()); err != nil {
+		if _, err := metadataSyncer.SyncOnStartup(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
 		}
 
