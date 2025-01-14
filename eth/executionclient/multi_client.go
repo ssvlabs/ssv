@@ -331,6 +331,10 @@ func (ec *MultiClient) Close() error {
 }
 
 func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error)) (any, error) {
+	if len(ec.clients) == 1 {
+		return f(ec.clients[0])
+	}
+
 	for range len(ec.clients) {
 		ec.currClientMu.Lock()
 		currentIdx := ec.currClientIdx
