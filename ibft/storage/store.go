@@ -295,11 +295,11 @@ func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, slot 
 func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte, bool, error) {
 	prefix := i.makePrefix(slot)
 	obj, found, err := i.db.Using(txn).Get(prefix, pk)
+	if err != nil {
+		return nil, false, err
+	}
 	if !found {
 		return nil, found, nil
-	}
-	if err != nil {
-		return nil, found, err
 	}
 	return obj.Value, found, nil
 }
