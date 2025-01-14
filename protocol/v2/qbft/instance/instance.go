@@ -94,8 +94,9 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 			fields.Height(i.State.Height))
 
 		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
-		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
-		span.AddEvent("starting QBFT instance", trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
+		const eventMsg = "ℹ️ starting QBFT instance"
+		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
+		span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
 
 		// propose if this node is the proposer
 		if proposerID == i.State.CommitteeMember.OperatorID {
@@ -115,13 +116,15 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 				}
 				// nolint
 				logger = logger.With(fields.Root(r))
-				logger.Debug("📢 leader broadcasting proposal message")
-				span.AddEvent("leader broadcasting proposal message", trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
+				const eventMsg = "📢 leader broadcasting proposal message"
+				logger.Debug(eventMsg)
+				span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
 
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 					span.SetStatus(codes.Error, err.Error())
 				}
+
 				span.SetStatus(codes.Ok, "")
 			}
 		}
