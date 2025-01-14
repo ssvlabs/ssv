@@ -1062,15 +1062,10 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 			FeeRecipientAddress: [20]byte{10, 20, 30},
 			Graffiti:            []byte("duplicate_test"),
 		},
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Index:           phase0.ValidatorIndex(1),
-				ActivationEpoch: 100,
-				Status:          eth2apiv1.ValidatorStatePendingQueued,
-			},
-			OwnerAddress: common.HexToAddress("0x12345"),
-			Liquidated:   false,
-		},
+		ActivationEpoch: 100,
+		Status:          eth2apiv1.ValidatorStatePendingQueued,
+		OwnerAddress:    common.HexToAddress("0x12345"),
+		Liquidated:      false,
 	}
 
 	// Add the same share multiple times
@@ -1132,8 +1127,8 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 		require.True(t, exists, "validator %x not found", share.ValidatorPubKey)
 		requireEqualShare(t, share, byPubKey)
 
-		byIndex, exists := store.ValidatorByIndex(share.Metadata.BeaconMetadata.Index)
-		require.True(t, exists, "validator %d not found", share.Metadata.BeaconMetadata.Index)
+		byIndex, exists := store.ValidatorByIndex(share.ValidatorIndex)
+		require.True(t, exists, "validator %d not found", share.ValidatorIndex)
 		requireEqualShare(t, share, byIndex)
 	}
 
@@ -1219,7 +1214,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 			// Compare indices.
 			expectedIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))
 			for i, validator := range storeOperatorCommittee.Validators {
-				expectedIndices[i] = validator.Metadata.BeaconMetadata.Index
+				expectedIndices[i] = validator.ValidatorIndex
 			}
 			slices.Sort(expectedIndices)
 			storeIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))

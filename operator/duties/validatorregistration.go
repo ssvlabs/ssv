@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )

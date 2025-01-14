@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
@@ -27,7 +25,6 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			if err := shareGOB.Decode(obj.Value); err != nil {
 				return fmt.Errorf("decode gob share: %w", err)
 			}
-			shareGOB.DomainType = spectypes.DomainType(genesistypes.GetDefaultDomain())
 			share, err := storageShareGOBToSpecShare(shareGOB)
 			if err != nil {
 				return fmt.Errorf("convert storage share to spec share: %w", err)

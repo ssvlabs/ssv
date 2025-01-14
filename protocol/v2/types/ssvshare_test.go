@@ -39,7 +39,7 @@ func TestSSVShare_ComputeClusterIDHash(t *testing.T) {
 	require.Equal(t, aliceClusterHash, hashString2)
 }
 
-func TestSSVShare_HasBeaconMetadata(t *testing.T) {
+func TestSSVShare_HasOnChainData(t *testing.T) {
 	tt := []struct {
 		Name          string
 		ShareMetadata *SSVShare

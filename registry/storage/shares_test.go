@@ -236,7 +236,7 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 		require.Nil(t, committee, "Committee should be nil after share deletion")
 
 		// Verify that other internal mappings are updated accordingly
-		byIndex, exists := storage.ValidatorStore.ValidatorByIndex(validatorShare.Metadata.BeaconMetadata.Index)
+		byIndex, exists := storage.ValidatorStore.ValidatorByIndex(validatorShare.ValidatorIndex)
 		require.False(t, exists)
 		require.Nil(t, byIndex)
 		for _, operator := range validatorShare.Committee {
@@ -311,7 +311,12 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		updatedShare, exists := storage.ValidatorStore.Validator(testShare.ValidatorPubKey[:])
 		require.True(t, exists)
 		require.NotNil(t, updatedShare, "Updated share should be present in validator store")
-		require.Equal(t, updatedMetadata, updatedShare.BeaconMetadata, "Validator metadata should be updated in validator store")
+		require.Equal(t, updatedMetadata, &beaconprotocol.ValidatorMetadata{
+			Balance:         updatedShare.Balance,
+			Status:          updatedShare.Status,
+			Index:           updatedShare.ValidatorIndex,
+			ActivationEpoch: updatedShare.ActivationEpoch,
+		}, "Validator metadata should be updated in validator store")
 
 		// Remove the share via SharesStorage
 		require.NoError(t, storage.Shares.Delete(nil, testShare.ValidatorPubKey[:]))
@@ -402,7 +407,12 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 						require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
 					case "update":
 						require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-							share2.ValidatorPubKey: updatedShare2.BeaconMetadata,
+							share2.ValidatorPubKey: {
+								Balance:         updatedShare2.Balance,
+								Status:          updatedShare2.Status,
+								Index:           updatedShare2.ValidatorIndex,
+								ActivationEpoch: updatedShare2.ActivationEpoch,
+							},
 						}))
 					case "remove1":
 						require.NoError(t, storage.Shares.Delete(nil, share1.ValidatorPubKey[:]))
@@ -555,7 +565,6 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShar
 		Share: spectypes.Share{
 			ValidatorIndex:      3,
 			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
-			ValidatorIndex:      3,
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
 			DomainType:          networkconfig.TestNetwork.DomainType,
@@ -599,16 +608,11 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Balance:         1,
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
-				Index:           index,
-				ActivationEpoch: 4,
-			},
-			OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Liquidated:   false,
-		},
+		Balance:         1,
+		Status:          eth2apiv1.ValidatorStateActiveOngoing,
+		ActivationEpoch: 4,
+		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+		Liquidated:      false,
 	}
 }
 
