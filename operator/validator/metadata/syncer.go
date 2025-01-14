@@ -135,10 +135,10 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
 
-	s.logger.Debug("🆕 fetched metadata for validator shares",
+	s.logger.Debug("🆕 fetched validators metadata",
 		fields.Took(time.Since(fetchStart)),
-		zap.Int("metadata_cnt", len(metadata)),
-		zap.Int("shares_cnt", len(pubKeys)),
+		zap.Int("metadatas", len(metadata)),
+		zap.Int("validators", len(pubKeys)),
 	)
 
 	updateStart := time.Now()
@@ -147,10 +147,10 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 		return metadata, fmt.Errorf("update metadata: %w", err)
 	}
 
-	s.logger.Debug("🆕 updated validators metadata in storage",
+	s.logger.Debug("🆕 saved validators metadata",
 		fields.Took(time.Since(updateStart)),
-		zap.Int("metadata_count", len(metadata)),
-		zap.Int("shares_cnt", len(pubKeys)),
+		zap.Int("metadatas", len(metadata)),
+		zap.Int("validators", len(pubKeys)),
 	)
 
 	return metadata, nil
