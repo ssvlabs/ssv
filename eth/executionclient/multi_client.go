@@ -129,69 +129,31 @@ func (ec *MultiClient) assertSameChainIDs(ctx context.Context) (bool, error) {
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
 	logsCh := make(chan BlockLogs, defaultLogBuf)
-	errorsCh := make(chan error, 1)
-	defer func() {
-		close(logsCh)
-		close(errorsCh)
-	}()
+	errCh := make(chan error, 1)
 
+	var singleLogsCh <-chan BlockLogs
+	var singleErrCh <-chan error
 	var nothingToSyncCount atomic.Int64
 
-	f := func(client SingleClientProvider) (any, error) {
-		innerLogs, innerErrors, innerErr := client.FetchHistoricalLogs(ctx, fromBlock)
-		if innerErr != nil {
-			if errors.Is(innerErr, ErrNothingToSync) {
+	// Find a client that's able to provide the requested data.
+	startFetchingFunc := func(client SingleClientProvider) (any, error) {
+		cl, ce, err := client.FetchHistoricalLogs(ctx, fromBlock)
+		if err != nil {
+			if errors.Is(err, ErrNothingToSync) {
 				nothingToSyncCount.Add(1)
 			}
 			// Consider ErrNothingToSync as an error to make sure that other nodes return ErrNothingToSync too.
 			// If they don't, it means that the current node is out of sync.
 			// Therefore, we keep count of how many ErrNothingToSync we saw.
-			return nil, innerErr
+			return nil, err
 		}
 
-		ec.logger.Info("waiting for client to fetch historical logs",
-			zap.Uint64("from_block", fromBlock),
-		)
-
-		// Wait for the goroutine FetchHistoricalLogs to finish.
-		// TODO: Make the logic asynchronous as the caller of FetchHistoricalLogs doesn't expect it to block.
-		// This blocks until the underlying client closes its errors channel or sends an error.
-		// The ExecutionClient code does defer-close, so it should never block forever.
-		processingErr := <-innerErrors
-
-		ec.logger.Info("client finished to fetch historical logs",
-			zap.Uint64("from_block", fromBlock),
-			zap.Error(processingErr),
-		)
-
-		if processingErr != nil {
-			// If there has been an error during the process, copy all fetched logs, the error and update fromBlock,
-			// then try another client.
-			var lastBlock uint64
-			for innerLog := range innerLogs {
-				logsCh <- innerLog
-				lastBlock = max(lastBlock, innerLog.BlockNumber)
-			}
-			fromBlock = lastBlock + 1 // TODO: make sure it will handle reorgs correctly
-
-			errorsCh = make(chan error, defaultLogBuf)
-			errorsCh <- processingErr
-			close(errorsCh)
-
-			// Return the error so that ec.call(...) tries the next client
-			return nil, processingErr
-		}
-
-		for innerLog := range innerLogs {
-			logsCh <- innerLog
-		}
-		// Clear the error if the client fetches the data successfully
-		errorsCh = make(chan error, defaultLogBuf)
-		close(errorsCh)
+		singleLogsCh = cl
+		singleErrCh = ce
 		return nil, nil
 	}
 
-	if _, err := ec.call(ec.setMethod(ctx, "FetchHistoricalLogs"), f); err != nil {
+	if _, err := ec.call(ec.setMethod(ctx, "FetchHistoricalLogs [start fetching]"), startFetchingFunc); err != nil {
 		if int(nothingToSyncCount.Load()) == len(ec.clients) {
 			// All clients returned ErrNothingToSync
 			return nil, nil, ErrNothingToSync
@@ -199,7 +161,51 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 		return nil, nil, err
 	}
 
-	return logsCh, errorsCh, nil
+	go func() {
+		defer func() {
+			close(logsCh)
+			close(errCh)
+		}()
+
+		var needInitChans atomic.Bool
+
+		// Getting historical logs may take significant amount of time.
+		// The current client may fail in the middle of the process,
+		// and also some clients may become available again, therefore we need to try other clients on error.
+		// Since singleLogsCh and singleErrCh are initialized by the active client,
+		// we need to re-initialize them if we try other clients.
+		processLogsFunc := func(client SingleClientProvider) (any, error) {
+			if needInitChans.Load() {
+				if _, err := startFetchingFunc(client); err != nil {
+					return nil, err
+				}
+			} else {
+				needInitChans.Store(true)
+			}
+
+			var lastBlock uint64
+			for {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-ec.closed:
+					return nil, fmt.Errorf("client closed")
+				case log := <-singleLogsCh:
+					logsCh <- log
+					lastBlock = max(lastBlock, log.BlockNumber)
+				case err := <-singleErrCh:
+					fromBlock = max(fromBlock, lastBlock+1)
+					return nil, err // Try another client
+				}
+			}
+		}
+
+		if _, err := ec.call(ec.setMethod(ctx, "FetchHistoricalLogs [process logs]"), processLogsFunc); err != nil {
+			errCh <- err
+		}
+	}()
+
+	return logsCh, errCh, nil
 }
 
 // StreamLogs subscribes to events emitted by the contract.
