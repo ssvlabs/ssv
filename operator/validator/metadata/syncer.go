@@ -297,12 +297,11 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 		}
 
 		// Fetch new and stale shares only.
-		shareMetadataStaleAfter := s.syncInterval
 		if !share.HasBeaconMetadata() && share.MetadataLastUpdated().IsZero() {
 			// Metadata was never fetched for this share, so it's considered new.
 			newShares = append(newShares, share)
-		} else if time.Since(share.MetadataLastUpdated()) > shareMetadataStaleAfter {
-			// Metadata has become stale and needs refreshing.
+		} else if time.Since(share.MetadataLastUpdated()) > s.syncInterval {
+			// Metadata hasn't been fetched for a while, so it's considered stale.
 			staleShares = append(staleShares, share)
 		}
 
