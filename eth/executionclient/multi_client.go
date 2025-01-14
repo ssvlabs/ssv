@@ -13,6 +13,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 )
@@ -61,12 +62,14 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 		opt(multiClient)
 	}
 
+	logger := multiClient.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop))
+
 	for _, nodeAddr := range nodeAddrs {
 		singleClient, err := New(
 			ctx,
 			nodeAddr,
 			contractAddr,
-			WithLogger(multiClient.logger),
+			WithLogger(logger),
 			WithFollowDistance(multiClient.followDistance),
 			WithConnectionTimeout(multiClient.connectionTimeout),
 			WithReconnectionInitialInterval(multiClient.reconnectionInitialInterval),
@@ -359,7 +362,7 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			}
 			ec.currClientMu.Unlock()
 
-			//client.reconnect(ctx) // TODO: implement reconnecting
+			client.reconnect(ctx)
 
 			continue
 		}

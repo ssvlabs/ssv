@@ -174,6 +174,12 @@ func TestMultiClient_FetchHistoricalLogs_MultiClient(t *testing.T) {
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), errors.New("fetch error")).
 		Times(1)
 
+	mockClient1.
+		EXPECT().
+		reconnect(gomock.Any()).
+		Do(func(ctx context.Context) {}).
+		Times(1)
+
 	client2Ready := make(chan struct{})
 
 	logCh := make(chan BlockLogs, 1)
@@ -269,15 +275,14 @@ func TestMultiClient_StreamLogs(t *testing.T) {
 		Return(uint64(202), nil).                                  // Should not be called
 		Times(0)
 
+	hook := &fatalHook{}
+
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
-		logger:    zap.NewNop(),
+		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
 		closed:    make(chan struct{}),
 	}
-
-	hook := &fatalHook{}
-	mc.logger = zap.NewNop().WithOptions(zap.WithFatalHook(hook))
 
 	logsCh := mc.StreamLogs(ctx, 200)
 
@@ -391,6 +396,12 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			}).
 			Times(1),
 
+		mockClient1.
+			EXPECT().
+			reconnect(gomock.Any()).
+			Do(func(ctx context.Context) {}).
+			Times(1),
+
 		// Second client: mockClient2 with fromBlock=202
 		mockClient2.
 			EXPECT().
@@ -456,6 +467,12 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 		}).
 		Times(1)
 
+	mockClient1.
+		EXPECT().
+		reconnect(gomock.Any()).
+		Do(func(ctx context.Context) {}).
+		Times(1)
+
 	mockClient2.
 		EXPECT().
 		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(201)). // Updated fromBlock to 201
@@ -464,6 +481,12 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 			out <- BlockLogs{BlockNumber: 201}
 			return 201, errors.New("network error") // All clients failed
 		}).
+		Times(1)
+
+	mockClient2.
+		EXPECT().
+		reconnect(gomock.Any()).
+		Do(func(ctx context.Context) {}).
 		Times(1)
 
 	hook := &fatalHook{}
@@ -567,11 +590,23 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 			Return(uint64(0), errors.New("network error")).
 			Times(1),
 
+		mockClient1.
+			EXPECT().
+			reconnect(gomock.Any()).
+			Do(func(ctx context.Context) {}).
+			Times(1),
+
 		// Setup mockClient2 to fail with fromBlock=200
 		mockClient2.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 			Return(uint64(0), errors.New("network error")).
+			Times(1),
+
+		mockClient2.
+			EXPECT().
+			reconnect(gomock.Any()).
+			Do(func(ctx context.Context) {}).
 			Times(1),
 
 		// Setup mockClient3 to handle fromBlock=200
@@ -638,6 +673,12 @@ func TestMultiClient_Healthy_MultiClient(t *testing.T) {
 		EXPECT().
 		Healthy(gomock.Any()).
 		Return(fmt.Errorf("not healthy")).
+		Times(1)
+
+	mockClient1.
+		EXPECT().
+		reconnect(gomock.Any()).
+		Do(func(ctx context.Context) {}).
 		Times(1)
 
 	mockClient2.
