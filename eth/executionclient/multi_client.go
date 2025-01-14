@@ -227,20 +227,13 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 						// Closed gracefully.
 						return lastBlock, err
 					}
-
-					// streamLogsToChan should never return without an error,
-					// so we treat a nil error as an error by itself.
-					if err == nil {
-						err = errors.New("streamLogsToChan halted without an error")
-					}
-					if lastBlock <= fromBlock {
-						err = errors.New("no new logs")
+					if err != nil {
+						fromBlock = max(fromBlock, lastBlock+1)
+						return nil, err
 					}
 
-					fromBlock = lastBlock + 1
-
-					// Proceed with the next client
-					return nil, err
+					// Success: terminate the loop without error
+					return nil, nil
 				}
 
 				_, err := ec.call(ec.setMethod(ctx, "StreamLogs"), f)
@@ -250,7 +243,10 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				}
 				if err != nil {
 					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
+					return // Terminate the loop after logging Fatal
 				}
+				// On success, terminate the loop
+				return
 			}
 		}
 	}()
@@ -335,16 +331,18 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		return f(ec.clients[0])
 	}
 
-	for range len(ec.clients) {
+	for i := 0; i < len(ec.clients); i++ {
 		ec.currClientMu.Lock()
 		currentIdx := ec.currClientIdx
 		client := ec.clients[currentIdx]
 		ec.currClientMu.Unlock()
 
+		ec.logger.Debug("calling client", zap.Int("client_index", currentIdx), zap.String("client_addr", ec.nodeAddrs[currentIdx]))
+
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-			// Closed gracefully.
-			return v, nil
+			ec.logger.Debug("received graceful closure from client", zap.Error(err))
+			return v, err
 		}
 
 		if err != nil {
@@ -366,6 +364,9 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			continue
 		}
 
+		ec.logger.Debug("call succeeded, returning value",
+			zap.String("method", ec.getMethod(ctx)),
+			zap.String("addr", ec.nodeAddrs[currentIdx]))
 		return v, nil
 	}
 
