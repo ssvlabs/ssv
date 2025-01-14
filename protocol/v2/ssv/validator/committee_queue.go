@@ -68,11 +68,12 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 	span.AddEvent("pushing message to queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
 		msgID := msg.MsgID.String()
-		eventMsg := "❗ dropping message because the queue is full"
-		span.AddEvent(eventMsg)
-		logger.Warn(eventMsg,
+		errMsg := "❗ dropping message because the queue is full"
+		span.AddEvent(errMsg)
+		logger.Warn(errMsg,
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 			zap.String("msg_id", msgID))
+		span.SetStatus(codes.Error, errMsg)
 	} else {
 		span.SetStatus(codes.Ok, "")
 	}

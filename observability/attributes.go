@@ -109,6 +109,13 @@ func ValidatorSignerAttribute(signer types.OperatorID) attribute.KeyValue {
 	}
 }
 
+func ValidatorProposerAttribute(proposer types.OperatorID) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.validator.proposer",
+		Value: Uint64AttributeValue(proposer),
+	}
+}
+
 func ValidatorPublicKeyAttribute(pubKey phase0.BLSPubKey) attribute.KeyValue {
 	return attribute.String("ssv.validator.pubkey", pubKey.String())
 }
