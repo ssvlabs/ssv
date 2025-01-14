@@ -275,12 +275,25 @@ func (ec *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) 
 	f := func(client SingleClientProvider) (any, error) {
 		return client.BlockByNumber(ctx, blockNumber)
 	}
-	res, err := ec.call(ec.setMethod(ctx, "BlockNumber"), f)
+	res, err := ec.call(ec.setMethod(ctx, "BlockByNumber"), f)
 	if err != nil {
 		return nil, err
 	}
 
 	return res.(*ethtypes.Block), nil
+}
+
+// HeaderByNumber retrieves a block header by its number.
+func (ec *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
+	f := func(client SingleClientProvider) (any, error) {
+		return client.HeaderByNumber(ctx, blockNumber)
+	}
+	res, err := ec.call(ec.setMethod(ctx, "HeaderByNumber"), f)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.(*ethtypes.Header), nil
 }
 
 func (ec *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {

@@ -714,6 +714,30 @@ func TestMultiClient_BlockByNumber(t *testing.T) {
 	require.NotNil(t, blk)
 }
 
+func TestMultiClient_HeaderByNumber(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockSingleClientProvider(ctrl)
+
+	mockClient.
+		EXPECT().
+		HeaderByNumber(gomock.Any(), big.NewInt(1234)).
+		Return(&ethtypes.Header{}, nil).
+		Times(1)
+
+	mc := &MultiClient{
+		nodeAddrs: []string{"mock1"},
+		clients:   []SingleClientProvider{mockClient},
+		logger:    zap.NewNop(),
+		closed:    make(chan struct{}),
+	}
+
+	blk, err := mc.HeaderByNumber(context.Background(), big.NewInt(1234))
+	require.NoError(t, err)
+	require.NotNil(t, blk)
+}
+
 func TestMultiClient_SubscribeFilterLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

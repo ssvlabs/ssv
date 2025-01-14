@@ -29,6 +29,7 @@ type Provider interface {
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
 	Filterer() (*contract.ContractFilterer, error)
 	BlockByNumber(ctx context.Context, number *big.Int) (*ethtypes.Block, error)
+	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
 	ChainID(ctx context.Context) (*big.Int, error)
 	Healthy(ctx context.Context) error
 	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error)

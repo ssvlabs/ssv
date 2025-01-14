@@ -134,6 +134,21 @@ func (mr *MockProviderMockRecorder) Filterer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filterer", reflect.TypeOf((*MockProvider)(nil).Filterer))
 }
 
+// HeaderByNumber mocks base method.
+func (m *MockProvider) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HeaderByNumber", ctx, blockNumber)
+	ret0, _ := ret[0].(*types.Header)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HeaderByNumber indicates an expected call of HeaderByNumber.
+func (mr *MockProviderMockRecorder) HeaderByNumber(ctx, blockNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeaderByNumber", reflect.TypeOf((*MockProvider)(nil).HeaderByNumber), ctx, blockNumber)
+}
+
 // Healthy mocks base method.
 func (m *MockProvider) Healthy(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -289,6 +304,21 @@ func (m *MockSingleClientProvider) Filterer() (*contract.ContractFilterer, error
 func (mr *MockSingleClientProviderMockRecorder) Filterer() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Filterer", reflect.TypeOf((*MockSingleClientProvider)(nil).Filterer))
+}
+
+// HeaderByNumber mocks base method.
+func (m *MockSingleClientProvider) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HeaderByNumber", ctx, blockNumber)
+	ret0, _ := ret[0].(*types.Header)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HeaderByNumber indicates an expected call of HeaderByNumber.
+func (mr *MockSingleClientProviderMockRecorder) HeaderByNumber(ctx, blockNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeaderByNumber", reflect.TypeOf((*MockSingleClientProvider)(nil).HeaderByNumber), ctx, blockNumber)
 }
 
 // Healthy mocks base method.
