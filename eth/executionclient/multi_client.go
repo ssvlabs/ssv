@@ -368,12 +368,14 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	return nil, fmt.Errorf("all clients returned an error")
 }
 
+type ctxMethod struct{}
+
 func (ec *MultiClient) setMethod(ctx context.Context, method string) context.Context {
-	return context.WithValue(ctx, "method", method)
+	return context.WithValue(ctx, ctxMethod{}, method)
 }
 
 func (ec *MultiClient) getMethod(ctx context.Context) string {
-	v, ok := ctx.Value("method").(string)
+	v, ok := ctx.Value(ctxMethod{}).(string)
 	if !ok {
 		return ""
 	}
