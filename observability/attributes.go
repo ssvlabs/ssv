@@ -73,6 +73,10 @@ func CommitteeIDAttribute(id types.CommitteeID) attribute.KeyValue {
 	return attribute.String("ssv.validator.duty.committee.id", hex.EncodeToString(id[:]))
 }
 
+func DutyCountAttribute(count int) attribute.KeyValue {
+	return attribute.Int("ssv.validator.duty_count", count)
+}
+
 func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.msg_type",

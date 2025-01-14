@@ -7,7 +7,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -126,11 +125,9 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	h.dutyQueue = pendingDuties
 	h.duties.RemoveSlot(slot - phase0.Slot(h.network.SlotsPerEpoch()))
 
+	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
 		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
-
-		span.SetAttributes(attribute.Int("ssv.validator.duty_count", dutyCount))
-
 	}
 
 	span.SetStatus(codes.Ok, "")

@@ -99,7 +99,7 @@ func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	span.SetAttributes(attribute.Int("ssv.validator.duty_count", len(d.ValidatorDuties)))
+	span.SetAttributes(observability.DutyCountAttribute(len(d.ValidatorDuties)))
 
 	for _, validatorDuty := range d.ValidatorDuties {
 		err := cr.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), d.DutySlot())

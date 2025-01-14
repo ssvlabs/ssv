@@ -10,7 +10,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -101,7 +100,7 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 		fmt.Sprintf("%s.start_consume_queue", observabilityNamespace),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
 			observability.BeaconSlotAttribute(duty.Slot)),
 	)
 	defer span.End()
@@ -144,7 +143,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		fmt.Sprintf("%s.start_duty", observabilityNamespace),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			attribute.Int("ssv.validator.duty_count", len(duty.ValidatorDuties)),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
 			observability.BeaconSlotAttribute(duty.Slot)),
 	)
 	defer span.End()

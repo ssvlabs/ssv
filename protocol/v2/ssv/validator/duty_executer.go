@@ -51,7 +51,7 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(executeDutyData.Duty.Slot),
 		observability.RunnerRoleAttribute(executeDutyData.Duty.RunnerRole()),
-		attribute.Int("ssv.validator.duty_count", len(executeDutyData.Duty.ValidatorDuties)),
+		observability.DutyCountAttribute(len(executeDutyData.Duty.ValidatorDuties)),
 	)
 	span.AddEvent("start duty")
 	if err := c.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {

@@ -675,9 +675,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 			observability.DutyIDAttribute(
 				fields.FormatDutyID(
-					c.networkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot),
-					duty.Slot,
-					duty.Type.String(), duty.ValidatorIndex)),
+					c.networkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex)),
 		))
 	defer span.End()
 
