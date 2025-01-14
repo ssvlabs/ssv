@@ -715,6 +715,14 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	defer span.End()
 
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
+		var committee []spectypes.OperatorID
+		for _, operator := range cm.CommitteeMember.Committee {
+			committee = append(committee, operator.OperatorID)
+		}
+		span.SetAttributes(
+			observability.DutyIDAttribute(fields.FormatCommitteeDutyID(committee, c.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot), duty.Slot)),
+		)
+
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
