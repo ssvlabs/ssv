@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/oleiade/lane/v2"
+	"math"
 	"math/rand"
 	"slices"
 	"strings"
@@ -729,23 +730,23 @@ func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
 	subnetPeers := n.idx.GetSubnetPeers(subnet)
 	subnetPeersExcluding := len(filterOutPeer(peerID, subnetPeers))
 
-	const targetPeersPerSubnet = 3
+	const targetPeersPerSubnet = 2
 	return score(targetPeersPerSubnet, subnetPeersExcluding)
 }
 
 func score(desired, actual int) float64 {
 	if actual > desired {
-		return float64(desired) / float64(actual) // is always less than 1.0
+		return 0.0
 	}
 	if actual == desired {
-		return 2 // at least 2x better than when `actual > desired`
+		return 0.0
 	}
 	// make every unit of difference count, starting with 2x of when `actual == desired` and
 	// increasing exponentially
 	diff := desired - actual
 	result := 2.0
 	for i := 1; i <= diff; i++ {
-		result *= float64(2.0 + i)
+		result *= math.Pow(2.0, float64(1+i))
 	}
 	return result
 }
