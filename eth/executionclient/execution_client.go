@@ -22,6 +22,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
+//go:generate mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
+
 type Provider interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
@@ -32,6 +34,14 @@ type Provider interface {
 	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error)
 	FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error)
 	Close() error
+}
+
+type SingleClientProvider interface {
+	Provider
+	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
+	connect(ctx context.Context) error
+	reconnect(ctx context.Context)
+	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
 }
 
 var _ Provider = &ExecutionClient{}

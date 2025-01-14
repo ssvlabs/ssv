@@ -19,14 +19,6 @@ import (
 
 var _ Provider = &MultiClient{}
 
-type SingleClientProvider interface {
-	Provider
-	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
-	connect(ctx context.Context) error
-	reconnect(ctx context.Context)
-	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
-}
-
 type MultiClient struct {
 	// optional
 	logger *zap.Logger
@@ -190,10 +182,18 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 					return nil, ctx.Err()
 				case <-ec.closed:
 					return nil, fmt.Errorf("client closed")
-				case log := <-singleLogsCh:
+				case log, ok := <-singleLogsCh:
+					if !ok {
+						// Underlying channel is closed -> no more logs.
+						return nil, nil
+					}
 					logsCh <- log
 					lastBlock = max(lastBlock, log.BlockNumber)
-				case err := <-singleErrCh:
+				case err, ok := <-singleErrCh:
+					if !ok {
+						// If the error channel closed, treat that as no more logs or success.
+						return nil, nil
+					}
 					fromBlock = max(fromBlock, lastBlock+1)
 					return nil, err // Try another client
 				}
