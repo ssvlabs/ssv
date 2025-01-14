@@ -119,7 +119,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		// save participants
 		for _, d := range decided250Seq {
-			_, err := ibftStorage.Get(role).UpdateParticipants(
+			_, err := ibftStorage.Get(role).SaveParticipants(
 				spectypes.ValidatorPK(pk.Serialize()),
 				phase0.Slot(d.State.Height),
 				d.DecidedMessage.OperatorIDs,

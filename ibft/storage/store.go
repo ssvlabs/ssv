@@ -60,18 +60,18 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 	}
 }
 
-// InitialSlotGC waits for the initial tick and then removes all slots below the tickSlot - retain
-func (i *participantStorage) Prune(ctx context.Context, logger *zap.Logger, threashold phase0.Slot) {
-	logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threashold))
+// Prune waits for the initial tick and then removes all slots below the tickSlot - retain
+func (i *participantStorage) Prune(ctx context.Context, logger *zap.Logger, threshold phase0.Slot) {
+	logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threshold))
 
-	// remove ALL slots below the threashold
+	// remove ALL slots below the threshold
 	start := time.Now()
-	count := i.removeSlotsOlderThan(logger, threashold)
+	count := i.removeSlotsOlderThan(logger, threshold)
 
-	logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threashold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+	logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 }
 
-// SlotGC on every tick looks up and removes the slots that fall below the retain threashold
+// PruneContinously on every tick looks up and removes the slots that fall below the retain threshold
 func (i *participantStorage) PruneContinously(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
 	ticker := slotTickerProvider()
 	logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
@@ -80,13 +80,13 @@ func (i *participantStorage) PruneContinously(ctx context.Context, logger *zap.L
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
-			threashold := ticker.Slot() - retain - 1
-			count, err := i.removeSlotAt(threashold)
+			threshold := ticker.Slot() - retain - 1
+			count, err := i.removeSlotAt(threshold)
 			if err != nil {
-				logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threashold))
+				logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threshold))
 			}
 
-			logger.Debug("removed stale slots", zap.String("store", i.ID()), fields.Slot(threashold), zap.Int("count", count))
+			logger.Debug("removed stale slots", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count))
 		}
 	}
 }
@@ -178,7 +178,7 @@ func (i *participantStorage) CleanAllInstances() error {
 	return nil
 }
 
-func (i *participantStorage) UpdateParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
 	i.participantsMu.Lock()
 	defer i.participantsMu.Unlock()
 

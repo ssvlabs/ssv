@@ -137,7 +137,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
 			}
 
-			updated, err := roleStorage.UpdateParticipants(validator.ValidatorPubKey, slot, quorum)
+			updated, err := roleStorage.SaveParticipants(validator.ValidatorPubKey, slot, quorum)
 			if err != nil {
 				return fmt.Errorf("update participants: %w", err)
 			}

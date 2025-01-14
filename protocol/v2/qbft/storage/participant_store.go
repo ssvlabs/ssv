@@ -46,8 +46,8 @@ type ParticipantStore interface {
 	// CleanAllInstances removes all records in old format.
 	CleanAllInstances() error
 
-	// UpdateParticipants updates participants in quorum.
-	UpdateParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
+	// SaveParticipants updates participants in quorum.
+	SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
 	GetAllParticipantsInRange(from, to phase0.Slot) ([]ParticipantsRangeEntry, error)

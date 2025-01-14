@@ -61,7 +61,7 @@ func TestRemoveSlot(t *testing.T) {
 
 	// save participants
 	for _, d := range decided250Seq {
-		_, err := storage.UpdateParticipants(
+		_, err := storage.SaveParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
 			phase0.Slot(d.State.Height),
 			d.DecidedMessage.OperatorIDs,
@@ -76,9 +76,9 @@ func TestRemoveSlot(t *testing.T) {
 	})
 
 	t.Run("remove slot older than", func(t *testing.T) {
-		threashold := phase0.Slot(100)
+		threshold := phase0.Slot(100)
 
-		count := storage.removeSlotsOlderThan(zap.NewNop(), threashold)
+		count := storage.removeSlotsOlderThan(zap.NewNop(), threshold)
 		require.Equal(t, 100, count)
 
 		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
@@ -86,7 +86,7 @@ func TestRemoveSlot(t *testing.T) {
 		require.Equal(t, 151, len(pp)) // seq 0 - 150
 
 		found := slices.ContainsFunc(pp, func(e qbftstorage.ParticipantsRangeEntry) bool {
-			return e.Slot < threashold
+			return e.Slot < threshold
 		})
 
 		assert.False(t, found, "found slots, none expected")
@@ -143,7 +143,7 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// save participants
 	for _, d := range decided10Seq {
-		_, err := storage.UpdateParticipants(
+		_, err := storage.SaveParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
 			phase0.Slot(d.State.Height),
 			d.DecidedMessage.OperatorIDs,
@@ -165,7 +165,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, d := range decided10Seq {
-		_, err := storage.UpdateParticipants(
+		_, err := storage.SaveParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
 			phase0.Slot(d.State.Height),
 			d.DecidedMessage.OperatorIDs,

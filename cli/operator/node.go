@@ -795,14 +795,14 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
-	threashold := slot - phase0.Slot(retain)
+	threshold := slot - phase0.Slot(retain)
 
 	// async perform initial slot gc
 	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			store.Prune(ctx, logger, threashold)
+			store.Prune(ctx, logger, threshold)
 		}()
 		return nil
 	})
