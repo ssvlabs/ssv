@@ -61,7 +61,7 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 }
 
 // InitialSlotGC waits for the initial tick and then removes all slots below the tickSlot - retain
-func (i *participantStorage) InitialSlotGC(ctx context.Context, logger *zap.Logger, threashold phase0.Slot) {
+func (i *participantStorage) Prune(ctx context.Context, logger *zap.Logger, threashold phase0.Slot) {
 	logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threashold))
 
 	// remove ALL slots below the threashold
@@ -72,7 +72,7 @@ func (i *participantStorage) InitialSlotGC(ctx context.Context, logger *zap.Logg
 }
 
 // SlotGC on every tick looks up and removes the slots that fall below the retain threashold
-func (i *participantStorage) SlotGC(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain uint64) {
+func (i *participantStorage) PruneContinously(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
 	ticker := slotTickerProvider()
 	logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
 	for {
@@ -80,7 +80,7 @@ func (i *participantStorage) SlotGC(ctx context.Context, logger *zap.Logger, slo
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
-			threashold := ticker.Slot() - phase0.Slot(retain) - 1
+			threashold := ticker.Slot() - retain - 1
 			count, err := i.removeSlotAt(threashold)
 			if err != nil {
 				logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threashold))

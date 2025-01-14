@@ -196,7 +196,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	}
 
 	// initial cleanup removes ALL slots below 3
-	storage.InitialSlotGC(ctx, zap.NewNop(), 3)
+	storage.Prune(ctx, zap.NewNop(), 3)
 
 	pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
 	require.Nil(t, err)
@@ -214,7 +214,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		storage.SlotGC(ctx, zap.NewNop(), tickerProv, 1)
+		storage.PruneContinously(ctx, zap.NewNop(), tickerProv, 1)
 	}()
 
 	mockTimeChan <- time.Now()

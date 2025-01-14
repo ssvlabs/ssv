@@ -800,7 +800,7 @@ func initSlotCleanup(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			store.InitialSlotGC(ctx, logger, threashold)
+			store.Prune(ctx, logger, threashold)
 		}()
 		return nil
 	})
@@ -809,7 +809,7 @@ func initSlotCleanup(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 
 	// start background job for removing old slots on every tick
 	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
-		go store.SlotGC(ctx, logger, slotTickerProvider, retain)
+		go store.PruneContinously(ctx, logger, slotTickerProvider, phase0.Slot(retain))
 		return nil
 	})
 }
