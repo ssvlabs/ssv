@@ -292,8 +292,10 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
-		threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
-		initSlotCleanup(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, cfg.DBOptions.RetainedSlotCount)
+		if cfg.SSVOptions.ValidatorOptions.Exporter {
+			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
+			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, cfg.DBOptions.RetainedSlotCount)
+		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
@@ -790,7 +792,7 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotCleanup(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
 	threashold := slot - phase0.Slot(retain)
