@@ -263,18 +263,12 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go func() {
 		// keep discovered peers in the pool so we can choose the best ones
 		for proposal := range connectorProposals {
-			// TODO - for debugging, can remove later
-			gotProposalStartTime := time.Now()
-			n.interfaceLogger.Debug("got proposal", zap.Time("proposal_start_time", gotProposalStartTime))
 			if peers.DiscoveredPeersPool.Has(proposal.ID) {
 				// TODO - comment out
 				// this log line is commented out as it is too spammy
 				n.interfaceLogger.Debug(
-					"got proposal, this proposal is already on the table",
+					"discovery proposed peer, this proposal is already in proposal-pool",
 					zap.String("peer_id", string(proposal.ID)),
-					// TODO - for debugging, can remove later
-					zap.Time("proposal_end_time", time.Now()),
-					zap.Duration("proposal_handling_duration", time.Since(gotProposalStartTime)),
 				)
 				continue // this proposal is already "on the table"
 			}
@@ -285,11 +279,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer, ttlcache.DefaultTTL)
 
 			n.interfaceLogger.Debug(
-				"got proposal, discovered new peer",
+				"discovery proposed peer, adding it to the pool",
 				zap.String("peer_id", string(proposal.ID)),
-				// TODO - for debugging, can remove later
-				zap.Time("proposal_end_time", time.Now()),
-				zap.Duration("proposal_handling_duration", time.Since(gotProposalStartTime)),
 			)
 		}
 	}()
@@ -324,7 +315,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				// this discovered peer has been tried many times already, we'll ignore him but won't
 				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
 				// peer again (essentially resetting this peer's retry attempts counter to 0)
-				// TODO - comment out ??
+				// TODO - comment out
 				// this log line is commented out as it is too spammy
 				n.interfaceLogger.Debug(
 					"Not gonna propose discovered peer: ran out of retries",
@@ -345,10 +336,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		for i := 0; i < peersToProposeCnt; i++ {
 			peerCandidate, _, _ := peersByPriority.Pop()
 			// update retry counter for this peer so we eventually skip it after certain number of retries
-			// TODO ^ because we aren't using mutex to make operations related to DiscoveredPeersPool atomic
-			// it's better to do this before we send this proposal on `connector` to minimize the chance of
-			// hitting the undesirable race condition (where we'll successfully connect to this peer but will
-			// keep retrying until last allowed retry attempt)
 			peers.DiscoveredPeersPool.Set(peerCandidate.ID, peers.DiscoveredPeer{
 				AddrInfo:       peerCandidate.AddrInfo,
 				ConnectRetries: peerCandidate.ConnectRetries + 1,
@@ -415,8 +402,6 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// start; it shouldn't be too large because that would negatively affect Ethereum duty
 		// execution quality
 		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
-		// TODO
-		//const maxPeersToDrop = 1
 
 		// see if we can accept more peer connections already (no need to trim), note we trim not
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
