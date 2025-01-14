@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"sync"
 	"testing"
@@ -262,7 +261,6 @@ func TestMultiClient_StreamLogs(t *testing.T) {
 		EXPECT().
 		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-			log.Println("MockClient1 called with fromBlock=200")
 			out <- BlockLogs{BlockNumber: 200}
 			out <- BlockLogs{BlockNumber: 201}
 			return 201, nil // Success
@@ -327,7 +325,6 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 		EXPECT().
 		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-			log.Println("MockClient called with fromBlock=200")
 			out <- BlockLogs{BlockNumber: 200}
 			out <- BlockLogs{BlockNumber: 201}
 			return 201, nil
@@ -389,7 +386,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-				log.Println("MockClient1 called with fromBlock=200")
 				out <- BlockLogs{BlockNumber: 200}
 				out <- BlockLogs{BlockNumber: 201}
 				return 201, errors.New("network error") // Triggers failover
@@ -407,7 +403,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
 			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-				log.Println("MockClient2 called with fromBlock=202")
 				out <- BlockLogs{BlockNumber: 202}
 				return 202, ErrClosed // Reference exported ErrClosed
 			}).
@@ -461,7 +456,6 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 		EXPECT().
 		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-			log.Println("MockClient1 called with fromBlock=200")
 			out <- BlockLogs{BlockNumber: 200}
 			return 200, errors.New("network error") // Triggers failover
 		}).
@@ -477,7 +471,6 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 		EXPECT().
 		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(201)). // Updated fromBlock to 201
 		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-			log.Println("MockClient2 called with fromBlock=201")
 			out <- BlockLogs{BlockNumber: 201}
 			return 201, errors.New("network error") // All clients failed
 		}).
@@ -614,7 +607,6 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-				log.Println("MockClient3 called with fromBlock=200")
 				out <- BlockLogs{BlockNumber: 200}
 				return 200, nil
 			}).
