@@ -318,9 +318,11 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 		shares = append(shares, staleShares[:end]...)
 	}
 
+	// Record update time for selected shares.
 	for _, share := range shares {
 		share.SetMetadataLastUpdated(time.Now())
 	}
+
 	return shares
 }
 
