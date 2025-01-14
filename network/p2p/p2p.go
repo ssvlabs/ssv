@@ -15,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
+	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
@@ -435,7 +436,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			}
 			// we don't want to trim incoming connections as often as outgoing connections (since trimming
 			// outgoing connections often helps us discover valuable peers, while it's not really the case
-			// for with incoming connections - only slightly so), hence we'll only do it 1/5 of the times
+			// with incoming connections - only slightly so), hence we'll only do it 1/5 of the times
 			if rand.Intn(5) > 0 { // nolint: gosec
 				return // skip trim iteration
 			}
@@ -444,24 +445,25 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// gotta trim some peers then
 		immunityQuota := len(connectedPeers) - maxPeersToDrop
 		protectedPeers := n.PeerProtection(immunityQuota)
-		for _, peer := range connectedPeers {
-			if _, ok := protectedPeers[peer]; ok {
-				n.libConnManager.Protect(peer, peers.ProtectedTag)
+		for _, p := range connectedPeers {
+			if _, ok := protectedPeers[p]; ok {
+				n.libConnManager.Protect(p, peers.ProtectedTag)
 				continue
 			}
-			n.libConnManager.Unprotect(peer, peers.ProtectedTag)
+			n.libConnManager.Unprotect(p, peers.ProtectedTag)
 		}
 		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxPeersToDrop) // trim up to maxPeersToDrop
 	}
 }
 
-// PeerProtection returns a map of protected peers based on the intersection of subnets.
-// it protects the best peers by these rules:
-// - At least 2 peers per subnet.
-// - Prefer peers that you have more shared subents with.
-// - Protect at most immunityQuota peers.
+// PeerProtection returns a map of protected peers based on how valuable those peers to us are,
+// peer value is proportional to how much of valuable subnets (dead/solo/duo) he contributes, as
+// defined by peerScore func. immunityQuota param limits how many peers can be protected at most,
+// it is distributed evenly between inbound and outbound connections to make sure we don't overly
+// protect one connection type (because if we do it can result in connections of other type not
+// getting trimmed frequently enough to be replaced by better connection-candidates).
 func (n *p2pNetwork) PeerProtection(immunityQuota int) map[peer.ID]struct{} {
-	myPeersSet := make(map[peer.ID]struct{}, 0)
+	myPeersSet := make(map[peer.ID]struct{})
 	for _, tpc := range n.topicsCtrl.Topics() {
 		peerz, err := n.topicsCtrl.Peers(tpc)
 		if err != nil {
@@ -489,12 +491,46 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int) map[peer.ID]struct{} {
 		return 0
 	})
 
+	immunityQuotaInbound := immunityQuota / 2
+	immunityQuotaOutbound := immunityQuota - immunityQuotaInbound
+
 	protectedPeers := make(map[peer.ID]struct{})
-	for i, p := range myPeers {
-		if i+1 > immunityQuota {
-			break
+	for _, p := range myPeers {
+		if immunityQuotaInbound == 0 && immunityQuotaOutbound == 0 {
+			break // can't protect any more peers since we reached our quotas
 		}
-		protectedPeers[p] = struct{}{}
+		pConns := n.host.Network().ConnsToPeer(p)
+		// we shouldn't have more than 1 connection per peer, but if we do we'd want
+		// a warning about it logged, and we'd want to handle it to the best of our ability
+		if len(pConns) > 1 {
+			n.interfaceLogger.Error(
+				"PeerProtection: encountered peer we have multiple open connections with (expected 1 at most)",
+				zap.String("peer_id", p.String()),
+				zap.Int("connections_count", len(pConns)),
+			)
+		}
+		for _, pConn := range pConns {
+			connDir := pConn.Stat().Direction
+			if connDir == p2pnet.DirUnknown {
+				n.interfaceLogger.Error(
+					"PeerProtection: encountered peer connection with direction Unknown",
+					zap.String("peer_id", p.String()),
+				)
+				continue
+			}
+			if connDir == p2pnet.DirInbound {
+				if immunityQuotaInbound > 0 {
+					protectedPeers[p] = struct{}{}
+					immunityQuotaInbound--
+				}
+			}
+			if connDir == p2pnet.DirOutbound {
+				if immunityQuotaOutbound > 0 {
+					immunityQuotaOutbound--
+					protectedPeers[p] = struct{}{}
+				}
+			}
+		}
 	}
 	return protectedPeers
 }

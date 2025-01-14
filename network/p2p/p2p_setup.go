@@ -43,11 +43,11 @@ const (
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
 	// backoffConnectorCacheSize is the cache size of the backoff connector
-	backoffConnectorCacheSize = 1024
+	backoffConnectorCacheSize = 2048
 	// connectTimeout is the timeout used for connections
 	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
-	connectorQueueSize = 1024
+	connectorQueueSize = 2048
 	// inboundLimitRatio is the ratio of inbound connections to the total connections
 	// we allow (both inbound and outbound).
 	inboundLimitRatio = float64(0.5)
@@ -374,7 +374,7 @@ func connectionStats(host host.Host) (inbound, outbound int) {
 	for _, cn := range host.Network().Conns() {
 		dir := cn.Stat().Direction
 		if dir == network.DirUnknown {
-			continue // TODO: how can it happen?
+			continue
 		}
 		if dir == network.DirOutbound {
 			outbound++

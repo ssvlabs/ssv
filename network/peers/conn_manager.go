@@ -28,9 +28,7 @@ type DiscoveredPeer struct {
 var (
 	// DiscoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
 	// the best candidates to connect to.
-	//DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](30 * time.Minute))
-	// TODO - for debugging, can remove later
-	DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](120 * time.Minute))
+	DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](30 * time.Minute))
 	TrimmedRecently     = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](30 * time.Minute))
 )
 
@@ -85,8 +83,8 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 			if err := c.disconnect(pid, net); err != nil {
 				logger.Debug("error closing peer", fields.PeerID(pid), zap.Error(err))
 			}
-			trimmed = append(trimmed, pid)
 			TrimmedRecently.Set(pid, struct{}{}, ttlcache.DefaultTTL) // record stats
+			trimmed = append(trimmed, pid)
 			if len(trimmed) >= maxTrims {
 				break
 			}
