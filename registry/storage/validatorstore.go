@@ -231,7 +231,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 		}
 
 		// Update byValidatorIndex
-		if share.HasOnChainData() {
+		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.ValidatorIndex] = share
 		}
 
@@ -310,7 +310,7 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 	defer c.mu.Unlock()
 
 	// Update byValidatorIndex
-	if share.HasOnChainData() {
+	if share.HasBeaconMetadata() {
 		delete(c.byValidatorIndex, share.ValidatorIndex)
 	}
 
@@ -382,7 +382,7 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 		}
 
 		// Update byValidatorIndex
-		if share.HasOnChainData() {
+		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.ValidatorIndex] = share
 		}
 

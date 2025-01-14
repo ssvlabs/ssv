@@ -500,7 +500,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if !share.HasOnChainData() {
+	if !share.HasBeaconMetadata() {
 		return nil, nil
 	}
 

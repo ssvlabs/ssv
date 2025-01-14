@@ -62,13 +62,13 @@ func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 	})
 }
 
-// HasOnChainData checks whether SSVShare has been enriched with respective Beacon metadata.
-func (s *SSVShare) HasOnChainData() bool {
+// HasBeaconMetadata checks whether SSVShare has been enriched with respective Beacon metadata.
+func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.Status != eth2apiv1.ValidatorStateUnknown
 }
 
 func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
-	return s.HasOnChainData() &&
+	return s.HasBeaconMetadata() &&
 		(s.Status.IsAttesting() || (s.Status == eth2apiv1.ValidatorStatePendingQueued && s.ActivationEpoch <= epoch))
 }
 

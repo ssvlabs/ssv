@@ -434,7 +434,7 @@ func ByNotLiquidated() SharesFilter {
 // ByActiveValidator filters for active validators.
 func ByActiveValidator() SharesFilter {
 	return func(share *types.SSVShare) bool {
-		return share.HasOnChainData()
+		return share.HasBeaconMetadata()
 	}
 }
 
