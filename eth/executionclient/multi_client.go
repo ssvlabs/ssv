@@ -231,6 +231,7 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 						return lastBlock, err
 					}
 					if err != nil {
+						// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
 						fromBlock = max(fromBlock, lastBlock+1)
 						return nil, err
 					}
