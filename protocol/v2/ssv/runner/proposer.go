@@ -41,7 +41,6 @@ type ProposerRunner struct {
 }
 
 func NewProposerRunner(
-	domainType spectypes.DomainType,
 	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -60,7 +59,6 @@ func NewProposerRunner(
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
-			DomainType:         domainType,
 			NetworkConfig:      networkConfig,
 			Share:              share,
 			QBFTController:     qbftController,

@@ -34,7 +34,6 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
-	domainType spectypes.DomainType,
 	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
@@ -50,7 +49,6 @@ func NewVoluntaryExitRunner(
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
-			DomainType:     domainType,
 			NetworkConfig:  networkConfig,
 			Share:          share,
 		},

@@ -59,7 +59,8 @@ type BaseRunner struct {
 	State          *State
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
-	DomainType     spectypes.DomainType // TODO: remove, use NetworkConfig
+	// DEPRECATED: get domain from NetworkConfig instead, DomainType is left for compatibility with spec tests
+	DomainType     spectypes.DomainType
 	NetworkConfig  networkconfig.NetworkConfig
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
@@ -127,7 +128,6 @@ func NewBaseRunner(
 	state *State,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
-	domainType spectypes.DomainType,
 	networkConfig networkconfig.NetworkConfig,
 	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
@@ -137,7 +137,6 @@ func NewBaseRunner(
 		Share:              share,
 		QBFTController:     controller,
 		NetworkConfig:      networkConfig,
-		DomainType:         domainType,
 		RunnerRoleType:     runnerRoleType,
 		highestDecidedSlot: highestDecidedSlot,
 	}

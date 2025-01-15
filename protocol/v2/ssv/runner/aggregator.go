@@ -35,7 +35,6 @@ type AggregatorRunner struct {
 var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
-	domainType spectypes.DomainType,
 	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -53,7 +52,6 @@ func NewAggregatorRunner(
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleAggregator,
-			DomainType:         domainType,
 			NetworkConfig:      networkConfig,
 			Share:              share,
 			QBFTController:     qbftController,

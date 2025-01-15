@@ -32,7 +32,6 @@ type ValidatorRegistrationRunner struct {
 }
 
 func NewValidatorRegistrationRunner(
-	domainType spectypes.DomainType,
 	networkConfig networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
@@ -47,7 +46,6 @@ func NewValidatorRegistrationRunner(
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
-			DomainType:     domainType,
 			NetworkConfig:  networkConfig,
 			Share:          share,
 		},
