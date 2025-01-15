@@ -48,7 +48,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("GetAll: %w", err)
 		}
 
-		if err := opt.Db.SetMany(migrationsPrefix, len(sets), func(i int) (basedb.Obj, error) {
+		if err := opt.Db.SetMany(storagePrefix, len(sets), func(i int) (basedb.Obj, error) {
 			return sets[i], nil
 		}); err != nil {
 			return fmt.Errorf("SetMany: %w", err)
