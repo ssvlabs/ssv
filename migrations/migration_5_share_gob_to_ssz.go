@@ -17,6 +17,10 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		// storagePrefix is a base prefix we use when storing shares
 		var storagePrefix = []byte("operator/")
 
+		// sets is a bunch of updates this migration will need to perform, we cannot do them all in a
+		// single transaction (because there is a limit on how large a single transaction can be) so
+		// we'll use SetMany func that will split up the data we want to update into batches committing
+		// each batch in a separate transaction. I guess that makes this migration non-atomic.
 		sets := make([]basedb.Obj, 0)
 
 		err := opt.Db.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
@@ -44,6 +48,12 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("GetAll: %w", err)
 		}
 
+		if err := opt.Db.SetMany(migrationsPrefix, len(sets), func(i int) (basedb.Obj, error) {
+			return sets[i], nil
+		}); err != nil {
+			return fmt.Errorf("SetMany: %w", err)
+		}
+
 		// TODO - do not complete migration just yet, we will complete it after testing on stage
 		// has been done and when we are ready to merge: https://github.com/ssvlabs/ssv/pull/1837
 		// or we'll complete this even later if we go for 100% rollback-supporting approach
@@ -52,11 +62,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		//if err := return completed(opt.Db); err != nil {
 		//	return fmt.Errorf("complete transaction: %w", err)
 		//}
-		if err := opt.Db.SetMany(migrationsPrefix, len(sets), func(i int) (basedb.Obj, error) {
-			return sets[i], nil
-		}); err != nil {
-			return fmt.Errorf("SetMany: %w", err)
-		}
+
 		return nil
 	},
 }
