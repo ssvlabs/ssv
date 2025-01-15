@@ -246,7 +246,8 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				}
 				if err != nil {
 					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
-					return // Terminate the loop after logging Fatal
+					// Tests override Fatal's behavior to test if it was called, so they need a return here.
+					return
 				}
 				// On success, terminate the loop
 				return
@@ -350,11 +351,11 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	for i := 0; i < len(ec.clients); i++ {
 		ec.currClientMu.Lock()
 		currentIdx := ec.currClientIdx
-		client := ec.clients[currentIdx]
 		ec.currClientMu.Unlock()
 
 		ec.logger.Debug("calling client", zap.Int("client_index", currentIdx), zap.String("client_addr", ec.nodeAddrs[currentIdx]))
 
+		client := ec.clients[currentIdx]
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 			ec.logger.Debug("received graceful closure from client", zap.Error(err))
