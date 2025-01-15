@@ -179,6 +179,8 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 			}
 
 			var lastBlock uint64
+
+		processLogsLabel:
 			for {
 				select {
 				case <-ctx.Done():
@@ -188,19 +190,31 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 				case log, ok := <-singleLogsCh:
 					if !ok {
 						// Underlying channel is closed -> no more logs.
-						return nil, nil
+						break processLogsLabel
 					}
 					logsCh <- log
 					lastBlock = max(lastBlock, log.BlockNumber)
+				}
+			}
+
+		processErrsLabel:
+			for {
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-ec.closed:
+					return nil, fmt.Errorf("client closed")
 				case err, ok := <-singleErrCh:
 					if !ok {
 						// If the error channel closed, treat that as no more logs or success.
-						return nil, nil
+						break processErrsLabel
 					}
 					fromBlock = max(fromBlock, lastBlock+1)
 					return nil, err // Try another client
 				}
 			}
+
+			return nil, nil
 		}
 
 		if _, err := ec.call(contextWithMethod(ctx, "FetchHistoricalLogs [process logs]"), processLogsFunc); err != nil {
