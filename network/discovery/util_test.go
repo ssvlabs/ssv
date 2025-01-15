@@ -96,13 +96,12 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 	return networkconfig.NetworkConfig{
 		Beacon: networkconfig.HoleskyBeaconConfig,
 		SSV: networkconfig.SSV{
-			Name:                      n.Name,
-			DomainType:                n.DomainType,
-			RegistrySyncOffset:        n.RegistrySyncOffset,
-			RegistryContractAddr:      n.RegistryContractAddr,
-			Bootnodes:                 n.Bootnodes,
-			MaxValidatorsPerCommittee: n.MaxValidatorsPerCommittee,
-			TotalEthereumValidators:   n.TotalEthereumValidators,
+			Name:                    n.Name,
+			DomainType:              n.DomainType,
+			RegistrySyncOffset:      n.RegistrySyncOffset,
+			RegistryContractAddr:    n.RegistryContractAddr,
+			Bootnodes:               n.Bootnodes,
+			TotalEthereumValidators: n.TotalEthereumValidators,
 		},
 	}
 }

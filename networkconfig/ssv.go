@@ -27,14 +27,13 @@ func GetSSVConfigByName(name string) (SSV, error) {
 }
 
 type SSV struct {
-	Name                      string               `yaml:"Name,omitempty"`
-	DomainType                spectypes.DomainType `yaml:"DomainType,omitempty"`
-	RegistrySyncOffset        *big.Int             `yaml:"RegistrySyncOffset,omitempty"`
-	RegistryContractAddr      ethcommon.Address    `yaml:"RegistryContractAddr,omitempty"`
-	Bootnodes                 []string             `yaml:"Bootnodes,omitempty"`
-	DiscoveryProtocolID       [6]byte              `yaml:"DiscoveryProtocolID,omitempty"`
-	MaxValidatorsPerCommittee int                  `yaml:"MaxValidatorsPerCommittee,omitempty"`
-	TotalEthereumValidators   int                  `yaml:"TotalEthereumValidators,omitempty"` // value needs to be maintained — consider getting it from external API with default or per-network value(s) as fallback
+	Name                    string               `yaml:"Name,omitempty"`
+	DomainType              spectypes.DomainType `yaml:"DomainType,omitempty"`
+	RegistrySyncOffset      *big.Int             `yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr    ethcommon.Address    `yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes               []string             `yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID     [6]byte              `yaml:"DiscoveryProtocolID,omitempty"`
+	TotalEthereumValidators int                  `yaml:"TotalEthereumValidators,omitempty"` // value needs to be maintained — consider getting it from external API with default or per-network value(s) as fallback
 }
 
 func (s SSV) String() string {
@@ -43,23 +42,21 @@ func (s SSV) String() string {
 
 func (s SSV) MarshalYAML() (interface{}, error) {
 	aux := &struct {
-		Name                      string   `yaml:"Name,omitempty"`
-		DomainType                string   `yaml:"DomainType,omitempty"`
-		RegistrySyncOffset        *big.Int `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr      string   `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes                 []string `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID       string   `yaml:"DiscoveryProtocolID,omitempty"`
-		MaxValidatorsPerCommittee int      `yaml:"MaxValidatorsPerCommittee,omitempty"`
-		TotalEthereumValidators   int      `yaml:"TotalEthereumValidators,omitempty"`
+		Name                    string   `yaml:"Name,omitempty"`
+		DomainType              string   `yaml:"DomainType,omitempty"`
+		RegistrySyncOffset      *big.Int `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr    string   `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes               []string `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID     string   `yaml:"DiscoveryProtocolID,omitempty"`
+		TotalEthereumValidators int      `yaml:"TotalEthereumValidators,omitempty"`
 	}{
-		Name:                      s.Name,
-		DomainType:                "0x" + hex.EncodeToString(s.DomainType[:]),
-		RegistrySyncOffset:        s.RegistrySyncOffset,
-		RegistryContractAddr:      s.RegistryContractAddr.String(),
-		Bootnodes:                 s.Bootnodes,
-		DiscoveryProtocolID:       "0x" + hex.EncodeToString(s.DiscoveryProtocolID[:]),
-		MaxValidatorsPerCommittee: s.MaxValidatorsPerCommittee,
-		TotalEthereumValidators:   s.TotalEthereumValidators,
+		Name:                    s.Name,
+		DomainType:              "0x" + hex.EncodeToString(s.DomainType[:]),
+		RegistrySyncOffset:      s.RegistrySyncOffset,
+		RegistryContractAddr:    s.RegistryContractAddr.String(),
+		Bootnodes:               s.Bootnodes,
+		DiscoveryProtocolID:     "0x" + hex.EncodeToString(s.DiscoveryProtocolID[:]),
+		TotalEthereumValidators: s.TotalEthereumValidators,
 	}
 
 	return aux, nil
@@ -67,14 +64,13 @@ func (s SSV) MarshalYAML() (interface{}, error) {
 
 func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	aux := &struct {
-		Name                      string   `yaml:"Name,omitempty"`
-		DomainType                string   `yaml:"DomainType,omitempty"`
-		RegistrySyncOffset        *big.Int `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr      string   `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes                 []string `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID       string   `yaml:"DiscoveryProtocolID,omitempty"`
-		MaxValidatorsPerCommittee int      `yaml:"MaxValidatorsPerCommittee,omitempty"`
-		TotalEthereumValidators   int      `yaml:"TotalEthereumValidators,omitempty"`
+		Name                    string   `yaml:"Name,omitempty"`
+		DomainType              string   `yaml:"DomainType,omitempty"`
+		RegistrySyncOffset      *big.Int `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr    string   `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes               []string `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID     string   `yaml:"DiscoveryProtocolID,omitempty"`
+		TotalEthereumValidators int      `yaml:"TotalEthereumValidators,omitempty"`
 	}{}
 
 	if err := unmarshal(aux); err != nil {
@@ -102,14 +98,13 @@ func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	*s = SSV{
-		Name:                      aux.Name,
-		DomainType:                domainArr,
-		RegistrySyncOffset:        aux.RegistrySyncOffset,
-		RegistryContractAddr:      ethcommon.HexToAddress(aux.RegistryContractAddr),
-		Bootnodes:                 aux.Bootnodes,
-		DiscoveryProtocolID:       discoveryProtocolIDArr,
-		MaxValidatorsPerCommittee: aux.MaxValidatorsPerCommittee,
-		TotalEthereumValidators:   aux.TotalEthereumValidators,
+		Name:                    aux.Name,
+		DomainType:              domainArr,
+		RegistrySyncOffset:      aux.RegistrySyncOffset,
+		RegistryContractAddr:    ethcommon.HexToAddress(aux.RegistryContractAddr),
+		Bootnodes:               aux.Bootnodes,
+		DiscoveryProtocolID:     discoveryProtocolIDArr,
+		TotalEthereumValidators: aux.TotalEthereumValidators,
 	}
 
 	return nil

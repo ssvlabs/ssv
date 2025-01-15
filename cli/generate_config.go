@@ -30,22 +30,21 @@ var (
 )
 
 var (
-	outputPath                   string
-	logLevel                     string
-	dbPath                       string
-	discovery                    string
-	consensusClient              string
-	executionClient              string
-	operatorPrivateKey           string
-	metricsAPIPort               int
-	ssvNetworkName               string
-	ssvDomain                    string
-	ssvRegistrySyncOffset        uint64
-	ssvRegistryContractAddr      string
-	ssvBootnodes                 string
-	ssvDiscoveryProtocolID       string
-	ssvMaxValidatorsPerCommittee int
-	ssvTotalEthereumValidators   int
+	outputPath                 string
+	logLevel                   string
+	dbPath                     string
+	discovery                  string
+	consensusClient            string
+	executionClient            string
+	operatorPrivateKey         string
+	metricsAPIPort             int
+	ssvNetworkName             string
+	ssvDomain                  string
+	ssvRegistrySyncOffset      uint64
+	ssvRegistryContractAddr    string
+	ssvBootnodes               string
+	ssvDiscoveryProtocolID     string
+	ssvTotalEthereumValidators int
 )
 
 type SSVConfig struct {
@@ -106,14 +105,13 @@ var generateConfigCmd = &cobra.Command{
 		config.OperatorPrivateKey = operatorPrivateKey
 		config.MetricsAPIPort = metricsAPIPort
 		config.SSV.CustomNetwork = &networkconfig.SSV{
-			Name:                      ssvNetworkName,
-			DomainType:                spectypes.DomainType(parsedDomain),
-			RegistrySyncOffset:        new(big.Int).SetUint64(ssvRegistrySyncOffset),
-			RegistryContractAddr:      ethcommon.HexToAddress(ssvRegistryContractAddr),
-			Bootnodes:                 bootnodes,
-			DiscoveryProtocolID:       parsedDiscoveryProtocolIDArr,
-			MaxValidatorsPerCommittee: ssvMaxValidatorsPerCommittee,
-			TotalEthereumValidators:   ssvTotalEthereumValidators,
+			Name:                    ssvNetworkName,
+			DomainType:              spectypes.DomainType(parsedDomain),
+			RegistrySyncOffset:      new(big.Int).SetUint64(ssvRegistrySyncOffset),
+			RegistryContractAddr:    ethcommon.HexToAddress(ssvRegistryContractAddr),
+			Bootnodes:               bootnodes,
+			DiscoveryProtocolID:     parsedDiscoveryProtocolIDArr,
+			TotalEthereumValidators: ssvTotalEthereumValidators,
 		}
 
 		data, err := yaml.Marshal(&config)
@@ -151,7 +149,6 @@ func init() {
 	generateConfigCmd.Flags().StringVar(&ssvBootnodes, "ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")
 	ssvDiscoveryProtocolIDDefault := "0x" + hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:])
 	generateConfigCmd.Flags().StringVar(&ssvDiscoveryProtocolID, "ssv-discovery-protocol-id", ssvDiscoveryProtocolIDDefault, "SSV discovery protocol ID")
-	generateConfigCmd.Flags().IntVar(&ssvMaxValidatorsPerCommittee, "ssv-max-validators-per-committee", defaultNetwork.MaxValidatorsPerCommittee, "SSV max validators per committee")
 	generateConfigCmd.Flags().IntVar(&ssvTotalEthereumValidators, "ssv-total-ethereum-validators", defaultNetwork.TotalEthereumValidators, "Total ethereum network validators")
 
 	RootCmd.AddCommand(generateConfigCmd)

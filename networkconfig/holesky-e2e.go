@@ -8,11 +8,10 @@ import (
 )
 
 var HoleskyE2ESSV = SSV{
-	Name:                      "holesky-e2e",
-	DomainType:                spectypes.DomainType{0x0, 0x0, 0xee, 0x1},
-	RegistryContractAddr:      ethcommon.HexToAddress("0x58410bef803ecd7e63b23664c586a6db72daf59c"),
-	RegistrySyncOffset:        big.NewInt(405579),
-	Bootnodes:                 []string{},
-	MaxValidatorsPerCommittee: HoleskySSV.MaxValidatorsPerCommittee,
-	TotalEthereumValidators:   HoleskySSV.TotalEthereumValidators,
+	Name:                    "holesky-e2e",
+	DomainType:              spectypes.DomainType{0x0, 0x0, 0xee, 0x1},
+	RegistryContractAddr:    ethcommon.HexToAddress("0x58410bef803ecd7e63b23664c586a6db72daf59c"),
+	RegistrySyncOffset:      big.NewInt(405579),
+	Bootnodes:               []string{},
+	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 }

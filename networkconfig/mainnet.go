@@ -11,12 +11,11 @@ import (
 )
 
 var MainnetSSV = SSV{
-	Name:                      "mainnet",
-	DomainType:                spectypes.AlanMainnet,
-	RegistrySyncOffset:        new(big.Int).SetInt64(17507487),
-	RegistryContractAddr:      ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
-	MaxValidatorsPerCommittee: 560,
-	TotalEthereumValidators:   1072679, // active_validators from https://mainnet.beaconcha.in/index/data on Nov 20, 2024
+	Name:                    "mainnet",
+	DomainType:              spectypes.AlanMainnet,
+	RegistrySyncOffset:      new(big.Int).SetInt64(17507487),
+	RegistryContractAddr:    ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
+	TotalEthereumValidators: 1072679, // active_validators from https://mainnet.beaconcha.in/index/data on Nov 20, 2024
 	Bootnodes: []string{
 		// SSV Labs
 		"enr:-Ja4QAbDe5XANqJUDyJU1GmtS01qqMwDYx9JNZgymjBb55fMaha80E2HznRYoUGy6NFVSvs1u1cFqSM0MgJI-h1QKLeGAZKaTo7LgmlkgnY0gmlwhDQrfraJc2VjcDI1NmsxoQNEj0Pgq9-VxfeX83LPDOUPyWiTVzdI-DnfMdO1n468u4Nzc3YBg3RjcIITioN1ZHCCD6I",

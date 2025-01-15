@@ -11,6 +11,10 @@ import (
 // Ethereum parameters
 const (
 	SingleSCDutiesLimit = 0
+	// MaxValidatorsPerCommitteeListCut serves as a threshold size for creating a cache that computes the expected number of duties given a committee size.
+	// For each committee size, we can compute the precise expected number of duties. However, for big enough committees (considered as bigger than the following constant), results are pretty much the same. So we create a list of const values only up to the following value. For values that exceed it, the function shall return a default limit answer (e.g. number of committees duties per epoch -> 32).
+	// TODO: It depends on duties per epoch, 32 duties per epoch maps to MaxValidatorsPerCommitteeListCut=560. If the value of duties per epoch changes, this value needs to be adjusted (need to run Monte Carlo simulation for that number).
+	MaxValidatorsPerCommitteeListCut = 560
 )
 
 type rateCalculator struct {
@@ -93,10 +97,10 @@ func (rc *rateCalculator) calcExpectedSingleSCCommitteeDutiesPerEpoch(numValidat
 func (rc *rateCalculator) generateCachedValues() {
 	// Cache costly calculations
 
-	expectedCommNumber := make([]float64, 0, rc.netCfg.SSV.MaxValidatorsPerCommittee)
-	expectedSingleSCC := make([]float64, 0, rc.netCfg.SSV.MaxValidatorsPerCommittee)
+	expectedCommNumber := make([]float64, 0, MaxValidatorsPerCommitteeListCut)
+	expectedSingleSCC := make([]float64, 0, MaxValidatorsPerCommitteeListCut)
 
-	for i := 0; i < rc.netCfg.SSV.MaxValidatorsPerCommittee; i++ {
+	for i := 0; i < MaxValidatorsPerCommitteeListCut; i++ {
 		expectedCommNumber = append(expectedCommNumber, rc.calcExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation(i))
 		expectedSingleSCC = append(expectedSingleSCC, rc.calcExpectedSingleSCCommitteeDutiesPerEpoch(i))
 	}
@@ -107,7 +111,7 @@ func (rc *rateCalculator) generateCachedValues() {
 
 func (rc *rateCalculator) expectedNumberOfCommitteeDutiesPerEpochDueToAttestationCached(numValidators int) float64 {
 	// If the committee has more validators than our computed cache, we return the limit value
-	if numValidators >= rc.netCfg.SSV.MaxValidatorsPerCommittee {
+	if numValidators >= MaxValidatorsPerCommitteeListCut {
 		return float64(rc.MaxAttestationDutiesPerEpochForCommittee())
 	}
 
@@ -116,7 +120,7 @@ func (rc *rateCalculator) expectedNumberOfCommitteeDutiesPerEpochDueToAttestatio
 
 func (rc *rateCalculator) expectedSingleSCCommitteeDutiesPerEpochCached(numValidators int) float64 {
 	// If the committee has more validators than our computed cache, we return the limit value
-	if numValidators >= rc.netCfg.SSV.MaxValidatorsPerCommittee {
+	if numValidators >= MaxValidatorsPerCommitteeListCut {
 		return SingleSCDutiesLimit
 	}
 
