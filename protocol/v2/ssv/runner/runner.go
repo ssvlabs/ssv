@@ -59,8 +59,6 @@ type BaseRunner struct {
 	State          *State
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
-	// DEPRECATED: get domain from NetworkConfig instead, DomainType is left for compatibility with spec tests
-	DomainType     spectypes.DomainType
 	NetworkConfig  networkconfig.NetworkConfig
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
