@@ -64,7 +64,7 @@ func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.NetworkConfig, logger)
+	return ekm.NewSignerStorage(o.Db, o.NetworkConfig.ConfigName, logger)
 }
 
 // Run executes the migrations.

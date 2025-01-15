@@ -40,53 +40,53 @@ func SetupMockNetworkConfig(t *testing.T, currentSlot *SlotValue) *networkconfig
 
 	exampleConfig := networkconfig.HoleskyBeaconConfig
 
-	mockBeaconNetwork := networkconfig.NewMockInterface(ctrl)
-	mockBeaconNetwork.EXPECT().BeaconNetwork().DoAndReturn(
+	mockNetworkConfig := networkconfig.NewMockInterface(ctrl)
+	mockNetworkConfig.EXPECT().BeaconNetwork().DoAndReturn(
 		func() string {
 			return exampleConfig.ConfigName
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().SlotsPerEpoch().Return(exampleConfig.SlotsPerEpoch).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedCurrentSlot().DoAndReturn(
+	mockNetworkConfig.EXPECT().SlotsPerEpoch().Return(exampleConfig.SlotsPerEpoch).AnyTimes()
+	mockNetworkConfig.EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
 			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
+	mockNetworkConfig.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
-			return phase0.Epoch(currentSlot.GetSlot() / mockBeaconNetwork.SlotsPerEpoch())
+			return phase0.Epoch(currentSlot.GetSlot() / mockNetworkConfig.SlotsPerEpoch())
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
+	mockNetworkConfig.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
 			return exampleConfig.EstimatedEpochAtSlot(slot)
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().FirstSlotAtEpoch(gomock.Any()).DoAndReturn(
+	mockNetworkConfig.EXPECT().FirstSlotAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
 			return exampleConfig.FirstSlotAtEpoch(epoch)
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().IsFirstSlotOfEpoch(gomock.Any()).DoAndReturn(
+	mockNetworkConfig.EXPECT().IsFirstSlotOfEpoch(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) bool {
-			return (slot)%mockBeaconNetwork.SlotsPerEpoch() == 0
+			return (slot)%mockNetworkConfig.SlotsPerEpoch() == 0
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
+	mockNetworkConfig.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
 			return exampleConfig.GetSlotStartTime(slot)
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().SlotDuration().DoAndReturn(
+	mockNetworkConfig.EXPECT().SlotDuration().DoAndReturn(
 		func() time.Duration {
 			return exampleConfig.SlotDuration
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().DomainType().DoAndReturn(
+	mockNetworkConfig.EXPECT().DomainType().DoAndReturn(
 		func() spectypes.DomainType {
 			return networkconfig.TestingNetworkConfig.DomainType()
 		},
 	).AnyTimes()
 
-	return mockBeaconNetwork
+	return mockNetworkConfig
 }

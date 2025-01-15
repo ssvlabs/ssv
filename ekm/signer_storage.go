@@ -21,7 +21,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -51,16 +50,16 @@ type Storage interface {
 
 type storage struct {
 	db            basedb.Database
-	networkConfig networkconfig.Interface
+	beaconNetwork string
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, networkConfig networkconfig.Interface, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, beaconNetwork string, logger *zap.Logger) Storage {
 	return &storage{
 		db:            db,
-		networkConfig: networkConfig,
+		beaconNetwork: beaconNetwork,
 		logger:        logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
 		lock:          sync.RWMutex{},
 	}
@@ -87,7 +86,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(s.networkConfig.BeaconNetwork() + obj)
+	return []byte(s.beaconNetwork + obj)
 }
 
 // Name returns storage name.
@@ -99,7 +98,7 @@ func (s *storage) Name() string {
 func (s *storage) Network() core.Network {
 	// This method is used only in tests,
 	// so s.network is always a network supported by core.Network.
-	return core.Network(s.networkConfig.BeaconNetwork())
+	return core.Network(s.beaconNetwork)
 }
 
 // SaveWallet stores the given wallet.

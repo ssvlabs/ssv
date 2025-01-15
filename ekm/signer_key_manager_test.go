@@ -83,7 +83,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(db, networkconfig.TestingNetworkConfig, logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestingNetworkConfig.ConfigName, logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 
