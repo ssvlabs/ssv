@@ -34,8 +34,8 @@ type Committee struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mtx           sync.RWMutex
-	networkConfig networkconfig.NetworkConfig
+	mtx          sync.RWMutex
+	beaconConfig networkconfig.Beacon
 
 	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
@@ -52,7 +52,7 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	networkConfig networkconfig.NetworkConfig,
+	beaconConfig networkconfig.Beacon,
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
@@ -63,7 +63,7 @@ func NewCommittee(
 	}
 	return &Committee{
 		logger:          logger,
-		networkConfig:   networkConfig,
+		beaconConfig:    beaconConfig,
 		ctx:             ctx,
 		cancel:          cancel,
 		Queues:          make(map[phase0.Slot]queueContainer),
@@ -106,7 +106,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.Beacon.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.beaconConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 
 	go func() {
 		defer cancelF()
@@ -281,7 +281,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.networkConfig.Beacon.EstimatedEpochAtSlot(slot)
+			epoch := c.beaconConfig.EstimatedEpochAtSlot(slot)
 			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))

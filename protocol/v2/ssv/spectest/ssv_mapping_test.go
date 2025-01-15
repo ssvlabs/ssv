@@ -554,7 +554,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		ctx,
 		cancel,
 		logger,
-		networkconfig.TestingNetworkConfig,
+		networkconfig.TestingBeaconConfig,
 		&specCommittee.CommitteeMember,
 		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)

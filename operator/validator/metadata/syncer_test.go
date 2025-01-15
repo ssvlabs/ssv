@@ -98,7 +98,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			noSubnets, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
 			require.NoError(t, err)
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestingNetworkConfig.Beacon, beaconNode, noSubnets)
+			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestingBeaconConfig, beaconNode, noSubnets)
 			_, err = syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
@@ -437,7 +437,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			beaconConfig:      networkconfig.TestingNetworkConfig.Beacon,
+			beaconConfig:      networkconfig.TestingBeaconConfig,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -538,7 +538,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        errMockBeaconNode,
-			beaconConfig:      networkconfig.TestingNetworkConfig.Beacon,
+			beaconConfig:      networkconfig.TestingBeaconConfig,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -614,7 +614,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			beaconConfig:      networkconfig.TestingNetworkConfig.Beacon,
+			beaconConfig:      networkconfig.TestingBeaconConfig,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -689,7 +689,7 @@ func TestWithUpdateInterval(t *testing.T) {
 		logger,
 		mockShareStorage,
 		mockValidatorStore,
-		networkconfig.TestingNetworkConfig.Beacon,
+		networkconfig.TestingBeaconConfig,
 		mockBeaconNode,
 		noSubnets,
 		WithSyncInterval(interval),

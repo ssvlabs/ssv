@@ -786,7 +786,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 			ctx,
 			cancel,
 			logger,
-			c.networkConfig,
+			c.networkConfig.Beacon,
 			operator,
 			committeeRunnerFunc,
 			nil,

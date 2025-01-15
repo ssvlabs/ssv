@@ -290,7 +290,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		networkconfig.TestingNetworkConfig,
+		networkconfig.TestingBeaconConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

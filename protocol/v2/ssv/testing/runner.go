@@ -86,13 +86,13 @@ var ConstructBaseRunner = func(
 		valCheck = ssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
 			[]spectypes.ShareValidatorPK{share.SharePubKey}, spectestingutils.TestingDutyEpoch)
 	case spectypes.RoleProposer:
-		valCheck = ssv.ProposerValueCheckF(km, networkconfig.TestingNetworkConfig.Beacon,
+		valCheck = ssv.ProposerValueCheckF(km, networkconfig.TestingBeaconConfig,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, share.SharePubKey)
 	case spectypes.RoleAggregator:
-		valCheck = ssv.AggregatorValueCheckF(km, networkconfig.TestingNetworkConfig.Beacon,
+		valCheck = ssv.AggregatorValueCheckF(km, networkconfig.TestingBeaconConfig,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	case spectypes.RoleSyncCommitteeContribution:
-		valCheck = ssv.SyncCommitteeContributionValueCheckF(km, networkconfig.TestingNetworkConfig.Beacon,
+		valCheck = ssv.SyncCommitteeContributionValueCheckF(km, networkconfig.TestingBeaconConfig,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	default:
 		valCheck = nil
@@ -336,13 +336,13 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = ssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
 				sharePubKeys, spectestingutils.TestingDutyEpoch)
 		case spectypes.RoleProposer:
-			valCheck = ssv.ProposerValueCheckF(km, networkconfig.TestingNetworkConfig.Beacon,
+			valCheck = ssv.ProposerValueCheckF(km, networkconfig.TestingBeaconConfig,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, shareInstance.SharePubKey)
 		case spectypes.RoleAggregator:
-			valCheck = ssv.AggregatorValueCheckF(km, networkconfig.TestingNetworkConfig.Beacon,
+			valCheck = ssv.AggregatorValueCheckF(km, networkconfig.TestingBeaconConfig,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 		case spectypes.RoleSyncCommitteeContribution:
-			valCheck = ssv.SyncCommitteeContributionValueCheckF(km, networkconfig.TestingNetworkConfig.Beacon,
+			valCheck = ssv.SyncCommitteeContributionValueCheckF(km, networkconfig.TestingBeaconConfig,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 		default:
 			valCheck = nil
