@@ -39,6 +39,7 @@ func SetupMockNetworkConfig(t *testing.T, currentSlot *SlotValue) *networkconfig
 	}
 
 	exampleConfig := networkconfig.TestingBeaconConfig
+	exampleConfig.NetworkName = string(spectypes.HoleskyNetwork)
 
 	mockNetworkConfig := networkconfig.NewMockInterface(ctrl)
 	mockNetworkConfig.EXPECT().BeaconNetwork().DoAndReturn(
