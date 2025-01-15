@@ -227,7 +227,6 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				f := func(client SingleClientProvider) (any, error) {
 					lastBlock, err := client.streamLogsToChan(ctx, logs, fromBlock)
 					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-						// Closed gracefully.
 						return lastBlock, err
 					}
 					if err != nil {
@@ -236,21 +235,15 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 						return nil, err
 					}
 
-					// Success: terminate the loop without error
 					return nil, nil
 				}
 
 				_, err := ec.call(ec.setMethod(ctx, "StreamLogs"), f)
-				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-					// Closed gracefully.
-					return
-				}
-				if err != nil {
+				if err != nil && !errors.Is(err, ErrClosed) && !errors.Is(err, context.Canceled) {
+					// NOTE: There are unit tests that trigger Fatal and override its behavior.
+					// Therefore, the code must call `return` afterward.
 					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
-					// Tests override Fatal's behavior to test if it was called, so they need a return here.
-					return
 				}
-				// On success, terminate the loop
 				return
 			}
 		}
