@@ -10,21 +10,14 @@ import (
 
 //go:generate mockgen -package=networkconfig -destination=./mock.go -source=./config.go
 
-// DomainTypeProvider is an interface for getting the domain type based on the current or given epoch.
-type DomainTypeProvider interface {
-	DomainType() spectypes.DomainType
-	NextDomainType() spectypes.DomainType
-	DomainTypeAtEpoch(epoch phase0.Epoch) spectypes.DomainType
-}
-
 type Interface interface { // TODO: rename?
-	DomainTypeProvider
-
 	BeaconNetwork() string
+	DomainType() spectypes.DomainType
 	GenesisForkVersion() phase0.Version
 	GenesisTime() time.Time
 	SlotDuration() time.Duration
 	SlotsPerEpoch() phase0.Slot
+	SyncCommitteeSize() uint64
 
 	EstimatedCurrentSlot() phase0.Slot
 	EstimatedCurrentEpoch() phase0.Epoch
@@ -55,14 +48,6 @@ func (n NetworkConfig) String() string {
 	return fmt.Sprintf("%#v", n)
 }
 
-func (n NetworkConfig) PastAlanFork() bool {
-	return n.EstimatedCurrentEpoch() >= n.AlanForkEpoch
-}
-
-func (n NetworkConfig) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
-	return epoch >= n.AlanForkEpoch
-}
-
 // SlotDuration returns slot duration
 func (n NetworkConfig) SlotDuration() time.Duration {
 	return n.Beacon.SlotDuration
@@ -75,9 +60,13 @@ func (n NetworkConfig) SlotsPerEpoch() phase0.Slot {
 
 // DomainType returns current domain type based on the current fork.
 func (n NetworkConfig) DomainType() spectypes.DomainType {
-	return n.DomainTypeAtEpoch(n.EstimatedCurrentEpoch())
+	return n.SSV.DomainType
 }
 
 func (n NetworkConfig) BeaconNetwork() string {
 	return n.Beacon.ConfigName
+}
+
+func (n NetworkConfig) SyncCommitteeSize() uint64 {
+	return n.Beacon.SyncCommitteeSize
 }

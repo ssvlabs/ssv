@@ -16,6 +16,7 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -63,7 +64,7 @@ func NewCommitteeRunner(
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
-			DomainType:     networkConfig.DomainType,
+			DomainType:     networkConfig.DomainType(),
 			NetworkConfig:  networkConfig,
 			Share:          share,
 			QBFTController: qbftController,
@@ -460,12 +461,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if attestationsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(attestationsCount),
-				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
 				spectypes.BNRoleAttester)
 		}
 
 		logger.Info("✅ successfully submitted attestations",
-			fields.Epoch(cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
+			fields.Epoch(cr.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attestations[0].Data.BeaconBlockRoot),
@@ -498,7 +499,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if syncMsgsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(syncMsgsCount),
-				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
 				spectypes.BNRoleSyncCommittee)
 		}
 

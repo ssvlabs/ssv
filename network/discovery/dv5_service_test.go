@@ -23,7 +23,7 @@ import (
 var TestNetwork = networkconfig.NetworkConfig{
 	Beacon: networkconfig.TestingBeaconConfig,
 	SSV: networkconfig.SSV{
-		DomainType:            spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		DomainType:                spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 		MaxValidatorsPerCommittee: networkconfig.TestingSSVConfig.MaxValidatorsPerCommittee,
 		TotalEthereumValidators:   networkconfig.TestingSSVConfig.TotalEthereumValidators,
 	},

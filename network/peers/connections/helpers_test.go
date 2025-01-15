@@ -90,15 +90,15 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:                context.Background(),
-		nodeInfos:          nii,
-		peerInfos:          ns,
-		subnetsIdx:         peers.NewSubnetsIndex(commons.Subnets()),
-		ids:                ids,
-		net:                net,
-		streams:            sc,
-		filters:            func() []HandshakeFilter { return []HandshakeFilter{} },
-		domainTypeProvider: networkconfig.TestingNetworkConfig,
+		ctx:        context.Background(),
+		nodeInfos:  nii,
+		peerInfos:  ns,
+		subnetsIdx: peers.NewSubnetsIndex(commons.Subnets()),
+		ids:        ids,
+		net:        net,
+		streams:    sc,
+		filters:    func() []HandshakeFilter { return []HandshakeFilter{} },
+		domainType: networkconfig.TestingNetworkConfig.DomainType(),
 	}
 
 	mockConn := mock.Conn{

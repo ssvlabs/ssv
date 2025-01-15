@@ -33,7 +33,7 @@ type MessageValidator interface {
 
 type messageValidator struct {
 	logger                *zap.Logger
-	netCfg                networkconfig.NetworkConfig
+	netCfg                networkconfig.Interface
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
@@ -51,7 +51,7 @@ type messageValidator struct {
 
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
-	netCfg networkconfig.NetworkConfig,
+	netCfg networkconfig.Interface,
 	validatorStore storage.ValidatorStore,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
@@ -249,7 +249,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is not active
-	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !validator.IsAttesting(mv.netCfg.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = validator.BeaconMetadata.Status.String()
 		return CommitteeInfo{}, e
@@ -279,7 +279,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: mv.netCfg.Beacon.SlotsPerEpoch * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.SlotsPerEpoch() * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

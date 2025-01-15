@@ -248,7 +248,7 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 
 func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.network.EstimatedCurrentSlot()
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+	currentEpoch := h.network.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {

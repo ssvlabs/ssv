@@ -136,7 +136,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			contr,
@@ -149,7 +149,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			contr,
@@ -163,7 +163,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			contr,
@@ -176,7 +176,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -186,7 +186,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -386,7 +386,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			contr,
@@ -399,7 +399,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			contr,
@@ -413,7 +413,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			contr,
@@ -426,7 +426,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -436,7 +436,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestingNetworkConfig.DomainType,
+			networkconfig.TestingNetworkConfig.DomainType(),
 			networkconfig.TestingNetworkConfig,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),

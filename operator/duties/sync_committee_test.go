@@ -78,7 +78,7 @@ func setupSyncCommitteeDutiesMock(
 								ValidatorIndex: duty.ValidatorIndex,
 							},
 						}
-						firstEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period)
+						firstEpoch := s.network.FirstEpochOfSyncPeriod(period)
 						if firstEpoch < minEpoch {
 							minEpoch = firstEpoch
 							ssvShare.SetMinParticipationEpoch(firstEpoch)

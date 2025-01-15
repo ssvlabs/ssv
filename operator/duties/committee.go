@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
@@ -203,7 +204,7 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 }
 
 func (h *CommitteeHandler) canParticipate(pubKey []byte, currentSlot phase0.Slot) bool {
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+	currentEpoch := h.network.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(pubKey)
 	if !exists {

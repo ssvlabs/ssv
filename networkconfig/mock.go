@@ -10,79 +10,13 @@
 package networkconfig
 
 import (
-	"reflect"
-	"time"
+	reflect "reflect"
+	time "time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/mock/gomock"
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
+	types "github.com/ssvlabs/ssv-spec/types"
+	gomock "go.uber.org/mock/gomock"
 )
-
-// MockDomainTypeProvider is a mock of DomainTypeProvider interface.
-type MockDomainTypeProvider struct {
-	ctrl     *gomock.Controller
-	recorder *MockDomainTypeProviderMockRecorder
-	isgomock struct{}
-}
-
-// MockDomainTypeProviderMockRecorder is the mock recorder for MockDomainTypeProvider.
-type MockDomainTypeProviderMockRecorder struct {
-	mock *MockDomainTypeProvider
-}
-
-// NewMockDomainTypeProvider creates a new mock instance.
-func NewMockDomainTypeProvider(ctrl *gomock.Controller) *MockDomainTypeProvider {
-	mock := &MockDomainTypeProvider{ctrl: ctrl}
-	mock.recorder = &MockDomainTypeProviderMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDomainTypeProvider) EXPECT() *MockDomainTypeProviderMockRecorder {
-	return m.recorder
-}
-
-// DomainType mocks base method.
-func (m *MockDomainTypeProvider) DomainType() types.DomainType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DomainType")
-	ret0, _ := ret[0].(types.DomainType)
-	return ret0
-}
-
-// DomainType indicates an expected call of DomainType.
-func (mr *MockDomainTypeProviderMockRecorder) DomainType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockDomainTypeProvider)(nil).DomainType))
-}
-
-// DomainTypeAtEpoch mocks base method.
-func (m *MockDomainTypeProvider) DomainTypeAtEpoch(epoch phase0.Epoch) types.DomainType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DomainTypeAtEpoch", epoch)
-	ret0, _ := ret[0].(types.DomainType)
-	return ret0
-}
-
-// DomainTypeAtEpoch indicates an expected call of DomainTypeAtEpoch.
-func (mr *MockDomainTypeProviderMockRecorder) DomainTypeAtEpoch(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainTypeAtEpoch", reflect.TypeOf((*MockDomainTypeProvider)(nil).DomainTypeAtEpoch), epoch)
-}
-
-// NextDomainType mocks base method.
-func (m *MockDomainTypeProvider) NextDomainType() types.DomainType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NextDomainType")
-	ret0, _ := ret[0].(types.DomainType)
-	return ret0
-}
-
-// NextDomainType indicates an expected call of NextDomainType.
-func (mr *MockDomainTypeProviderMockRecorder) NextDomainType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextDomainType", reflect.TypeOf((*MockDomainTypeProvider)(nil).NextDomainType))
-}
 
 // MockInterface is a mock of Interface interface.
 type MockInterface struct {
@@ -134,20 +68,6 @@ func (m *MockInterface) DomainType() types.DomainType {
 func (mr *MockInterfaceMockRecorder) DomainType() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockInterface)(nil).DomainType))
-}
-
-// DomainTypeAtEpoch mocks base method.
-func (m *MockInterface) DomainTypeAtEpoch(epoch phase0.Epoch) types.DomainType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DomainTypeAtEpoch", epoch)
-	ret0, _ := ret[0].(types.DomainType)
-	return ret0
-}
-
-// DomainTypeAtEpoch indicates an expected call of DomainTypeAtEpoch.
-func (mr *MockInterfaceMockRecorder) DomainTypeAtEpoch(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainTypeAtEpoch", reflect.TypeOf((*MockInterface)(nil).DomainTypeAtEpoch), epoch)
 }
 
 // EpochStartTime mocks base method.
@@ -388,48 +308,6 @@ func (mr *MockInterfaceMockRecorder) LastSlotOfSyncPeriod(period any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastSlotOfSyncPeriod", reflect.TypeOf((*MockInterface)(nil).LastSlotOfSyncPeriod), period)
 }
 
-// NextDomainType mocks base method.
-func (m *MockInterface) NextDomainType() types.DomainType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NextDomainType")
-	ret0, _ := ret[0].(types.DomainType)
-	return ret0
-}
-
-// NextDomainType indicates an expected call of NextDomainType.
-func (mr *MockInterfaceMockRecorder) NextDomainType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextDomainType", reflect.TypeOf((*MockInterface)(nil).NextDomainType))
-}
-
-// PastAlanFork mocks base method.
-func (m *MockInterface) PastAlanFork() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PastAlanFork")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// PastAlanFork indicates an expected call of PastAlanFork.
-func (mr *MockInterfaceMockRecorder) PastAlanFork() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PastAlanFork", reflect.TypeOf((*MockInterface)(nil).PastAlanFork))
-}
-
-// PastAlanForkAtEpoch mocks base method.
-func (m *MockInterface) PastAlanForkAtEpoch(epoch phase0.Epoch) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PastAlanForkAtEpoch", epoch)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// PastAlanForkAtEpoch indicates an expected call of PastAlanForkAtEpoch.
-func (mr *MockInterfaceMockRecorder) PastAlanForkAtEpoch(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PastAlanForkAtEpoch", reflect.TypeOf((*MockInterface)(nil).PastAlanForkAtEpoch), epoch)
-}
-
 // SlotDuration mocks base method.
 func (m *MockInterface) SlotDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -470,4 +348,18 @@ func (m *MockInterface) SlotsPerPeriod() phase0.Slot {
 func (mr *MockInterfaceMockRecorder) SlotsPerPeriod() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotsPerPeriod", reflect.TypeOf((*MockInterface)(nil).SlotsPerPeriod))
+}
+
+// SyncCommitteeSize mocks base method.
+func (m *MockInterface) SyncCommitteeSize() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncCommitteeSize")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// SyncCommitteeSize indicates an expected call of SyncCommitteeSize.
+func (mr *MockInterfaceMockRecorder) SyncCommitteeSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeSize", reflect.TypeOf((*MockInterface)(nil).SyncCommitteeSize))
 }

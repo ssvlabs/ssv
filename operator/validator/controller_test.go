@@ -267,7 +267,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	wg.Add(3)
 
-	identifier := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	identifier := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{

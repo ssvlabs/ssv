@@ -132,11 +132,11 @@ func (rc *rateCalculator) ProposalProbability() float64 {
 }
 
 func (rc *rateCalculator) SyncCommitteeProbability() float64 {
-	return float64(rc.netCfg.SyncCommitteeSize) / float64(rc.netCfg.TotalEthereumValidators)
+	return float64(rc.netCfg.SyncCommitteeSize()) / float64(rc.netCfg.TotalEthereumValidators)
 }
 
 func (rc *rateCalculator) SyncCommitteeAggProb() float64 {
-	return rc.SyncCommitteeProbability() * 16.0 / (float64(rc.netCfg.SyncCommitteeSize) / 4.0)
+	return rc.SyncCommitteeProbability() * 16.0 / (float64(rc.netCfg.SyncCommitteeSize()) / 4.0)
 }
 
 func (rc *rateCalculator) MaxAttestationDutiesPerEpochForCommittee() uint64 {

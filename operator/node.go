@@ -166,7 +166,7 @@ func (n *Node) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMessage) {
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.DomainType)
+		api.HandleParticipantsQuery(logger, n.qbftStorage, nm, n.network.DomainType())
 	case api.TypeError:
 		api.HandleErrorQuery(logger, nm)
 	default:

@@ -179,7 +179,7 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(dutyExecutorID []byte, height qbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType, dutyExecutorID, spectypes.RoleCommittee)
+	id := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), dutyExecutorID, spectypes.RoleCommittee)
 	qbftMsg := &qbft.Message{
 		MsgType:    qbft.RoundChangeMsgType,
 		Height:     height,

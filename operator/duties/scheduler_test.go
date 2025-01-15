@@ -141,18 +141,6 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 		},
 	).AnyTimes()
 
-	mockNetworkConfig.EXPECT().PastAlanForkAtEpoch(gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch) bool {
-			return epoch >= alanForkEpoch
-		},
-	).AnyTimes()
-
-	mockNetworkConfig.EXPECT().PastAlanFork().DoAndReturn(
-		func() bool {
-			return s.network.EstimatedCurrentEpoch() >= alanForkEpoch
-		},
-	).AnyTimes()
-
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
 

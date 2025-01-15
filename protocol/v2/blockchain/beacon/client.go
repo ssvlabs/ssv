@@ -59,6 +59,3 @@ type BeaconNode interface {
 	beaconValidator
 	proposer
 }
-
-// TODO: add SyncDistanceTolerance to beacon options:
-// SyncDistanceTolerance uint64 `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"The number of out-of-sync slots we can tolerate"`

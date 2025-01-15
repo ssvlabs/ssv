@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -22,7 +21,7 @@ func Test_verifyConfig(t *testing.T) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	testNetworkName := networkconfig.TestingNetworkConfig.NetworkName()
+	testNetworkName := "testnet:alan"
 
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{

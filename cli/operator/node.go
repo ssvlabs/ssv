@@ -204,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, ssvNetworkConfig.NetworkName(), usingLocalEvents); err != nil {
+		if err := validateConfig(nodeStorage, ssvNetworkConfig.Name, usingLocalEvents); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
@@ -220,7 +220,6 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 
-		// TODO: add executionclient.WithSyncDistanceTolerance and delete executionclient.WithMetrics when setting up execution client
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore

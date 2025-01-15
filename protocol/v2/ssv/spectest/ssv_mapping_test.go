@@ -367,7 +367,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.DomainType = networkconfig.TestingNetworkConfig.DomainType
+	base.DomainType = networkconfig.TestingNetworkConfig.DomainType()
 	base.NetworkConfig = networkconfig.TestingNetworkConfig
 
 	logger := logging.TestLogger(t)
@@ -385,7 +385,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	}
 
 	if (ret.GetBaseRunner().DomainType == spectypes.DomainType{}) {
-		ret.GetBaseRunner().DomainType = networkconfig.TestingNetworkConfig.DomainType
+		ret.GetBaseRunner().DomainType = networkconfig.TestingNetworkConfig.DomainType()
 	}
 
 	ret.GetBaseRunner().NetworkConfig = networkconfig.TestingNetworkConfig

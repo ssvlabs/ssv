@@ -61,7 +61,7 @@ type CommitteeObserverOptions struct {
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:      opts.NetworkConfig.DomainType,
+		Domain:      opts.NetworkConfig.DomainType(),
 		Network:     opts.Network,
 		CutOffRound: roundtimer.CutOffRound,
 	}

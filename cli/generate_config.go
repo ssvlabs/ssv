@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -40,9 +39,7 @@ var (
 	operatorPrivateKey           string
 	metricsAPIPort               int
 	ssvNetworkName               string
-	ssvGenesisDomain             string
-	ssvAlanDomain                string
-	ssvAlanForkEpoch             uint64
+	ssvDomain                    string
 	ssvRegistrySyncOffset        uint64
 	ssvRegistryContractAddr      string
 	ssvBootnodes                 string
@@ -80,14 +77,9 @@ var generateConfigCmd = &cobra.Command{
 	Use:   "generate-config",
 	Short: "generates ssv operator config",
 	Run: func(cmd *cobra.Command, args []string) {
-		parsedGenesisDomain, err := hex.DecodeString(strings.TrimPrefix(ssvGenesisDomain, "0x"))
+		parsedDomain, err := hex.DecodeString(strings.TrimPrefix(ssvDomain, "0x"))
 		if err != nil {
-			log.Fatalf("Failed to decode genesis network domain: %v", err)
-		}
-
-		parsedAlanDomain, err := hex.DecodeString(strings.TrimPrefix(ssvAlanDomain, "0x"))
-		if err != nil {
-			log.Fatalf("Failed to decode alan network domain: %v", err)
+			log.Fatalf("Failed to decode network domain: %v", err)
 		}
 
 		parsedDiscoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(ssvDiscoveryProtocolID, "0x"))
@@ -115,13 +107,11 @@ var generateConfigCmd = &cobra.Command{
 		config.MetricsAPIPort = metricsAPIPort
 		config.SSV.CustomNetwork = &networkconfig.SSV{
 			Name:                      ssvNetworkName,
-			GenesisDomainType:         spectypes.DomainType(parsedGenesisDomain),
-			AlanDomainType:            spectypes.DomainType(parsedAlanDomain),
+			DomainType:                spectypes.DomainType(parsedDomain),
 			RegistrySyncOffset:        new(big.Int).SetUint64(ssvRegistrySyncOffset),
 			RegistryContractAddr:      ethcommon.HexToAddress(ssvRegistryContractAddr),
 			Bootnodes:                 bootnodes,
 			DiscoveryProtocolID:       parsedDiscoveryProtocolIDArr,
-			AlanForkEpoch:             phase0.Epoch(ssvAlanForkEpoch),
 			MaxValidatorsPerCommittee: ssvMaxValidatorsPerCommittee,
 			TotalEthereumValidators:   ssvTotalEthereumValidators,
 		}
@@ -154,11 +144,8 @@ func init() {
 	generateConfigCmd.Flags().IntVar(&metricsAPIPort, "metrics-api-port", 0, "Metrics API port")
 
 	generateConfigCmd.Flags().StringVar(&ssvNetworkName, "ssv-network-name", defaultNetwork.Name, "SSV network name")
-	ssvGenesisDomainDefault := "0x" + hex.EncodeToString(defaultNetwork.GenesisDomainType[:])
-	generateConfigCmd.Flags().StringVar(&ssvGenesisDomain, "ssv-genesis-domain", ssvGenesisDomainDefault, "SSV genesis domain")
-	ssvAlanDomainDefault := "0x" + hex.EncodeToString(defaultNetwork.AlanDomainType[:])
-	generateConfigCmd.Flags().StringVar(&ssvAlanDomain, "ssv-alan-domain", ssvAlanDomainDefault, "SSV Alan fork domain type")
-	generateConfigCmd.Flags().Uint64Var(&ssvAlanForkEpoch, "ssv-alan-fork-epoch", uint64(defaultNetwork.AlanForkEpoch), "SSV Alan fork epoch")
+	ssvDomainDefault := "0x" + hex.EncodeToString(defaultNetwork.DomainType[:])
+	generateConfigCmd.Flags().StringVar(&ssvDomain, "ssv-domain", ssvDomainDefault, "SSV Alan fork domain type")
 	generateConfigCmd.Flags().Uint64Var(&ssvRegistrySyncOffset, "ssv-registry-sync-offset", defaultNetwork.RegistrySyncOffset.Uint64(), "SSV registry sync offset")
 	generateConfigCmd.Flags().StringVar(&ssvRegistryContractAddr, "ssv-registry-contract-addr", defaultNetwork.RegistryContractAddr.String(), "SSV registry contract addr")
 	generateConfigCmd.Flags().StringVar(&ssvBootnodes, "ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")

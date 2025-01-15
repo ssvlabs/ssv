@@ -32,7 +32,7 @@ var migration_4_configlock_add_alan_fork_to_network_name = Migration{
 					return fmt.Errorf("failed to get network config by name: %w", err)
 				}
 
-				config.NetworkName = networkConfig.NetworkName()
+				config.NetworkName = networkConfig.Name
 				if err := nodeStorage.SaveConfig(txn, config); err != nil {
 					return fmt.Errorf("failed to save config: %w", err)
 				}
