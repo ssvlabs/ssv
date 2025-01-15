@@ -94,7 +94,7 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 	n := networkconfig.HoleskyStageSSV
 
 	return networkconfig.NetworkConfig{
-		Beacon: networkconfig.HoleskyBeaconConfig,
+		Beacon: networkconfig.TestingBeaconConfig,
 		SSV: networkconfig.SSV{
 			Name:                    n.Name,
 			DomainType:              n.DomainType,
@@ -108,13 +108,13 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 
 // NetworkConfig for staying in pre-fork
 func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyBeaconConfig.EstimatedCurrentEpoch() + 1000
+	forkEpoch := networkconfig.TestingBeaconConfig.EstimatedCurrentEpoch() + 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
 // NetworkConfig for staying in post-fork
 func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyBeaconConfig.EstimatedCurrentEpoch() - 1000
+	forkEpoch := networkconfig.TestingBeaconConfig.EstimatedCurrentEpoch() - 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 

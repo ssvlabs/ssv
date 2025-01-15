@@ -47,8 +47,8 @@ var (
 
 // NetworkOpts is the config struct for network configurations
 type NetworkOpts struct {
-	// NetCfg defines network config
-	NetCfg *networkconfig.NetworkConfig
+	// EpochDuration defines network epoch duration
+	EpochDuration time.Duration
 	// ActiveValidators is the amount of validators in the network
 	ActiveValidators uint64
 	// Subnets is the number of subnets in the network
@@ -95,8 +95,8 @@ type Options struct {
 }
 
 func (o *Options) defaults() {
-	if o.Network.NetCfg == nil {
-		o.Network.NetCfg = &networkconfig.MainnetConfig
+	if o.Network.EpochDuration == 0 {
+		o.Network.EpochDuration = 12 * time.Second * 32
 	}
 	if o.Network.TotalTopicsWeight == 0 {
 		o.Network.TotalTopicsWeight = totalTopicsWeight
@@ -133,7 +133,7 @@ func (o *Options) defaults() {
 		o.Topic.MeshDeliveryCapFactor = meshDeliveryCapFactor
 	}
 	if o.Topic.MeshDeliveryActivationTime == 0 {
-		o.Topic.MeshDeliveryActivationTime = o.Network.NetCfg.EpochDuration() * 3
+		o.Topic.MeshDeliveryActivationTime = o.Network.EpochDuration * 3
 	}
 	// Topic - P4
 	if o.Topic.InvalidMessageDecayEpochs == 0 {
@@ -150,12 +150,12 @@ func (o *Options) maxScore() float64 {
 }
 
 // NewOpts creates new TopicOpts instance
-func NewOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int) *Options {
+func NewOpts(epochDuration time.Duration, activeValidators uint64, subnets int) *Options {
 	return &Options{
 		Network: NetworkOpts{
 			ActiveValidators: activeValidators,
 			Subnets:          subnets,
-			NetCfg:           &netCfg,
+			EpochDuration:    epochDuration,
 		},
 		Topic: TopicOpts{},
 	}
@@ -164,7 +164,7 @@ func NewOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnet
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
 func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
-	opts := NewOpts(netCfg, activeValidators, subnets)
+	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()
 
 	// Set topic weight with equal weights
@@ -180,7 +180,7 @@ func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uin
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
 func NewSubnetTopicOptsValidators(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int) *Options {
 	// Create options with default values
-	opts := NewOpts(netCfg, activeValidators, subnets)
+	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()
 
 	// Set topic weight with equal weights
@@ -203,14 +203,14 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	// Set to default if not set
 	opts.defaults()
 
-	decayInterval := opts.Network.NetCfg.EpochDuration()
+	decayInterval := opts.Network.EpochDuration
 	expectedMessagesPerDecayInterval := opts.Topic.ExpectedMsgRate * decayInterval.Seconds()
 
 	// P1
 	timeInMeshCap := float64(opts.Topic.TimeInMeshQuantumCap) / float64(opts.Topic.TimeInMeshQuantum)
 
 	// P2
-	oneEpochDuration := opts.Network.NetCfg.EpochDuration()
+	oneEpochDuration := opts.Network.EpochDuration
 	firstMessageDeliveriesDecay := scoreDecay(oneEpochDuration*opts.Topic.FirstDeliveryDecayEpochs, decayInterval)
 	firstMessageDeliveriesCap := 1.0
 	if expectedMessagesPerDecayInterval > 0 {

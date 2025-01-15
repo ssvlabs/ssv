@@ -107,8 +107,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 	for _, role := range roles {
 		pk := sks[1].GetPublicKey()
 		networkConfig := networkconfig.NetworkConfig{
-			SSV:    networkconfig.HoleskyStageSSV,
-			Beacon: networkconfig.HoleskyBeaconConfig,
+			SSV:    networkconfig.TestingSSVConfig,
+			Beacon: networkconfig.TestingBeaconConfig,
 		}
 		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 			id := convert.NewMsgID(networkConfig.DomainType(), pk.Serialize(), role)

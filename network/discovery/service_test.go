@@ -160,8 +160,8 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 
 	// Change network config
 	netCfg := networkconfig.NetworkConfig{
-		SSV:    networkconfig.HoleskyStageSSV,
-		Beacon: networkconfig.HoleskyBeaconConfig,
+		SSV:    networkconfig.TestingSSVConfig,
+		Beacon: networkconfig.TestingBeaconConfig,
 	}
 	dvs.networkConfig = netCfg
 	// Test PublishENR method

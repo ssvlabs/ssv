@@ -2,10 +2,7 @@ package networkconfig
 
 import (
 	"math/big"
-	"time"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -19,23 +16,5 @@ var LocalTestnetSSV = SSV{
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 	Bootnodes: []string{
 		"enr:-Li4QLR4Y1VbwiqFYKy6m-WFHRNDjhMDZ_qJwIABu2PY9BHjIYwCKpTvvkVmZhu43Q6zVA29sEUhtz10rQjDJkK3Hd-GAYiGrW2Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQJTcI7GHPw-ZqIflPZYYDK_guurp_gsAFF5Erns3-PAvIN0Y3CCE4mDdWRwgg-h",
-	},
-}
-
-var LocalTestnetBeaconConfig = Beacon{
-	ConfigName:                           string(spectypes.HoleskyNetwork),
-	CapellaForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
-	SlotDuration:                         12 * time.Second,
-	SlotsPerEpoch:                        32,
-	EpochsPerSyncCommitteePeriod:         256,
-	SyncCommitteeSize:                    512,
-	SyncCommitteeSubnetCount:             4,
-	TargetAggregatorsPerSyncSubcommittee: 16,
-	TargetAggregatorsPerCommittee:        16,
-	IntervalsPerSlot:                     3,
-	Genesis: v1.Genesis{
-		GenesisTime:           HoleskyBeaconConfig.Genesis.GenesisTime,
-		GenesisValidatorsRoot: HoleskyBeaconConfig.Genesis.GenesisValidatorsRoot,
-		GenesisForkVersion:    phase0.Version{0x99, 0x99, 0x99, 0x99},
 	},
 }
