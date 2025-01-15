@@ -14,13 +14,12 @@ import (
 var migration_5_change_share_format_from_gob_to_ssz = Migration{
 	Name: "migration_5_change_share_format_from_gob_to_ssz",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
-		txn := opt.Db.Begin()
-		defer txn.Discard()
-
 		// storagePrefix is a base prefix we use when storing shares
 		var storagePrefix = []byte("operator/")
 
-		err := txn.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
+		sets := make([]basedb.Obj, 0)
+
+		err := opt.Db.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
 			shareGOB := &storageShareGOB{}
 			if err := shareGOB.Decode(obj.Value); err != nil {
 				return fmt.Errorf("decode gob share: %w", err)
@@ -35,14 +34,14 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			if err != nil {
 				return fmt.Errorf("encode ssz share: %w", err)
 			}
-			err = txn.Set(storagePrefix, key, value)
-			if err != nil {
-				return fmt.Errorf("set ssz share: %w", err)
-			}
+			sets = append(sets, basedb.Obj{
+				Key:   key,
+				Value: value,
+			})
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("get all gob shares: %w", err)
+			return fmt.Errorf("GetAll: %w", err)
 		}
 
 		// TODO - do not complete migration just yet, we will complete it after testing on stage
@@ -50,11 +49,13 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		// or we'll complete this even later if we go for 100% rollback-supporting approach
 		// described in https://github.com/ssvlabs/ssv/pull/1837
 		//// Must complete txn before commit (complete func makes sure migration executes once).
-		//if err := completed(txn); err != nil {
+		//if err := return completed(opt.Db); err != nil {
 		//	return fmt.Errorf("complete transaction: %w", err)
 		//}
-		if err := txn.Commit(); err != nil {
-			return fmt.Errorf("commit transaction: %w", err)
+		if err := opt.Db.SetMany(migrationsPrefix, len(sets), func(i int) (basedb.Obj, error) {
+			return sets[i], nil
+		}); err != nil {
+			return fmt.Errorf("SetMany: %w", err)
 		}
 		return nil
 	},
