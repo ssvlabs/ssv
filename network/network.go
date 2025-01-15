@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/records"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
@@ -46,6 +47,10 @@ type P2PNetwork interface {
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	// UpdateScoreParams will update the scoring parameters of GossipSub
 	UpdateScoreParams(logger *zap.Logger)
+	// ActiveSubnets returns active subnets
+	ActiveSubnets() records.Subnets
+	// FixedSubnets returns fixed subnets
+	FixedSubnets() records.Subnets
 
 	// used for tests and api
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)

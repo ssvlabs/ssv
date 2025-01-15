@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -176,7 +177,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.Network.DomainType()
+	d := n.cfg.Network.DomainType
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -201,13 +202,9 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		ids.Start()
 	}
 
-	subnetsProvider := func() records.Subnets {
-		return n.activeSubnets
-	}
-
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.Network.DomainType()
+		newDomain := n.cfg.Network.DomainType
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
@@ -216,25 +213,33 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
-		Streams:            n.streamCtrl,
-		NodeInfos:          n.idx,
-		PeerInfos:          n.idx,
-		ConnIdx:            n.idx,
-		SubnetsIdx:         n.idx,
-		IDService:          ids,
-		Network:            n.host.Network(),
-		DomainTypeProvider: n.cfg.Network,
-		SubnetsProvider:    subnetsProvider,
+		Streams:         n.streamCtrl,
+		NodeInfos:       n.idx,
+		PeerInfos:       n.idx,
+		ConnIdx:         n.idx,
+		SubnetsIdx:      n.idx,
+		IDService:       ids,
+		Network:         n.host.Network(),
+		DomainType:      n.cfg.Network.DomainType,
+		SubnetsProvider: n.ActiveSubnets,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx, n.metrics)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
 	return nil
+}
+
+func (n *p2pNetwork) ActiveSubnets() records.Subnets {
+	return n.activeSubnets
+}
+
+func (n *p2pNetwork) FixedSubnets() records.Subnets {
+	return n.fixedSubnets
 }
 
 func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
@@ -253,9 +258,9 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if len(n.fixedSubnets) > 0 {
+		if discovery.HasActiveSubnets(n.fixedSubnets) {
 			discV5Opts.Subnets = n.fixedSubnets
-			logger = logger.With(zap.String("subnets", records.Subnets(n.fixedSubnets).String()))
+			logger = logger.With(fields.Subnets(n.fixedSubnets))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
@@ -316,7 +321,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics, n.nodeStorage.ValidatorStore(), n.idx)
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

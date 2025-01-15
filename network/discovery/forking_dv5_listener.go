@@ -1,9 +1,12 @@
 package discovery
 
 import (
+	"context"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -95,6 +98,7 @@ func (i *annotatedIterator) Next() bool {
 	if !i.Iterator.Next() {
 		return false
 	}
-	metricIterations.WithLabelValues(i.fork).Inc()
+	peerDiscoveryIterationsCounter.Add(
+		context.TODO(), 1, metric.WithAttributes(attribute.String("ssv.fork", i.fork)))
 	return true
 }

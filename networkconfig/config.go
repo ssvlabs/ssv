@@ -19,8 +19,6 @@ type DomainTypeProvider interface {
 
 type Interface interface { // TODO: rename?
 	DomainTypeProvider
-	PastAlanFork() bool
-	PastAlanForkAtEpoch(epoch phase0.Epoch) bool
 
 	BeaconNetwork() string
 	GenesisForkVersion() phase0.Version

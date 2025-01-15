@@ -4,15 +4,19 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
+	// TODO: add metrics to requests that were moved from here (call recordRequestDuration, add logs on error)
 	forkData := &phase0.ForkData{
 		CurrentVersion:        gc.BeaconConfig().CapellaForkVersion,
 		GenesisValidatorsRoot: gc.BeaconConfig().Genesis.GenesisValidatorsRoot,
@@ -48,10 +52,17 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		return gc.computeVoluntaryExitDomain()
 	}
 
+	start := time.Now()
 	data, err := gc.client.Domain(gc.ctx, domain, epoch)
+	recordRequestDuration(gc.ctx, "Domain", gc.client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Domain"),
+			zap.Error(err),
+		)
 		return phase0.Domain{}, err
 	}
+
 	return data, nil
 }
 

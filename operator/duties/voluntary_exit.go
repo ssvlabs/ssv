@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
@@ -120,35 +119,11 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	h.dutyQueue = pendingDuties
 	h.duties.RemoveSlot(slot - h.network.SlotsPerEpoch())
 
-	if !h.network.PastAlanForkAtEpoch(h.network.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(dutiesForExecution))
-		for _, d := range dutiesForExecution {
-			toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleVoluntaryExit))
-		}
-
-		if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-			h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
-			h.logger.Debug("executed voluntary exit duties",
-				fields.Slot(slot),
-				fields.Count(dutyCount))
-		}
-		return
-	}
-
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
 		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))
-	}
-}
-
-func (h *VoluntaryExitHandler) toGenesisSpecDuty(duty *spectypes.ValidatorDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
-	return &genesisspectypes.Duty{
-		Type:           role,
-		PubKey:         duty.PubKey,
-		Slot:           duty.Slot,
-		ValidatorIndex: duty.ValidatorIndex,
 	}
 }
 

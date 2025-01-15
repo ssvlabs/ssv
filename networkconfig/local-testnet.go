@@ -12,8 +12,7 @@ import (
 
 var LocalTestnetSSV = SSV{
 	Name:                      "local-testnet",
-	GenesisDomainType:         spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x1},
-	AlanDomainType:            spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},
+	DomainType:                spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},
 	RegistrySyncOffset:        new(big.Int).SetInt64(1),
 	RegistryContractAddr:      ethcommon.HexToAddress("0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D"),
 	DiscoveryProtocolID:       [6]byte{'s', 's', 'v', 'd', 'v', '5'},

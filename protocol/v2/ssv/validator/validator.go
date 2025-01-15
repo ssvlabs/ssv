@@ -53,10 +53,6 @@ type Validator struct {
 func NewValidator(pctx context.Context, cancel func(), options Options) *Validator {
 	options.defaults()
 
-	if options.Metrics == nil {
-		options.Metrics = &NopMetrics{}
-	}
-
 	v := &Validator{
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
@@ -82,7 +78,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
 		v.Queues[role] = queueContainer{
-			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
+			Q: queue.New(options.QueueSize),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,

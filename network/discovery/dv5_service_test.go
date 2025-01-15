@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"context"
-	"math"
 	"net"
 	"os"
 	"testing"
@@ -24,9 +23,7 @@ import (
 var TestNetwork = networkconfig.NetworkConfig{
 	Beacon: networkconfig.TestingBeaconConfig,
 	SSV: networkconfig.SSV{
-		GenesisDomainType:         spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-		AlanDomainType:            spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-		AlanForkEpoch:             math.MaxUint64,
+		DomainType:            spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 		MaxValidatorsPerCommittee: networkconfig.TestingSSVConfig.MaxValidatorsPerCommittee,
 		TotalEthereumValidators:   networkconfig.TestingSSVConfig.TotalEthereumValidators,
 	},
@@ -52,38 +49,10 @@ func TestCheckPeer(t *testing.T) {
 				expectedError: errors.New("could not read domain type: not found"),
 			},
 			{
-				name:           "missing domain type but has next domain type",
-				domainType:     nil,
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-				subnets:        mySubnets,
-				expectedError:  errors.New("could not read domain type: not found"),
-			},
-			{
-				name:           "domain type mismatch",
-				domainType:     &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x6},
-				subnets:        mySubnets,
-				expectedError:  errors.New("mismatched domain type: neither 01020305 nor 01020306 match 01020304"),
-			},
-			{
-				name:          "domain type mismatch (missing next domain type)",
+				name:          "domain type mismatch",
 				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
 				subnets:       mySubnets,
-				expectedError: errors.New("mismatched domain type: neither 01020305 nor 00000000 match 01020304"),
-			},
-			{
-				name:           "only next domain type matches",
-				domainType:     &spectypes.DomainType{0x1, 0x2, 0x3, 0x3},
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-				subnets:        mySubnets,
-				expectedError:  nil,
-			},
-			{
-				name:           "both domain types match",
-				domainType:     &spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-				nextDomainType: &spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-				subnets:        mySubnets,
-				expectedError:  nil,
+				expectedError: errors.New("domain type 01020305 doesn't match 01020304"),
 			},
 			{
 				name:          "missing subnets",
@@ -137,10 +106,6 @@ func TestCheckPeer(t *testing.T) {
 				err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
 				require.NoError(t, err)
 			}
-			if test.nextDomainType != nil {
-				err := records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, *test.nextDomainType)
-				require.NoError(t, err)
-			}
 			if test.subnets != nil {
 				err := records.SetSubnetsEntry(localNode, test.subnets)
 				require.NoError(t, err)
@@ -163,7 +128,7 @@ func TestCheckPeer(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name+":run", func(t *testing.T) {
-			err := dvs.checkPeer(logger, PeerEvent{
+			err := dvs.checkPeer(context.TODO(), logger, PeerEvent{
 				Node: test.localNode.Node(),
 			})
 			if test.expectedError != nil {
@@ -176,12 +141,11 @@ func TestCheckPeer(t *testing.T) {
 }
 
 type checkPeerTest struct {
-	name           string
-	domainType     *spectypes.DomainType
-	nextDomainType *spectypes.DomainType
-	subnets        []byte
-	localNode      *enode.LocalNode
-	expectedError  error
+	name          string
+	domainType    *spectypes.DomainType
+	subnets       []byte
+	localNode     *enode.LocalNode
+	expectedError error
 }
 
 func mockSubnets(active ...int) []byte {

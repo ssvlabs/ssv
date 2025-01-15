@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
-	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -144,7 +143,7 @@ func (s *sharesStorage) load() error {
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
-		val.DomainType = spectypes.DomainType(genesistypes.GetDefaultDomain())
+
 		share, err := s.storageShareToSpecShare(val)
 		if err != nil {
 			return fmt.Errorf("failed to convert storage share to spec share: %w", err)
@@ -362,8 +361,11 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 	defer s.storageMtx.Unlock()
 
 	err := func() error {
-		s.memoryMtx.Lock()
-		defer s.memoryMtx.Unlock()
+		// using a read-lock here even if we are writing to the share pointer
+		// because it's the only place a write is happening
+		// to be re-implemented in a a safer maner in future iteration
+		s.memoryMtx.RLock()
+		defer s.memoryMtx.RUnlock()
 
 		for pk, metadata := range data {
 			if metadata == nil {
@@ -376,11 +378,6 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			share.BeaconMetadata = metadata
 			share.Share.ValidatorIndex = metadata.Index
 			shares = append(shares, share)
-		}
-
-		for _, share := range shares {
-			key := hex.EncodeToString(share.ValidatorPubKey[:])
-			s.shares[key] = share
 		}
 
 		return s.validatorStore.handleSharesUpdated(shares...)

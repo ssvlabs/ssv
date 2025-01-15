@@ -36,7 +36,6 @@ type topicScoreSnapshot struct {
 func scoreInspector(logger *zap.Logger,
 	scoreIdx peers.ScoreIndex,
 	logFrequency int,
-	metrics Metrics,
 	peerConnected func(pid peer.ID) bool,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
@@ -51,9 +50,6 @@ func scoreInspector(logger *zap.Logger,
 			peerScores[pid] = ps.Score
 		}
 		gossipScoreIndex.SetScores(peerScores)
-
-		// Reset metrics before updating them.
-		metrics.ResetPeerScores()
 
 		// Use a "scope cache" for getting a topic's score parameters
 		// otherwise, the factory method would be called multiple times for the same topic
@@ -137,10 +133,6 @@ func scoreInspector(logger *zap.Logger,
 			p7 := peerScores.BehaviourPenalty
 			w7 := peerScoreParams.BehaviourPenaltyWeight
 
-			// Update metrics.
-			metrics.PeerScore(pid, peerScores.Score)
-			metrics.PeerP4Score(pid, p4Impact)
-
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
@@ -216,27 +208,6 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		opts := params.NewSubnetTopicOpts(cfg.NetworkConfig, totalValidators, commons.Subnets(), topicCommittees)
 
 		// Generate topic parameters
-		tp, err := params.TopicParams(opts)
-		if err != nil {
-			logger.Debug("ignoring topic score params", zap.Error(err))
-			return nil
-		}
-		return tp
-	}
-}
-
-// topicScoreParams factory for creating scoring params for topics
-func validatorTopicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
-	return func(t string) *pubsub.TopicScoreParams {
-		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
-		if err != nil {
-			logger.Debug("could not read stats: active validators")
-			return nil
-		}
-		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
-			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
-		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOptsValidators(cfg.NetworkConfig, totalValidators, commons.Subnets())
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))

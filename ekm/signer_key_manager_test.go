@@ -19,8 +19,6 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -682,76 +680,6 @@ func TestSlashing_Attestation(t *testing.T) {
 	// 14. Different signing root -> expect slashing.
 	//     The new point on the line s==t, strictly lower in source and target
 	signAttestation(secretKeys[2], phase0.Root{7}, createAttestationData(6, 6), true, "HighestAttestationVote")
-}
-
-func TestSignRoot(t *testing.T) {
-	require.NoError(t, bls.Init(bls.BLS12_381))
-
-	km := testKeyManager(t, nil)
-
-	t.Run("pk 1", func(t *testing.T) {
-		pk := &bls.PublicKey{}
-		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
-
-		msg := genesisspecqbft.Message{
-			MsgType:    genesisspecqbft.CommitMsgType,
-			Height:     genesisspecqbft.Height(3),
-			Round:      genesisspecqbft.Round(2),
-			Identifier: []byte("identifier1"),
-			Root:       [32]byte{1, 2, 3},
-		}
-
-		// sign
-		sig, err := km.(*ethKeyManagerSigner).SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
-		require.NoError(t, err)
-
-		// verify
-		signed := &genesisspecqbft.SignedMessage{
-			Signature: genesisspectypes.Signature(sig),
-			Signers:   []spectypes.OperatorID{1},
-			Message:   msg,
-		}
-
-		err = signed.Signature.VerifyByOperators(
-			signed,
-			genesisspectypes.DomainType(networkconfig.TestingNetworkConfig.DomainType()),
-			genesisspectypes.QBFTSignatureType,
-			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
-		)
-		require.NoError(t, err)
-	})
-
-	t.Run("pk 2", func(t *testing.T) {
-		pk := &bls.PublicKey{}
-		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
-
-		msg := genesisspecqbft.Message{
-			MsgType:    genesisspecqbft.CommitMsgType,
-			Height:     genesisspecqbft.Height(1),
-			Round:      genesisspecqbft.Round(3),
-			Identifier: []byte("identifier2"),
-			Root:       [32]byte{4, 5, 6},
-		}
-
-		// sign
-		sig, err := km.(*ethKeyManagerSigner).SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
-		require.NoError(t, err)
-
-		// verify
-		signed := &genesisspecqbft.SignedMessage{
-			Signature: genesisspectypes.Signature(sig),
-			Signers:   []spectypes.OperatorID{1},
-			Message:   msg,
-		}
-
-		err = signed.Signature.VerifyByOperators(
-			signed,
-			genesisspectypes.DomainType(networkconfig.TestingNetworkConfig.DomainType()),
-			genesisspectypes.QBFTSignatureType,
-			[]*genesisspectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}},
-		)
-		require.NoError(t, err)
-	})
 }
 
 func TestRemoveShare(t *testing.T) {

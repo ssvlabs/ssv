@@ -63,9 +63,6 @@ type KeyManager interface {
 	AddShare(shareKey *bls.SecretKey) error
 	// RemoveShare removes a share key
 	RemoveShare(pubKey string) error
-
-	// SignRoot TODO: (Alan) genesis support - should be removed after alan fork
-	SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error)
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
@@ -253,28 +250,6 @@ func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slo
 	}
 
 	return nil
-}
-
-func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
-	km.walletLock.RLock()
-	defer km.walletLock.RUnlock()
-
-	account, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get signing account")
-	}
-
-	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.netCfg.DomainType(), sigType))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not compute signing root")
-	}
-
-	sig, err := account.ValidationKeySign(root[:])
-	if err != nil {
-		return nil, errors.Wrap(err, "could not sign message")
-	}
-
-	return sig, nil
 }
 
 func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {

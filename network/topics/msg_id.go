@@ -128,17 +128,6 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
 
-	// pre-fork hashing scheme
-
-	if !handler.networkConfig.PastAlanFork() {
-		decodedMsg, _, _, err := genesisspectypes.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			// todo: should err here or just log and let the decode function err?
-		} else {
-			return commons.MsgID()(decodedMsg)
-		}
-	}
-
 	// In Alan message structure the message body can be identical for all 4 operators
 	// whereas before it included a BLS signature which made it unique
 	// so we hash full message (including signer) to make it unique

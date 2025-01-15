@@ -22,7 +22,7 @@ func Test_verifyConfig(t *testing.T) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	testNetworkName := networkconfig.TestingNetworkConfig.AlanForkNetworkName()
+	testNetworkName := networkconfig.TestingNetworkConfig.NetworkName()
 
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{

@@ -7,10 +7,9 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
@@ -129,7 +128,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset next epoch duties if in appropriate slot range
 			if h.shouldFetchNexEpoch(slot) {
-				h.duties.ResetEpoch(currentEpoch + 1)
 				h.fetchNextEpoch = true
 			}
 		}
@@ -169,19 +167,6 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
-		return
-	}
-
-	if !h.network.PastAlanForkAtEpoch(h.network.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAttester))
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleAggregator))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
 		return
 	}
 
@@ -261,21 +246,24 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 	}
 }
 
-func (h *AttesterHandler) toGenesisSpecDuty(duty *eth2apiv1.AttesterDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
-	return &genesisspectypes.Duty{
-		Type:                    role,
-		PubKey:                  duty.PubKey,
-		Slot:                    duty.Slot,
-		ValidatorIndex:          duty.ValidatorIndex,
-		CommitteeIndex:          duty.CommitteeIndex,
-		CommitteeLength:         duty.CommitteeLength,
-		CommitteesAtSlot:        duty.CommitteesAtSlot,
-		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
-	}
-}
-
 func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.network.EstimatedCurrentSlot()
+	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+
+	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
+	if !exists {
+		h.logger.Warn("validator not found", fields.Validator(duty.PubKey[:]))
+		return false
+	}
+
+	if v.MinParticipationEpoch() > currentEpoch {
+		h.logger.Debug("validator not yet participating",
+			fields.Validator(duty.PubKey[:]),
+			zap.Uint64("min_participation_epoch", uint64(v.MinParticipationEpoch())),
+			zap.Uint64("current_epoch", uint64(currentEpoch)),
+		)
+		return false
+	}
 	// execute task if slot already began and not pass 1 epoch
 	var attestationPropagationSlotRange = h.network.SlotsPerEpoch()
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {

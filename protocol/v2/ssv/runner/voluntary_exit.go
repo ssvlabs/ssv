@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -32,8 +31,6 @@ type VoluntaryExitRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
-
-	metrics metrics.ConsensusMetrics
 }
 
 func NewVoluntaryExitRunner(
@@ -62,8 +59,6 @@ func NewVoluntaryExitRunner(
 		network:        network,
 		signer:         signer,
 		operatorSigner: operatorSigner,
-
-		metrics: metrics.NewConsensusMetrics(spectypes.RoleVoluntaryExit),
 	}, nil
 }
 

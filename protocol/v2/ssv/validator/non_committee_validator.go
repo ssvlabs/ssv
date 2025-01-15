@@ -61,7 +61,7 @@ type CommitteeObserverOptions struct {
 func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:      opts.NetworkConfig.DomainType(),
+		Domain:      opts.NetworkConfig.DomainType,
 		Network:     opts.Network,
 		CutOffRound: roundtimer.CutOffRound,
 	}
@@ -277,8 +277,6 @@ func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSi
 
 // copied from BaseRunner
 func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root phase0.Root, share *ssvtypes.SSVShare) error {
-	ssvtypes.MetricsSignaturesVerifications.WithLabelValues().Inc()
-
 	for _, n := range share.Committee {
 		if n.Signer == signer {
 			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
