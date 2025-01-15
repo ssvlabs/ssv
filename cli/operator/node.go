@@ -204,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, ssvNetworkConfig.Name, usingLocalEvents); err != nil {
+		if err := validateConfig(nodeStorage, ssvNetworkConfig.ConfigName(), usingLocalEvents); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 

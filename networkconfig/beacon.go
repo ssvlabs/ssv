@@ -10,7 +10,7 @@ import (
 )
 
 type Beacon struct {
-	ConfigName                           string
+	NetworkName                          string
 	CapellaForkVersion                   phase0.Version
 	SlotDuration                         time.Duration
 	SlotsPerEpoch                        phase0.Slot

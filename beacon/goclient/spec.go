@@ -45,12 +45,12 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 
 	// types of most values are already cast: https://github.com/attestantio/go-eth2-client/blob/v0.21.7/http/spec.go#L78
 
-	configNameRaw, ok := specResponse.Data["CONFIG_NAME"]
+	networkNameRaw, ok := specResponse.Data["CONFIG_NAME"]
 	if !ok {
 		return nil, fmt.Errorf("config name not known by chain")
 	}
 
-	configName, ok := configNameRaw.(string)
+	networkName, ok := networkNameRaw.(string)
 	if !ok {
 		return nil, fmt.Errorf("failed to decode config name")
 	}
@@ -149,7 +149,7 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	return &networkconfig.Beacon{
-		ConfigName:                           configName,
+		NetworkName:                          networkName,
 		CapellaForkVersion:                   capellaForkVersion,
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,

@@ -22,7 +22,7 @@ var TestingSSVConfig = SSV{
 }
 
 var TestingBeaconConfig = Beacon{
-	ConfigName:                           string(spectypes.BeaconTestNetwork),
+	NetworkName:                          string(spectypes.BeaconTestNetwork),
 	CapellaForkVersion:                   phase0.Version{0x99, 0x99, 0x99, 0x99},
 	SlotDuration:                         12 * time.Second,
 	SlotsPerEpoch:                        32,

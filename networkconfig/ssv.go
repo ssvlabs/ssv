@@ -109,3 +109,9 @@ func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	return nil
 }
+
+const forkName = "alan"
+
+func (s SSV) ConfigName() string {
+	return fmt.Sprintf("%s:%s", s.Name, forkName)
+}

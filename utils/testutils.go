@@ -43,7 +43,7 @@ func SetupMockNetworkConfig(t *testing.T, currentSlot *SlotValue) *networkconfig
 	mockNetworkConfig := networkconfig.NewMockInterface(ctrl)
 	mockNetworkConfig.EXPECT().BeaconNetwork().DoAndReturn(
 		func() string {
-			return exampleConfig.ConfigName
+			return exampleConfig.NetworkName
 		},
 	).AnyTimes()
 	mockNetworkConfig.EXPECT().SlotsPerEpoch().Return(exampleConfig.SlotsPerEpoch).AnyTimes()
