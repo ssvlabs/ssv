@@ -300,7 +300,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.IsParticipating(c.networkConfig.Beacon.EstimatedCurrentEpoch()) {
+		if s.IsParticipating(c.networkConfig.EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
@@ -974,7 +974,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			validatorsPerStatus := make(map[validatorStatus]uint32)
 
 			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
-				if share.IsParticipating(c.networkConfig.Beacon.EstimatedCurrentEpoch()) {
+				if share.IsParticipating(c.networkConfig.EstimatedCurrentEpoch()) {
 					validatorsPerStatus[statusParticipating]++
 				}
 				meta := share.BeaconMetadata
