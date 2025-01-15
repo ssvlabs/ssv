@@ -148,7 +148,7 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 		return nil, nil
 	}
 
-	if _, err := ec.call(ec.setMethod(ctx, "FetchHistoricalLogs [start fetching]"), startFetchingFunc); err != nil {
+	if _, err := ec.call(contextWithMethod(ctx, "FetchHistoricalLogs [start fetching]"), startFetchingFunc); err != nil {
 		if int(nothingToSyncCount.Load()) == len(ec.clients) {
 			// All clients returned ErrNothingToSync
 			return nil, nil, ErrNothingToSync
@@ -203,7 +203,7 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 			}
 		}
 
-		if _, err := ec.call(ec.setMethod(ctx, "FetchHistoricalLogs [process logs]"), processLogsFunc); err != nil {
+		if _, err := ec.call(contextWithMethod(ctx, "FetchHistoricalLogs [process logs]"), processLogsFunc); err != nil {
 			errCh <- err
 		}
 	}()
@@ -238,7 +238,7 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					return nil, nil
 				}
 
-				_, err := ec.call(ec.setMethod(ctx, "StreamLogs"), f)
+				_, err := ec.call(contextWithMethod(ctx, "StreamLogs"), f)
 				if err != nil && !errors.Is(err, ErrClosed) && !errors.Is(err, context.Canceled) {
 					// NOTE: There are unit tests that trigger Fatal and override its behavior.
 					// Therefore, the code must call `return` afterward.
@@ -258,7 +258,7 @@ func (ec *MultiClient) Healthy(ctx context.Context) error {
 		return nil, client.Healthy(ctx)
 	}
 
-	if _, err := ec.call(ec.setMethod(ctx, "Healthy"), f); err != nil {
+	if _, err := ec.call(contextWithMethod(ctx, "Healthy"), f); err != nil {
 		return err
 	}
 
@@ -270,7 +270,7 @@ func (ec *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) 
 	f := func(client SingleClientProvider) (any, error) {
 		return client.BlockByNumber(ctx, blockNumber)
 	}
-	res, err := ec.call(ec.setMethod(ctx, "BlockByNumber"), f)
+	res, err := ec.call(contextWithMethod(ctx, "BlockByNumber"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (ec *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int)
 	f := func(client SingleClientProvider) (any, error) {
 		return client.HeaderByNumber(ctx, blockNumber)
 	}
-	res, err := ec.call(ec.setMethod(ctx, "HeaderByNumber"), f)
+	res, err := ec.call(contextWithMethod(ctx, "HeaderByNumber"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +295,7 @@ func (ec *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.Filte
 	f := func(client SingleClientProvider) (any, error) {
 		return client.SubscribeFilterLogs(ctx, q, ch)
 	}
-	res, err := ec.call(ec.setMethod(ctx, "SubscribeFilterLogs"), f)
+	res, err := ec.call(contextWithMethod(ctx, "SubscribeFilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +307,7 @@ func (ec *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) (
 	f := func(client SingleClientProvider) (any, error) {
 		return client.FilterLogs(ctx, q)
 	}
-	res, err := ec.call(ec.setMethod(ctx, "FilterLogs"), f)
+	res, err := ec.call(contextWithMethod(ctx, "FilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +358,7 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		if err != nil {
 			ec.logger.Error("call failed, trying another client",
-				zap.String("method", ec.getMethod(ctx)),
+				zap.String("method", methodFromContext(ctx)),
 				zap.String("addr", ec.nodeAddrs[currentIdx]),
 				zap.Error(err))
 
@@ -376,7 +376,7 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		}
 
 		ec.logger.Debug("call succeeded, returning value",
-			zap.String("method", ec.getMethod(ctx)),
+			zap.String("method", methodFromContext(ctx)),
 			zap.String("addr", ec.nodeAddrs[currentIdx]))
 		return v, nil
 	}
@@ -384,14 +384,14 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	return nil, fmt.Errorf("all clients returned an error")
 }
 
-type ctxMethod struct{}
+type methodContextKey struct{}
 
-func (ec *MultiClient) setMethod(ctx context.Context, method string) context.Context {
-	return context.WithValue(ctx, ctxMethod{}, method)
+func contextWithMethod(ctx context.Context, method string) context.Context {
+	return context.WithValue(ctx, methodContextKey{}, method)
 }
 
-func (ec *MultiClient) getMethod(ctx context.Context) string {
-	v, ok := ctx.Value(ctxMethod{}).(string)
+func methodFromContext(ctx context.Context) string {
+	v, ok := ctx.Value(methodContextKey{}).(string)
 	if !ok {
 		return ""
 	}
