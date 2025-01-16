@@ -8,9 +8,9 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
