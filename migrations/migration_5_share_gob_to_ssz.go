@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
@@ -26,7 +27,9 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		err := opt.Db.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
 			shareGOB := &storageShareGOB{}
 			if err := shareGOB.Decode(obj.Value); err != nil {
-				return fmt.Errorf("decode gob share: %w", err)
+				// TODO - dumping obj to see why we can't decode it
+				//return fmt.Errorf("decode gob share: %w", err)
+				return fmt.Errorf("decode gob share: %w obj: %s", err, spew.Sdump(obj))
 			}
 			share, err := storageShareGOBToSpecShare(shareGOB)
 			if err != nil {
@@ -54,12 +57,9 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("SetMany: %w", err)
 		}
 
-		// TODO - do not complete migration just yet, we will complete it after testing on stage
-		// has been done and when we are ready to merge: https://github.com/ssvlabs/ssv/pull/1837
-		// or we'll complete this even later if we go for 100% rollback-supporting approach
-		// described in https://github.com/ssvlabs/ssv/pull/1837
-		//// Must complete txn before commit (complete func makes sure migration executes once).
-		//if err := return completed(opt.Db); err != nil {
+		// This makes sure migration applies only once.
+		// TODO - uncomment to complete migration
+		//if err := completed(opt.Db); err != nil {
 		//	return fmt.Errorf("complete transaction: %w", err)
 		//}
 
