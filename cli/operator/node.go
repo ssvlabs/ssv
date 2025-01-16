@@ -427,7 +427,6 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					NetworkConfig:     ssvNetworkConfig,
 					ParticipantStores: storageMap,
 				},
 			)
