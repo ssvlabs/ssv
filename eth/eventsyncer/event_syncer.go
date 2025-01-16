@@ -130,12 +130,6 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
 	}
 
-	// Check if the block is too old.
-	b := new(big.Int).SetUint64(lastProcessedBlock)
-	if err := es.blockBelowThreshold(ctx, b); err != nil {
-		return 0, err
-	}
-
 	es.logger.Info("finished syncing historical events",
 		zap.Uint64("from_block", fromBlock),
 		zap.Uint64("last_processed_block", lastProcessedBlock))
