@@ -63,6 +63,12 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 			return beaconNetwork.FirstSlotAtEpoch(epoch)
 		},
 	).AnyTimes()
+	mockBeaconNetwork.EXPECT().EpochStartTime(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) time.Time {
+			firstSlot := beaconNetwork.FirstSlotAtEpoch(epoch)
+			t := beaconNetwork.EstimatedTimeAtSlot(firstSlot)
+			return time.Unix(t, 0)
+		}).AnyTimes()
 	mockBeaconNetwork.EXPECT().IsFirstSlotOfEpoch(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) bool {
 			return uint64(slot)%mockBeaconNetwork.SlotsPerEpoch() == 0
