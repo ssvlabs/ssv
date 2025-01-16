@@ -3,13 +3,17 @@ package validator
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -19,17 +23,25 @@ import (
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
+func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.handle_committee_message", observabilityNamespace),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+		))
+	defer span.End()
 
+	msg.Context = ctx
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 
+	span.SetAttributes(observability.BeaconSlotAttribute(slot))
 	c.mtx.RLock() // read v.Queues
 	q, ok := c.Queues[slot]
 	c.mtx.RUnlock()
@@ -46,16 +58,21 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 		c.mtx.Lock()
 		c.Queues[slot] = q
 		c.mtx.Unlock()
-		logger.Debug("missing queue for slot created", fields.Slot(slot))
+		const eventMsg = "missing queue for slot created"
+		logger.Debug(eventMsg, fields.Slot(slot))
+		span.AddEvent(eventMsg)
 	}
 
+	span.AddEvent("pushing message to queue")
+
 	if pushed := q.Q.TryPush(msg); !pushed {
-		msgID := msg.MsgID.String()
-		logger.Warn("❗ dropping message because the queue is full",
+		const errMsg = "❗ dropping message because the queue is full"
+		logger.Warn(errMsg,
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msgID))
+			zap.String("msg_id", msg.MsgID.String()))
+		span.SetStatus(codes.Error, errMsg)
 	} else {
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		span.SetStatus(codes.Ok, "")
 	}
 }
 
