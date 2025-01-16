@@ -15,7 +15,7 @@ import (
 )
 
 type Exporter struct {
-	NetworkConfig     networkconfig.NetworkConfig
+	NetworkConfig     networkconfig.SSV
 	ParticipantStores *ibftstorage.ParticipantStores
 }
 

@@ -293,6 +293,13 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
+		slotTickerProvider := func() slotticker.SlotTicker {
+			return slotticker.New(logger, slotticker.Config{
+				SlotDuration: networkConfig.SlotDuration(),
+				GenesisTime:  networkConfig.GenesisTime(),
+			})
+		}
+
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
@@ -318,13 +325,6 @@ var StartNodeCmd = &cobra.Command{
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
-
-		slotTickerProvider := func() slotticker.SlotTicker {
-			return slotticker.New(logger, slotticker.Config{
-				SlotDuration: networkConfig.SlotDuration(),
-				GenesisTime:  networkConfig.GenesisTime(),
-			})
-		}
 
 		operatorNode := operator.New(cfg.SSVOptions, slotTickerProvider, storageMap)
 
@@ -427,7 +427,7 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					DomainType:        ssvNetworkConfig.DomainType,
+					NetworkConfig:     ssvNetworkConfig,
 					ParticipantStores: storageMap,
 				},
 			)
