@@ -21,7 +21,7 @@ import (
 // sharesPrefix specifies the prefix used for storing Share(s) in DB.
 // Note, previously gob-encoded Share(s) were stored with `shares` prefix, this has been
 // changed in migration_5_change_share_format_from_gob_to_ssz.
-var sharesPrefix = []byte("shares_ssz")
+var sharesPrefix = []byte("shares_ssz/")
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -138,7 +138,7 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 // loadFromDB reads all shares from db.
 func (s *sharesStorage) loadFromDB() error {
 	// not locking since at this point nobody has the reference to this object
-	return s.db.GetAll(append(s.prefix, sharesPrefix...), func(i int, obj basedb.Obj) error {
+	return s.db.GetAll(s.storagePrefix(), func(i int, obj basedb.Obj) error {
 		val := &storageShare{}
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
@@ -406,15 +406,17 @@ func (s *sharesStorage) Drop() error {
 		s.validatorStore.handleDrop()
 	}()
 
-	return s.db.DropPrefix(bytes.Join(
-		[][]byte{s.prefix, sharesPrefix, []byte("/")},
-		nil,
-	))
+	return s.db.DropPrefix(s.storagePrefix())
+}
+
+// storageKey builds a prefix all share keys are stored under
+func (s *sharesStorage) storagePrefix() []byte {
+	return append(s.prefix, sharesPrefix...)
 }
 
 // storageKey builds share key using sharesPrefix & validator public key, e.g. "shares_ssz/0x00..01"
 func (s *sharesStorage) storageKey(pk []byte) []byte {
-	return bytes.Join([][]byte{sharesPrefix, pk}, []byte("/"))
+	return append(sharesPrefix, pk...)
 }
 
 // ByOperatorID filters by operator ID.

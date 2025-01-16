@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-var sharesPrefixGOB = []byte("shares")
+var sharesPrefixGOB = []byte("shares/")
 
 type storageShareGOB struct {
 	Share
