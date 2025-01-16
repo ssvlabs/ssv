@@ -3,7 +3,6 @@ package migrations
 import (
 	"context"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
@@ -26,9 +25,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		err := opt.Db.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
 			shareGOB := &storageShareGOB{}
 			if err := shareGOB.Decode(obj.Value); err != nil {
-				// TODO - dumping obj to see why we can't decode it
-				//return fmt.Errorf("decode gob share: %w", err)
-				return fmt.Errorf("decode gob share: %w obj: %s", err, spew.Sdump(obj))
+				return fmt.Errorf("decode gob share: %w", err)
 			}
 			share, err := storageShareGOBToSpecShare(shareGOB)
 			if err != nil {
@@ -56,11 +53,14 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("SetMany: %w", err)
 		}
 
+		if err := opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
+			return fmt.Errorf("DropPrefix: %w", err)
+		}
+
 		// This makes sure migration applies only once.
-		// TODO - uncomment to complete migration
-		//if err := completed(opt.Db); err != nil {
-		//	return fmt.Errorf("complete transaction: %w", err)
-		//}
+		if err := completed(opt.Db); err != nil {
+			return fmt.Errorf("complete transaction: %w", err)
+		}
 
 		return nil
 	},
