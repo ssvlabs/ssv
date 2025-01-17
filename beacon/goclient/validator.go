@@ -19,7 +19,7 @@ func (gc *GoClient) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[p
 		PubKeys: validatorPubKeys,
 		Common:  api.CommonOpts{Timeout: gc.longTimeout},
 	})
-	recordRequestDuration(gc.ctx, "Validators", gc.client.Address(), http.MethodPost, time.Since(reqStart), err)
+	recordRequestDuration(gc.ctx, "Validators", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Validators"),
