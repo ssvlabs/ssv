@@ -17,10 +17,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	"go.uber.org/zap"
 )
 
 const (
@@ -339,7 +340,7 @@ func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operat
 	gc.registrationMu.Lock()
 
 	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := phase0.Slot(operatorID) % (slotsPerEpoch)
+	operatorSubmissionSlotModulo := phase0.Slot(operatorID) % slotsPerEpoch
 
 	hasRegistrations := len(gc.registrationCache) != 0
 	operatorSubmissionSlot := currentSlot%slotsPerEpoch == operatorSubmissionSlotModulo
