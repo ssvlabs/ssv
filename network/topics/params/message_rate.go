@@ -8,11 +8,21 @@ import (
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
-// Ethereum parameters
+// Threshold and limit parameters
 const (
+	// SingleSCDutiesLimit represents the limit of the number of committee duties in an epoch
+	// with only sync committee beacon duties (no attestation) taken for a very big number of validators.
+	// To help reasoning it, note that for a very big number of validators all slots in the epoch
+	// will have an attestation with high probability and, thus,
+	// the committee duties with only sync committee beacon duties tends to 0.
 	SingleSCDutiesLimit = 0
-	// MaxValidatorsPerCommitteeListCut serves as a threshold size for creating a cache that computes the expected number of duties given a committee size.
-	// For each committee size, we can compute the precise expected number of duties. However, for big enough committees (considered as bigger than the following constant), results are pretty much the same. So we create a list of const values only up to the following value. For values that exceed it, the function shall return a default limit answer (e.g. number of committees duties per epoch -> 32).
+	// MaxValidatorsPerCommitteeListCut serves as a threshold size for creating a cache
+	// that computes the expected number of duties given a committee size.
+	// For each committee size, we can compute the precise expected number of duties.
+	// However, for big enough committees (considered as bigger than the following constant),
+	// results are pretty much the same. So we create a list of const values only up to the following value.
+	// For values that exceed it, the function shall return a default limit answer
+	// (e.g. number of committees duties per epoch -> 32).
 	// TODO: It depends on duties per epoch, 32 duties per epoch maps to MaxValidatorsPerCommitteeListCut=560. If the value of duties per epoch changes, this value needs to be adjusted (need to run Monte Carlo simulation for that number).
 	MaxValidatorsPerCommitteeListCut = 560
 )
