@@ -18,11 +18,11 @@ func New[Key comparable, Value any](lifespan, cleanupInterval time.Duration) *Ma
 	}
 	go func() {
 		// TODO: use time.After when Go is updated to 1.23
-		timer := time.NewTimer(cleanupInterval)
-		defer timer.Stop()
+		ticker := time.NewTicker(cleanupInterval)
+		defer ticker.Stop()
 
 		// TODO - consider terminating with ctx.Done() to make this ttl map garbage-collectable
-		for range timer.C {
+		for range ticker.C {
 			m.idxLastUpdatedAt.Range(func(key Key, t time.Time) bool {
 				if time.Since(t) > lifespan {
 					m.idxLastUpdatedAt.Delete(key)
