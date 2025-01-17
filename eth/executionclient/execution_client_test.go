@@ -637,7 +637,7 @@ func TestSyncProgress(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := New(ctx, addr, contractAddr)
+	client, err := New(ctx, addr, contractAddr, WithHealthInvalidationInterval(0))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)

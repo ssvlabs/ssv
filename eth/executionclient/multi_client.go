@@ -29,6 +29,7 @@ type MultiClient struct {
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
+	healthInvalidationInterval  time.Duration
 	logBatchSize                uint64
 	syncDistanceTolerance       uint64
 
@@ -74,6 +75,7 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 			WithConnectionTimeout(multiClient.connectionTimeout),
 			WithReconnectionInitialInterval(multiClient.reconnectionInitialInterval),
 			WithReconnectionMaxInterval(multiClient.reconnectionMaxInterval),
+			WithHealthInvalidationInterval(multiClient.healthInvalidationInterval),
 			WithSyncDistanceTolerance(multiClient.syncDistanceTolerance),
 		)
 		if err != nil {
@@ -129,6 +131,11 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 	var singleLogsCh <-chan BlockLogs
 	var singleErrCh <-chan error
 	var nothingToSyncCount atomic.Int64
+
+	// Update healthiness of all nodes and make sure at least one of them is available.
+	if err := ec.Healthy(ctx); err != nil {
+		ec.logger.Fatal("no healthy clients", zap.Error(err))
+	}
 
 	// Find a client that's able to provide the requested data.
 	startFetchingFunc := func(client SingleClientProvider) (any, error) {
@@ -238,6 +245,11 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 			case <-ec.closed:
 				return
 			default:
+				// Update healthiness of all nodes and make sure at least one of them is available.
+				if err := ec.Healthy(ctx); err != nil {
+					ec.logger.Fatal("no healthy clients", zap.Error(err))
+				}
+
 				f := func(client SingleClientProvider) (any, error) {
 					lastBlock, err := client.streamLogsToChan(ctx, logs, fromBlock)
 					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
@@ -268,12 +280,37 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *MultiClient) Healthy(ctx context.Context) error {
-	f := func(client SingleClientProvider) (any, error) {
-		return nil, client.Healthy(ctx)
-	}
+	var atLeastOneHealthy atomic.Bool
+	var errs error
+	var errsMu sync.Mutex
 
-	if _, err := ec.call(contextWithMethod(ctx, "Healthy"), f); err != nil {
-		return err
+	var wg sync.WaitGroup
+	// We need to fetch all clients to update the internal state
+	for i, client := range ec.clients {
+		wg.Add(1)
+		go func(i int, client SingleClientProvider) {
+			defer wg.Done()
+
+			if err := client.Healthy(ctx); err != nil {
+				ec.logger.Warn("client is not healthy",
+					zap.String("addr", ec.nodeAddrs[i]),
+					zap.Error(err))
+
+				errsMu.Lock()
+				errs = errors.Join(errs, err)
+				errsMu.Unlock()
+			} else {
+				ec.logger.Debug("client is healthy",
+					zap.String("addr", ec.nodeAddrs[i]))
+
+				atLeastOneHealthy.Store(true)
+			}
+		}(i, client)
+	}
+	wg.Wait()
+
+	if !atLeastOneHealthy.Load() {
+		return errs
 	}
 
 	return nil
@@ -361,9 +398,24 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		currentIdx := ec.currClientIdx
 		ec.currClientMu.Unlock()
 
-		ec.logger.Debug("calling client", zap.Int("client_index", currentIdx), zap.String("client_addr", ec.nodeAddrs[currentIdx]))
-
 		client := ec.clients[currentIdx]
+
+		ec.logger.Debug("checking client healthiness",
+			zap.Int("index", currentIdx),
+			zap.String("method", methodFromContext(ctx)),
+			zap.String("addr", ec.nodeAddrs[currentIdx]))
+
+		// Make sure this client is healthy, this shouldn't cause too many requests because the result is cached.
+		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
+		if err := client.Healthy(ctx); err != nil {
+			return nil, err
+		}
+
+		ec.logger.Debug("calling client",
+			zap.Int("index", currentIdx),
+			zap.String("method", methodFromContext(ctx)),
+			zap.String("addr", ec.nodeAddrs[currentIdx]))
+
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 			ec.logger.Debug("received graceful closure from client", zap.Error(err))

@@ -84,6 +84,20 @@ func WithReconnectionMaxIntervalMulti(interval time.Duration) OptionMulti {
 	}
 }
 
+// WithHealthInvalidationInterval sets health invalidation interval. 0 disables caching.
+func WithHealthInvalidationInterval(interval time.Duration) Option {
+	return func(s *ExecutionClient) {
+		s.healthInvalidationInterval = interval
+	}
+}
+
+// WithHealthInvalidationIntervalMulti sets health invalidation interval.
+func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
+	return func(s *MultiClient) {
+		s.healthInvalidationInterval = interval
+	}
+}
+
 // WithLogBatchSize sets log batch size.
 func WithLogBatchSize(size uint64) Option {
 	return func(s *ExecutionClient) {

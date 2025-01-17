@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -70,14 +71,16 @@ type ExecutionClient struct {
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
+	healthInvalidationInterval  time.Duration
 	logBatchSize                uint64
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	client *ethclient.Client
-	closed chan struct{}
+	client         *ethclient.Client
+	closed         chan struct{}
+	lastSyncedTime atomic.Int64
 }
 
 // New creates a new instance of ExecutionClient.
@@ -90,6 +93,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
+		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
 	}
@@ -279,6 +283,17 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ErrClosed
 	}
 
+	lastHealthyTime := time.Unix(ec.lastSyncedTime.Load(), 0)
+
+	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
+		// Synced recently, reuse the result (only if ec.healthInvalidationInterval is set).
+		return nil
+	}
+
+	return ec.healthy(ctx)
+}
+
+func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
@@ -294,21 +309,20 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
 	if sp != nil {
-		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
-
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
-
 		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
+			recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
 			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
+	} else {
+		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
-
-	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+	ec.lastSyncedTime.Store(time.Now().Unix())
 
 	return nil
 }
