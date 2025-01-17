@@ -16,7 +16,6 @@ import (
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
-	// TODO: add metrics to requests that were moved from here (call recordRequestDuration, add logs on error)
 	forkData := &phase0.ForkData{
 		CurrentVersion:        gc.BeaconConfig().CapellaForkVersion,
 		GenesisValidatorsRoot: gc.BeaconConfig().Genesis.GenesisValidatorsRoot,

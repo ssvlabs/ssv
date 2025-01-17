@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -32,14 +33,26 @@ func (gc *GoClient) BeaconConfig() networkconfig.Beacon {
 
 // fetchBeaconConfig must be called once on GoClient's initialization
 func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
+	start := time.Now()
 	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+	recordRequestDuration(gc.ctx, "Spec", gc.client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Spec"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to obtain spec response: %w", err)
 	}
 	if specResponse == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "Spec"),
+		)
 		return nil, fmt.Errorf("spec response is nil")
 	}
 	if specResponse.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "Spec"),
+		)
 		return nil, fmt.Errorf("spec response data is nil")
 	}
 
@@ -137,14 +150,26 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		}
 	}
 
+	start = time.Now()
 	genesisResponse, err := gc.client.Genesis(gc.ctx, &api.GenesisOpts{})
+	recordRequestDuration(gc.ctx, "Genesis", gc.client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Genesis"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
 	if genesisResponse == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "Genesis"),
+		)
 		return nil, fmt.Errorf("genesis response is nil")
 	}
 	if genesisResponse.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "Genesis"),
+		)
 		return nil, fmt.Errorf("genesis response data is nil")
 	}
 
