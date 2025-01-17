@@ -185,7 +185,7 @@ func TestMultiClient_FetchHistoricalLogs_MultiClient(t *testing.T) {
 		EXPECT().
 		reconnect(gomock.Any()).
 		Do(func(ctx context.Context) {}).
-		Times(1)
+		AnyTimes()
 
 	mockClient1.
 		EXPECT().
@@ -444,6 +444,12 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 		}).
 		AnyTimes()
 
+	mockClient1.
+		EXPECT().
+		reconnect(gomock.Any()).
+		Do(func(ctx context.Context) {}).
+		AnyTimes()
+
 	gomock.InOrder(
 		// First client: mockClient1 with fromBlock=200
 		mockClient1.
@@ -454,12 +460,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				out <- BlockLogs{BlockNumber: 201}
 				return 201, errors.New("network error") // Triggers failover
 			}).
-			Times(1),
-
-		mockClient1.
-			EXPECT().
-			reconnect(gomock.Any()).
-			Do(func(ctx context.Context) {}).
 			Times(1),
 
 		// Second client: mockClient2 with fromBlock=202
@@ -529,7 +529,7 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 		EXPECT().
 		reconnect(gomock.Any()).
 		Do(func(ctx context.Context) {}).
-		Times(1)
+		AnyTimes()
 
 	mockClient1.
 		EXPECT().
@@ -552,7 +552,7 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 		EXPECT().
 		reconnect(gomock.Any()).
 		Do(func(ctx context.Context) {}).
-		Times(1)
+		AnyTimes()
 
 	mockClient2.
 		EXPECT().
@@ -695,6 +695,18 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 		}).
 		AnyTimes()
 
+	mockClient1.
+		EXPECT().
+		reconnect(gomock.Any()).
+		Do(func(ctx context.Context) {}).
+		AnyTimes()
+
+	mockClient2.
+		EXPECT().
+		reconnect(gomock.Any()).
+		Do(func(ctx context.Context) {}).
+		AnyTimes()
+
 	gomock.InOrder(
 		// Setup mockClient1 to fail with fromBlock=200
 		mockClient1.
@@ -703,23 +715,11 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 			Return(uint64(0), errors.New("network error")).
 			Times(1),
 
-		mockClient1.
-			EXPECT().
-			reconnect(gomock.Any()).
-			Do(func(ctx context.Context) {}).
-			Times(1),
-
 		// Setup mockClient2 to fail with fromBlock=200
 		mockClient2.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 			Return(uint64(0), errors.New("network error")).
-			Times(1),
-
-		mockClient2.
-			EXPECT().
-			reconnect(gomock.Any()).
-			Do(func(ctx context.Context) {}).
 			Times(1),
 
 		// Setup mockClient3 to handle fromBlock=200

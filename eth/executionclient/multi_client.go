@@ -408,7 +408,14 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		// Make sure this client is healthy, this shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
-			return nil, err
+			ec.logger.Warn("client is not healthy, using another one",
+				zap.Int("index", currentIdx),
+				zap.String("method", methodFromContext(ctx)),
+				zap.String("addr", ec.nodeAddrs[currentIdx]))
+
+			ec.useNextClient(ctx, currentIdx, client)
+
+			continue
 		}
 
 		ec.logger.Debug("calling client",
@@ -428,15 +435,7 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.String("addr", ec.nodeAddrs[currentIdx]),
 				zap.Error(err))
 
-			ec.currClientMu.Lock()
-			idx := ec.currClientIdx
-			// The index might have already changed if a parallel request failed.
-			if idx == currentIdx {
-				ec.currClientIdx = (ec.currClientIdx + 1) % len(ec.clients)
-			}
-			ec.currClientMu.Unlock()
-
-			client.reconnect(ctx)
+			ec.useNextClient(ctx, currentIdx, client)
 
 			continue
 		}
@@ -448,6 +447,18 @@ func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	}
 
 	return nil, fmt.Errorf("all clients returned an error")
+}
+
+func (ec *MultiClient) useNextClient(ctx context.Context, currentIdx int, client SingleClientProvider) {
+	ec.currClientMu.Lock()
+	idx := ec.currClientIdx
+	// The index might have already changed if a parallel request failed.
+	if idx == currentIdx {
+		ec.currClientIdx = (ec.currClientIdx + 1) % len(ec.clients)
+	}
+	ec.currClientMu.Unlock()
+
+	go client.reconnect(ctx)
 }
 
 type methodContextKey struct{}
