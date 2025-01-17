@@ -3,14 +3,13 @@ package operator
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func Test_verifyConfig(t *testing.T) {
@@ -29,7 +28,7 @@ func Test_verifyConfig(t *testing.T) {
 			NetworkName:      testNetworkName,
 			UsingLocalEvents: true,
 		}
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents))
+		require.NoError(t, checkCfgCompatibility(nodeStorage, c.NetworkName, c.UsingLocalEvents))
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -45,7 +44,7 @@ func Test_verifyConfig(t *testing.T) {
 			UsingLocalEvents: true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents))
+		require.NoError(t, checkCfgCompatibility(nodeStorage, c.NetworkName, c.UsingLocalEvents))
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -62,7 +61,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, true),
+			checkCfgCompatibility(nodeStorage, testNetworkName, true),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -81,7 +80,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents),
+			checkCfgCompatibility(nodeStorage, testNetworkName, c.UsingLocalEvents),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -100,7 +99,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true),
+			checkCfgCompatibility(nodeStorage, c.NetworkName, true),
 			"incompatible config change: enabling local events is not allowed. The database must be removed or reinitialized",
 		)
 
@@ -119,7 +118,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, false),
+			checkCfgCompatibility(nodeStorage, c.NetworkName, false),
 			"incompatible config change: disabling local events is not allowed. The database must be removed or reinitialized",
 		)
 

@@ -15,8 +15,6 @@ import (
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -34,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
+	"go.uber.org/zap"
 )
 
 // network states
@@ -325,7 +324,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.Addr
 		})
 	}, 3)
 	if err != nil {
-		logger.Panic("could not setup discovery", zap.Error(err))
+		logger.Fatal("could not setup discovery", zap.Error(err))
 	}
 }
 
