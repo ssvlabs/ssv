@@ -16,16 +16,13 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	global_config "github.com/ssvlabs/ssv/cli/config"
+	globalcfg "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -68,6 +65,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -76,40 +74,56 @@ type KeyStore struct {
 }
 
 type config struct {
-	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options                   `yaml:"db"`
-	SSVOptions                 operator.Options                 `yaml:"ssv"`
-	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
-	KeyStore                   KeyStore                         `yaml:"KeyStore"`
-	Graffiti                   string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"ssv.network" `
-	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
-	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-	WsAPIPort                  int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
-	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
-	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
-	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	globalcfg.Global   `yaml:"global"`
+	DBOptions          basedb.Options                   `yaml:"db"`
+	SSVOptions         operator.Options                 `yaml:"ssv"`
+	ExecutionClient    executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient    beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig   p2pv1.Config                     `yaml:"p2p"`
+	KeyStore           KeyStore                         `yaml:"KeyStore"`
+	Graffiti           string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"ssv.network" `
+	OperatorPrivateKey string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	MetricsAPIPort     int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
+	EnableProfile      bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey  string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	WsAPIPort          int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
+	WithPing           bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+	SSVAPIPort         int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
+	LocalEventsPath    string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
 }
 
 var cfg config
 
-var globalArgs global_config.Args
+var globalArgs globalcfg.Args
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := cmd.Context()
+
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		logger, err := setupGlobal()
+		err := globalcfg.Prepare(&cfg, &globalArgs)
 		if err != nil {
-			log.Fatal("could not create logger ", err)
+			log.Fatalf("could not prepare config: %v", err)
 		}
 
+		err = logging.SetGlobalLogger(
+			cfg.LogLevel,
+			cfg.LogLevelFormat,
+			cfg.LogFormat,
+			&logging.LogFileOptions{
+				FileName:   cfg.LogFilePath,
+				MaxSize:    cfg.LogFileSize,
+				MaxBackups: cfg.LogFileBackups,
+			},
+		)
+		if err != nil {
+			log.Fatalf("could not create logger: %v", err)
+		}
+		logger := zap.L()
 		defer logging.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
@@ -132,7 +146,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
-		cfg.DBOptions.Ctx = cmd.Context()
+		cfg.DBOptions.Ctx = ctx
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -177,8 +191,8 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
-			logger.Fatal("failed to validate config", zap.Error(err))
+		if err := checkCfgCompatibility(nodeStorage, networkConfig.NetworkName(), usingLocalEvents); err != nil {
+			logger.Fatal("failed to check config compatibility", zap.Error(err))
 		}
 
 		ekmHashedKey, err := operatorPrivKey.EKMHash()
@@ -191,7 +205,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
-		cfg.P2pNetworkConfig.Ctx = cmd.Context()
+		cfg.P2pNetworkConfig.Ctx = ctx
 
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
@@ -200,14 +214,14 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		cfg.ConsensusClient.Context = cmd.Context()
+		cfg.ConsensusClient.Context = ctx
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
-			cmd.Context(),
+			ctx,
 			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
@@ -227,7 +241,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		validatorsMap := validators.New(cmd.Context())
+		validatorsMap := validators.New(ctx)
 
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
@@ -247,14 +261,14 @@ var StartNodeCmd = &cobra.Command{
 
 		p2pNetwork := setupP2P(logger, db)
 
-		cfg.SSVOptions.Context = cmd.Context()
+		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
-		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
+		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
@@ -267,7 +281,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
-			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
+			ws := exporterapi.NewWsServer(ctx, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(networkConfig, logger, ws)
@@ -327,36 +341,69 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber := nodeprobe.NewProber(
 			logger,
 			func() {
-				logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.")
+				logger.Fatal("Ethereum nodes are either out of sync or down. Make sure the nodes are healthy to resume.")
 			},
 			map[string]nodeprobe.Node{
-				"execution client": executionClient,
+				nodeprobe.ExecutionClientNode: executionClient,
 
 				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
 				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
 				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-				"consensus client": consensusClient,
+				nodeprobe.ConsensusClientNode: consensusClient,
 			},
 		)
 
-		nodeProber.Start(cmd.Context())
-		nodeProber.Wait()
-		logger.Info("ethereum node(s) are healthy")
-
-		eventSyncer := syncContractEvents(
-			cmd.Context(),
-			logger,
-			executionClient,
+		eventFilterer, err := executionClient.Filterer()
+		if err != nil {
+			logger.Fatal("failed to set up event filterer", zap.Error(err))
+		}
+		eventHandler, err := eventhandler.New(
+			nodeStorage,
+			eventparser.New(eventFilterer),
 			validatorCtrl,
 			networkConfig,
-			nodeStorage,
 			operatorDataStore,
 			operatorPrivKey,
 			keyManager,
+			cfg.SSVOptions.ValidatorOptions.Beacon,
+			eventhandler.WithFullNode(),
+			eventhandler.WithLogger(logger),
 		)
-		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode("event syncer", eventSyncer)
+		if err != nil {
+			logger.Fatal("failed to setup event data handler", zap.Error(err))
 		}
+
+		// load & parse local events yaml if exists, otherwise sync from contract
+		if usingLocalEvents {
+			localEvents, err := localevents.Load(cfg.LocalEventsPath)
+			if err != nil {
+				logger.Fatal("failed to load local events", zap.Error(err))
+			}
+			if err := eventHandler.HandleLocalEvents(localEvents); err != nil {
+				logger.Fatal("error occurred while running event data handler", zap.Error(err))
+			}
+		} else {
+			eventSyncer := eventsyncer.New(
+				nodeStorage,
+				executionClient,
+				eventHandler,
+				eventsyncer.WithLogger(logger),
+			)
+			startEventSyncer(
+				cmd.Context(),
+				logger,
+				eventSyncer,
+				networkConfig,
+				nodeStorage,
+				operatorDataStore,
+			)
+			nodeProber.AddNode(nodeprobe.EventSyncerNode, eventSyncer)
+		}
+
+		nodeProber.Start(ctx)
+		nodeProber.Wait()
+
+		logger.Info("Ethereum nodes are healthy")
 
 		if _, err := metadataSyncer.SyncOnStartup(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
@@ -436,12 +483,11 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
-func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) error {
+func checkCfgCompatibility(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) error {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
 		return fmt.Errorf("failed to get stored config: %w", err)
 	}
-
 	currentConfig := &operatorstorage.ConfigLock{
 		NetworkName:      networkName,
 		UsingLocalEvents: usingLocalEvents,
@@ -452,7 +498,6 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
-
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
 			return fmt.Errorf("failed to store config: %w", err)
 		}
@@ -462,36 +507,7 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 }
 
 func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
-}
-
-func setupGlobal() (*zap.Logger, error) {
-	if globalArgs.ConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read config: %w", err)
-		}
-	}
-	if globalArgs.ShareConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %w", err)
-		}
-	}
-
-	err := logging.SetGlobalLogger(
-		cfg.LogLevel,
-		cfg.LogLevelFormat,
-		cfg.LogFormat,
-		&logging.LogFileOptions{
-			FileName:   cfg.LogFilePath,
-			MaxSize:    cfg.LogFileSize,
-			MaxBackups: cfg.LogFileBackups,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
-	}
-
-	return zap.L(), nil
+	globalcfg.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
 func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
@@ -678,125 +694,79 @@ func setupConsensusClient(
 	return cl
 }
 
-// syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
-func syncContractEvents(
+// startEventSyncer blocks until historical events are synced and then spawns a goroutine
+// to sync ongoing events.
+func startEventSyncer(
 	ctx context.Context,
 	logger *zap.Logger,
-	executionClient *executionclient.ExecutionClient,
-	validatorCtrl validator.Controller,
+	eventSyncer *eventsyncer.EventSyncer,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
-	operatorDecrypter keys.OperatorDecrypter,
-	keyManager ekm.KeyManager,
-) *eventsyncer.EventSyncer {
-	eventFilterer, err := executionClient.Filterer()
-	if err != nil {
-		logger.Fatal("failed to set up event filterer", zap.Error(err))
-	}
-
-	eventParser := eventparser.New(eventFilterer)
-
-	eventHandler, err := eventhandler.New(
-		nodeStorage,
-		eventParser,
-		validatorCtrl,
-		networkConfig,
-		operatorDataStore,
-		operatorDecrypter,
-		keyManager,
-		cfg.SSVOptions.ValidatorOptions.Beacon,
-		eventhandler.WithFullNode(),
-		eventhandler.WithLogger(logger),
-	)
-	if err != nil {
-		logger.Fatal("failed to setup event data handler", zap.Error(err))
-	}
-
-	eventSyncer := eventsyncer.New(
-		nodeStorage,
-		executionClient,
-		eventHandler,
-		eventsyncer.WithLogger(logger),
-	)
-
+) {
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
 		logger.Fatal("syncing registry contract events failed, could not get last processed block", zap.Error(err))
 	}
 	if !found {
 		fromBlock = networkConfig.RegistrySyncOffset
-	} else if fromBlock == nil {
+	}
+	if fromBlock == nil {
 		logger.Fatal("syncing registry contract events failed, last processed block is nil")
-	} else {
-		// Start syncing from the next block.
-		fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
+	}
+	// Start syncing from the next block.
+	fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
+
+	logger.Debug("syncing historical registry events", zap.Uint64("fromBlock", fromBlock.Uint64()))
+
+	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, fromBlock.Uint64())
+	switch {
+	case errors.Is(err, executionclient.ErrNothingToSync):
+		// Nothing was synced, keep fromBlock as is.
+	case err == nil:
+		// Advance fromBlock to the block after lastProcessedBlock.
+		fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
+	default:
+		logger.Fatal("failed to sync historical registry events", zap.Error(err))
 	}
 
-	// load & parse local events yaml if exists, otherwise sync from contract
-	if len(cfg.LocalEventsPath) != 0 {
-		localEvents, err := localevents.Load(cfg.LocalEventsPath)
-		if err != nil {
-			logger.Fatal("failed to load local events", zap.Error(err))
-		}
+	// Print registry stats.
+	shares := nodeStorage.Shares().List(nil)
+	operators, err := nodeStorage.ListOperators(nil, 0, 0)
+	if err != nil {
+		logger.Error("failed to get operators", zap.Error(err))
+	}
 
-		if err := eventHandler.HandleLocalEvents(localEvents); err != nil {
-			logger.Fatal("error occurred while running event data handler", zap.Error(err))
-		}
-	} else {
-		// Sync historical registry events.
-		logger.Debug("syncing historical registry events", zap.Uint64("fromBlock", fromBlock.Uint64()))
-		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, fromBlock.Uint64())
-		switch {
-		case errors.Is(err, executionclient.ErrNothingToSync):
-			// Nothing was synced, keep fromBlock as is.
-		case err == nil:
-			// Advance fromBlock to the block after lastProcessedBlock.
-			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
-		default:
-			logger.Fatal("failed to sync historical registry events", zap.Error(err))
-		}
-
-		// Print registry stats.
-		shares := nodeStorage.Shares().List(nil)
-		operators, err := nodeStorage.ListOperators(nil, 0, 0)
-		if err != nil {
-			logger.Error("failed to get operators", zap.Error(err))
-		}
-
-		operatorValidators := 0
-		liquidatedValidators := 0
-		operatorID := operatorDataStore.GetOperatorID()
-		if operatorDataStore.OperatorIDReady() {
-			for _, share := range shares {
-				if share.BelongsToOperator(operatorID) {
-					operatorValidators++
-				}
-				if share.Liquidated {
-					liquidatedValidators++
-				}
+	operatorValidators := 0
+	liquidatedValidators := 0
+	operatorID := operatorDataStore.GetOperatorID()
+	if operatorDataStore.OperatorIDReady() {
+		for _, share := range shares {
+			if share.BelongsToOperator(operatorID) {
+				operatorValidators++
+			}
+			if share.Liquidated {
+				liquidatedValidators++
 			}
 		}
-		logger.Info("historical registry sync stats",
-			zap.Uint64("my_operator_id", operatorID),
-			zap.Int("operators", len(operators)),
-			zap.Int("validators", len(shares)),
-			zap.Int("liquidated_validators", liquidatedValidators),
-			zap.Int("my_validators", operatorValidators),
-		)
-
-		// Sync ongoing registry events in the background.
-		go func() {
-			err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
-
-			// Crash if ongoing sync has stopped, regardless of the reason.
-			logger.Fatal("failed syncing ongoing registry events",
-				zap.Uint64("last_processed_block", lastProcessedBlock),
-				zap.Error(err))
-		}()
 	}
+	logger.Info("historical registry sync stats",
+		zap.Uint64("my_operator_id", operatorID),
+		zap.Int("operators", len(operators)),
+		zap.Int("validators", len(shares)),
+		zap.Int("liquidated_validators", liquidatedValidators),
+		zap.Int("my_validators", operatorValidators),
+	)
 
-	return eventSyncer
+	// Sync ongoing registry events in the background.
+	go func() {
+		err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+
+		// Crash if ongoing sync has stopped, regardless of the reason.
+		logger.Fatal("failed syncing ongoing registry events",
+			zap.Uint64("last_processed_block", lastProcessedBlock),
+			zap.Error(err))
+	}()
 }
 
 func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
