@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	loggingV2 "github.com/ipfs/go-log/v2"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -108,6 +109,10 @@ func (n *Node) Start(logger *zap.Logger) error {
 	logger.Named(logging.NameOperator)
 
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+
+	if err := loggingV2.SetLogLevel("*", "debug"); err != nil {
+		return fmt.Errorf("failed to set log level: %w", err)
+	}
 
 	go func() {
 		err := n.startWSServer(logger)
