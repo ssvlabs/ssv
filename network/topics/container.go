@@ -6,6 +6,8 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
+const subscriptionBufferSize = 256
+
 type onTopicJoined func(ps *pubsub.PubSub, topic *pubsub.Topic)
 
 type topicsContainer struct {
@@ -94,7 +96,7 @@ func (tc *topicsContainer) Subscribe(name string, opts ...pubsub.SubOpt) (*pubsu
 		return nil, err
 	}
 
-	opts = append(opts, pubsub.WithBufferSize(1024))
+	opts = append(opts, pubsub.WithBufferSize(subscriptionBufferSize))
 
 	s, err := topic.Subscribe(opts...)
 	if err != nil {
