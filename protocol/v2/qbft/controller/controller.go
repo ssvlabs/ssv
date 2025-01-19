@@ -9,10 +9,13 @@ import (
 
 	"github.com/pkg/errors"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -55,24 +58,38 @@ func NewController(
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
 func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.controller.start_new_instance", observabilityNamespace),
+		trace.WithAttributes(observability.BeaconSlotAttribute(height)))
+	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return errors.Wrap(err, "value invalid")
+		err = errors.Wrap(err, "value invalid")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	if height < c.Height {
-		return errors.New("attempting to start an instance with a past height")
+		err := errors.New("attempting to start an instance with a past height")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return errors.New("instance already running")
+		err := errors.New("instance already running")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	c.Height = height
 
 	newInstance := c.addAndStoreNewInstance()
+
+	span.AddEvent("start new instance")
 	newInstance.Start(ctx, logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

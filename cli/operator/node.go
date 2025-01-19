@@ -115,9 +115,11 @@ var StartNodeCmd = &cobra.Command{
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		observabilityShutdown, err := observability.Initialize(
+			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			observability.WithMetrics())
+			observability.WithMetrics(),
+			observability.WithTraces("stage-alloy.alloy.svc:4317", true))
 		if err != nil {
 			logger.Fatal("could not initialize observability configuration", zap.Error(err))
 		}
