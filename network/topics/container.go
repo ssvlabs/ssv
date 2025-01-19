@@ -6,7 +6,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
-const subscriptionBufferSize = 256
+const subscriptionBufferSize = 64
 
 type onTopicJoined func(ps *pubsub.PubSub, topic *pubsub.Topic)
 
