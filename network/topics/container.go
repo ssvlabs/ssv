@@ -94,6 +94,8 @@ func (tc *topicsContainer) Subscribe(name string, opts ...pubsub.SubOpt) (*pubsu
 		return nil, err
 	}
 
+	opts = append(opts, pubsub.WithBufferSize(1024))
+
 	s, err := topic.Subscribe(opts...)
 	if err != nil {
 		return nil, err
