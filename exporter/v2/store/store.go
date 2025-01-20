@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	validatorDutyTraceKey = "vd"
-	commiteeDutyTraceKey  = "cd"
-	commiteeVIndexKey     = "ci"
+	validatorDutyTraceKey    = "vd"
+	commiteeDutyTraceKey     = "cd"
+	commiteeOperatorIndexKey = "ci"
 )
 
 type DutyTraceStore struct {
@@ -26,15 +26,55 @@ func New(db basedb.Database) *DutyTraceStore {
 	}
 }
 
-func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (out []*model.ValidatorDutyTrace, err error) {
-	prefix := s.makeValidatorSlotPrefix(role, slot, index)
-	err = s.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
-		vdt := new(model.ValidatorDutyTrace)
-		err := vdt.UnmarshalSSZ(o.Value)
-		if err != nil {
-			return fmt.Errorf("unmarshall ValidatorDutyTrace: %w", err)
+func (s *DutyTraceStore) SaveValidatorDuty(dto *model.ValidatorDutyTrace) error {
+	role, slot, index := dto.Role, dto.Slot, dto.Validator
+	prefix := s.makeValidatorPrefix(role, slot, index)
+
+	value, err := dto.MarshalSSZ()
+	if err != nil {
+		return fmt.Errorf("marshall validator duty: %w", err)
+	}
+
+	tx := s.db.Begin()
+	defer tx.Discard()
+
+	if err = s.db.Using(tx).Set(prefix, nil, value); err != nil {
+		return fmt.Errorf("save validator duty: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (s *DutyTraceStore) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (duty *model.ValidatorDutyTrace, err error) {
+	prefix := s.makeValidatorPrefix(role, slot, index)
+	obj, found, err := s.db.Get(prefix, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get validator duty: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("validator duty not found")
+	}
+
+	duty = new(model.ValidatorDutyTrace)
+	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+		return nil, fmt.Errorf("unmarshall validator duty: %w", err)
+	}
+
+	return duty, nil
+}
+
+func (s *DutyTraceStore) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (duties []*model.ValidatorDutyTrace, err error) {
+	prefix := s.makeValidatorPrefix(role, slot)
+	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
+		duty := new(model.ValidatorDutyTrace)
+		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+			return fmt.Errorf("unmarshall validator duty: %w", err)
 		}
-		out = append(out, vdt)
+		duties = append(duties, duty)
 		return nil
 	})
 	if err != nil {
@@ -44,37 +84,78 @@ func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phas
 	return
 }
 
-func (s *DutyTraceStore) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (out []*model.ValidatorDutyTrace, err error) {
-	panic("fix me")
+func (s *DutyTraceStore) SaveCommiteeDuty(duty *model.CommitteeDutyTrace) error {
+	prefix := s.makeCommitteePrefix(duty.Slot, duty.CommitteeID)
+
+	value, err := duty.MarshalSSZ()
+	if err != nil {
+		return fmt.Errorf("marshall committee duty: %w", err)
+	}
+
+	tx := s.db.Begin()
+	defer tx.Discard()
+
+	if err = s.db.Using(tx).Set(prefix, nil, value); err != nil {
+		return fmt.Errorf("save committee duty: %w", err)
+	}
+
+	prefixes := s.makeCommiteeOperatorPrefixes(duty.OperatorIDs, duty.Slot)
+
+	for _, ref := range prefixes {
+		if err = s.db.Using(tx).Set(ref, nil, prefix); err != nil {
+			return fmt.Errorf("save committee duty index: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
 }
 
-func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot, role spectypes.BeaconRole) (out []*model.CommitteeDutyTrace, err error) {
-	panic("fix me")
+func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *model.CommitteeDutyTrace, err error) {
+	prefix := s.makeCommitteePrefix(slot, committeeID)
+	obj, found, err := s.db.Get(prefix, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duty: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("committee duty not found")
+	}
+
+	duty = new(model.CommitteeDutyTrace)
+	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+		return nil, fmt.Errorf("unmarshall committee duty: %w", err)
+	}
+
+	return
 }
 
-func (s *DutyTraceStore) GetCommitteeDutiesByValidator(indexes []phase0.ValidatorIndex, slot phase0.Slot) (out []*model.CommitteeDutyTrace, err error) {
-	prefixes := s.makeCommiteeValidatorIndexPrefixes(indexes, slot)
+func (s *DutyTraceStore) GetCommitteeDutiesByOperator(indexes []spectypes.OperatorID, slot phase0.Slot) (out []*model.CommitteeDutyTrace, err error) {
+	prefixes := s.makeCommiteeOperatorPrefixes(indexes, slot)
 	keys := make([][]byte, 0)
 
 	tx := s.db.BeginRead()
 	defer tx.Discard()
 
 	for _, prefix := range prefixes {
-		err = s.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
-			keys = append(keys, o.Value)
-			return nil
-		})
+		obj, found, err := s.db.Get(prefix, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get committee duty index: %w", err)
 		}
+		if !found {
+			return nil, fmt.Errorf("committee duty index not found")
+		}
+		keys = append(keys, obj.Value)
 	}
 
-	err = s.db.GetMany(nil, keys, func(o basedb.Obj) error {
-		vdt := new(model.CommitteeDutyTrace)
-		if err := vdt.UnmarshalSSZ(o.Value); err != nil {
-			return fmt.Errorf("unmarshall ValidatorDutyTrace: %w", err)
+	err = s.db.GetMany(nil, keys, func(obj basedb.Obj) error {
+		duty := new(model.CommitteeDutyTrace)
+		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+			return fmt.Errorf("unmarshall committee duty: %w", err)
 		}
-		out = append(out, vdt)
+		out = append(out, duty)
 		return nil
 	})
 	if err != nil {
@@ -84,74 +165,32 @@ func (s *DutyTraceStore) GetCommitteeDutiesByValidator(indexes []phase0.Validato
 	return
 }
 
-func (s *DutyTraceStore) SaveValidatorDuty(dto *model.ValidatorDutyTrace) error {
-	prefix := s.makeValidatorPrefix(dto)
-
-	value, err := dto.MarshalSSZ()
-	if err != nil {
-		return fmt.Errorf("marshall ValidatorDutyTrace: %w", err)
-	}
-
-	tx := s.db.Begin()
-	defer tx.Discard()
-
-	err = s.db.Using(tx).Set(prefix, nil, value)
-	if err != nil {
-		return fmt.Errorf("save full ValidatorDutyTrace: %w", err)
-	}
-
-	return tx.Commit()
-}
-
-func (s *DutyTraceStore) SaveCommiteeDuty(dto *model.CommitteeDutyTrace) error {
-	prefix := s.makeCommitteePrefix(dto)
-
-	value, err := dto.MarshalSSZ()
-	if err != nil {
-		return fmt.Errorf("marshall ValidatorDutyTrace: %w", err)
-	}
-
-	tx := s.db.Begin()
-	defer tx.Discard()
-
-	err = s.db.Using(tx).Set(prefix, nil, value)
-	if err != nil {
-		return fmt.Errorf("save full ValidatorDutyTrace: %w", err)
-	}
-
-	return tx.Commit()
-}
-
-func (s *DutyTraceStore) makeValidatorSlotPrefix(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) []byte {
+// role + slot + ?index
+func (s *DutyTraceStore) makeValidatorPrefix(role spectypes.BeaconRole, slot phase0.Slot, index ...phase0.ValidatorIndex) []byte {
 	prefix := make([]byte, 0, len(validatorDutyTraceKey)+1+4)
 	prefix = append(prefix, []byte(validatorDutyTraceKey)...)
 	prefix = append(prefix, byte(role&0xff))
 	prefix = append(prefix, slotToByteSlice(slot)...)
-	prefix = append(prefix, uInt64ToByteSlice(uint64(index))...)
+	if len(index) > 0 { // optional
+		prefix = append(prefix, uInt64ToByteSlice(uint64(index[0]))...)
+	}
 	return prefix
 }
 
-func (s *DutyTraceStore) makeValidatorPrefix(dto *model.ValidatorDutyTrace) []byte {
-	prefix := make([]byte, 0, len(validatorDutyTraceKey)+4+1+8)
-	prefix = append(prefix, []byte(validatorDutyTraceKey)...)
-	prefix = append(prefix, byte(dto.Role&0xff))
-	prefix = append(prefix, slotToByteSlice(dto.Slot)...)
-	prefix = append(prefix, uInt64ToByteSlice(uint64(dto.Validator))...)
-	return prefix
-}
-
-func (s *DutyTraceStore) makeCommitteePrefix(dto *model.CommitteeDutyTrace) []byte {
-	prefix := make([]byte, 0, len(commiteeDutyTraceKey)+4+1+8)
+// role + slot
+func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.CommitteeID) []byte {
+	prefix := make([]byte, 0, len(commiteeDutyTraceKey)+4+32)
 	prefix = append(prefix, []byte(commiteeDutyTraceKey)...)
-	prefix = append(prefix, slotToByteSlice(dto.Slot)...)
-	prefix = append(prefix, dto.CommitteeID[:]...)
+	prefix = append(prefix, slotToByteSlice(slot)...)
+	prefix = append(prefix, id[:]...)
 	return prefix
 }
 
-func (s *DutyTraceStore) makeCommiteeValidatorIndexPrefixes(ii []phase0.ValidatorIndex, slot phase0.Slot) (keys [][]byte) {
+// slot + index
+func (s *DutyTraceStore) makeCommiteeOperatorPrefixes(ii []spectypes.OperatorID, slot phase0.Slot) (keys [][]byte) {
 	for _, index := range ii {
-		prefix := make([]byte, 0, len(commiteeVIndexKey)+1+8)
-		prefix = append(prefix, []byte(commiteeVIndexKey)...)
+		prefix := make([]byte, 0, len(commiteeOperatorIndexKey)+4+32)
+		prefix = append(prefix, []byte(commiteeOperatorIndexKey)...)
 		prefix = append(prefix, slotToByteSlice(slot)...)
 		prefix = append(prefix, uInt64ToByteSlice(uint64(index))...)
 		keys = append(keys, prefix)

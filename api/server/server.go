@@ -55,8 +55,9 @@ func (s *Server) Run() error {
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
 	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
-	router.Get("/v1/exporter/validator/traces", api.Handler(s.exporter.ValidatorTraces))
-	router.Get("/v1/exporter/committee/traces", api.Handler(s.exporter.CommitteeTraces))
+	router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
+	router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
+	router.Get("/v1/exporter/traces/operator", api.Handler(s.exporter.OperatorTraces))
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
