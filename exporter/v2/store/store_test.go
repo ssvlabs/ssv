@@ -1,0 +1,80 @@
+package store_test
+
+import (
+	"testing"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv-spec/types"
+	model "github.com/ssvlabs/ssv/exporter/v2"
+	store "github.com/ssvlabs/ssv/exporter/v2/store"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+)
+
+func TestSaveCommitteeDutyTrace(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	trace1 := makeCTrace(1)
+	trace2 := makeCTrace(2)
+
+	_, _ = trace1, trace2
+}
+
+func TestSaveValidatorDutyTrace(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	trace1 := makeVTrace(1)
+	trace2 := makeVTrace(2)
+
+	store := store.New(db)
+	require.NoError(t, store.SaveValidatorDuty(trace1))
+	require.NoError(t, store.SaveValidatorDuty(trace2))
+
+	traces, err := store.GetValidatorDuties(types.BNRoleAttester, phase0.Slot(1), phase0.ValidatorIndex(39393))
+	require.NoError(t, err)
+	require.Len(t, traces, 1)
+
+	traces, err = store.GetValidatorDuties(types.BNRoleAttester, phase0.Slot(2), phase0.ValidatorIndex(39393))
+	require.NoError(t, err)
+	require.Len(t, traces, 1)
+
+	traces, err = store.GetValidatorDuties(types.BNRoleAttester, phase0.Slot(3), phase0.ValidatorIndex(39393))
+	require.NoError(t, err)
+	require.Empty(t, traces)
+}
+
+func makeVTrace(slot phase0.Slot) *model.ValidatorDutyTrace {
+	return &model.ValidatorDutyTrace{
+		DutyTrace: model.DutyTrace{
+			Slot:   slot,
+			Pre:    nil,
+			Rounds: nil,
+			Post:   nil,
+		},
+		Role:      types.BNRoleAttester,
+		Validator: phase0.ValidatorIndex(39393),
+	}
+}
+
+func makeCTrace(slot phase0.Slot) *model.CommitteeDutyTrace {
+	return &model.CommitteeDutyTrace{
+		DutyTrace: model.DutyTrace{
+			Slot:   slot,
+			Pre:    nil,
+			Rounds: nil,
+			Post:   nil,
+		},
+		CommitteeID:              [32]byte{},
+		OperatorIDs:              nil,
+		AttestationDataRoot:      [32]byte{},
+		SyncCommitteeMessageRoot: [32]byte{},
+	}
+}
