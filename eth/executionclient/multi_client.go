@@ -98,22 +98,22 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 
 // assertSameChainIDs checks if all healthy clients have the same chain ID.
 // It sets firstChainID to the chain ID of the first healthy client encountered.
-func (ec *MultiClient) assertSameChainIDs(ctx context.Context) (bool, error) {
-	for i, client := range ec.clients {
-		addr := ec.nodeAddrs[i]
+func (mc *MultiClient) assertSameChainIDs(ctx context.Context) (bool, error) {
+	for i, client := range mc.clients {
+		addr := mc.nodeAddrs[i]
 
 		chainID, err := client.ChainID(ctx)
 		if err != nil {
-			ec.logger.Error("failed to get chain ID", zap.String("address", addr), zap.Error(err))
+			mc.logger.Error("failed to get chain ID", zap.String("address", addr), zap.Error(err))
 			return false, fmt.Errorf("get chain ID: %w", err)
 		}
-		if ec.chainID == nil {
-			ec.chainID = chainID
+		if mc.chainID == nil {
+			mc.chainID = chainID
 			continue
 		}
-		if ec.chainID.Cmp(chainID) != 0 {
-			ec.logger.Error("chain ID mismatch",
-				zap.String("observed_chain_id", ec.chainID.String()),
+		if mc.chainID.Cmp(chainID) != 0 {
+			mc.logger.Error("chain ID mismatch",
+				zap.String("observed_chain_id", mc.chainID.String()),
 				zap.String("checked_chain_id", chainID.String()),
 				zap.String("address", addr))
 			return false, nil
@@ -124,7 +124,7 @@ func (ec *MultiClient) assertSameChainIDs(ctx context.Context) (bool, error) {
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
+func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
 	logsCh := make(chan BlockLogs, defaultLogBuf)
 	errCh := make(chan error, 1)
 
@@ -133,8 +133,8 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 	var nothingToSyncCount atomic.Int64
 
 	// Update healthiness of all nodes and make sure at least one of them is available.
-	if err := ec.Healthy(ctx); err != nil {
-		ec.logger.Fatal("no healthy clients", zap.Error(err))
+	if err := mc.Healthy(ctx); err != nil {
+		mc.logger.Fatal("no healthy clients", zap.Error(err))
 	}
 
 	// Find a client that's able to provide the requested data.
@@ -155,8 +155,8 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 		return nil, nil
 	}
 
-	if _, err := ec.call(contextWithMethod(ctx, "FetchHistoricalLogs [start fetching]"), startFetchingFunc); err != nil {
-		if int(nothingToSyncCount.Load()) == len(ec.clients) {
+	if _, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs [start fetching]"), startFetchingFunc); err != nil {
+		if int(nothingToSyncCount.Load()) == len(mc.clients) {
 			// All clients returned ErrNothingToSync
 			return nil, nil, ErrNothingToSync
 		}
@@ -192,7 +192,7 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
-				case <-ec.closed:
+				case <-mc.closed:
 					return nil, fmt.Errorf("client closed")
 				case log, ok := <-singleLogsCh:
 					if !ok {
@@ -209,7 +209,7 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
-				case <-ec.closed:
+				case <-mc.closed:
 					return nil, fmt.Errorf("client closed")
 				case err, ok := <-singleErrCh:
 					if !ok {
@@ -224,7 +224,7 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 			return nil, nil
 		}
 
-		if _, err := ec.call(contextWithMethod(ctx, "FetchHistoricalLogs [process logs]"), processLogsFunc); err != nil {
+		if _, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs [process logs]"), processLogsFunc); err != nil {
 			errCh <- err
 		}
 	}()
@@ -233,7 +233,7 @@ func (ec *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 }
 
 // StreamLogs subscribes to events emitted by the contract.
-func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	logs := make(chan BlockLogs)
 
 	go func() {
@@ -242,12 +242,12 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 			select {
 			case <-ctx.Done():
 				return
-			case <-ec.closed:
+			case <-mc.closed:
 				return
 			default:
 				// Update healthiness of all nodes and make sure at least one of them is available.
-				if err := ec.Healthy(ctx); err != nil {
-					ec.logger.Fatal("no healthy clients", zap.Error(err))
+				if err := mc.Healthy(ctx); err != nil {
+					mc.logger.Fatal("no healthy clients", zap.Error(err))
 				}
 
 				f := func(client SingleClientProvider) (any, error) {
@@ -264,11 +264,11 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					return nil, nil
 				}
 
-				_, err := ec.call(contextWithMethod(ctx, "StreamLogs"), f)
+				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f)
 				if err != nil && !errors.Is(err, ErrClosed) && !errors.Is(err, context.Canceled) {
 					// NOTE: There are unit tests that trigger Fatal and override its behavior.
 					// Therefore, the code must call `return` afterward.
-					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
+					mc.logger.Fatal("failed to stream registry events", zap.Error(err))
 				}
 				return
 			}
@@ -279,29 +279,29 @@ func (ec *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 }
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
-func (ec *MultiClient) Healthy(ctx context.Context) error {
+func (mc *MultiClient) Healthy(ctx context.Context) error {
 	var atLeastOneHealthy atomic.Bool
 	var errs error
 	var errsMu sync.Mutex
 
 	var wg sync.WaitGroup
 	// We need to fetch all clients to update the internal state
-	for i, client := range ec.clients {
+	for i, client := range mc.clients {
 		wg.Add(1)
 		go func(i int, client SingleClientProvider) {
 			defer wg.Done()
 
 			if err := client.Healthy(ctx); err != nil {
-				ec.logger.Warn("client is not healthy",
-					zap.String("addr", ec.nodeAddrs[i]),
+				mc.logger.Warn("client is not healthy",
+					zap.String("addr", mc.nodeAddrs[i]),
 					zap.Error(err))
 
 				errsMu.Lock()
 				errs = errors.Join(errs, err)
 				errsMu.Unlock()
 			} else {
-				ec.logger.Debug("client is healthy",
-					zap.String("addr", ec.nodeAddrs[i]))
+				mc.logger.Debug("client is healthy",
+					zap.String("addr", mc.nodeAddrs[i]))
 
 				atLeastOneHealthy.Store(true)
 			}
@@ -317,11 +317,11 @@ func (ec *MultiClient) Healthy(ctx context.Context) error {
 }
 
 // BlockByNumber retrieves a block by its number.
-func (ec *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
+func (mc *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
 	f := func(client SingleClientProvider) (any, error) {
 		return client.BlockByNumber(ctx, blockNumber)
 	}
-	res, err := ec.call(contextWithMethod(ctx, "BlockByNumber"), f)
+	res, err := mc.call(contextWithMethod(ctx, "BlockByNumber"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -330,11 +330,11 @@ func (ec *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) 
 }
 
 // HeaderByNumber retrieves a block header by its number.
-func (ec *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
+func (mc *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
 	f := func(client SingleClientProvider) (any, error) {
 		return client.HeaderByNumber(ctx, blockNumber)
 	}
-	res, err := ec.call(contextWithMethod(ctx, "HeaderByNumber"), f)
+	res, err := mc.call(contextWithMethod(ctx, "HeaderByNumber"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -342,11 +342,11 @@ func (ec *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int)
 	return res.(*ethtypes.Header), nil
 }
 
-func (ec *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
+func (mc *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
 	f := func(client SingleClientProvider) (any, error) {
 		return client.SubscribeFilterLogs(ctx, q, ch)
 	}
-	res, err := ec.call(contextWithMethod(ctx, "SubscribeFilterLogs"), f)
+	res, err := mc.call(contextWithMethod(ctx, "SubscribeFilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -354,11 +354,11 @@ func (ec *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.Filte
 	return res.(ethereum.Subscription), nil
 }
 
-func (ec *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+func (mc *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
 	f := func(client SingleClientProvider) (any, error) {
 		return client.FilterLogs(ctx, q)
 	}
-	res, err := ec.call(contextWithMethod(ctx, "FilterLogs"), f)
+	res, err := mc.call(contextWithMethod(ctx, "FilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -366,21 +366,21 @@ func (ec *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) (
 	return res.([]ethtypes.Log), nil
 }
 
-func (ec *MultiClient) Filterer() (*contract.ContractFilterer, error) {
-	return contract.NewContractFilterer(ec.contractAddress, ec)
+func (mc *MultiClient) Filterer() (*contract.ContractFilterer, error) {
+	return contract.NewContractFilterer(mc.contractAddress, mc)
 }
 
-func (ec *MultiClient) ChainID(_ context.Context) (*big.Int, error) {
-	return ec.chainID, nil
+func (mc *MultiClient) ChainID(_ context.Context) (*big.Int, error) {
+	return mc.chainID, nil
 }
 
-func (ec *MultiClient) Close() error {
-	close(ec.closed)
+func (mc *MultiClient) Close() error {
+	close(mc.closed)
 
 	var multiErr error
-	for i, client := range ec.clients {
+	for i, client := range mc.clients {
 		if err := client.Close(); err != nil {
-			ec.logger.Debug("Failed to close client", zap.String("address", ec.nodeAddrs[i]), zap.Error(err))
+			mc.logger.Debug("Failed to close client", zap.String("address", mc.nodeAddrs[i]), zap.Error(err))
 			multiErr = errors.Join(multiErr, err)
 		}
 	}
@@ -388,75 +388,75 @@ func (ec *MultiClient) Close() error {
 	return multiErr
 }
 
-func (ec *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error)) (any, error) {
-	if len(ec.clients) == 1 {
-		return f(ec.clients[0])
+func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error)) (any, error) {
+	if len(mc.clients) == 1 {
+		return f(mc.clients[0])
 	}
 
-	for i := 0; i < len(ec.clients); i++ {
-		ec.currClientMu.Lock()
-		currentIdx := ec.currClientIdx
-		ec.currClientMu.Unlock()
+	for i := 0; i < len(mc.clients); i++ {
+		mc.currClientMu.Lock()
+		currentIdx := mc.currClientIdx
+		mc.currClientMu.Unlock()
 
-		client := ec.clients[currentIdx]
+		client := mc.clients[currentIdx]
 
-		ec.logger.Debug("checking client healthiness",
+		mc.logger.Debug("checking client healthiness",
 			zap.Int("index", currentIdx),
 			zap.String("method", methodFromContext(ctx)),
-			zap.String("addr", ec.nodeAddrs[currentIdx]))
+			zap.String("addr", mc.nodeAddrs[currentIdx]))
 
 		// Make sure this client is healthy, this shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
-			ec.logger.Warn("client is not healthy, using another one",
+			mc.logger.Warn("client is not healthy, using another one",
 				zap.Int("index", currentIdx),
 				zap.String("method", methodFromContext(ctx)),
-				zap.String("addr", ec.nodeAddrs[currentIdx]))
+				zap.String("addr", mc.nodeAddrs[currentIdx]))
 
-			ec.useNextClient(ctx, currentIdx, client)
+			mc.useNextClient(ctx, currentIdx, client)
 
 			continue
 		}
 
-		ec.logger.Debug("calling client",
+		mc.logger.Debug("calling client",
 			zap.Int("index", currentIdx),
 			zap.String("method", methodFromContext(ctx)),
-			zap.String("addr", ec.nodeAddrs[currentIdx]))
+			zap.String("addr", mc.nodeAddrs[currentIdx]))
 
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-			ec.logger.Debug("received graceful closure from client", zap.Error(err))
+			mc.logger.Debug("received graceful closure from client", zap.Error(err))
 			return v, err
 		}
 
 		if err != nil {
-			ec.logger.Error("call failed, trying another client",
+			mc.logger.Error("call failed, trying another client",
 				zap.String("method", methodFromContext(ctx)),
-				zap.String("addr", ec.nodeAddrs[currentIdx]),
+				zap.String("addr", mc.nodeAddrs[currentIdx]),
 				zap.Error(err))
 
-			ec.useNextClient(ctx, currentIdx, client)
+			mc.useNextClient(ctx, currentIdx, client)
 
 			continue
 		}
 
-		ec.logger.Debug("call succeeded, returning value",
+		mc.logger.Debug("call succeeded, returning value",
 			zap.String("method", methodFromContext(ctx)),
-			zap.String("addr", ec.nodeAddrs[currentIdx]))
+			zap.String("addr", mc.nodeAddrs[currentIdx]))
 		return v, nil
 	}
 
 	return nil, fmt.Errorf("all clients returned an error")
 }
 
-func (ec *MultiClient) useNextClient(ctx context.Context, currentIdx int, client SingleClientProvider) {
-	ec.currClientMu.Lock()
-	idx := ec.currClientIdx
+func (mc *MultiClient) useNextClient(ctx context.Context, currentIdx int, client SingleClientProvider) {
+	mc.currClientMu.Lock()
+	idx := mc.currClientIdx
 	// The index might have already changed if a parallel request failed.
 	if idx == currentIdx {
-		ec.currClientIdx = (ec.currClientIdx + 1) % len(ec.clients)
+		mc.currClientIdx = (mc.currClientIdx + 1) % len(mc.clients)
 	}
-	ec.currClientMu.Unlock()
+	mc.currClientMu.Unlock()
 
 	go client.reconnect(ctx)
 }

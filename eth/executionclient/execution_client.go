@@ -465,7 +465,6 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 
 	start := time.Now()
 	var err error
-
 	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
