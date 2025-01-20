@@ -377,8 +377,6 @@ func (mc *MultiClient) useNextClient(ctx context.Context, currentIdx int, client
 		mc.currClientIdx = (mc.currClientIdx + 1) % len(mc.clients)
 	}
 	mc.currClientMu.Unlock()
-
-	go client.reconnect(ctx)
 }
 
 type methodContextKey struct{}

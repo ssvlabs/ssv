@@ -379,32 +379,6 @@ func (mr *MockSingleClientProviderMockRecorder) SyncProgress(ctx any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncProgress", reflect.TypeOf((*MockSingleClientProvider)(nil).SyncProgress), ctx)
 }
 
-// connect mocks base method.
-func (m *MockSingleClientProvider) connect(ctx context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "connect", ctx)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// connect indicates an expected call of connect.
-func (mr *MockSingleClientProviderMockRecorder) connect(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "connect", reflect.TypeOf((*MockSingleClientProvider)(nil).connect), ctx)
-}
-
-// reconnect mocks base method.
-func (m *MockSingleClientProvider) reconnect(ctx context.Context) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "reconnect", ctx)
-}
-
-// reconnect indicates an expected call of reconnect.
-func (mr *MockSingleClientProviderMockRecorder) reconnect(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "reconnect", reflect.TypeOf((*MockSingleClientProvider)(nil).reconnect), ctx)
-}
-
 // streamLogsToChan mocks base method.
 func (m *MockSingleClientProvider) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 	m.ctrl.T.Helper()

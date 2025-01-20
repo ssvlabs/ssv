@@ -298,18 +298,6 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 		Return(nil).
 		AnyTimes()
 
-	mockClient1.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
@@ -342,12 +330,6 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 
 	mockClient1.
 		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
-	mockClient1.
-		EXPECT().
 		Healthy(gomock.Any()).
 		Return(nil).
 		AnyTimes()
@@ -357,12 +339,6 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 		FetchHistoricalLogs(gomock.Any(), uint64(100)).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), ErrNothingToSync).
 		Times(1)
-
-	mockClient2.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
 
 	mockClient2.
 		EXPECT().
@@ -557,12 +533,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 		}).
 		AnyTimes()
 
-	mockClient1.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
 	gomock.InOrder(
 		// First client: mockClient1 with fromBlock=200
 		mockClient1.
@@ -640,12 +610,6 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 
 	mockClient1.
 		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
-	mockClient1.
-		EXPECT().
 		Healthy(gomock.Any()).
 		DoAndReturn(func(ctx context.Context) error {
 			return nil
@@ -660,12 +624,6 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 			return 201, errors.New("network error") // All clients failed
 		}).
 		Times(1)
-
-	mockClient2.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
 
 	mockClient2.
 		EXPECT().
@@ -808,18 +766,6 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 		}).
 		AnyTimes()
 
-	mockClient1.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
 	gomock.InOrder(
 		// Setup mockClient1 to fail with fromBlock=200
 		mockClient1.
@@ -878,18 +824,6 @@ func TestMultiClient_StreamLogs_NoHealthyClients(t *testing.T) {
 	healthErr := errors.New("client1 unhealthy")
 	mockClient1.EXPECT().Healthy(gomock.Any()).Return(healthErr).AnyTimes()
 	mockClient2.EXPECT().Healthy(gomock.Any()).Return(healthErr).AnyTimes()
-
-	mockClient1.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) {}).
-		AnyTimes()
 
 	hook := &fatalHook{}
 
@@ -1405,8 +1339,6 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	var wg sync.WaitGroup
-
 	mockClient1 := NewMockSingleClientProvider(ctrl)
 	mockClient2 := NewMockSingleClientProvider(ctrl)
 
@@ -1428,24 +1360,10 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 		Return(uint64(0), fmt.Errorf("streaming error")).
 		Times(1)
 
-	wg.Add(1)
-	mockClient1.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) { wg.Done() }).
-		Times(1)
-
 	mockClient2.
 		EXPECT().
 		streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(uint64(201), fmt.Errorf("another streaming error")).
-		Times(1)
-
-	wg.Add(1)
-	mockClient2.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) { wg.Done() }).
 		Times(1)
 
 	mc := &MultiClient{
@@ -1463,8 +1381,6 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 	_, err := mc.call(context.Background(), f)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "all clients failed")
-
-	wg.Wait()
 }
 
 func TestMultiClient_ReconnectionLimit(t *testing.T) {
@@ -1473,8 +1389,6 @@ func TestMultiClient_ReconnectionLimit(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	var wg sync.WaitGroup
 
 	mockClient1 := NewMockSingleClientProvider(ctrl)
 	mockClient2 := NewMockSingleClientProvider(ctrl)
@@ -1491,13 +1405,6 @@ func TestMultiClient_ReconnectionLimit(t *testing.T) {
 		Return(uint64(200), fmt.Errorf("streaming error")).
 		AnyTimes()
 
-	wg.Add(1)
-	mockClient1.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) { wg.Done() }).
-		Times(1)
-
 	mockClient2.
 		EXPECT().
 		Healthy(gomock.Any()).
@@ -1508,13 +1415,6 @@ func TestMultiClient_ReconnectionLimit(t *testing.T) {
 		EXPECT().
 		streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(uint64(200), fmt.Errorf("streaming error")).
-		Times(1)
-
-	wg.Add(1)
-	mockClient2.
-		EXPECT().
-		reconnect(gomock.Any()).
-		Do(func(ctx context.Context) { wg.Done() }).
 		Times(1)
 
 	hook := &fatalHook{}
@@ -1530,8 +1430,6 @@ func TestMultiClient_ReconnectionLimit(t *testing.T) {
 
 	_, open := <-logsCh
 	require.False(t, open, "logs channel should be closed after reconnection attempts limit")
-
-	wg.Wait()
 }
 
 type fatalHook struct {

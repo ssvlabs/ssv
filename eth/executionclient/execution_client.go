@@ -41,8 +41,6 @@ type Provider interface {
 type SingleClientProvider interface {
 	Provider
 	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
-	connect(ctx context.Context) error
-	reconnect(ctx context.Context)
 	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
 }
 
@@ -266,7 +264,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 
 				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
-				ec.reconnect(ctx)
+				ec.reconnect(ctx) // TODO: ethclient implements reconnection, consider removing this logic after thorough testing
 				fromBlock = lastBlock + 1
 			}
 		}
