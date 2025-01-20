@@ -124,112 +124,30 @@ func (mc *MultiClient) assertSameChainIDs(ctx context.Context) (bool, error) {
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
+// It calls FetchHistoricalLogs of all clients until a no-error result.
+// It doesn't handle errors in the error channel to simplify logic.
+// In this case, caller should call Panic/Fatal to restart the node.
 func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
-	logsCh := make(chan BlockLogs, defaultLogBuf)
-	errCh := make(chan error, 1)
+	var logCh <-chan BlockLogs
+	var errCh <-chan error
 
-	var singleLogsCh <-chan BlockLogs
-	var singleErrCh <-chan error
-	var nothingToSyncCount atomic.Int64
-
-	// Update healthiness of all nodes and make sure at least one of them is available.
-	if err := mc.Healthy(ctx); err != nil {
-		mc.logger.Fatal("no healthy clients", zap.Error(err))
-	}
-
-	// Find a client that's able to provide the requested data.
-	startFetchingFunc := func(client SingleClientProvider) (any, error) {
-		cl, ce, err := client.FetchHistoricalLogs(ctx, fromBlock)
+	f := func(client SingleClientProvider) (any, error) {
+		singleLogsCh, singleErrCh, err := client.FetchHistoricalLogs(ctx, fromBlock)
 		if err != nil {
-			if errors.Is(err, ErrNothingToSync) {
-				nothingToSyncCount.Add(1)
-			}
-			// Consider ErrNothingToSync as an error to make sure that other nodes return ErrNothingToSync too.
-			// If they don't, it means that the current node is out of sync.
-			// Therefore, we keep count of how many ErrNothingToSync we saw.
 			return nil, err
 		}
 
-		singleLogsCh = cl
-		singleErrCh = ce
+		logCh = singleLogsCh
+		errCh = singleErrCh
 		return nil, nil
 	}
 
-	if _, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs [start fetching]"), startFetchingFunc); err != nil {
-		if int(nothingToSyncCount.Load()) == len(mc.clients) {
-			// All clients returned ErrNothingToSync
-			return nil, nil, ErrNothingToSync
-		}
+	_, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs"), f)
+	if err != nil {
 		return nil, nil, err
 	}
 
-	go func() {
-		defer func() {
-			close(logsCh)
-			close(errCh)
-		}()
-
-		var needInitChans atomic.Bool
-
-		// Getting historical logs may take significant amount of time.
-		// The current client may fail in the middle of the process,
-		// and also some clients may become available again, therefore we need to try other clients on error.
-		// Since singleLogsCh and singleErrCh are initialized by the active client,
-		// we need to re-initialize them if we try other clients.
-		processLogsFunc := func(client SingleClientProvider) (any, error) {
-			if needInitChans.Load() {
-				if _, err := startFetchingFunc(client); err != nil {
-					return nil, err
-				}
-			} else {
-				needInitChans.Store(true)
-			}
-
-			var lastBlock uint64
-
-		processLogsLabel:
-			for {
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-mc.closed:
-					return nil, fmt.Errorf("client closed")
-				case log, ok := <-singleLogsCh:
-					if !ok {
-						// Underlying channel is closed -> no more logs.
-						break processLogsLabel
-					}
-					logsCh <- log
-					lastBlock = max(lastBlock, log.BlockNumber)
-				}
-			}
-
-		processErrsLabel:
-			for {
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-mc.closed:
-					return nil, fmt.Errorf("client closed")
-				case err, ok := <-singleErrCh:
-					if !ok {
-						// If the error channel closed, treat that as no more logs or success.
-						break processErrsLabel
-					}
-					fromBlock = max(fromBlock, lastBlock+1)
-					return nil, err // Try another client
-				}
-			}
-
-			return nil, nil
-		}
-
-		if _, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs [process logs]"), processLogsFunc); err != nil {
-			errCh <- err
-		}
-	}()
-
-	return logsCh, errCh, nil
+	return logCh, errCh, nil
 }
 
 // StreamLogs subscribes to events emitted by the contract.
