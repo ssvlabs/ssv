@@ -393,6 +393,8 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		return f(mc.clients[0])
 	}
 
+	var allErrs error
+
 	for i := 0; i < len(mc.clients); i++ {
 		mc.currClientMu.Lock()
 		currentIdx := mc.currClientIdx
@@ -414,7 +416,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.String("addr", mc.nodeAddrs[currentIdx]))
 
 			mc.useNextClient(ctx, currentIdx, client)
-
+			allErrs = errors.Join(allErrs, err)
 			continue
 		}
 
@@ -436,7 +438,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.Error(err))
 
 			mc.useNextClient(ctx, currentIdx, client)
-
+			allErrs = errors.Join(allErrs, err)
 			continue
 		}
 
@@ -446,7 +448,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		return v, nil
 	}
 
-	return nil, fmt.Errorf("all clients returned an error")
+	return nil, fmt.Errorf("all clients failed: %w", allErrs)
 }
 
 func (mc *MultiClient) useNextClient(ctx context.Context, currentIdx int, client SingleClientProvider) {
