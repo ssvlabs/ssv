@@ -74,8 +74,8 @@ const addressLength = 20
 // see more on this here: https://github.com/ferranbt/fastssz/issues/179#issuecomment-2454371820
 type storageShare struct {
 	ValidatorIndex        uint64
-	ValidatorPubKey       []byte             `ssz-max:"48"`
-	SharePubKey           []byte             `ssz-max:"48"`
+	ValidatorPubKey       []byte             `ssz-size:"48"`
+	SharePubKey           []byte             `ssz-size:"48"`
 	Committee             []*storageOperator `ssz-max:"13"`
 	Quorum, PartialQuorum uint64
 	DomainType            [4]byte `ssz-size:"4"`

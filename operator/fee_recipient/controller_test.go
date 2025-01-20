@@ -144,6 +144,7 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 
 		return &types.SSVShare{
 			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
+				SharePubKey:    []byte(fmt.Sprintf("pk%046d", index)),
 				ValidatorIndex: phase0.ValidatorIndex(index),
 				Committee:      []*spectypes.ShareMember{{Signer: operatorID}},
 			},
