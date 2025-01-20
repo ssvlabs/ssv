@@ -15,8 +15,8 @@ import (
 var sharesPrefixGOB = []byte("shares/")
 
 type storageShareGOB struct {
-	share
-	metadata
+	Share
+	Metadata
 }
 
 // Decode decodes Share using gob.
@@ -33,10 +33,10 @@ func (s *storageShareGOB) Decode(data []byte) error {
 	return nil
 }
 
-// share represents a storage share.
+// Share represents a storage share.
 // The better name of the struct is storageShareGOB,
 // but we keep the name Share to avoid conflicts with gob encoding.
-type share struct {
+type Share struct {
 	OperatorID            spectypes.OperatorID
 	ValidatorPubKey       []byte
 	SharePubKey           []byte
@@ -52,8 +52,8 @@ type storageOperatorGOB struct {
 	PubKey     []byte `ssz-size:"48"`
 }
 
-// metadata represents metadata of SSVShare.
-type metadata struct {
+// Metadata represents metadata of SSVShare.
+type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
