@@ -205,7 +205,7 @@ var StartNodeCmd = &cobra.Command{
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
-		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: temporary using ; as separator because , is used as separator by deployment bot
+		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
 			logger.Fatal("no execution node address provided")
 		}

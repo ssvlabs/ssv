@@ -154,7 +154,7 @@ func New(
 		longTimeout = DefaultLongTimeout
 	}
 
-	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: temporary using ; as separator because , is used as separator by deployment bot
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	if len(beaconAddrList) == 0 {
 		return nil, fmt.Errorf("no beacon node address provided")
 	}
