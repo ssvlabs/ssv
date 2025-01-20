@@ -736,8 +736,8 @@ github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.0.0/go.mod h1:A8kyI5cUJhb8N+3pkfONlcEcZbueH6nhAm0Fq7SrnBM=
 github.com/ssvlabs/eth2-key-manager v1.4.2 h1:YdeI7vk9jSa8vfSKogx2aSjtYz4eS9Bp85E0yfQF95o=
 github.com/ssvlabs/eth2-key-manager v1.4.2/go.mod h1:RqsGIMCsOeUJQmC2nytr82z5vqn5gN3i3VAoY0OydV8=
-github.com/ssvlabs/ssv-spec v1.0.0 h1:h/EoKLsLXVO6GIzKoBi1O05xdHlirpLi8DLhVcTSEBE=
-github.com/ssvlabs/ssv-spec v1.0.0/go.mod h1:lTqsNeTUIfpacMoztbN7YqvFttDigCLjINjy/8I2Wuc=
+github.com/ssvlabs/ssv-spec v1.0.2 h1:wq0YUo0DOjFUvfwrr6UUvs38EKvSg8r1k6auBrcNvlI=
+github.com/ssvlabs/ssv-spec v1.0.2/go.mod h1:lTqsNeTUIfpacMoztbN7YqvFttDigCLjINjy/8I2Wuc=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
