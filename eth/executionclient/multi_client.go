@@ -151,6 +151,7 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 }
 
 // StreamLogs subscribes to events emitted by the contract.
+// NOTE: StreamLogs spawns a goroutine which calls os.Exit(1) if no client is available.
 func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	logs := make(chan BlockLogs)
 
