@@ -110,7 +110,6 @@ type GoClient struct {
 	client       Client
 	nodeVersion  string
 	nodeClient   NodeClient
-	gasLimit     uint64
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -168,7 +167,6 @@ func New(
 		log:                   logger,
 		ctx:                   opt.Context,
 		client:                httpClient.(*eth2clienthttp.Service),
-		gasLimit:              opt.GasLimit,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		commonTimeout:         commonTimeout,
