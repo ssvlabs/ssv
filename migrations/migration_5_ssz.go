@@ -24,7 +24,6 @@ type storageShareSSZ struct {
 	FeeRecipientAddress   [addressLength]byte
 	Graffiti              []byte `ssz-max:"32"`
 
-	Balance         uint64
 	Status          uint64
 	ActivationEpoch uint64
 	OwnerAddress    [addressLength]byte
@@ -78,7 +77,6 @@ func specShareToStorageShareSSZ(share *types.SSVShare) *storageShareSSZ {
 		Graffiti:            share.Graffiti,
 		OwnerAddress:        share.OwnerAddress,
 		Liquidated:          share.Liquidated,
-		Balance:             uint64(share.Balance),
 		Status:              uint64(share.Status), // nolint: gosec
 		ActivationEpoch:     uint64(share.ActivationEpoch),
 	}
@@ -101,7 +99,7 @@ func (s *storageShareSSZ) MarshalSSZ() ([]byte, error) {
 // MarshalSSZTo ssz marshals the storageShareSSZ object to a target array
 func (s *storageShareSSZ) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = buf
-	offset := int(93)
+	offset := int(85)
 
 	// Field (0) 'ValidatorIndex'
 	dst = ssz.MarshalUint64(dst, s.ValidatorIndex)
@@ -130,19 +128,16 @@ func (s *storageShareSSZ) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	// Offset (6) 'Graffiti'
 	dst = ssz.WriteOffset(dst, offset)
 
-	// Field (7) 'Balance'
-	dst = ssz.MarshalUint64(dst, s.Balance)
-
-	// Field (8) 'Status'
+	// Field (7) 'Status'
 	dst = ssz.MarshalUint64(dst, s.Status)
 
-	// Field (9) 'ActivationEpoch'
+	// Field (8) 'ActivationEpoch'
 	dst = ssz.MarshalUint64(dst, s.ActivationEpoch)
 
-	// Field (10) 'OwnerAddress'
+	// Field (9) 'OwnerAddress'
 	dst = append(dst, s.OwnerAddress[:]...)
 
-	// Field (11) 'Liquidated'
+	// Field (10) 'Liquidated'
 	dst = ssz.MarshalBool(dst, s.Liquidated)
 
 	// Field (1) 'ValidatorPubKey'
@@ -191,7 +186,7 @@ func (s *storageShareSSZ) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 func (s *storageShareSSZ) UnmarshalSSZ(buf []byte) error {
 	var err error
 	size := uint64(len(buf))
-	if size < 93 {
+	if size < 85 {
 		return ssz.ErrSize
 	}
 
@@ -206,7 +201,7 @@ func (s *storageShareSSZ) UnmarshalSSZ(buf []byte) error {
 		return ssz.ErrOffset
 	}
 
-	if o1 != 93 {
+	if o1 != 85 {
 		return ssz.ErrInvalidVariableOffset
 	}
 
@@ -231,20 +226,17 @@ func (s *storageShareSSZ) UnmarshalSSZ(buf []byte) error {
 		return ssz.ErrOffset
 	}
 
-	// Field (7) 'Balance'
-	s.Balance = ssz.UnmarshallUint64(buf[48:56])
+	// Field (7) 'Status'
+	s.Status = ssz.UnmarshallUint64(buf[48:56])
 
-	// Field (8) 'Status'
-	s.Status = ssz.UnmarshallUint64(buf[56:64])
+	// Field (8) 'ActivationEpoch'
+	s.ActivationEpoch = ssz.UnmarshallUint64(buf[56:64])
 
-	// Field (9) 'ActivationEpoch'
-	s.ActivationEpoch = ssz.UnmarshallUint64(buf[64:72])
+	// Field (9) 'OwnerAddress'
+	copy(s.OwnerAddress[:], buf[64:84])
 
-	// Field (10) 'OwnerAddress'
-	copy(s.OwnerAddress[:], buf[72:92])
-
-	// Field (11) 'Liquidated'
-	s.Liquidated = ssz.UnmarshalBool(buf[92:93])
+	// Field (10) 'Liquidated'
+	s.Liquidated = ssz.UnmarshalBool(buf[84:85])
 
 	// Field (1) 'ValidatorPubKey'
 	{
@@ -308,7 +300,7 @@ func (s *storageShareSSZ) UnmarshalSSZ(buf []byte) error {
 
 // SizeSSZ returns the ssz encoded size in bytes for the storageShareSSZ object
 func (s *storageShareSSZ) SizeSSZ() (size int) {
-	size = 93
+	size = 85
 
 	// Field (1) 'ValidatorPubKey'
 	size += len(s.ValidatorPubKey)
@@ -398,19 +390,16 @@ func (s *storageShareSSZ) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 		hh.MerkleizeWithMixin(elemIndx, byteLen, (32+31)/32)
 	}
 
-	// Field (7) 'Balance'
-	hh.PutUint64(s.Balance)
-
-	// Field (8) 'Status'
+	// Field (7) 'Status'
 	hh.PutUint64(s.Status)
 
-	// Field (9) 'ActivationEpoch'
+	// Field (8) 'ActivationEpoch'
 	hh.PutUint64(s.ActivationEpoch)
 
-	// Field (10) 'OwnerAddress'
+	// Field (9) 'OwnerAddress'
 	hh.PutBytes(s.OwnerAddress[:])
 
-	// Field (11) 'Liquidated'
+	// Field (10) 'Liquidated'
 	hh.PutBool(s.Liquidated)
 
 	hh.Merkleize(indx)

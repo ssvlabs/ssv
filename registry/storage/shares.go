@@ -82,7 +82,6 @@ type storageShare struct {
 	FeeRecipientAddress   [addressLength]byte
 	Graffiti              []byte `ssz-max:"32"`
 
-	Balance         uint64
 	Status          uint64
 	ActivationEpoch uint64
 	OwnerAddress    [addressLength]byte
@@ -281,7 +280,6 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 		Graffiti:            share.Graffiti,
 		OwnerAddress:        share.OwnerAddress,
 		Liquidated:          share.Liquidated,
-		Balance:             uint64(share.Balance),
 		Status:              uint64(share.Status), // nolint: gosec
 		ActivationEpoch:     uint64(share.ActivationEpoch),
 	}
@@ -313,7 +311,6 @@ func (s *sharesStorage) storageShareToSpecShare(stShare *storageShare) (*types.S
 			FeeRecipientAddress: stShare.FeeRecipientAddress,
 			Graffiti:            stShare.Graffiti,
 		},
-		Balance:         phase0.Gwei(stShare.Balance),
 		Status:          eth2apiv1.ValidatorState(stShare.Status), // nolint: gosec
 		ActivationEpoch: phase0.Epoch(stShare.ActivationEpoch),
 		OwnerAddress:    stShare.OwnerAddress,
@@ -364,8 +361,8 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 
 	err := func() error {
 		// using a read-lock here even if we are writing to the share pointer
-		// because it's the only place a write is happening
-		// to be re-implemented in a a safer maner in future iteration
+		// because it's the only place writes are happening
+		// TODO: re-implemented in a safer maner in future iteration
 		s.memoryMtx.RLock()
 		defer s.memoryMtx.RUnlock()
 
@@ -378,7 +375,6 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 				continue
 			}
 			share.ValidatorIndex = metadata.Index
-			share.Balance = metadata.Balance
 			share.Status = metadata.Status
 			share.ActivationEpoch = metadata.ActivationEpoch
 			shares = append(shares, share)

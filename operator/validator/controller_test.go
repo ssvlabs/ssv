@@ -115,7 +115,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
-			Balance:         0,
 			Status:          3, // ValidatorStatePendingInitialized
 			ActivationEpoch: passedEpoch,
 			Liquidated:      false,
@@ -125,7 +124,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
-			Balance:         0,
 			Status:          3, // Some other status
 			ActivationEpoch: passedEpoch,
 			Liquidated:      false,
@@ -338,7 +336,6 @@ func TestSetupValidators(t *testing.T) {
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
-		Balance:         0,
 		Status:          3, // ValidatorStateActiveOngoing
 		ActivationEpoch: passedEpoch,
 	}
@@ -367,9 +364,8 @@ func TestSetupValidators(t *testing.T) {
 
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		0: {
-			Balance: 0,
-			Status:  3,
-			Index:   2,
+			Status: 3,
+			Index:  2,
 			Validator: &phase0.Validator{
 				ActivationEpoch: passedEpoch,
 				PublicKey:       validatorPublicKey,
@@ -607,7 +603,6 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Balance:         0,
 				Status:          3, // ValidatorStatePendingInitialized
 				ActivationEpoch: passedEpoch,
 			},
@@ -615,7 +610,6 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators[1:],
 				},
-				Balance:         0,
 				Status:          1, // Some other status
 				ActivationEpoch: passedEpoch,
 			},
@@ -656,7 +650,6 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Balance:         0,
 				Status:          3, // ValidatorStatePendingInitialized
 				ActivationEpoch: passedEpoch,
 			},
@@ -689,7 +682,6 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: nil,
 				},
-				Balance:         0,
 				Status:          3, // ValidatorStatePendingInitialized
 				ActivationEpoch: passedEpoch,
 			},
@@ -729,7 +721,6 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Balance:         0,
 				Status:          3, // ValidatorStatePendingInitialized
 				ActivationEpoch: passedEpoch,
 			},
@@ -737,7 +728,6 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Balance:         0,
 				Status:          1,
 				ActivationEpoch: passedEpoch,
 			},

@@ -58,7 +58,6 @@ func TestValidatorSerializer(t *testing.T) {
 	require.Equal(t, hex.EncodeToString(v1.ValidatorPubKey[:]), hex.EncodeToString(validatorShare.ValidatorPubKey[:]))
 	require.NotNil(t, v1.Committee)
 	require.Equal(t, v1.ValidatorIndex, validatorShare.ValidatorIndex)
-	require.Equal(t, v1.Balance, validatorShare.Balance)
 	require.Equal(t, v1.Status, validatorShare.Status)
 	require.Equal(t, v1.ActivationEpoch, validatorShare.ActivationEpoch)
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
@@ -100,7 +99,6 @@ func TestSharesStorage(t *testing.T) {
 	}
 
 	validatorShare, _ := generateRandomShare(splitKeys)
-	validatorShare.Balance = 1
 	validatorShare.Status = eth2apiv1.ValidatorStateActiveOngoing
 	validatorShare.ValidatorIndex = 3
 	validatorShare.ActivationEpoch = 4
@@ -125,7 +123,6 @@ func TestSharesStorage(t *testing.T) {
 	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
 		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			validatorShare.ValidatorPubKey: {
-				Balance:         10000,
 				Index:           3,
 				Status:          eth2apiv1.ValidatorStateActiveOngoing,
 				ActivationEpoch: 4,
@@ -176,7 +173,6 @@ func TestSharesStorage(t *testing.T) {
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
 		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			validatorShare.ValidatorPubKey: {
-				Balance:         10000,
 				Index:           3,
 				Status:          2,
 				ActivationEpoch: 4,
@@ -295,7 +291,6 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 
 		// Now update the share
 		updatedMetadata := &beaconprotocol.ValidatorMetadata{
-			Balance:         5000,
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
 			Index:           3,
 			ActivationEpoch: 5,
@@ -312,7 +307,6 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		require.True(t, exists)
 		require.NotNil(t, updatedShare, "Updated share should be present in validator store")
 		require.Equal(t, updatedMetadata, &beaconprotocol.ValidatorMetadata{
-			Balance:         updatedShare.Balance,
 			Status:          updatedShare.Status,
 			Index:           updatedShare.ValidatorIndex,
 			ActivationEpoch: updatedShare.ActivationEpoch,
@@ -408,7 +402,6 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 					case "update":
 						require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 							share2.ValidatorPubKey: {
-								Balance:         updatedShare2.Balance,
 								Status:          updatedShare2.Status,
 								Index:           updatedShare2.ValidatorIndex,
 								ActivationEpoch: updatedShare2.ActivationEpoch,
@@ -535,7 +528,6 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 		DomainType:          networkconfig.TestNetwork.DomainType,
 		FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Graffiti:            bytes.Repeat([]byte{0x01}, 32),
-		Balance:             1,
 		Status:              2,
 		ActivationEpoch:     4,
 		OwnerAddress:        common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
@@ -571,7 +563,6 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShar
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
-		Balance:         1,
 		Status:          2,
 		ActivationEpoch: 4,
 		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
@@ -608,7 +599,6 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
-		Balance:         1,
 		Status:          eth2apiv1.ValidatorStateActiveOngoing,
 		ActivationEpoch: 4,
 		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),

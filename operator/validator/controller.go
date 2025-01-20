@@ -554,7 +554,6 @@ func (c *controller) startValidatorsForMetadata(_ context.Context, validators me
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
 			v.Share.ValidatorIndex = share.ValidatorIndex
-			v.Share.Balance = share.Balance
 			v.Share.Status = share.Status
 			v.Share.ActivationEpoch = share.ActivationEpoch
 			started, err := c.startValidator(v)

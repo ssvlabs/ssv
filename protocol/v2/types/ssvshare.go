@@ -25,8 +25,6 @@ const (
 type SSVShare struct {
 	spectypes.Share
 
-	// Balance is validator (this share belongs to) balance.
-	Balance phase0.Gwei
 	// Status is validator (this share belongs to) state.
 	Status eth2apiv1.ValidatorState
 	// ActivationEpoch is validator (this share belongs to) epoch it activates at.
@@ -36,10 +34,10 @@ type SSVShare struct {
 	// Liquidated is validator (this share belongs to) liquidation status (true or false).
 	Liquidated bool
 
-	// lastUpdated is used to keep track of share last update time. Note, we don't
+	// beaconMetadataLastUpdated is used to keep track of share last update time. Note, we don't
 	// store this field in DB - it just serves as a helper-indicator for when we might want
-	// to update SSVShare data so it doesn't get super stale.
-	lastUpdated time.Time
+	// to update SSVShare metadata we fetch from Beacon node so it doesn't get super stale.
+	beaconMetadataLastUpdated time.Time
 
 	// committeeID is a cached value for committee ID so we don't recompute it every time.
 	committeeID atomic.Pointer[spectypes.CommitteeID]
@@ -149,12 +147,12 @@ func (s *SSVShare) Quorum() uint64 {
 	return q
 }
 
-func (s *SSVShare) LastUpdated() time.Time {
-	return s.lastUpdated
+func (s *SSVShare) BeaconMetadataLastUpdated() time.Time {
+	return s.beaconMetadataLastUpdated
 }
 
-func (s *SSVShare) SetLastUpdated(t time.Time) {
-	s.lastUpdated = t
+func (s *SSVShare) SetBeaconMetadataLastUpdated(t time.Time) {
+	s.beaconMetadataLastUpdated = t
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids

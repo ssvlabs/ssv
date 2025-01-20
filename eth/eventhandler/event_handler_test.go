@@ -747,7 +747,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			valShare.ValidatorIndex = 1
 			valShare.ActivationEpoch = 0
 			valShare.Status = eth2apiv1.ValidatorStateActiveOngoing
-			valShare.Balance = phase0.Gwei(10000000000000000)
 			err := eh.nodeStorage.Shares().Save(nil, valShare)
 			require.NoError(t, err)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)

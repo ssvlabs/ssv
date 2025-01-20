@@ -199,7 +199,6 @@ func TestController_ReactivateCluster(t *testing.T) {
 				ValidatorIndex:  1,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
-			Balance:         0,
 			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
 			ActivationEpoch: 1,
 		},
@@ -208,7 +207,6 @@ func TestController_ReactivateCluster(t *testing.T) {
 				ValidatorIndex:  1,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
-			Balance:         0,
 			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
 			ActivationEpoch: 1,
 		},
