@@ -295,7 +295,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 
-	err := ec.is_healthy(ctx)
+	err := ec.isHealthy(ctx)
 	if err != nil {
 		close(ec.healthy)
 	} else {
@@ -309,7 +309,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	return errors.Join(ErrUnhealthy, err)
 }
 
-func (ec *ExecutionClient) is_healthy(ctx context.Context) error {
+func (ec *ExecutionClient) isHealthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
