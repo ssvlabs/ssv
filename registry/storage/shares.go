@@ -75,7 +75,7 @@ const addressLength = 20
 type storageShare struct {
 	ValidatorIndex        uint64
 	ValidatorPubKey       []byte             `ssz-size:"48"`
-	SharePubKey           []byte             `ssz-size:"48"`
+	SharePubKey           []byte             `ssz-max:"48"` // empty for not own shares
 	Committee             []*storageOperator `ssz-max:"13"`
 	Quorum, PartialQuorum uint64
 	DomainType            [4]byte `ssz-size:"4"`
