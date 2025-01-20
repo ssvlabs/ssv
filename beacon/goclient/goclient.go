@@ -18,10 +18,9 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -114,7 +113,6 @@ type GoClient struct {
 	network     beaconprotocol.Network
 	clients     []Client
 	multiClient MultiClient
-	gasLimit    uint64
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -222,7 +220,6 @@ func New(
 		network:               opt.Network,
 		clients:               consensusClients,
 		multiClient:           consensusClient,
-		gasLimit:              opt.GasLimit,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		operatorDataStore:     operatorDataStore,
 		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
