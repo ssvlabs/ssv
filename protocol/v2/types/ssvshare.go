@@ -34,10 +34,10 @@ type SSVShare struct {
 	// Liquidated is validator (this share belongs to) liquidation status (true or false).
 	Liquidated bool
 
-	// beaconMetadataLastUpdated is used to keep track of share last update time. Note, we don't
+	// BeaconMetadataLastUpdated is used to keep track of share last update time. Note, we don't
 	// store this field in DB - it just serves as a helper-indicator for when we might want
 	// to update SSVShare metadata we fetch from Beacon node so it doesn't get super stale.
-	beaconMetadataLastUpdated time.Time
+	BeaconMetadataLastUpdated time.Time
 
 	// committeeID is a cached value for committee ID so we don't recompute it every time.
 	committeeID atomic.Pointer[spectypes.CommitteeID]
@@ -90,7 +90,7 @@ func (s *SSVShare) Exiting() bool {
 	return s.Status.IsExited() || s.Status.HasExited()
 }
 
-// Slashed returns true if the validator is existing or exited due to slashing
+// Slashed returns true if the validator is exiting or exited due to slashing
 func (s *SSVShare) Slashed() bool {
 	return s.Status == eth2apiv1.ValidatorStateExitedSlashed || s.Status == eth2apiv1.ValidatorStateActiveSlashed
 }
@@ -145,14 +145,6 @@ func (s *SSVShare) HasQuorum(cnt uint64) bool {
 func (s *SSVShare) Quorum() uint64 {
 	q, _ := ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
 	return q
-}
-
-func (s *SSVShare) BeaconMetadataLastUpdated() time.Time {
-	return s.beaconMetadataLastUpdated
-}
-
-func (s *SSVShare) SetBeaconMetadataLastUpdated(t time.Time) {
-	s.beaconMetadataLastUpdated = t
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids

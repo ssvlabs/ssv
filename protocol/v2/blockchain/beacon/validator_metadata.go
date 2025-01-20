@@ -47,7 +47,7 @@ func (m *ValidatorMetadata) Exiting() bool {
 	return m.Status.IsExited() || m.Status.HasExited()
 }
 
-// Slashed returns true if the validator is existing or exited due to slashing
+// Slashed returns true if the validator is exiting or exited due to slashing
 func (m *ValidatorMetadata) Slashed() bool {
 	return m.Status == eth2apiv1.ValidatorStateExitedSlashed || m.Status == eth2apiv1.ValidatorStateActiveSlashed
 }
