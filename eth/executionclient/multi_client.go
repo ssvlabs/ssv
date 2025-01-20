@@ -164,7 +164,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 			case <-mc.closed:
 				return
 			default:
-				// Update healthiness of all nodes and make sure at least one of them is available.
+				// Update healthyCh of all nodes and make sure at least one of them is available.
 				if err := mc.Healthy(ctx); err != nil {
 					mc.logger.Fatal("no healthy clients", zap.Error(err))
 				}
@@ -321,7 +321,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		client := mc.clients[currentIdx]
 
-		mc.logger.Debug("checking client healthiness",
+		mc.logger.Debug("checking client healthyCh",
 			zap.Int("index", currentIdx),
 			zap.String("method", methodFromContext(ctx)),
 			zap.String("addr", mc.nodeAddrs[currentIdx]))
