@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,8 +37,7 @@ type MultiClient struct {
 	nodeAddrs       []string
 	clients         []SingleClientProvider
 	chainID         *big.Int
-	currClientMu    sync.Mutex
-	currClientIdx   *atomic.Int64
+	currClientIdx   atomic.Int64
 	closed          chan struct{}
 }
 
