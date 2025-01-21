@@ -319,6 +319,10 @@ func (ec *ExecutionClient) isClosed() bool {
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
 
+	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
+	// We must receive all events as they determine the state of the ssv network, so a discrepancy can result in slashing.
+	// Therefore, we decided to implement more atomic behaviour, where we can revert the tx if there was an error in processing all the events of a block.
+	// So we can restart from this block once everything is good. Doing this based on the event stream was a bit harder.
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
