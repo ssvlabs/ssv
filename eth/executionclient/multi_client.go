@@ -63,6 +63,8 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 		opt(multiClient)
 	}
 
+	// The underlying client may call Fatal on unsuccessful reconnection attempt.
+	// Therefore, we need to override Fatal's behavior to avoid crashing.
 	logger := multiClient.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop))
 
 	for _, nodeAddr := range nodeAddrs {
