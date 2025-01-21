@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -38,7 +39,7 @@ type MultiClient struct {
 	clients         []SingleClientProvider
 	chainID         *big.Int
 	currClientMu    sync.Mutex
-	currClientIdx   int
+	currClientIdx   *atomic.Int64
 	closed          chan struct{}
 }
 
@@ -199,40 +200,19 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (mc *MultiClient) Healthy(ctx context.Context) error {
-	var atLeastOneHealthy atomic.Bool
-	var errs error
-	var errsMu sync.Mutex
-
-	var wg sync.WaitGroup
-	// We need to fetch all clients to update the internal state
+	p := pool.New().WithErrors()
 	for i, client := range mc.clients {
-		wg.Add(1)
-		go func(i int, client SingleClientProvider) {
-			defer wg.Done()
-
-			if err := client.Healthy(ctx); err != nil {
+		p.Go(func() error {
+			err := client.Healthy(ctx)
+			if err != nil {
 				mc.logger.Warn("client is not healthy",
 					zap.String("addr", mc.nodeAddrs[i]),
 					zap.Error(err))
-
-				errsMu.Lock()
-				errs = errors.Join(errs, err)
-				errsMu.Unlock()
-			} else {
-				mc.logger.Debug("client is healthy",
-					zap.String("addr", mc.nodeAddrs[i]))
-
-				atLeastOneHealthy.Store(true)
 			}
-		}(i, client)
+			return err
+		})
 	}
-	wg.Wait()
-
-	if !atLeastOneHealthy.Load() {
-		return errs
-	}
-
-	return nil
+	return p.Wait()
 }
 
 // BlockByNumber retrieves a block by its number.
@@ -313,36 +293,26 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	}
 
 	var allErrs error
+	currentIdx := int(mc.currClientIdx.Load())
 
 	for i := 0; i < len(mc.clients); i++ {
-		mc.currClientMu.Lock()
-		currentIdx := mc.currClientIdx
-		mc.currClientMu.Unlock()
-
-		client := mc.clients[currentIdx]
-
-		mc.logger.Debug("checking client healthyCh",
-			zap.Int("index", currentIdx),
-			zap.String("method", methodFromContext(ctx)),
-			zap.String("addr", mc.nodeAddrs[currentIdx]))
+		currentIdx = (currentIdx + i) % len(mc.clients)
+		nextAddr := mc.nodeAddrs[(currentIdx+1)%len(mc.clients)]
+		client := mc.clients[currentIdx] // round-robin starting from current client
+		logger := mc.logger.With(zap.String("addr", mc.nodeAddrs[currentIdx]),
+			zap.String("method", methodFromContext(ctx)))
 
 		// Make sure this client is healthy, this shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
-			mc.logger.Warn("client is not healthy, using another one",
-				zap.Int("index", currentIdx),
-				zap.String("method", methodFromContext(ctx)),
-				zap.String("addr", mc.nodeAddrs[currentIdx]))
-
-			mc.useNextClient(ctx, currentIdx, client)
+			logger.Warn("client is not healthy, switching to next client",
+				zap.String("next_addr", nextAddr),
+				zap.Error(err))
 			allErrs = errors.Join(allErrs, err)
 			continue
 		}
 
-		mc.logger.Debug("calling client",
-			zap.Int("index", currentIdx),
-			zap.String("method", methodFromContext(ctx)),
-			zap.String("addr", mc.nodeAddrs[currentIdx]))
+		logger.Debug("calling client")
 
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
@@ -352,32 +322,19 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		if err != nil {
 			mc.logger.Error("call failed, trying another client",
-				zap.String("method", methodFromContext(ctx)),
-				zap.String("addr", mc.nodeAddrs[currentIdx]),
+				zap.String("next_addr", nextAddr),
 				zap.Error(err))
 
-			mc.useNextClient(ctx, currentIdx, client)
 			allErrs = errors.Join(allErrs, err)
 			continue
 		}
 
-		mc.logger.Debug("call succeeded, returning value",
-			zap.String("method", methodFromContext(ctx)),
-			zap.String("addr", mc.nodeAddrs[currentIdx]))
+		mc.currClientIdx.Store(int64(currentIdx))
 		return v, nil
 	}
 
+	mc.currClientIdx.Store(int64(currentIdx))
 	return nil, fmt.Errorf("all clients failed: %w", allErrs)
-}
-
-func (mc *MultiClient) useNextClient(ctx context.Context, currentIdx int, client SingleClientProvider) {
-	mc.currClientMu.Lock()
-	idx := mc.currClientIdx
-	// The index might have already changed if a parallel request failed.
-	if idx == currentIdx {
-		mc.currClientIdx = (mc.currClientIdx + 1) % len(mc.clients)
-	}
-	mc.currClientMu.Unlock()
 }
 
 type methodContextKey struct{}
