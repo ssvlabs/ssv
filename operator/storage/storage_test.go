@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math/big"
 	"testing"
@@ -65,10 +66,15 @@ func TestDropRegistryData(t *testing.T) {
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
+	sharepubkey := func(id int) []byte {
+		v := make([]byte, 48)
+		rand.Read(v)
+		return v
+	}
 	// Save operators, shares and recipients.
 	var (
 		operatorIDs     = []uint64{1, 2, 3}
-		sharePubKeys    = [][]byte{{1}, {2}, {3}}
+		sharePubKeys    = [][]byte{sharepubkey(1), sharepubkey(2), sharepubkey(3)}
 		recipientOwners = []common.Address{{1}, {2}, {3}}
 	)
 	for _, id := range operatorIDs {

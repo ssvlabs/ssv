@@ -178,13 +178,16 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					}
 					validLogs = append(validLogs, log)
 				}
-				if len(validLogs) == 0 {
-					// Emit empty block logs to indicate that we have advanced to this block.
-					logs <- BlockLogs{BlockNumber: toBlock}
-				} else {
-					for _, blockLogs := range PackLogs(validLogs) {
-						logs <- blockLogs
+				var highestBlock uint64
+				for _, blockLogs := range PackLogs(validLogs) {
+					logs <- blockLogs
+					if blockLogs.BlockNumber > highestBlock {
+						highestBlock = blockLogs.BlockNumber
 					}
+				}
+				// Emit empty block logs to indicate that we have advanced to this block.
+				if highestBlock < toBlock {
+					logs <- BlockLogs{BlockNumber: toBlock}
 				}
 			}
 		}
@@ -261,22 +264,19 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
 	if sp != nil {
-		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
-
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
-
 		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
+			recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
 			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
+	} else {
+		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
-
-	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
-
 	return nil
 }
 
@@ -290,6 +290,18 @@ func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.I
 	}
 
 	return b, nil
+}
+
+func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
+	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getBlockByNumber"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return h, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {

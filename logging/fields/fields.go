@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dgraph-io/ristretto"
@@ -233,7 +231,7 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 func Role(val spectypes.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
-func ExporterRole(val convert.RunnerRole) zap.Field {
+func ExporterRole(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 

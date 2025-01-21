@@ -2,27 +2,34 @@ package validator
 
 import (
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
 
-func (c *controller) reportValidatorStatus(pk []byte, meta *beacon.ValidatorMetadata) {
-	logger := c.logger.With(fields.PubKey(pk), zap.Any("metadata", meta))
-	if meta == nil {
-		logger.Debug("validator metadata not found")
-	} else if meta.IsActive() {
-		logger.Debug("validator is ready")
-	} else if meta.Slashed() {
-		logger.Debug("validator slashed")
-	} else if meta.Exiting() {
-		logger.Debug("validator exiting / exited")
-	} else if !meta.Activated() {
-		logger.Debug("validator not activated")
-	} else if meta.Pending() {
-		logger.Debug("validator pending")
-	} else if meta.Index == 0 {
-		logger.Debug("validator index not found")
+func (c *controller) reportValidatorStatus(share *types.SSVShare) {
+	if share == nil {
+		c.logger.Debug("checking validator: validator share not found")
+		return
+	}
+
+	pk := share.ValidatorPubKey[:]
+	logger := c.logger.With(fields.PubKey(pk), zap.Any("share", share))
+
+	if !share.HasBeaconMetadata() {
+		c.logger.Debug("checking validator: validator has no beacon metadata")
+	} else if share.IsActive() {
+		logger.Debug("checking validator: validator is ready")
+	} else if share.Slashed() {
+		logger.Debug("checking validator: validator slashed")
+	} else if share.Exiting() {
+		logger.Debug("checking validator: validator exiting / exited")
+	} else if !share.Activated() {
+		logger.Debug("checking validator: validator not activated")
+	} else if share.Pending() {
+		logger.Debug("checking validator: validator pending")
+	} else if share.ValidatorIndex == 0 {
+		logger.Debug("checking validator: validator index not found")
 	} else {
-		logger.Debug("validator is unknown")
+		logger.Debug("checking validator: validator is unknown")
 	}
 }

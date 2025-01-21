@@ -255,8 +255,8 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 	return err
 }
 
-func (gc *GoClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	return gc.updateBatchRegistrationCache(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
+func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
+	return gc.updateBatchRegistrationCache(registration)
 }
 
 func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
@@ -290,25 +290,6 @@ func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSign
 
 	gc.registrationCache[pk] = registration
 	return nil
-}
-
-func (gc *GoClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], pubkey)
-
-	signedReg := &api.VersionedSignedValidatorRegistration{
-		Version: spec.BuilderVersionV1,
-		V1: &eth2apiv1.SignedValidatorRegistration{
-			Message: &eth2apiv1.ValidatorRegistration{
-				FeeRecipient: feeRecipient,
-				GasLimit:     gc.gasLimit,
-				Timestamp:    gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
-				Pubkey:       pk,
-			},
-			Signature: sig,
-		},
-	}
-	return signedReg
 }
 
 func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {

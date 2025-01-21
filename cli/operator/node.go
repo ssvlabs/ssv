@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -32,7 +34,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -56,8 +57,10 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -198,7 +201,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
-		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
@@ -257,43 +259,58 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
-		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
-		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(networkConfig, logger, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []convert.RunnerRole{
-			convert.RoleCommittee,
-			convert.RoleAttester,
-			convert.RoleProposer,
-			convert.RoleSyncCommittee,
-			convert.RoleAggregator,
-			convert.RoleSyncCommitteeContribution,
-			convert.RoleValidatorRegistration,
-			convert.RoleVoluntaryExit,
+		storageRoles := []spectypes.BeaconRole{
+			spectypes.BNRoleAttester,
+			spectypes.BNRoleProposer,
+			spectypes.BNRoleSyncCommittee,
+			spectypes.BNRoleAggregator,
+			spectypes.BNRoleSyncCommitteeContribution,
+			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
+			s := ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole)
+			storageMap.Add(storageRole, s)
+		}
+
+		if cfg.SSVOptions.ValidatorOptions.Exporter {
+			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
+			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
+			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
+
+		metadataSyncer := metadata.NewSyncer(
+			logger,
+			nodeStorage.Shares(),
+			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+			networkConfig.Beacon,
+			consensusClient,
+			p2pNetwork.FixedSubnets(),
+			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
+		)
+		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
@@ -324,7 +341,7 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber.Wait()
 		logger.Info("ethereum node(s) are healthy")
 
-		eventSyncer := setupEventHandling(
+		eventSyncer := syncContractEvents(
 			cmd.Context(),
 			logger,
 			executionClient,
@@ -337,6 +354,10 @@ var StartNodeCmd = &cobra.Command{
 		)
 		if len(cfg.LocalEventsPath) == 0 {
 			nodeProber.AddNode("event syncer", eventSyncer)
+		}
+
+		if _, err := metadataSyncer.SyncOnStartup(cmd.Context()); err != nil {
+			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
 		}
 
 		// Increase MaxPeers if the operator is subscribed to many subnets.
@@ -396,8 +417,8 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					DomainType: networkConfig.DomainType,
-					QBFTStores: storageMap,
+					NetworkConfig:     networkConfig,
+					ParticipantStores: storageMap,
 				},
 			)
 			go func() {
@@ -655,7 +676,8 @@ func setupConsensusClient(
 	return cl
 }
 
-func setupEventHandling(
+// syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
+func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
@@ -783,4 +805,28 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
+}
+
+func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+	var wg sync.WaitGroup
+
+	threshold := slot - phase0.Slot(retain)
+
+	// async perform initial slot gc
+	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			store.Prune(ctx, logger, threshold)
+		}()
+		return nil
+	})
+
+	wg.Wait()
+
+	// start background job for removing old slots on every tick
+	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+		go store.PruneContinously(ctx, logger, slotTickerProvider, phase0.Slot(retain))
+		return nil
+	})
 }

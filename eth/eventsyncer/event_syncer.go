@@ -6,14 +6,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/logging/fields"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 )
+
+//go:generate mockgen -package=eventsyncer -destination=./event_syncer_mock.go -source=./event_syncer.go
 
 // TODO: check if something from these PRs need to be ported:
 // https://github.com/ssvlabs/ssv/pull/1053
@@ -26,6 +30,7 @@ var (
 type ExecutionClient interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs
+	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error)
 }
 
 type EventHandler interface {
@@ -80,6 +85,21 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	if time.Since(es.lastProcessedBlockChange) > es.stalenessThreshold {
 		return fmt.Errorf("syncing is stuck at block %d", lastProcessedBlock.Uint64())
 	}
+
+	return es.blockBelowThreshold(ctx, lastProcessedBlock)
+}
+
+func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) error {
+	header, err := es.executionClient.HeaderByNumber(ctx, block)
+	if err != nil {
+		return fmt.Errorf("failed to get header for block %d: %w", block, err)
+	}
+
+	// #nosec G115
+	if header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+		return fmt.Errorf("block %d is too old", block)
+	}
+
 	return nil
 }
 

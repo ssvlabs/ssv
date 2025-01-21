@@ -52,7 +52,7 @@ type Node struct {
 	executionClient  *executionclient.ExecutionClient
 	net              network.P2PNetwork
 	storage          storage.Storage
-	qbftStorage      *qbftstorage.QBFTStores
+	qbftStorage      *qbftstorage.ParticipantStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 
@@ -61,7 +61,7 @@ type Node struct {
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) *Node {
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	node := &Node{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
@@ -105,7 +105,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start(logger *zap.Logger) error {
-	logger.Named(logging.NameOperator)
+	logger = logger.Named(logging.NameOperator)
 
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
@@ -134,11 +134,11 @@ func (n *Node) Start(logger *zap.Logger) error {
 	}
 	go n.net.UpdateSubnets(logger)
 	go n.net.UpdateScoreParams(logger)
-	n.validatorsCtrl.StartValidators()
+	n.validatorsCtrl.StartValidators(n.context)
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+	go n.validatorsCtrl.HandleMetadataUpdates(n.context)
 	go n.validatorsCtrl.ReportValidatorStatuses(n.context)
 
 	if err := n.dutyScheduler.Wait(); err != nil {
