@@ -5,6 +5,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+//go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path . --objs ValidatorDutyTrace,CommitteeDutyTrace
 type ValidatorDutyTrace struct {
 	DutyTrace
 	Role      spectypes.BeaconRole
