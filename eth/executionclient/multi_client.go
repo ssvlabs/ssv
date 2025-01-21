@@ -298,11 +298,11 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		return f(mc.clients[0])
 	}
 
+	// Iterate over the clients in round-robin fashion,
+	// starting from the most likely healthy client (currentClientIndex).
+	var startingIndex = int(mc.currentClientIndex.Load())
 	var allErrs error
-	startingIndex := int(mc.currentClientIndex.Load())
-
 	for i := 0; i < len(mc.clients); i++ {
-		// Get the next client in round-robin fashion.
 		clientIndex := (startingIndex + i) % len(mc.clients)
 		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
 		client := mc.clients[clientIndex]
@@ -311,14 +311,14 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			zap.String("addr", mc.nodeAddrs[clientIndex]),
 			zap.String("method", methodFromContext(ctx)))
 
-		// Make sure this client is healthy, this shouldn't cause too many requests because the result is cached.
+		// Make sure this client is healthy. This shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
 			logger.Warn("client is not healthy, switching to next client",
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 			allErrs = errors.Join(allErrs, err)
-			mc.currentClientIndex.Store(int64(clientIndex))
+			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			continue
 		}
 
@@ -336,10 +336,11 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.Error(err))
 
 			allErrs = errors.Join(allErrs, err)
-			mc.currentClientIndex.Store(int64(clientIndex))
+			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			continue
 		}
 
+		// Update currentClientIndex to the healthy client.
 		mc.currentClientIndex.Store(int64(clientIndex))
 		return v, nil
 	}
