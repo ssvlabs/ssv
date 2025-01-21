@@ -238,15 +238,15 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 			return nil
 		})
 	}
-
-	// At least one client has submitted the proposal successfully.
-	// Wait for the other clients to finish, just in case
-	// the successful client returned a false positive.
-	if err := p.Wait(); err != nil {
+	err := p.Wait()
+	if atLeastOneSubmitted.Load() {
+		// At least one client has submitted the proposal successfully.
+		return nil
+	}
+	if err != nil {
 		logger.Error("no consensus clients have been able to submit blinded proposal. See adjacent logs for error details.")
 		return fmt.Errorf("no consensus clients have been able to submit blinded proposal")
 	}
-
 	return nil
 }
 
