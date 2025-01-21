@@ -5,10 +5,11 @@ import (
 	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"go.uber.org/zap"
 )
 
 var db basedb.Database
@@ -38,5 +39,5 @@ var allRoles = []spectypes.BeaconRole{
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return qbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
+	return qbftstorage.NewStoresFromRoles(logger, getDB(logger), allRoles...)
 }

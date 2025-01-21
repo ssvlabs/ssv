@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -39,7 +40,7 @@ const (
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
 	ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty)
-	ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap)
+	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
@@ -89,6 +90,7 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
+	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
@@ -112,13 +114,14 @@ type Scheduler struct {
 	previousDutyDependentRoot phase0.Root
 }
 
-func NewScheduler(opts *SchedulerOptions) *Scheduler {
+func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	dutyStore := opts.DutyStore
 	if dutyStore == nil {
 		dutyStore = dutystore.New()
 	}
 
 	s := &Scheduler{
+		logger:              logger.Named(logging.NameDutyScheduler),
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
 		network:             opts.Network,
@@ -155,13 +158,12 @@ type ReorgEvent struct {
 // Start initializes the Scheduler and begins its operation.
 // Note: This function includes blocking operations, especially within the handler's HandleInitialDuties call,
 // which will block until initial duties are fully handled.
-func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
-	logger = logger.Named(logging.NameDutyScheduler)
-	logger.Info("duty scheduler started")
+func (s *Scheduler) Start(ctx context.Context) error {
+	s.logger.Info("duty scheduler started")
 
 	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
 	// as well as re-request duties if there is a change in beacon block.
-	if err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger)); err != nil {
+	if err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent()); err != nil {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
@@ -178,7 +180,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 		handler.Setup(
 			handler.Name(),
-			logger,
+			s.logger,
 			s.beaconNode,
 			s.executionClient,
 			s.network,
@@ -273,7 +275,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 }
 
 // HandleHeadEvent handles the "head" events from the beacon node.
-func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Event) {
+func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.Event) {
 	return func(event *eth2apiv1.Event) {
 		if event.Data == nil {
 			return
@@ -289,7 +291,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		// check for reorg
 		epoch := s.network.Beacon.EstimatedEpochAtSlot(data.Slot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, data.Slot, data.Slot%32+1)
-		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
+		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
 			if epoch > s.lastBlockEpoch {
 				// Change of epoch.
@@ -361,7 +363,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
 		duty := duty
-		logger := s.loggerWithDutyContext(logger, duty)
+		logger := s.loggerWithDutyContext(duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
@@ -378,10 +380,10 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
 	for _, committee := range duties {
 		duty := committee.duty
-		logger := s.loggerWithCommitteeDutyContext(logger, committee)
+		logger := s.loggerWithCommitteeDutyContext(committee) // TODO: extract this in dutyExecutor (validator controller), don't pass logger to ExecuteCommitteeDuty
 		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
 		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
 
@@ -399,8 +401,8 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.ValidatorDuty) *zap.Logger {
-	return logger.
+func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
+	return s.logger.
 		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
@@ -411,12 +413,12 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Va
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
-func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
+func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
 	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
-	return logger.
+	return s.logger.
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).

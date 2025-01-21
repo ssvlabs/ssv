@@ -27,13 +27,13 @@ type PeerScore float64
 // rather than relaying on libp2p's connection manager.
 type ConnManager interface {
 	// TagBestPeers tags the best n peers from the given list, based on subnets distribution scores.
-	TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
+	TagBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
 	// TrimPeers will trim unprotected peers.
-	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
+	TrimPeers(ctx context.Context, net libp2pnetwork.Network)
 	// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
-	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int
+	DisconnectFromBadPeers(net libp2pnetwork.Network, allPeers []peer.ID) int
 	// DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
-	DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int
+	DisconnectFromIrrelevantPeers(disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int
 }
 
 // connManager implements ConnManager
@@ -61,9 +61,9 @@ func (c connManager) disconnect(peerID peer.ID, net libp2pnetwork.Network) error
 }
 
 // Set the "Protect" tag for the best [n] peers. For the others, set the "Unprotect" tag
-func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
+func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
 	bestPeers := c.getBestPeers(n, mySubnets, allPeers, topicMaxPeers)
-	logger.Debug("tagging best peers",
+	c.logger.Debug("tagging best peers",
 		zap.Int("n", n),
 		zap.Int("allPeers", len(allPeers)),
 		zap.Int("bestPeers", len(bestPeers)))
@@ -80,7 +80,7 @@ func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.S
 }
 
 // Closes the connection to all peers that are not protected
-func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network) {
+func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
 	allPeers := net.Peers()
 	before := len(allPeers)
 	// TODO: use libp2p's conn manager once ready
@@ -88,10 +88,10 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
 			err := c.disconnect(pid, net)
-			logger.Debug("closing peer", fields.PeerID(pid), zap.Error(err))
+			c.logger.Debug("closing peer", fields.PeerID(pid), zap.Error(err))
 		}
 	}
-	logger.Debug("trimmed peers", zap.Int("beforeTrim", before),
+	c.logger.Debug("trimmed peers", zap.Int("beforeTrim", before),
 		zap.Int("afterTrim", len(net.Peers())))
 }
 
@@ -209,16 +209,16 @@ func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 }
 
 // DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
-func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int {
+func (c connManager) DisconnectFromBadPeers(net libp2pnetwork.Network, allPeers []peer.ID) int {
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
 		// Disconnect if peer has bad gossip score.
 		if isBad, gossipScore := c.gossipScoreIndex.HasBadGossipScore(peerID); isBad {
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("failed to disconnect from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
+				c.logger.Error("failed to disconnect from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
 			} else {
-				logger.Debug("disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
+				c.logger.Debug("disconnecting from bad peer", fields.PeerID(peerID), zap.Float64("gossip_score", gossipScore))
 				disconnectedPeers++
 			}
 		}
@@ -228,7 +228,7 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 }
 
 // DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
-func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int {
+func (c connManager) DisconnectFromIrrelevantPeers(disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int {
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
@@ -238,9 +238,9 @@ func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnec
 		if len(sharedSubnets) == 0 {
 			err := c.disconnect(peerID, net)
 			if err != nil {
-				logger.Error("failed to disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
+				c.logger.Error("failed to disconnect from peer with irrelevant subnets", fields.PeerID(peerID))
 			} else {
-				logger.Debug("disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
+				c.logger.Debug("disconnecting from peer with irrelevant subnets", fields.PeerID(peerID))
 				disconnectedPeers++
 				if disconnectedPeers >= disconnectQuota {
 					return disconnectedPeers

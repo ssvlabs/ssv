@@ -107,12 +107,12 @@ func (n *p2pNetwork) initCfg() error {
 	return nil
 }
 
-// Returns whetehr a peer is bad
-func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
+// IsBadPeer returns whether a peer is bad
+func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
 	if n.idx == nil {
 		return false
 	}
-	return n.idx.IsBad(logger, peerID)
+	return n.idx.IsBad(peerID)
 }
 
 // SetupHost configures a libp2p host and backoff connector utility
@@ -211,23 +211,26 @@ func (n *p2pNetwork) setupPeerServices() error {
 		}
 	}
 
-	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
-		Streams:         n.streamCtrl,
-		NodeInfos:       n.idx,
-		PeerInfos:       n.idx,
-		ConnIdx:         n.idx,
-		SubnetsIdx:      n.idx,
-		IDService:       ids,
-		Network:         n.host.Network(),
-		DomainType:      n.cfg.Network.DomainType,
-		SubnetsProvider: n.ActiveSubnets,
-	}, filters)
+	handshaker := connections.NewHandshaker(
+		n.ctx,
+		n.logger,
+		&connections.HandshakerCfg{
+			Streams:         n.streamCtrl,
+			NodeInfos:       n.idx,
+			PeerInfos:       n.idx,
+			ConnIdx:         n.idx,
+			SubnetsIdx:      n.idx,
+			IDService:       ids,
+			Network:         n.host.Network(),
+			DomainType:      n.cfg.Network.DomainType,
+			SubnetsProvider: n.ActiveSubnets,
+		}, filters)
 
-	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(n.logger))
+	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx)
-	n.host.Network().Notify(n.connHandler.Handle(n.logger))
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx)
+	n.host.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 
 	return nil

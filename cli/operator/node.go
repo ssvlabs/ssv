@@ -19,9 +19,9 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -265,7 +265,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
 		if cfg.WsAPIPort != 0 {
-			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
+			ws := exporterapi.NewWsServer(cmd.Context(), zap.NewNop(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(networkConfig, logger, ws)
@@ -286,7 +286,7 @@ var StartNodeCmd = &cobra.Command{
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			s := ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole)
+			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole)
 			storageMap.Add(storageRole, s)
 		}
 
@@ -428,7 +428,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		if err := operatorNode.Start(logger); err != nil {
+		if err := operatorNode.Start(); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
@@ -800,9 +800,9 @@ func syncContractEvents(
 func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewHandler(db, enableProf, opNode)
+	metricsHandler := metrics.NewHandler(logger, db, enableProf, opNode)
 	addr := fmt.Sprintf(":%d", port)
-	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
+	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
 }
@@ -817,7 +817,7 @@ func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			store.Prune(ctx, logger, threshold)
+			store.Prune(ctx, threshold)
 		}()
 		return nil
 	})
@@ -826,7 +826,7 @@ func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 
 	// start background job for removing old slots on every tick
 	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
-		go store.PruneContinously(ctx, logger, slotTickerProvider, phase0.Slot(retain))
+		go store.PruneContinously(ctx, slotTickerProvider, phase0.Slot(retain))
 		return nil
 	})
 }

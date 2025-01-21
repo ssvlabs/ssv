@@ -50,6 +50,8 @@ type Listener interface {
 // currently using ENR entry (subnets) to facilitate subnets discovery
 // TODO: should be changed once discv5 supports topics (v5.2)
 type DiscV5Service struct {
+	logger *zap.Logger
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -71,6 +73,7 @@ type DiscV5Service struct {
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
+		logger:        logger.Named(logging.NameDiscoveryService),
 		ctx:           ctx,
 		cancel:        cancel,
 		conns:         discOpts.ConnIndex,
@@ -135,16 +138,14 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // Bootstrap start looking for new nodes, note that this function blocks.
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
-func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
-	logger = logger.Named(logging.NameDiscoveryService)
-
+func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	// Log every 10th skipped peer.
 	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
 	const logFrequency = 10
 	var skippedPeers uint64 = 0
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		logger := logger.With(
+		logger := dvs.logger.With(
 			fields.ENR(e.Node),
 			fields.PeerID(e.AddrInfo.ID),
 		)
@@ -324,7 +325,7 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
+func (dvs *DiscV5Service) RegisterSubnets(subnets ...uint64) (updated bool, err error) {
 	if len(subnets) == 0 {
 		return false, nil
 	}
@@ -334,16 +335,14 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64)
 	}
 	if updatedSubnets != nil {
 		dvs.subnets = updatedSubnets
-		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
+		dvs.logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
 	}
 	return false, nil
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
-	logger = logger.Named(logging.NameDiscoveryService)
-
+func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, err error) {
 	if len(subnets) == 0 {
 		return false, nil
 	}
@@ -353,23 +352,23 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint6
 	}
 	if updatedSubnets != nil {
 		dvs.subnets = updatedSubnets
-		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
+		dvs.logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
 	}
 	return false, nil
 }
 
 // PublishENR publishes the ENR with the current domain type across the network
-func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
+func (dvs *DiscV5Service) PublishENR() {
 	// Update own node record.
 	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.networkConfig.DomainType)
 	if err != nil {
-		logger.Error("could not set domain type", zap.Error(err))
+		dvs.logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
 	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.networkConfig.DomainType)
 	if err != nil {
-		logger.Error("could not set next domain type", zap.Error(err))
+		dvs.logger.Error("could not set next domain type", zap.Error(err))
 		return
 	}
 
@@ -403,15 +402,15 @@ func (dvs *DiscV5Service) PublishENR(logger *zap.Logger) {
 				// ignore
 				return
 			}
-			logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
+			dvs.logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
 			return
 		}
 		pings++
 		peerIDs[e.AddrInfo.ID] = struct{}{}
-	}, time.Millisecond*100, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger))
+	}, time.Millisecond*100, dvs.ssvNodeFilter(), dvs.badNodeFilter())
 
 	// Log metrics.
-	logger.Debug("done publishing ENR",
+	dvs.logger.Debug("done publishing ENR",
 		fields.Duration(start),
 		zap.Int("unique_peers", len(peerIDs)),
 		zap.Int("pings", pings),

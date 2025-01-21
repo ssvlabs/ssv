@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -59,8 +58,8 @@ type ParticipantStore interface {
 	GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
 
 	// InitialSlotGC performs an initial cleanup (blocking) of slots bellow the retained threshold
-	Prune(ctx context.Context, logger *zap.Logger, below phase0.Slot)
+	Prune(ctx context.Context, below phase0.Slot)
 
 	// SlotGC continuously removes old slots
-	PruneContinously(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain phase0.Slot)
+	PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot)
 }

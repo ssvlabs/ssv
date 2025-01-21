@@ -7,11 +7,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -54,7 +53,7 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	dvs := testingDiscovery(t)
 
 	// Register subnets 1, 3, and 5
-	updated, err := dvs.RegisterSubnets(testLogger, 1, 3, 5)
+	updated, err := dvs.RegisterSubnets(1, 3, 5)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
@@ -64,7 +63,7 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	require.Equal(t, byte(0), dvs.subnets[2])
 
 	// Register the same subnets. Should not update the state
-	updated, err = dvs.RegisterSubnets(testLogger, 1, 3, 5)
+	updated, err = dvs.RegisterSubnets(1, 3, 5)
 	assert.NoError(t, err)
 	assert.False(t, updated)
 
@@ -74,7 +73,7 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	require.Equal(t, byte(0), dvs.subnets[2])
 
 	// Register different subnets
-	updated, err = dvs.RegisterSubnets(testLogger, 2, 4)
+	updated, err = dvs.RegisterSubnets(2, 4)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 	require.Equal(t, byte(1), dvs.subnets[1])
@@ -93,7 +92,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	dvs := testingDiscovery(t)
 
 	// Register subnets first
-	_, err := dvs.RegisterSubnets(testLogger, 1, 2, 3)
+	_, err := dvs.RegisterSubnets(1, 2, 3)
 	require.NoError(t, err)
 
 	require.Equal(t, byte(1), dvs.subnets[1])
@@ -101,7 +100,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.Equal(t, byte(1), dvs.subnets[3])
 
 	// Deregister from 2 and 3
-	updated, err := dvs.DeregisterSubnets(testLogger, 2, 3)
+	updated, err := dvs.DeregisterSubnets(2, 3)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
@@ -110,7 +109,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.Equal(t, byte(0), dvs.subnets[3])
 
 	// Deregistering non-existent subnets should not update
-	updated, err = dvs.DeregisterSubnets(testLogger, 4, 5)
+	updated, err = dvs.DeregisterSubnets(4, 5)
 	assert.NoError(t, err)
 	assert.False(t, updated)
 
@@ -140,7 +139,6 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
-	logger := zap.NewNop()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -161,14 +159,13 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	// Change network config
 	dvs.networkConfig = networkconfig.HoleskyStage
 	// Test PublishENR method
-	dvs.PublishENR(logger)
+	dvs.PublishENR()
 
 	// Check LocalNode has been updated
 	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.HoleskyStage)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
-	logger := zap.NewNop()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -194,7 +191,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 
 	// Run bootstrap
 	go func() {
-		err := dvs.Bootstrap(logger, handler)
+		err := dvs.Bootstrap(handler)
 		assert.NoError(t, err)
 	}()
 

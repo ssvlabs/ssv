@@ -6,8 +6,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/records"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
@@ -40,13 +38,13 @@ type P2PNetwork interface {
 	// Start starts the network
 	Start() error
 	// UpdateSubnets will update the registered subnets according to active validators
-	UpdateSubnets(logger *zap.Logger)
+	UpdateSubnets()
 	// SubscribeAll subscribes to all subnets
-	SubscribeAll(logger *zap.Logger) error
+	SubscribeAll() error
 	// SubscribeRandoms subscribes to random subnets
-	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeRandoms(numSubnets int) error
 	// UpdateScoreParams will update the scoring parameters of GossipSub
-	UpdateScoreParams(logger *zap.Logger)
+	UpdateScoreParams()
 	// ActiveSubnets returns active subnets
 	ActiveSubnets() records.Subnets
 	// FixedSubnets returns fixed subnets

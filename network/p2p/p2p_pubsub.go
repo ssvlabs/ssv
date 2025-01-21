@@ -70,13 +70,13 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	return nil
 }
 
-func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
+func (n *p2pNetwork) SubscribeAll() error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	n.fixedSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
-		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
+		err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(subnet))
 		if err != nil {
 			return err
 		}
@@ -85,7 +85,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 }
 
 // SubscribeRandoms subscribes to random subnets. This method isn't thread-safe.
-func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -99,7 +99,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	randomSubnets = randomSubnets[:numSubnets]
 	for _, subnet := range randomSubnets {
 		// #nosec G115
-		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(uint64(subnet))) // Perm slice is [0, n)
+		err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(uint64(subnet))) // Perm slice is [0, n)
 		if err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
@@ -144,7 +144,7 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	}
 
 	for _, topic := range commons.CommitteeTopicID(cid) {
-		if err := n.topicsCtrl.Subscribe(n.logger, topic); err != nil {
+		if err := n.topicsCtrl.Subscribe(topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
@@ -152,21 +152,21 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	return nil
 }
 
-func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint64) error {
+func (n *p2pNetwork) unsubscribeSubnet(subnet uint64) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	if subnet >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(subnet), false); err != nil {
+	if err := n.topicsCtrl.Unsubscribe(commons.SubnetTopicID(subnet), false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
 	}
 	return nil
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -179,7 +179,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	cmtid := share.CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
+		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			return err
 		}
 	}
@@ -215,18 +215,18 @@ func (n *p2pNetwork) handlePubsubMessages() func(ctx context.Context, topic stri
 }
 
 // subscribeToSubnets subscribes to all the node's subnets
-func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
+func (n *p2pNetwork) subscribeToSubnets() error {
 	if !discovery.HasActiveSubnets(n.fixedSubnets) {
 		return nil
 	}
 
-	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
+	n.logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
 
 	for i, val := range n.fixedSubnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)
-			if err := n.topicsCtrl.Subscribe(logger, subnet); err != nil {
-				logger.Warn("could not subscribe to subnet",
+			if err := n.topicsCtrl.Subscribe(subnet); err != nil {
+				n.logger.Warn("could not subscribe to subnet",
 					zap.String("subnet", subnet), zap.Error(err))
 				// TODO: handle error
 			}

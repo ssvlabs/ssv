@@ -26,7 +26,7 @@ const (
 	//
 )
 
-type BadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+type BadPeerF func(peerID peer.ID) bool
 
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
@@ -60,7 +60,7 @@ func (n *connGater) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
-	if n.isBadPeer(n.logger, id) {
+	if n.isBadPeer(id) {
 		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
@@ -89,7 +89,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	if n.isBadPeer(n.logger, id) {
+	if n.isBadPeer(id) {
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
