@@ -201,8 +201,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (mc *MultiClient) Healthy(ctx context.Context) error {
-	var atLeastOneHealthy atomic.Bool
-
+	healthyClients := atomic.Int32{}
 	p := pool.New().WithErrors().WithContext(ctx)
 	for i, client := range mc.clients {
 		p.Go(func(ctx context.Context) error {
@@ -213,14 +212,15 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 					zap.Error(err))
 				return err
 			}
-			atLeastOneHealthy.Store(true)
+			healthyClients.Add(1)
 			return nil
 		})
 	}
-
-	if err := p.Wait(); err != nil && !atLeastOneHealthy.Load() {
-		return fmt.Errorf("no healthy clients: %w", err)
+	err := p.Wait()
+	if healthyClients.Load() > 0 {
+		return nil
 	}
+	return fmt.Errorf("no healthy clients: %w", err)
 
 	return nil
 }

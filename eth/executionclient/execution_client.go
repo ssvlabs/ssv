@@ -289,7 +289,6 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	}
 
 	lastHealthyTime := time.Unix(ec.lastSyncedTime.Load(), 0)
-
 	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
 		// Synced recently, reuse the result (only if ec.healthInvalidationInterval is set).
 		return nil
