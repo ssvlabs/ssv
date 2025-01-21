@@ -45,10 +45,10 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	gc.waitForOneThirdSlotDuration(slot)
 
 	scDataReqStart := time.Now()
-	beaconBlockRootResp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
+	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
 		Block: fmt.Sprint(slot),
 	})
-	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(scDataReqStart), err)
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.multiClient.Address(), http.MethodGet, time.Since(scDataReqStart), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "BeaconBlockRoot"),
@@ -82,12 +82,12 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		index := i
 		g.Go(func() error {
 			start := time.Now()
-			syncCommitteeContrResp, err := gc.client.SyncCommitteeContribution(gc.ctx, &api.SyncCommitteeContributionOpts{
+			syncCommitteeContrResp, err := gc.multiClient.SyncCommitteeContribution(gc.ctx, &api.SyncCommitteeContributionOpts{
 				Slot:              slot,
 				SubcommitteeIndex: subnetIDs[index],
 				BeaconBlockRoot:   *blockRoot,
 			})
-			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.client.Address(), http.MethodGet, time.Since(start), err)
+			recordRequestDuration(gc.ctx, "SyncCommitteeContribution", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 			if err != nil {
 				gc.log.Error(clResponseErrMsg,
 					zap.String("api", "SyncCommitteeContribution"),
@@ -126,8 +126,8 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
 	start := time.Now()
-	err := gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
-	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.client.Address(), http.MethodPost, time.Since(start), err)
+	err := gc.multiClient.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitSyncCommitteeContributions"),

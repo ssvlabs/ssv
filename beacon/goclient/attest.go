@@ -17,11 +17,11 @@ import (
 // AttesterDuties returns attester duties for a given epoch.
 func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
 	start := time.Now()
-	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
+	resp, err := gc.multiClient.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(gc.ctx, "AttesterDuties", gc.client.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(gc.ctx, "AttesterDuties", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "AttesterDuties"),
@@ -61,11 +61,11 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	// Have to make beacon node request and cache the result.
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
 		attDataReqStart := time.Now()
-		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
+		resp, err := gc.multiClient.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
 		})
 
-		recordRequestDuration(gc.ctx, "AttestationData", gc.client.Address(), http.MethodGet, time.Since(attDataReqStart), err)
+		recordRequestDuration(gc.ctx, "AttestationData", gc.multiClient.Address(), http.MethodGet, time.Since(attDataReqStart), err)
 
 		if err != nil {
 			gc.log.Error(clResponseErrMsg,
@@ -123,8 +123,8 @@ func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.Comm
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error {
 	start := time.Now()
-	err := gc.client.SubmitAttestations(gc.ctx, attestations)
-	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.client.Address(), http.MethodPost, time.Since(start), err)
+	err := gc.multiClient.SubmitAttestations(gc.ctx, attestations)
+	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitAttestations"),

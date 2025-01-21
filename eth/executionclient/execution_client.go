@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -22,8 +24,32 @@ import (
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
+//go:generate mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
+
+type Provider interface {
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
+	StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
+	Filterer() (*contract.ContractFilterer, error)
+	BlockByNumber(ctx context.Context, number *big.Int) (*ethtypes.Block, error)
+	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
+	ChainID(ctx context.Context) (*big.Int, error)
+	Healthy(ctx context.Context) error
+	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error)
+	FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error)
+	Close() error
+}
+
+type SingleClientProvider interface {
+	Provider
+	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
+	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
+}
+
+var _ Provider = &ExecutionClient{}
+
 var (
 	ErrClosed        = fmt.Errorf("closed")
+	ErrUnhealthy     = fmt.Errorf("unhealthy")
 	ErrNotConnected  = fmt.Errorf("not connected")
 	ErrBadInput      = fmt.Errorf("bad input")
 	ErrNothingToSync = errors.New("nothing to sync")
@@ -45,14 +71,18 @@ type ExecutionClient struct {
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
+	healthInvalidationInterval  time.Duration
 	logBatchSize                uint64
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	client *ethclient.Client
-	closed chan struct{}
+	client         *ethclient.Client
+	closed         chan struct{}
+	lastSyncedTime atomic.Int64
+	healthyChMu    sync.Mutex
+	healthyCh      chan struct{}
 }
 
 // New creates a new instance of ExecutionClient.
@@ -65,8 +95,10 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
+		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
+		healthyCh:                   make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -79,6 +111,11 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	client.syncProgressFn = client.syncProgress
 
 	return client, nil
+}
+
+// TODO: add comments about SyncProgress, syncProgress, syncProgressFn
+func (ec *ExecutionClient) SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
+	return ec.syncProgressFn(ctx)
 }
 
 func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
@@ -209,6 +246,8 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				return
 			case <-ec.closed:
 				return
+			case <-ec.healthyCh:
+				return
 			default:
 				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
@@ -232,7 +271,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 
 				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
-				ec.reconnect(ctx)
+				ec.reconnect(ctx) // TODO: ethclient implements reconnection, consider removing this logic after thorough testing
 				fromBlock = lastBlock + 1
 			}
 		}
@@ -249,11 +288,36 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ErrClosed
 	}
 
+	lastHealthyTime := time.Unix(ec.lastSyncedTime.Load(), 0)
+	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
+		// Synced recently, reuse the result (only if ec.healthInvalidationInterval is set).
+		return nil
+	}
+
+	ec.healthyChMu.Lock()
+	defer ec.healthyChMu.Unlock()
+
+	if err := ec.healthy(ctx); err != nil {
+		close(ec.healthyCh)
+		return fmt.Errorf("unhealthy: %w", err)
+	}
+
+	// Reset the healthyCh channel if it was closed.
+	select {
+	case <-ec.healthyCh:
+	default:
+		ec.healthyCh = make(chan struct{})
+	}
+
+	return nil
+}
+
+func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
 	start := time.Now()
-	sp, err := ec.syncProgressFn(ctx)
+	sp, err := ec.SyncProgress(ctx)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 		ec.logger.Error(elResponseErrMsg,
@@ -277,6 +341,8 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
+	ec.lastSyncedTime.Store(time.Now().Unix())
+
 	return nil
 }
 
@@ -302,6 +368,30 @@ func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.
 	}
 
 	return h, nil
+}
+
+func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
+	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "EthSubscribe"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return logs, nil
+}
+
+func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+	logs, err := ec.client.FilterLogs(ctx, q)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getLogs"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return logs, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {
@@ -335,6 +425,9 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 
 		case <-ec.closed:
 			return fromBlock, ErrClosed
+
+		case <-ec.healthyCh:
+			return fromBlock, ErrUnhealthy
 
 		case err := <-sub.Err():
 			if err == nil {
@@ -416,4 +509,8 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 	return contract.NewContractFilterer(ec.contractAddress, ec.client)
+}
+
+func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
+	return ec.client.ChainID(ctx)
 }
