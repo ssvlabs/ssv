@@ -21,10 +21,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ekmcore "github.com/ssvlabs/eth2-key-manager/core"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -46,6 +42,9 @@ import (
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 var (
@@ -745,12 +744,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
 			require.NotNil(t, valShare)
-			valShare.BeaconMetadata = &beacon.ValidatorMetadata{
-				Index:           1,
-				ActivationEpoch: 0,
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
-				Balance:         phase0.Gwei(10000000000000000),
-			}
+			valShare.ValidatorIndex = 1
+			valShare.ActivationEpoch = 0
+			valShare.Status = eth2apiv1.ValidatorStateActiveOngoing
 			err := eh.nodeStorage.Shares().Save(nil, valShare)
 			require.NoError(t, err)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
