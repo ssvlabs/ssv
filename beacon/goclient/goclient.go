@@ -290,7 +290,7 @@ func sameGenesis(a, b *apiv1.Genesis) error {
 		return fmt.Errorf("genesis is nil")
 	}
 
-	if a.GenesisTime != b.GenesisTime {
+	if !a.GenesisTime.Equal(b.GenesisTime) {
 		return fmt.Errorf("genesis time mismatch, got %v and %v", a.GenesisTime, b.GenesisTime)
 	}
 
