@@ -34,11 +34,12 @@ type MultiClient struct {
 	syncDistanceTolerance       uint64
 
 	contractAddress ethcommon.Address
-	nodeAddrs       []string
-	clients         []SingleClientProvider
 	chainID         *big.Int
-	currClientIdx   atomic.Int64
 	closed          chan struct{}
+
+	nodeAddrs          []string
+	clients            []SingleClientProvider
+	currentClientIndex atomic.Int64
 }
 
 // NewMulti creates a new instance of MultiClient.
@@ -298,20 +299,23 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	}
 
 	var allErrs error
-	currentIdx := int(mc.currClientIdx.Load())
+	clientIndex := int(mc.currentClientIndex.Load())
 
 	for i := 0; i < len(mc.clients); i++ {
-		currentIdx = (currentIdx + i) % len(mc.clients)
-		nextAddr := mc.nodeAddrs[(currentIdx+1)%len(mc.clients)]
-		client := mc.clients[currentIdx] // round-robin starting from current client
-		logger := mc.logger.With(zap.String("addr", mc.nodeAddrs[currentIdx]),
+		// Get the next client in round-robin fashion.
+		clientIndex = (clientIndex + i) % len(mc.clients)
+		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
+		client := mc.clients[clientIndex]
+
+		logger := mc.logger.With(
+			zap.String("addr", mc.nodeAddrs[clientIndex]),
 			zap.String("method", methodFromContext(ctx)))
 
 		// Make sure this client is healthy, this shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
 			logger.Warn("client is not healthy, switching to next client",
-				zap.String("next_addr", nextAddr),
+				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 			allErrs = errors.Join(allErrs, err)
 			continue
@@ -327,18 +331,17 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		if err != nil {
 			mc.logger.Error("call failed, trying another client",
-				zap.String("next_addr", nextAddr),
+				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
 			allErrs = errors.Join(allErrs, err)
 			continue
 		}
 
-		mc.currClientIdx.Store(int64(currentIdx))
 		return v, nil
 	}
 
-	mc.currClientIdx.Store(int64(currentIdx))
+	mc.currentClientIndex.Store(int64(clientIndex))
 	return nil, fmt.Errorf("all clients failed: %w", allErrs)
 }
 
