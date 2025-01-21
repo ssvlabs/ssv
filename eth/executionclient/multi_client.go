@@ -221,8 +221,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 	return fmt.Errorf("no healthy clients: %w", err)
-
-	return nil
 }
 
 // BlockByNumber retrieves a block by its number.
