@@ -40,20 +40,6 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 			t.Logf("mock server handling request: %s", r.URL.Path)
 
 			expInitRequests := map[string][]byte{
-				"/eth/v1/node/syncing": []byte(`{
-				  "data": {
-					"head_slot": "4239945",
-					"sync_distance": "1",
-					"is_syncing": false,
-					"is_optimistic": false,
-					"el_offline": false
-				  }
-				}`),
-				"/eth/v1/node/version": []byte(`{
-				  "data": {
-					"version": "Lighthouse/v4.5.0-441fc16/x86_64-linux"
-				  }
-				}`),
 				"/eth/v1/config/spec": []byte(`{
 				  "data": {
 					"CONFIG_NAME": "holesky",
@@ -75,6 +61,20 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 					"genesis_time": "1695902400",
 					"genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
 					"genesis_fork_version": "0x01017000"
+				  }
+				}`),
+				"/eth/v1/node/syncing": []byte(`{
+				  "data": {
+					"head_slot": "4239945",
+					"sync_distance": "1",
+					"is_syncing": false,
+					"is_optimistic": false,
+					"el_offline": false
+				  }
+				}`),
+				"/eth/v1/node/version": []byte(`{
+				  "data": {
+					"version": "Lighthouse/v4.5.0-441fc16/x86_64-linux"
 				  }
 				}`),
 			}

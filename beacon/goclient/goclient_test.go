@@ -84,7 +84,7 @@ func TestTimeouts(t *testing.T) {
 			return nil
 		})
 		_, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
-		require.ErrorContains(t, err, "client is not active")
+		require.ErrorContains(t, err, "context deadline exceeded")
 	}
 
 	// Too slow to respond to the Validators request.

@@ -18,11 +18,11 @@ import (
 // SyncCommitteeDuties returns sync committee duties for a given epoch
 func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 	reqStart := time.Now()
-	resp, err := gc.client.SyncCommitteeDuties(ctx, &api.SyncCommitteeDutiesOpts{
+	resp, err := gc.multiClient.SyncCommitteeDuties(ctx, &api.SyncCommitteeDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(gc.ctx, "SyncCommitteeDuties", gc.client.Address(), http.MethodPost, time.Since(reqStart), err)
+	recordRequestDuration(gc.ctx, "SyncCommitteeDuties", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SyncCommitteeDuties"),
@@ -43,10 +43,10 @@ func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 // GetSyncMessageBlockRoot returns beacon block root for sync committee
 func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec.DataVersion, error) {
 	reqStart := time.Now()
-	resp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
+	resp, err := gc.multiClient.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
 		Block: "head",
 	})
-	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.client.Address(), http.MethodGet, time.Since(reqStart), err)
+	recordRequestDuration(gc.ctx, "BeaconBlockRoot", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "BeaconBlockRoot"),
@@ -74,8 +74,8 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 // SubmitSyncMessages submits a signed sync committee msg
 func (gc *GoClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
 	reqStart := time.Now()
-	err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, msgs)
-	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeMessages", gc.client.Address(), http.MethodPost, time.Since(reqStart), err)
+	err := gc.multiClient.SubmitSyncCommitteeMessages(gc.ctx, msgs)
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeMessages", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitSyncCommitteeMessages"),

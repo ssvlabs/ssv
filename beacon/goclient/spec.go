@@ -34,8 +34,8 @@ func (gc *GoClient) BeaconConfig() networkconfig.Beacon {
 // fetchBeaconConfig must be called once on GoClient's initialization
 func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	start := time.Now()
-	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
-	recordRequestDuration(gc.ctx, "Spec", gc.client.Address(), http.MethodGet, time.Since(start), err)
+	specResponse, err := gc.multiClient.Spec(gc.ctx, &api.SpecOpts{})
+	recordRequestDuration(gc.ctx, "Spec", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Spec"),
@@ -151,8 +151,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	start = time.Now()
-	genesisResponse, err := gc.client.Genesis(gc.ctx, &api.GenesisOpts{})
-	recordRequestDuration(gc.ctx, "Genesis", gc.client.Address(), http.MethodGet, time.Since(start), err)
+	genesisResponse, err := gc.multiClient.Genesis(gc.ctx, &api.GenesisOpts{})
+	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Genesis"),
