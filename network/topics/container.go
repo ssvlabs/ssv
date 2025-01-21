@@ -7,7 +7,7 @@ import (
 )
 
 // Increased from the default (32) to reduce message drops caused by slow subscribers.
-const subscriptionBufferSize = 128
+const subscriptionBufferSize = 256
 
 type onTopicJoined func(ps *pubsub.PubSub, topic *pubsub.Topic)
 
