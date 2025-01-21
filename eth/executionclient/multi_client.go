@@ -303,7 +303,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 	for i := 0; i < len(mc.clients); i++ {
 		// Get the next client in round-robin fashion.
-		clientIndex = (clientIndex + 1) % len(mc.clients)
+		clientIndex := (clientIndex + i) % len(mc.clients)
 		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
 		client := mc.clients[clientIndex]
 
@@ -344,7 +344,6 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		return v, nil
 	}
 
-	mc.currentClientIndex.Store(int64(clientIndex))
 	return nil, fmt.Errorf("all clients failed: %w", allErrs)
 }
 
