@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -17,6 +17,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -217,57 +218,36 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 	// Wait for all submissions to finish or timeout after 1 minute.
 	//
 	// TODO: Make sure this the above is correct. Should we submit only to the node that returned the block?
-	ctx, cancel := context.WithTimeout(gc.ctx, 1*time.Minute) // The timeout should never happen, but if it does due to some bug, the node will block, and it will be hard to debug it.
-	defer cancel()
 
-	type errWithAddress struct {
-		err     error
-		address string
-	}
+	logger := gc.log.With(zap.String("api", "SubmitBlindedProposal"))
 
-	results := make(chan errWithAddress, len(gc.clients))
+	var atLeastOneSubmitted atomic.Bool
 
-	var wg sync.WaitGroup
+	p := pool.New().WithErrors().WithContext(gc.ctx)
 	for _, client := range gc.clients {
-		wg.Add(1)
-		go func(ctx context.Context, client Client) {
-			defer wg.Done()
-
-			err := client.SubmitBlindedProposal(ctx, opts)
-			results <- errWithAddress{err: err, address: client.Address()}
-		}(ctx, client)
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	for {
-		select {
-		case result, ok := <-results:
-			if !ok {
-				gc.log.Error("No consensus clients have been able to submit blinded proposal. See adjacent logs for error details.",
-					zap.String("api", "SubmitBlindedProposal"),
-				)
-				return fmt.Errorf("no consensus clients have been able to submit blinded proposal")
+		client := client
+		p.Go(func(ctx context.Context) error {
+			if err := client.SubmitBlindedProposal(ctx, opts); err == nil {
+				logger.Debug("consensus client returned an error while submitting blinded proposal. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
+					zap.String("client_addr", client.Address()),
+					zap.Error(err))
+				return err
 			}
 
-			if result.err != nil {
-				gc.log.Debug("Consensus client returned an error while submitting blinded proposal. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
-					zap.String("api", "SubmitBlindedProposal"),
-					zap.String("client_addr", result.address),
-					zap.Error(result.err),
-				)
-			} else {
-				cancel()
-				return nil
-			}
-
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+			atLeastOneSubmitted.Store(true)
+			return nil
+		})
 	}
+
+	// At least one client has submitted the proposal successfully.
+	// Wait for the other clients to finish, just in case
+	// the successful client returned a false positive.
+	if err := p.Wait(); err != nil {
+		logger.Error("no consensus clients have been able to submit blinded proposal. See adjacent logs for error details.")
+		return fmt.Errorf("no consensus clients have been able to submit blinded proposal")
+	}
+
+	return nil
 }
 
 // SubmitBeaconBlock submit the block to the node
