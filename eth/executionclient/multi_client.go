@@ -338,6 +338,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			continue
 		}
 
+		mc.currentClientIndex.Store(int64(clientIndex))
 		return v, nil
 	}
 
