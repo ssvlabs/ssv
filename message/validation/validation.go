@@ -232,7 +232,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
-	validator, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
+	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
 	if !exists {
 		e := ErrUnknownValidator
 		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
@@ -240,30 +240,30 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is liquidated
-	if validator.Liquidated {
+	if share.Liquidated {
 		return CommitteeInfo{}, ErrValidatorLiquidated
 	}
 
-	if validator.BeaconMetadata == nil {
+	if !share.HasBeaconMetadata() {
 		return CommitteeInfo{}, ErrNoShareMetadata
 	}
 
 	// Rule: If validator is not active
-	if !validator.IsAttesting(mv.netCfg.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
-		e.got = validator.BeaconMetadata.Status.String()
+		e.got = share.Status.String()
 		return CommitteeInfo{}, e
 	}
 
 	var operators []spectypes.OperatorID
-	for _, c := range validator.Committee {
+	for _, c := range share.Committee {
 		operators = append(operators, c.Signer)
 	}
 
 	return CommitteeInfo{
 		operatorIDs: operators,
-		indices:     []phase0.ValidatorIndex{validator.BeaconMetadata.Index},
-		committeeID: validator.CommitteeID(),
+		indices:     []phase0.ValidatorIndex{share.ValidatorIndex},
+		committeeID: share.CommitteeID(),
 	}, nil
 }
 

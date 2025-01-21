@@ -151,6 +151,10 @@ start-boot-node:
 
 .PHONY: mock
 mock:
+	make generate
+
+.PHONY: generate
+generate:
 	go generate ./...
 
 .PHONY: mockgen-install

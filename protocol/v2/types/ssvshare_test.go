@@ -9,8 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSSVShare_BelongsToOperator(t *testing.T) {
@@ -48,25 +46,19 @@ func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 		Result        bool
 	}{
 		{
-			Name:          "Metadata == nil",
+			Name:          "SSVShare == nil",
 			ShareMetadata: nil,
 			Result:        false,
 		},
 		{
-			Name: "BeaconMetadata == nil",
-			ShareMetadata: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: nil,
-				},
-			},
-			Result: false,
+			Name:          "SSVShare.Status == ValidatorStateUnknown",
+			ShareMetadata: &SSVShare{},
+			Result:        false,
 		},
 		{
-			Name: "BeaconMetadata != nil",
+			Name: "SSVShare.Status != ValidatorStateUnknown",
 			ShareMetadata: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{},
-				},
+				Status: eth2apiv1.ValidatorStatePendingInitialized,
 			},
 			Result: true,
 		},
@@ -117,23 +109,15 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 		Expected bool
 	}{
 		{
-			Name: "No BeaconMetadata",
-			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: nil,
-				},
-			},
+			Name:     "No BeaconMetadata",
+			Share:    &SSVShare{},
 			Epoch:    currentEpoch,
 			Expected: false,
 		},
 		{
 			Name: "Is Attesting",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status: eth2apiv1.ValidatorStateActiveOngoing,
-					},
-				},
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
 			},
 			Epoch:    currentEpoch,
 			Expected: true,
@@ -141,12 +125,8 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 		{
 			Name: "Pending Queued with Future Activation Epoch",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status:          eth2apiv1.ValidatorStatePendingQueued,
-						ActivationEpoch: currentEpoch + 1,
-					},
-				},
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: currentEpoch + 1,
 			},
 			Epoch:    currentEpoch,
 			Expected: false,
@@ -154,12 +134,8 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 		{
 			Name: "Pending Queued with Current Epoch as Activation Epoch",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status:          eth2apiv1.ValidatorStatePendingQueued,
-						ActivationEpoch: currentEpoch,
-					},
-				},
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: currentEpoch,
 			},
 			Epoch:    currentEpoch,
 			Expected: true,
@@ -167,12 +143,8 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 		{
 			Name: "Pending Queued with Past Activation Epoch",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status:          eth2apiv1.ValidatorStatePendingQueued,
-						ActivationEpoch: currentEpoch - 1,
-					},
-				},
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: currentEpoch - 1,
 			},
 			Epoch:    currentEpoch,
 			Expected: true,
@@ -199,12 +171,8 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 		{
 			Name: "Liquidated Share",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status: eth2apiv1.ValidatorStateActiveOngoing,
-					},
-					Liquidated: true,
-				},
+				Status:     eth2apiv1.ValidatorStateActiveOngoing,
+				Liquidated: true,
 			},
 			Epoch:    currentEpoch,
 			Expected: false,
@@ -212,12 +180,8 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 		{
 			Name: "Non-Liquidated Share that is Attesting",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status: eth2apiv1.ValidatorStateActiveOngoing,
-					},
-					Liquidated: false,
-				},
+				Status:     eth2apiv1.ValidatorStateActiveOngoing,
+				Liquidated: false,
 			},
 			Epoch:    currentEpoch,
 			Expected: true,
@@ -225,13 +189,9 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 		{
 			Name: "Non-Liquidated Share that is not Attesting",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status:          eth2apiv1.ValidatorStatePendingQueued,
-						ActivationEpoch: currentEpoch + 1,
-					},
-					Liquidated: false,
-				},
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: currentEpoch + 1,
+				Liquidated:      false,
 			},
 			Epoch:    currentEpoch,
 			Expected: false,
@@ -239,13 +199,9 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 		{
 			Name: "Non-Liquidated Share with Pending Queued and Current Epoch Activation",
 			Share: &SSVShare{
-				Metadata: Metadata{
-					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-						Status:          eth2apiv1.ValidatorStatePendingQueued,
-						ActivationEpoch: currentEpoch,
-					},
-					Liquidated: false,
-				},
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: currentEpoch,
+				Liquidated:      false,
 			},
 			Epoch:    currentEpoch,
 			Expected: true,

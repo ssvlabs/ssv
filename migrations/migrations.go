@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 var (
@@ -24,6 +23,7 @@ var (
 		migration_2_encrypt_shares,
 		migration_3_drop_registry_data,
 		migration_4_configlock_add_alan_fork_to_network_name,
+		migration_5_change_share_format_from_gob_to_ssz,
 	}
 )
 

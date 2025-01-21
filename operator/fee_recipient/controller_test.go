@@ -8,14 +8,11 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -26,6 +23,9 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 func TestSubmitProposal(t *testing.T) {
@@ -129,7 +129,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, regis
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	shareStorage, _, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,16 +144,13 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 
 		return &types.SSVShare{
 			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
+				SharePubKey:    []byte(fmt.Sprintf("pk%046d", index)),
 				ValidatorIndex: phase0.ValidatorIndex(index),
-				Committee:      []*spectypes.ShareMember{&spectypes.ShareMember{Signer: operatorID}},
+				Committee:      []*spectypes.ShareMember{{Signer: operatorID}},
 			},
-			Metadata: types.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Index: phase0.ValidatorIndex(index),
-				},
-				OwnerAddress: common.BytesToAddress(ownerAddrByte[:]),
-				Liquidated:   false,
-			},
+			Status:       eth2apiv1.ValidatorStateActiveOngoing,
+			OwnerAddress: common.BytesToAddress(ownerAddrByte[:]),
+			Liquidated:   false,
 		}
 	}
 

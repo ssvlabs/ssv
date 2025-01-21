@@ -14,8 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -45,6 +43,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -553,8 +552,9 @@ func (c *controller) startValidatorsForMetadata(_ context.Context, validators me
 		// Start validator (if not already started).
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			v.Share.BeaconMetadata = share.BeaconMetadata
 			v.Share.ValidatorIndex = share.ValidatorIndex
+			v.Share.Status = share.Status
+			v.Share.ActivationEpoch = share.ActivationEpoch
 			started, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
@@ -686,7 +686,7 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 	var indices []phase0.ValidatorIndex
 	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 		if share.IsParticipating(epoch) {
-			indices = append(indices, share.BeaconMetadata.Index)
+			indices = append(indices, share.ValidatorIndex)
 		}
 		return true
 	})
@@ -901,8 +901,8 @@ func (c *controller) validatorStart(validator *validator.Validator) (bool, error
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validator.Validator) (bool, error) {
-	c.reportValidatorStatus(v.Share.ValidatorPubKey[:], v.Share.BeaconMetadata)
-	if v.Share.BeaconMetadata.Index == 0 {
+	c.reportValidatorStatus(v.Share)
+	if v.Share.ValidatorIndex == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
 	started, err := c.validatorStart(v)
@@ -977,20 +977,19 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 				if share.IsParticipating(c.networkConfig.EstimatedCurrentEpoch()) {
 					validatorsPerStatus[statusParticipating]++
 				}
-				meta := share.BeaconMetadata
-				if meta == nil {
+				if !share.HasBeaconMetadata() {
 					validatorsPerStatus[statusNotFound]++
-				} else if meta.IsActive() {
+				} else if share.IsActive() {
 					validatorsPerStatus[statusActive]++
-				} else if meta.Slashed() {
+				} else if share.Slashed() {
 					validatorsPerStatus[statusSlashed]++
-				} else if meta.Exiting() {
+				} else if share.Exiting() {
 					validatorsPerStatus[statusExiting]++
-				} else if !meta.Activated() {
+				} else if !share.Activated() {
 					validatorsPerStatus[statusNotActivated]++
-				} else if meta.Pending() {
+				} else if share.Pending() {
 					validatorsPerStatus[statusPending]++
-				} else if meta.Index == 0 {
+				} else if share.ValidatorIndex == 0 {
 					validatorsPerStatus[statusNoIndex]++
 				} else {
 					validatorsPerStatus[statusUnknown]++
@@ -1077,7 +1076,7 @@ func SetupRunners(
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
 
-	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
+	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
 	}
@@ -1120,15 +1119,15 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role], err = runner.NewProposerRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
-			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
 			runners[role], err = runner.NewAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
 		case spectypes.RoleSyncCommitteeContribution:
-			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:

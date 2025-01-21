@@ -271,19 +271,15 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{},
-				Liquidated:     false,
-			},
+			Status:     eth2apiv1.ValidatorStatePendingInitialized,
+			Liquidated: false,
 		}
 		share2 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x2},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{},
-				Liquidated:     false,
-			},
+			Status:     eth2apiv1.ValidatorStatePendingInitialized,
+			Liquidated: false,
 		}
 
 		shares := []*ssvtypes.SSVShare{share1, share2}
@@ -317,19 +313,15 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{},
-				Liquidated:     false,
-			},
+			Status:     eth2apiv1.ValidatorStatePendingInitialized,
+			Liquidated: false,
 		}
 		share2 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x2},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: nil, // Lacks BeaconMetadata
-				Liquidated:     false,
-			},
+			Status:     eth2apiv1.ValidatorStateUnknown, // Lacks BeaconMetadata
+			Liquidated: false,
 		}
 
 		shares := []*ssvtypes.SSVShare{share1, share2}
@@ -376,19 +368,15 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: nil, // Lacks BeaconMetadata
-				Liquidated:     false,
-			},
+			Status:     eth2apiv1.ValidatorStateUnknown, // Lacks BeaconMetadata
+			Liquidated: false,
 		}
 		share2 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x2},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{},
-				Liquidated:     false,
-			},
+			Status:     eth2apiv1.ValidatorStatePendingInitialized,
+			Liquidated: false,
 		}
 
 		shares := []*ssvtypes.SSVShare{share1, share2}
@@ -450,16 +438,12 @@ func TestSyncer_Stream(t *testing.T) {
 		// Share to be returned
 		share1 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
+				ValidatorIndex:  1,
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Index:           1,
-					Status:          eth2apiv1.ValidatorStateActiveOngoing,
-					ActivationEpoch: 0,
-				},
-				Liquidated: false,
-			},
+			Status:          eth2apiv1.ValidatorStateActiveOngoing,
+			ActivationEpoch: 0,
+			Liquidated:      false,
 		}
 
 		// Use a channel to signal when the update is sent
@@ -553,10 +537,8 @@ func TestSyncer_Stream(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
 			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{},
-				Liquidated:     false,
-			},
+			Status:     eth2apiv1.ValidatorStatePendingInitialized,
+			Liquidated: false,
 		}
 
 		// Mock shareStorage.Range

@@ -20,18 +20,11 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap/zaptest"
-	"golang.org/x/exp/maps"
-
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -40,6 +33,11 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
+	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap/zaptest"
+	"golang.org/x/exp/maps"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -67,20 +65,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
-			beaconMetadata1 := *shares.active.BeaconMetadata
-			beaconMetadata2 := beaconMetadata1
-			beaconMetadata2.Index = beaconMetadata1.Index + 1
-			beaconMetadata3 := beaconMetadata2
-			beaconMetadata3.Index = beaconMetadata2.Index + 1
 
 			share1 := cloneSSVShare(t, shares.active)
-			share1.BeaconMetadata = &beaconMetadata1
 			share2 := cloneSSVShare(t, share1)
 			share2.ValidatorIndex = share1.ValidatorIndex + 1
-			share2.BeaconMetadata = &beaconMetadata2
 			share3 := cloneSSVShare(t, share2)
 			share3.ValidatorIndex = share2.ValidatorIndex + 1
-			share3.BeaconMetadata = &beaconMetadata3
 
 			return &registrystorage.Committee{
 				ID:        id,
@@ -493,8 +483,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		expectedErr := ErrValidatorNotAttesting
-		expectedErr.got = eth2apiv1.ValidatorStateUnknown.String()
+		expectedErr := ErrNoShareMetadata
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1788,27 +1777,17 @@ type shareSet struct {
 
 func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
 	activeShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
-			},
-			Liquidated: false,
-		},
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: false,
 	}
 
 	require.NoError(t, ns.Shares().Save(nil, activeShare))
 
 	liquidatedShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
-			},
-			Liquidated: true,
-		},
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: true,
 	}
 
 	liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
@@ -1818,13 +1797,9 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
 
 	inactiveShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateUnknown,
-			},
-			Liquidated: false,
-		},
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateUnknown,
+		Liquidated: false,
 	}
 
 	inactiveSK, err := eth2types.GenerateBLSPrivateKey()
@@ -1837,14 +1812,10 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
 
 	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status:          eth2apiv1.ValidatorStatePendingQueued,
-				ActivationEpoch: epoch,
-			},
-			Liquidated: false,
-		},
+		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:          eth2apiv1.ValidatorStatePendingQueued,
+		ActivationEpoch: epoch,
+		Liquidated:      false,
 	}
 
 	nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
@@ -1854,14 +1825,10 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
 
 	nonUpdatedMetadataNextEpochShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status:          eth2apiv1.ValidatorStatePendingQueued,
-				ActivationEpoch: epoch + 1,
-			},
-			Liquidated: false,
-		},
+		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:          eth2apiv1.ValidatorStatePendingQueued,
+		ActivationEpoch: epoch + 1,
+		Liquidated:      false,
 	}
 
 	nonUpdatedMetadataNextEpochSK, err := eth2types.GenerateBLSPrivateKey()
@@ -1871,11 +1838,8 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataNextEpochShare))
 
 	noMetadataShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: nil,
-			Liquidated:     false,
-		},
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Liquidated: false,
 	}
 
 	noMetadataShareSK, err := eth2types.GenerateBLSPrivateKey()

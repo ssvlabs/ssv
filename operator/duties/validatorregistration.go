@@ -49,7 +49,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if phase0.Slot(share.BeaconMetadata.Index)%registrationSlotInterval != (slot)%registrationSlotInterval {
+				if phase0.Slot(share.ValidatorIndex)%registrationSlotInterval != (slot)%registrationSlotInterval {
 					continue
 				}
 
@@ -64,7 +64,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				}})
 
 				vrs = append(vrs, ValidatorRegistration{
-					ValidatorIndex: share.BeaconMetadata.Index,
+					ValidatorIndex: share.ValidatorIndex,
 					FeeRecipient:   hex.EncodeToString(share.FeeRecipientAddress[:]),
 				})
 			}
