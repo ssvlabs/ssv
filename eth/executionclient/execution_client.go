@@ -320,9 +320,20 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	heads := make(chan *ethtypes.Header)
 
 	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
+	//
 	// We must receive all events as they determine the state of the ssv network, so a discrepancy can result in slashing.
-	// Therefore, we decided to implement more atomic behaviour, where we can revert the tx if there was an error in processing all the events of a block.
-	// So we can restart from this block once everything is good. Doing this based on the event stream was a bit harder.
+	// Therefore, we must be sure that we don't miss any log while streaming.
+	//
+	// With SubscribeFilterLogs we cannot specify the block we subscribe from, it always starts at the highest.
+	// So with streaming we had some bugs because of missing blocks:
+	// - first sync history from genesis to block 100, but then stream sometimes starts late at 102 (missed 101)
+	// - inevitably miss blocks during any stream connection interruptions (such as EL restarts)
+	//
+	// Thus, we decided not to rely on log streaming and use SubscribeNewHead + FilterLogs.
+	//
+	// It also allowed us to implement more 'atomic' behaviour easier:
+	// We can revert the tx if there was an error in processing all the events of a block.
+	// So we can restart from this block once everything is good.
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
