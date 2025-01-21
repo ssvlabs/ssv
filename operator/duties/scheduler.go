@@ -38,7 +38,7 @@ const (
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty)
+	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty)
 	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
 }
 
@@ -359,7 +359,7 @@ func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.Event) {
 }
 
 // ExecuteDuties tries to execute the given duties
-func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(duty)
