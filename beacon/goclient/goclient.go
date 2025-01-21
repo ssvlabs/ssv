@@ -193,7 +193,7 @@ func New(
 		consensusClientsAsServices = append(consensusClientsAsServices, httpClient)
 	}
 
-	err := assertSameSpec(opt.Context, consensusClients...)
+	err := assertSameGenesis(opt.Context, consensusClients...)
 	if err != nil {
 		return nil, fmt.Errorf("assert same spec: %w", err)
 	}
@@ -264,58 +264,21 @@ func setupHTTPClient(ctx context.Context, logger *zap.Logger, addr string, commo
 	return httpClient.(*eth2clienthttp.Service), nil
 }
 
-// assertSameSpec should receive a non-empty list
-func assertSameSpec(ctx context.Context, services ...Client) error {
-	firstSpec, err := services[0].Spec(ctx, &api.SpecOpts{})
-	if err != nil {
-		return fmt.Errorf("get first spec: %w", err)
-	}
-
+// assertSameGenesis should receive a non-empty list
+func assertSameGenesis(ctx context.Context, services ...Client) error {
 	firstGenesis, err := services[0].Genesis(ctx, &api.GenesisOpts{})
 	if err != nil {
 		return fmt.Errorf("get first genesis: %w", err)
 	}
 
 	for _, service := range services[1:] {
-		srvSpec, err := service.Spec(ctx, &api.SpecOpts{})
-		if err != nil {
-			return fmt.Errorf("get service spec: %w", err)
-		}
-
 		srvGenesis, err := service.Genesis(ctx, &api.GenesisOpts{})
 		if err != nil {
 			return fmt.Errorf("get service genesis: %w", err)
 		}
 
-		if err := sameSpec(firstSpec.Data, srvSpec.Data); err != nil {
-			return fmt.Errorf("different spec: %w", err)
-		}
-
 		if err := sameGenesis(firstGenesis.Data, srvGenesis.Data); err != nil {
 			return fmt.Errorf("different genesis: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func sameSpec(a, b map[string]any) error {
-	paramsToCheck := []string{
-		"CONFIG_NAME",
-		"CAPELLA_FORK_VERSION",
-		"SECONDS_PER_SLOT",
-		"SLOTS_PER_EPOCH",
-		"EPOCHS_PER_SYNC_COMMITTEE_PERIOD",
-		"SYNC_COMMITTEE_SIZE",
-		"SYNC_COMMITTEE_SUBNET_COUNT",
-		"TARGET_AGGREGATORS_PER_COMMITTEE",
-		"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE",
-		// NOTE: not checking "INTERVALS_PER_SLOT" because it's not set on some clients
-	}
-
-	for _, param := range paramsToCheck {
-		if a[param] != b[param] {
-			return fmt.Errorf("param %s mismatch, got %v and %v", param, a[param], b[param])
 		}
 	}
 
