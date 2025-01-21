@@ -221,8 +221,7 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 
 	logger := gc.log.With(zap.String("api", "SubmitBlindedProposal"))
 
-	var atLeastOneSubmitted atomic.Bool
-
+	submissions := atomic.Int32{}
 	p := pool.New().WithErrors().WithContext(gc.ctx)
 	for _, client := range gc.clients {
 		client := client
@@ -234,13 +233,14 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 				return err
 			}
 
-			atLeastOneSubmitted.Store(true)
+			submissions.Add(1)
 			return nil
 		})
 	}
 	err := p.Wait()
-	if atLeastOneSubmitted.Load() {
-		// At least one client has submitted the proposal successfully.
+	if submissions.Load() > 0 {
+		// At least one client has submitted the proposal successfully,
+		// so we can return without error.
 		return nil
 	}
 	if err != nil {
