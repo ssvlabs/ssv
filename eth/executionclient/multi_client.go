@@ -299,11 +299,11 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	}
 
 	var allErrs error
-	clientIndex := int(mc.currentClientIndex.Load())
+	startingIndex := int(mc.currentClientIndex.Load())
 
 	for i := 0; i < len(mc.clients); i++ {
 		// Get the next client in round-robin fashion.
-		clientIndex := (clientIndex + i) % len(mc.clients)
+		clientIndex := (startingIndex + i) % len(mc.clients)
 		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
 		client := mc.clients[clientIndex]
 
