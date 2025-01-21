@@ -53,14 +53,16 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("SetMany: %w", err)
 		}
 
-		if err := opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
-			return fmt.Errorf("DropPrefix: %w", err)
-		}
-
-		// This makes sure migration applies only once.
-		if err := completed(opt.Db); err != nil {
-			return fmt.Errorf("complete transaction: %w", err)
-		}
+		// TODO - do not complete this migration for now, we'll complete it once
+		// additional sanity-checks are added here
+		//if err := opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
+		//	return fmt.Errorf("DropPrefix: %w", err)
+		//}
+		//
+		//// This makes sure migration applies only once.
+		//if err := completed(opt.Db); err != nil {
+		//	return fmt.Errorf("complete transaction: %w", err)
+		//}
 
 		return nil
 	},
