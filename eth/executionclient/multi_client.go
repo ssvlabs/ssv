@@ -340,7 +340,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			continue
 		}
 
-		// Update currentClientIndex to the healthy client.
+		// Update currentClientIndex to the successful client.
 		mc.currentClientIndex.Store(int64(clientIndex))
 		return v, nil
 	}
