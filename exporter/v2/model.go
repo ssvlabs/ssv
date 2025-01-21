@@ -8,35 +8,56 @@ import (
 //go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path . --objs ValidatorDutyTrace,CommitteeDutyTrace
 type ValidatorDutyTrace struct {
 	DutyTrace
+	Pre       []*MessageTrace `ssz-max:"13"`
+	Post      []*MessageTrace `ssz-max:"13"`
 	Role      spectypes.BeaconRole
 	Validator phase0.ValidatorIndex
 }
 
 type CommitteeDutyTrace struct {
 	DutyTrace
-	CommitteeID              spectypes.CommitteeID  `ssz-size:"32"`
-	OperatorIDs              []spectypes.OperatorID `ssz-max:"4"`
-	AttestationDataRoot      phase0.Root            `ssz-size:"32"` // Computed from BeaconVote: See example in CommitteeObserver
-	SyncCommitteeMessageRoot phase0.Root            `ssz-size:"32"` // Computed from BeaconVote: See example in CommitteeObserver
+	Post []*CommitteeMessageTrace `ssz-max:"13"`
+
+	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
+	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`
+
+	// maybe not needed
+	AttestationDataRoot      phase0.Root `ssz-size:"32"`
+	SyncCommitteeMessageRoot phase0.Root `ssz-size:"32"`
+}
+
+type CommitteeMessageTrace struct {
+	BeaconRoot []phase0.Root           `ssz-max:"1500" ssz-size:"32"`
+	Validators []phase0.ValidatorIndex `ssz-max:"1500"`
+
+	Signer       spectypes.OperatorID
+	ReceivedTime uint64 // TODO fixme
 }
 
 type DutyTrace struct {
 	Slot   phase0.Slot
-	Pre    []*MessageTrace `ssz-max:"4"`
-	Rounds []*RoundTrace   `ssz-max:"4"`
-	Post   []*MessageTrace `ssz-max:"4"`
+	Rounds []*RoundTrace `ssz-max:"15"`
 }
 
 type RoundTrace struct {
-	ProposalRoot     [32]byte        `ssz-size:"32"`
-	ProposalReceived uint64          // TODO fixme
-	Prepares         []*MessageTrace `ssz-max:"4"` // Only recorded if root matches proposal.
-	Commits          []*MessageTrace `ssz-max:"4"` // Only recorded if root matches proposal.
+	Proposer spectypes.OperatorID // can be computed or saved
+	// ProposalData
+	ProposalRoot         phase0.Root         `ssz-size:"32"`
+	ProposalReceivedTime uint64              // TODO fix time
+	Prepares             []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
+	Commits              []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
+	RoundChanges         []*RoundChangeTrace `ssz-max:"13"`
+}
+
+type RoundChangeTrace struct {
+	MessageTrace
+	preparedRound   uint8
+	PrepareMessages []*MessageTrace `ssz-max:"32"`
 }
 
 type MessageTrace struct {
-	BeaconRoot phase0.Root `ssz-size:"32"`
-	Signer     spectypes.OperatorID
-	Validator  phase0.ValidatorIndex // Only present in CommitteeDutyTrace.Post
-	Received   uint64                // TODO fixme
+	BeaconRoot   phase0.Root `ssz-size:"32"`
+	Signer       spectypes.OperatorID
+	Validator    phase0.ValidatorIndex // Only present in CommitteeDutyTrace.Post -> remove
+	ReceivedTime uint64                // TODO fix time
 }
