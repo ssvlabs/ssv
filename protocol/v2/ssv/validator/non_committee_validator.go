@@ -28,11 +28,11 @@ import (
 )
 
 type CommitteeObserver struct {
+	msgID                  spectypes.MessageID
 	logger                 *zap.Logger
 	Storage                *storage.ParticipantStores
 	beaconNetwork          beacon.BeaconNetwork
 	networkConfig          networkconfig.NetworkConfig
-	qbftController         *qbftcontroller.Controller
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
 	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
@@ -56,10 +56,11 @@ type CommitteeObserverOptions struct {
 	DomainCache       *DomainCache
 }
 
-func NewCommitteeObserver(opts CommitteeObserverOptions) *CommitteeObserver {
+func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// TODO: does the specific operator matters?
 
 	return &CommitteeObserver{
+		msgID:                  msgID,
 		logger:                 opts.Logger,
 		Storage:                opts.Storage,
 		beaconNetwork:          opts.NetworkConfig.Beacon,
@@ -127,7 +128,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				fields.BlockRoot(key.Root),
-				zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
+				zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.msgID[:])),
 			)
 		}
 

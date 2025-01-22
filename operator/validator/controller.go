@@ -379,7 +379,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			DomainCache:       c.domainCache,
 		}
 		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewCommitteeObserver(committeeObserverOptions),
+			CommitteeObserver: validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions),
 		}
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
 		c.committeesObservers.Set(
