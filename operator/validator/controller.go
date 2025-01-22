@@ -379,10 +379,8 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			SyncCommRoots:     c.syncCommRoots,
 			DomainCache:       c.domainCache,
 		}
-		msgID := ssvMsg.GetID()
-		identifier := msgID[:]
 		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewCommitteeObserver(identifier, committeeObserverOptions),
+			CommitteeObserver: validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions),
 		}
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
 		c.committeesObservers.Set(
