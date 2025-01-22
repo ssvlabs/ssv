@@ -1,8 +1,10 @@
 package migrations
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"github.com/sanity-io/litter"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
@@ -12,21 +14,43 @@ import (
 // data to be targeted - so that SSV node with "fresh" DB can operate just fine.
 var migration_5_change_share_format_from_gob_to_ssz = Migration{
 	Name: "migration_5_change_share_format_from_gob_to_ssz",
-	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) (err error) {
 		// storagePrefix is a base prefix we use when storing shares
 		var storagePrefix = []byte("operator/")
 
-		// sets is a bunch of updates this migration will need to perform, we cannot do them all in a
-		// single transaction (because there is a limit on how large a single transaction can be) so
-		// we'll use SetMany func that will split up the data we want to update into batches committing
-		// each batch in a separate transaction. I guess that makes this migration non-atomic.
-		sets := make([]basedb.Obj, 0)
+		var sharesGOBTotal int
 
-		err := opt.Db.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
+		defer func() {
+			if err != nil {
+				return // cannot complete migration successfully
+			}
+			// complete migration, this makes sure migration applies only once
+			if err := completed(opt.Db); err != nil {
+				err = fmt.Errorf("complete transaction: %w", err)
+				return
+			}
+			logger.Info("migration completed", zap.Int("gob_shares_total", sharesGOBTotal))
+		}()
+
+		// sharesSSZEncoded is a bunch of updates this migration will need to perform, we cannot do them
+		// all in a single transaction (because there is a limit on how large a single transaction can be)
+		// so we'll use SetMany func that will split up the data we want to update into batches committing
+		// each batch in a separate transaction. I guess that makes this migration non-atomic, but since
+		// this migration is idempotent atomicity isn't required (we can re-apply it however many times
+		// we like without "breaking" anything)
+		sharesSSZEncoded := make([]basedb.Obj, 0)
+
+		sharesGOB := make(map[string]*storageShareGOB)
+		err = opt.Db.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
 			shareGOB := &storageShareGOB{}
 			if err := shareGOB.Decode(obj.Value); err != nil {
 				return fmt.Errorf("decode gob share: %w", err)
 			}
+			sID := shareID(shareGOB.ValidatorPubKey)
+			if _, ok := sharesGOB[sID]; ok {
+				return fmt.Errorf("have already seen GOB share with the same share ID: %s", sID)
+			}
+			sharesGOB[sID] = shareGOB
 			share, err := storageShareGOBToSpecShare(shareGOB)
 			if err != nil {
 				return fmt.Errorf("convert storage share to spec share: %w", err)
@@ -37,7 +61,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			if err != nil {
 				return fmt.Errorf("encode ssz share: %w", err)
 			}
-			sets = append(sets, basedb.Obj{
+			sharesSSZEncoded = append(sharesSSZEncoded, basedb.Obj{
 				Key:   key,
 				Value: value,
 			})
@@ -47,23 +71,130 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("GetAll: %w", err)
 		}
 
-		if err := opt.Db.SetMany(storagePrefix, len(sets), func(i int) (basedb.Obj, error) {
-			return sets[i], nil
+		sharesGOBTotal = len(sharesGOB)
+		if sharesGOBTotal == 0 {
+			return nil // we won't be creating any SSZ shares
+		}
+
+		if err := opt.Db.SetMany(storagePrefix, len(sharesSSZEncoded), func(i int) (basedb.Obj, error) {
+			return sharesSSZEncoded[i], nil
 		}); err != nil {
 			return fmt.Errorf("SetMany: %w", err)
 		}
 
-		// TODO - do not complete this migration for now, we'll complete it once
-		// additional sanity-checks are added here
-		//if err := opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
-		//	return fmt.Errorf("DropPrefix: %w", err)
-		//}
-		//
-		//// This makes sure migration applies only once.
-		//if err := completed(opt.Db); err != nil {
-		//	return fmt.Errorf("complete transaction: %w", err)
-		//}
+		sharesSSZTotal := 0
+		if err := opt.Db.GetAll(append(storagePrefix, sharesPrefixSSZ...), func(i int, obj basedb.Obj) error {
+			shareSSZ := &storageShareSSZ{}
+			err := shareSSZ.Decode(obj.Value)
+			if err != nil {
+				return fmt.Errorf("decode ssz share: %w", err)
+			}
+			sID := shareID(shareSSZ.ValidatorPubKey)
+			shareGOB, ok := sharesGOB[sID]
+			if !ok {
+				// this shouldn't really happen & we should probably return error if it does, but
+				// on stage since we already have some SSV nodes that migrated to SSZ format and
+				// potentially added new validators (new SSZ shares) erroring would prevent migration
+				// from completing, so we don't return error here
+				return nil
+			}
+			if !matchGOBvsSSZ(shareGOB, shareSSZ) {
+				return fmt.Errorf(
+					"GOB share doesn't match corresponding SSZ share, GOB: %s, SSZ: %s",
+					litter.Sdump(shareGOB),
+					litter.Sdump(shareSSZ),
+				)
+			}
+			sharesSSZTotal++
+			return nil
+		}); err != nil {
+			return fmt.Errorf("GetMany: %w", err)
+		}
+
+		if sharesSSZTotal != sharesGOBTotal {
+			return fmt.Errorf("total SSZ shares count %d doesn't match GOB shares count %d", sharesSSZTotal, sharesGOBTotal)
+		}
+
+		if err := opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
+			err = fmt.Errorf("DropPrefix (GOB shares): %w", err)
+			return
+		}
 
 		return nil
 	},
+}
+
+func shareID(validatorPubkey []byte) string {
+	return string(validatorPubkey)
+}
+
+func matchGOBvsSSZ(shareGOB *storageShareGOB, shareSSZ *storageShareSSZ) bool {
+	// note, ssz share no longer has OperatorID field
+
+	if !bytes.Equal(shareGOB.ValidatorPubKey, shareSSZ.ValidatorPubKey) {
+		return false
+	}
+	if !bytes.Equal(shareGOB.SharePubKey, shareSSZ.SharePubKey) {
+		return false
+	}
+	if len(shareGOB.Committee) != len(shareSSZ.Committee) {
+		return false
+	}
+	for i, committeeGOB := range shareGOB.Committee {
+		committeeSSZ := shareSSZ.Committee[i]
+		if committeeGOB.OperatorID != committeeSSZ.OperatorID {
+			return false
+		}
+		if !bytes.Equal(committeeGOB.PubKey, committeeSSZ.PubKey) {
+			return false
+		}
+	}
+	if shareGOB.Quorum != shareSSZ.Quorum {
+		return false
+	}
+	if shareGOB.PartialQuorum != shareSSZ.PartialQuorum {
+		return false
+	}
+	if shareGOB.DomainType != shareSSZ.DomainType {
+		return false
+	}
+	if shareGOB.FeeRecipientAddress != shareSSZ.FeeRecipientAddress {
+		return false
+	}
+	if !bytes.Equal(shareGOB.Graffiti, shareSSZ.Graffiti) {
+		return false
+	}
+
+	if shareGOB.OwnerAddress != shareSSZ.OwnerAddress {
+		return false
+	}
+	if shareGOB.Liquidated != shareSSZ.Liquidated {
+		return false
+	}
+
+	// finally, check Beacon metadata matches
+	if shareGOB.BeaconMetadata == nil {
+		if shareSSZ.ValidatorIndex != 0 {
+			return false
+		}
+		if shareSSZ.Status != 0 {
+			return false
+		}
+		if shareSSZ.ActivationEpoch != 0 {
+			return false
+		}
+		// note, ssz share no longer has Balance field
+		return true
+	}
+	if uint64(shareGOB.BeaconMetadata.Index) != shareSSZ.ValidatorIndex {
+		return false
+	}
+	if int(shareGOB.BeaconMetadata.Status) != int(shareSSZ.Status) {
+		return false
+	}
+	if uint64(shareGOB.BeaconMetadata.ActivationEpoch) != shareSSZ.ActivationEpoch {
+		return false
+	}
+
+	return true
 }
