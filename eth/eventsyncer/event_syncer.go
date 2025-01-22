@@ -133,6 +133,12 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 			return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
 		}
 
+		if lastProcessedBlock == prevProcessedBlock {
+			// Not advancing, so can't sync any further.
+			break
+		}
+		prevProcessedBlock = lastProcessedBlock
+
 		err = es.blockBelowThreshold(ctx, new(big.Int).SetUint64(lastProcessedBlock))
 		if err == nil {
 			// Successfully synced up to a fresh block.
@@ -142,12 +148,6 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 
 			return lastProcessedBlock, nil
 		}
-
-		if lastProcessedBlock == prevProcessedBlock {
-			// Not advancing, so can't sync any further.
-			break
-		}
-		prevProcessedBlock = lastProcessedBlock
 
 		fromBlock = lastProcessedBlock + 1
 		es.logger.Info("finished syncing up to a stale block, resuming", zap.Uint64("from_block", fromBlock))
