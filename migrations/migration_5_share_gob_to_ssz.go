@@ -25,7 +25,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 				return // cannot complete migration successfully
 			}
 			// complete migration, this makes sure migration applies only once
-			if err := completed(opt.Db); err != nil {
+			if err = completed(opt.Db); err != nil {
 				err = fmt.Errorf("complete transaction: %w", err)
 				return
 			}
@@ -115,7 +115,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("total SSZ shares count %d doesn't match GOB shares count %d", sharesSSZTotal, sharesGOBTotal)
 		}
 
-		if err := opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
+		if err = opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
 			err = fmt.Errorf("DropPrefix (GOB shares): %w", err)
 			return
 		}
