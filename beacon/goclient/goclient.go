@@ -195,10 +195,11 @@ func New(
 		)
 	}
 
-	err := assertSameGenesis(opt.Context, consensusClients...)
-	if err != nil {
-		return nil, fmt.Errorf("assert same spec: %w", err)
-	}
+	// TODO: assert genesis against info in networkconfig
+	//err := assertSameGenesis(opt.Context, consensusClients...)
+	//if err != nil {
+	//	return nil, fmt.Errorf("assert same spec: %w", err)
+	//}
 
 	multiClient, err := eth2clientmulti.New(
 		opt.Context,
