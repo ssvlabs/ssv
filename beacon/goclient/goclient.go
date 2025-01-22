@@ -167,19 +167,24 @@ func New(
 			return nil, err
 		}
 
+		consensusClients = append(consensusClients, httpClient)
+		consensusClientsAsServices = append(consensusClientsAsServices, httpClient)
+
 		nodeVersionResp, err := httpClient.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 		if err != nil {
 			logger.Error(clResponseErrMsg,
+				zap.String("address", httpClient.Address()),
 				zap.String("api", "NodeVersion"),
 				zap.Error(err),
 			)
-			return nil, fmt.Errorf("failed to get node version: %w", err)
+			continue
 		}
 		if nodeVersionResp == nil {
 			logger.Error(clNilResponseErrMsg,
+				zap.String("address", httpClient.Address()),
 				zap.String("api", "NodeVersion"),
 			)
-			return nil, fmt.Errorf("node version response is nil")
+			continue
 		}
 
 		logger.Info("consensus client connected",
@@ -188,9 +193,6 @@ func New(
 			zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
 			zap.String("version", nodeVersionResp.Data),
 		)
-
-		consensusClients = append(consensusClients, httpClient)
-		consensusClientsAsServices = append(consensusClientsAsServices, httpClient)
 	}
 
 	err := assertSameGenesis(opt.Context, consensusClients...)
