@@ -267,47 +267,6 @@ func setupHTTPClient(ctx context.Context, logger *zap.Logger, addr string, commo
 	return httpClient.(*eth2clienthttp.Service), nil
 }
 
-// assertSameGenesis should receive a non-empty list
-func assertSameGenesis(ctx context.Context, services ...Client) error {
-	firstGenesis, err := services[0].Genesis(ctx, &api.GenesisOpts{})
-	if err != nil {
-		return fmt.Errorf("get first genesis: %w", err)
-	}
-
-	for _, service := range services[1:] {
-		srvGenesis, err := service.Genesis(ctx, &api.GenesisOpts{})
-		if err != nil {
-			return fmt.Errorf("get service genesis: %w", err)
-		}
-
-		if err := sameGenesis(firstGenesis.Data, srvGenesis.Data); err != nil {
-			return fmt.Errorf("different genesis: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func sameGenesis(a, b *apiv1.Genesis) error {
-	if a == nil || b == nil { // Input parameters should never be nil, so the check may fail if both are nil
-		return fmt.Errorf("genesis is nil")
-	}
-
-	if !a.GenesisTime.Equal(b.GenesisTime) {
-		return fmt.Errorf("genesis time mismatch, got %v and %v", a.GenesisTime, b.GenesisTime)
-	}
-
-	if a.GenesisValidatorsRoot != b.GenesisValidatorsRoot {
-		return fmt.Errorf("genesis validators root mismatch, got %v and %v", a.GenesisValidatorsRoot, b.GenesisValidatorsRoot)
-	}
-
-	if a.GenesisForkVersion != b.GenesisForkVersion {
-		return fmt.Errorf("genesis fork version mismatch, got %v and %v", a.GenesisForkVersion, b.GenesisForkVersion)
-	}
-
-	return nil
-}
-
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
 	return gc.multiClient.NodeSyncing(ctx, opts)
 }
