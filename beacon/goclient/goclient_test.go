@@ -14,12 +14,13 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestHealthy(t *testing.T) {
@@ -87,7 +88,7 @@ func TestTimeouts(t *testing.T) {
 			return nil
 		})
 		_, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
-		require.ErrorContains(t, err, "client is not active")
+		require.ErrorContains(t, err, "context deadline exceeded")
 	}
 
 	// Too slow to respond to the Validators request.

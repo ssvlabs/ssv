@@ -19,9 +19,9 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -205,19 +205,49 @@ var StartNodeCmd = &cobra.Command{
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
-		executionClient, err := executionclient.New(
-			cmd.Context(),
-			cfg.ExecutionClient.Addr,
-			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
-			executionclient.WithLogger(logger),
-			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
-			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
-			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
-			executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
-		)
-		if err != nil {
-			logger.Fatal("could not connect to execution client", zap.Error(err))
+		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
+		if len(executionAddrList) == 0 {
+			logger.Fatal("no execution node address provided")
+		}
+
+		var executionClient executionclient.Provider
+
+		if len(executionAddrList) == 1 {
+			ec, err := executionclient.New(
+				cmd.Context(),
+				executionAddrList[0],
+				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				executionclient.WithLogger(logger),
+				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
+				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
+				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
+				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
+			)
+			if err != nil {
+				logger.Fatal("could not connect to execution client", zap.Error(err))
+			}
+
+			executionClient = ec
+		} else {
+			ec, err := executionclient.NewMulti(
+				cmd.Context(),
+				executionAddrList,
+				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				executionclient.WithLoggerMulti(logger),
+				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
+				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReconnectionInitialIntervalMulti(executionclient.DefaultReconnectionInitialInterval),
+				executionclient.WithReconnectionMaxIntervalMulti(executionclient.DefaultReconnectionMaxInterval),
+				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
+				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
+			)
+			if err != nil {
+				logger.Fatal("could not connect to execution client", zap.Error(err))
+			}
+
+			executionClient = ec
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
@@ -680,7 +710,7 @@ func setupConsensusClient(
 func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
-	executionClient *executionclient.ExecutionClient,
+	executionClient executionclient.Provider,
 	validatorCtrl validator.Controller,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,

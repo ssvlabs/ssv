@@ -12,8 +12,8 @@ import (
 // SubmitBeaconCommitteeSubscriptions is implementation for subscribing committee to subnet (p2p topic)
 func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error {
 	start := time.Now()
-	err := gc.client.SubmitBeaconCommitteeSubscriptions(ctx, subscription)
-	recordRequestDuration(gc.ctx, "SubmitBeaconCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start), err)
+	err := gc.multiClient.SubmitBeaconCommitteeSubscriptions(ctx, subscription)
+	recordRequestDuration(gc.ctx, "SubmitBeaconCommitteeSubscriptions", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitBeaconCommitteeSubscriptions"),
@@ -26,8 +26,8 @@ func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subs
 // SubmitSyncCommitteeSubscriptions is implementation for subscribing sync committee to subnet (p2p topic)
 func (gc *GoClient) SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error {
 	start := time.Now()
-	err := gc.client.SubmitSyncCommitteeSubscriptions(ctx, subscription)
-	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeSubscriptions", gc.client.Address(), http.MethodPost, time.Since(start), err)
+	err := gc.multiClient.SubmitSyncCommitteeSubscriptions(ctx, subscription)
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeSubscriptions", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "SubmitSyncCommitteeSubscriptions"),
