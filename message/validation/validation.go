@@ -15,14 +15,13 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
+	"go.uber.org/zap"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -232,7 +231,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
-	validator, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
+	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
 	if !exists {
 		e := ErrUnknownValidator
 		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
@@ -240,30 +239,30 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is liquidated
-	if validator.Liquidated {
+	if share.Liquidated {
 		return CommitteeInfo{}, ErrValidatorLiquidated
 	}
 
-	if validator.BeaconMetadata == nil {
+	if !share.HasBeaconMetadata() {
 		return CommitteeInfo{}, ErrNoShareMetadata
 	}
 
 	// Rule: If validator is not active
-	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
-		e.got = validator.BeaconMetadata.Status.String()
+		e.got = share.Status.String()
 		return CommitteeInfo{}, e
 	}
 
 	var operators []spectypes.OperatorID
-	for _, c := range validator.Committee {
+	for _, c := range share.Committee {
 		operators = append(operators, c.Signer)
 	}
 
 	return CommitteeInfo{
 		operatorIDs: operators,
-		indices:     []phase0.ValidatorIndex{validator.BeaconMetadata.Index},
-		committeeID: validator.CommitteeID(),
+		indices:     []phase0.ValidatorIndex{share.ValidatorIndex},
+		committeeID: share.CommitteeID(),
 	}, nil
 }
 

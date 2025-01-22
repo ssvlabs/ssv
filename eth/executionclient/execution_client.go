@@ -264,22 +264,19 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
 	if sp != nil {
-		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
-
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
-
 		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
+			recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
 			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
+	} else {
+		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
-
-	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
-
 	return nil
 }
 

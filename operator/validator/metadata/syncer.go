@@ -297,10 +297,10 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 		}
 
 		// Fetch new and stale shares only.
-		if !share.HasBeaconMetadata() && share.MetadataLastUpdated().IsZero() {
+		if !share.HasBeaconMetadata() && share.BeaconMetadataLastUpdated.IsZero() {
 			// Metadata was never fetched for this share, so it's considered new.
 			newShares = append(newShares, share)
-		} else if time.Since(share.MetadataLastUpdated()) > s.syncInterval {
+		} else if time.Since(share.BeaconMetadataLastUpdated) > s.syncInterval {
 			// Metadata hasn't been fetched for a while, so it's considered stale.
 			staleShares = append(staleShares, share)
 		}
@@ -320,7 +320,7 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 
 	// Record update time for selected shares.
 	for _, share := range shares {
-		share.SetMetadataLastUpdated(time.Now())
+		share.BeaconMetadataLastUpdated = time.Now()
 	}
 
 	return shares
@@ -333,7 +333,7 @@ func (s *Syncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase
 	// TODO: use context, return if it's done
 	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
 		if share.IsParticipating(epoch) {
-			indices = append(indices, share.BeaconMetadata.Index)
+			indices = append(indices, share.ValidatorIndex)
 		}
 		return true
 	})
