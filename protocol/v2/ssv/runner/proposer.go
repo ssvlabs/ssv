@@ -23,6 +23,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/tracer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -36,6 +38,13 @@ type ProposerRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
 	graffiti       []byte
+	dutyTracer     ValidatorDutyTracer
+}
+
+type ValidatorDutyTracer interface {
+	Consensus(*spectypes.ValidatorDuty, ssz.HashRoot)
+	Pre(*spectypes.ValidatorDuty, phase0.Hash32, *ssv.PartialSigContainer)
+	Post(*spectypes.ValidatorDuty, *ssv.PartialSigContainer)
 }
 
 func NewProposerRunner(
@@ -72,6 +81,7 @@ func NewProposerRunner(
 		operatorSigner: operatorSigner,
 		graffiti:       graffiti,
 		measurements:   NewMeasurementsStore(),
+		dutyTracer:     &tracer.Validator{Role: spectypes.BNRoleProposer},
 	}, nil
 }
 
@@ -147,6 +157,9 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	r.measurements.StartConsensus()
+
+	sigs := r.GetState().PreConsensusContainer
+	r.dutyTracer.Pre(duty, blockSummary.Hash, sigs)
 
 	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
@@ -229,6 +242,9 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+
+	r.dutyTracer.Consensus(&cd.Duty, blkToSign)
+
 	return nil
 }
 
@@ -329,6 +345,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
 			zap.NamedError("summarize_err", summarizeErr))
+
+		r.dutyTracer.Post(&validatorConsensusData.Duty, r.GetState().PostConsensusContainer)
 	}
 
 	r.GetState().Finished = true
