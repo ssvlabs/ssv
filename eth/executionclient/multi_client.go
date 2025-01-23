@@ -239,6 +239,7 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		i := i
 		p.Go(func(ctx context.Context) error {
 			mc.clientsMu[i].Lock()
+			defer mc.clientsMu[i].Unlock()
 
 			if mc.clients[i] == nil {
 				if err := mc.connect(ctx, i); err != nil {
@@ -246,7 +247,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 						zap.String("addr", mc.nodeAddrs[i]),
 						zap.Error(err))
 
-					mc.clientsMu[i].Unlock()
 					return err
 				}
 			}
@@ -257,12 +257,10 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 					zap.String("addr", mc.nodeAddrs[i]),
 					zap.Error(err))
 
-				mc.clientsMu[i].Unlock()
 				return err
 			}
 			healthyClients.Add(1)
 
-			mc.clientsMu[i].Unlock()
 			return nil
 		})
 	}
