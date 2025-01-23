@@ -312,6 +312,11 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
+// assertSameGenesis checks if genesis is same.
+// Clients may have different values returned by Spec call,
+// so we decided that it's best to assert that GenesisForkVersion is the same.
+// To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
+// as they should be same too.
 func (gc *GoClient) assertSameGenesis(genesis *apiv1.Genesis) error {
 	gc.genesisMu.Lock()
 	defer gc.genesisMu.Unlock()
