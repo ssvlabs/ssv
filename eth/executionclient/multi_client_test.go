@@ -42,37 +42,6 @@ func TestNewMulti(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "create single client")
 	})
-
-	t.Run("chain ID mismatch", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		mockClient1 := NewMockSingleClientProvider(ctrl)
-		mockClient2 := NewMockSingleClientProvider(ctrl)
-
-		mockClient1.
-			EXPECT().
-			ChainID(gomock.Any()).
-			Return(big.NewInt(1), nil).
-			AnyTimes()
-
-		mockClient2.
-			EXPECT().
-			ChainID(gomock.Any()).
-			Return(big.NewInt(2), nil).
-			AnyTimes()
-
-		mc := &MultiClient{
-			nodeAddrs: []string{"mock1", "mock2"},
-			clients:   []SingleClientProvider{mockClient1, mockClient2},
-			logger:    zap.NewNop(),
-		}
-
-		same, err := mc.assertSameChainIDs(context.Background())
-
-		require.NoError(t, err)
-		require.False(t, same)
-	})
 }
 
 func TestNewMulti_WithOptions(t *testing.T) {
@@ -123,90 +92,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
 }
 
-func TestMultiClient_assertSameChainIDs(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-
-	mockClient1.
-		EXPECT().
-		ChainID(gomock.Any()).
-		Return(big.NewInt(5), nil).
-		Times(1)
-
-	mockClient2.
-		EXPECT().
-		ChainID(gomock.Any()).
-		Return(big.NewInt(5), nil).
-		Times(1)
-
-	mc := &MultiClient{
-		nodeAddrs: []string{"mock1", "mock2"},
-		clients:   []SingleClientProvider{mockClient1, mockClient2},
-		logger:    zap.NewNop(),
-	}
-
-	same, err := mc.assertSameChainIDs(context.Background())
-	require.NoError(t, err)
-	require.True(t, same, "expected chain IDs to match")
-
-	chainID, err := mc.ChainID(context.Background())
-	require.NoError(t, err)
-	require.NotNil(t, chainID)
-	require.Equal(t, int64(5), chainID.Int64())
-}
-
-func TestMultiClient_assertSameChainIDs_Error(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-
-	nodeAddr1 := "mockNode1"
-	nodeAddr2 := "mockNode2"
-
-	mockClient1.
-		EXPECT().
-		ChainID(gomock.Any()).
-		Return(big.NewInt(1), nil).
-		Times(1)
-
-	mockClient1.
-		EXPECT().
-		Healthy(gomock.Any()).
-		Return(nil).
-		AnyTimes()
-
-	fetchErr := fmt.Errorf("failed to get chain ID")
-	mockClient2.
-		EXPECT().
-		ChainID(gomock.Any()).
-		Return(nil, fetchErr).
-		Times(1)
-
-	mockClient2.
-		EXPECT().
-		Healthy(gomock.Any()).
-		Return(nil).
-		AnyTimes()
-
-	mc := &MultiClient{
-		nodeAddrs: []string{nodeAddr1, nodeAddr2},
-		clients:   []SingleClientProvider{mockClient1, mockClient2},
-		logger:    zap.NewNop(),
-		closed:    make(chan struct{}),
-	}
-
-	same, err := mc.assertSameChainIDs(context.Background())
-
-	require.False(t, same, "Expected chain IDs to not match due to an error")
-	require.Error(t, err, "Expected an error when fetching chain ID from a client")
-	require.Contains(t, err.Error(), "get chain ID: failed to get chain ID", "Error message should indicate the chain ID retrieval failure")
-}
-
 func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -243,6 +128,7 @@ func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockaddr"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -301,6 +187,7 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -349,6 +236,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -407,6 +295,7 @@ func TestMultiClient_StreamLogs(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
 		closed:    make(chan struct{}),
 	}
@@ -473,6 +362,7 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
 		closed:    make(chan struct{}),
 	}
@@ -559,6 +449,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockClient2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -638,6 +529,7 @@ func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
 		closed:    make(chan struct{}),
 	}
@@ -717,6 +609,7 @@ func TestMultiClient_StreamLogs_SameFromBlock(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -795,6 +688,7 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2", "mockNode3"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2, mockClient3},
+		clientsMu: make([]sync.Mutex, 3),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -831,6 +725,7 @@ func TestMultiClient_StreamLogs_NoHealthyClients(t *testing.T) {
 		logger:          zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
 		nodeAddrs:       nodeAddrs,
 		clients:         []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu:       make([]sync.Mutex, 2),
 		closed:          make(chan struct{}),
 		contractAddress: contractAddr,
 	}
@@ -858,6 +753,7 @@ func TestMultiClient_Healthy(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -889,6 +785,7 @@ func TestMultiClient_Healthy_MultiClient(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -919,6 +816,7 @@ func TestMultiClient_Healthy_AllClientsUnhealthy(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -944,6 +842,7 @@ func TestMultiClient_BlockByNumber(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -968,6 +867,7 @@ func TestMultiClient_BlockByNumber_Error(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -993,6 +893,7 @@ func TestMultiClient_HeaderByNumber(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1017,6 +918,7 @@ func TestMultiClient_HeaderByNumber_Error(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1052,6 +954,7 @@ func TestMultiClient_SubscribeFilterLogs(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1084,6 +987,7 @@ func TestMultiClient_SubscribeFilterLogs_Error(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1114,6 +1018,7 @@ func TestMultiClient_FilterLogs(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1139,6 +1044,7 @@ func TestMultiClient_FilterLogs_Error(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1245,6 +1151,7 @@ func TestMultiClient_Close(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1", "mock2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1284,6 +1191,7 @@ func TestMultiClient_Close_MultiClient(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2", "mockNode3"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2, mockClient3},
+		clientsMu: make([]sync.Mutex, 3),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1317,6 +1225,7 @@ func TestMultiClient_Call_Concurrency(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mock1"},
 		clients:   []SingleClientProvider{mockClient},
+		clientsMu: make([]sync.Mutex, 1),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1369,6 +1278,7 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop(),
 		closed:    make(chan struct{}),
 	}
@@ -1422,6 +1332,7 @@ func TestMultiClient_ReconnectionLimit(t *testing.T) {
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockNode2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
+		clientsMu: make([]sync.Mutex, 2),
 		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
 		closed:    make(chan struct{}),
 	}
