@@ -28,7 +28,7 @@ jobs:
 
       - name: Upload output.diff
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: output.diff
           path: ./scripts/spec-alignment/output.diff
