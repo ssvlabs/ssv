@@ -57,7 +57,7 @@ func NewOperatorsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) 
 	}
 }
 
-// GetOperatorsPrefix returns the storagePrefix
+// GetOperatorsPrefix returns DB prefix
 func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 	return operatorsPrefix
 }

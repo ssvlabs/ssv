@@ -55,7 +55,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 				return fmt.Errorf("convert storage share to spec share: %w", err)
 			}
 			shareSSZ := storage.FromSpecShare(share)
-			key := storage.SharesDBKey(share.ValidatorPubKey[:])
+			key := storage.SharesDBKey(shareSSZ.ValidatorPubKey[:])
 			value, err := shareSSZ.Encode()
 			if err != nil {
 				return fmt.Errorf("encode ssz share: %w", err)
@@ -129,7 +129,6 @@ func shareID(validatorPubkey []byte) string {
 
 func matchGOBvsSSZ(shareGOB *storageShareGOB, shareSSZ *storage.Share) bool {
 	// note, ssz share no longer has OperatorID field
-
 	if !bytes.Equal(shareGOB.ValidatorPubKey, shareSSZ.ValidatorPubKey) {
 		return false
 	}

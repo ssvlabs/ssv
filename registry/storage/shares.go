@@ -18,8 +18,8 @@ import (
 
 //go:generate sszgen -path ./shares.go --objs Share
 
-// sharesPrefix specifies the storagePrefix used for storing Share(s) in DB.
-// Note, previously gob-encoded Share(s) were stored with `shares` storagePrefix, this has been
+// sharesPrefix specifies the prefix used for storing Share(s) in DB.
+// Note, previously gob-encoded Share(s) were stored with `shares/` prefix, this has been
 // changed in migration_5_change_share_format_from_gob_to_ssz.
 var sharesPrefix = []byte("shares_ssz/")
 
@@ -408,7 +408,7 @@ func (s *sharesStorage) Drop() error {
 	return s.db.DropPrefix(SharesDBPrefix(s.storagePrefix))
 }
 
-// SharesDBPrefix builds a storagePrefix all share keys are stored under
+// SharesDBPrefix builds a DB prefix all share keys are stored under.
 func SharesDBPrefix(storagePrefix []byte) []byte {
 	return append(storagePrefix, sharesPrefix...)
 }
