@@ -92,6 +92,41 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
 }
 
+func TestMultiClient_assertSameChainIDs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mc := &MultiClient{
+		logger: zap.NewNop(),
+	}
+
+	require.NoError(t, mc.assertSameChainID(big.NewInt(5)))
+	require.NoError(t, mc.assertSameChainID(big.NewInt(5)))
+
+	chainID, err := mc.ChainID(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, chainID)
+	require.Equal(t, int64(5), chainID.Int64())
+}
+
+func TestMultiClient_assertSameChainIDs_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mc := &MultiClient{
+		logger: zap.NewNop(),
+		closed: make(chan struct{}),
+	}
+
+	require.NoError(t, mc.assertSameChainID(big.NewInt(5)))
+	require.Error(t, mc.assertSameChainID(big.NewInt(6)))
+
+	chainID, err := mc.ChainID(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, chainID)
+	require.Equal(t, int64(5), chainID.Int64())
+}
+
 func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
