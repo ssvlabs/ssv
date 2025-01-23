@@ -312,7 +312,6 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
-// assertSameGenesis should receive a non-empty list
 func (gc *GoClient) assertSameGenesis(genesis *apiv1.Genesis) error {
 	gc.genesisMu.Lock()
 	defer gc.genesisMu.Unlock()
