@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/sanity-io/litter"
+	opstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
@@ -15,9 +17,6 @@ import (
 var migration_5_change_share_format_from_gob_to_ssz = Migration{
 	Name: "migration_5_change_share_format_from_gob_to_ssz",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) (err error) {
-		// storagePrefix is a base prefix we use when storing shares
-		var storagePrefix = []byte("operator/")
-
 		var sharesGOBTotal int
 
 		defer func() {
@@ -41,7 +40,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		sharesSSZEncoded := make([]basedb.Obj, 0)
 
 		sharesGOB := make(map[string]*storageShareGOB)
-		err = opt.Db.GetAll(append(storagePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
+		err = opt.Db.GetAll(append(opstorage.OperatorStoragePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
 			shareGOB := &storageShareGOB{}
 			if err := shareGOB.Decode(obj.Value); err != nil {
 				return fmt.Errorf("decode gob share: %w", err)
@@ -55,8 +54,8 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			if err != nil {
 				return fmt.Errorf("convert storage share to spec share: %w", err)
 			}
-			shareSSZ := specShareToStorageShareSSZ(share)
-			key := storageKeySSZ(share.ValidatorPubKey[:])
+			shareSSZ := storage.FromSpecShare(share)
+			key := storage.SharesDBKey(share.ValidatorPubKey[:])
 			value, err := shareSSZ.Encode()
 			if err != nil {
 				return fmt.Errorf("encode ssz share: %w", err)
@@ -76,15 +75,15 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return nil // we won't be creating any SSZ shares
 		}
 
-		if err := opt.Db.SetMany(storagePrefix, len(sharesSSZEncoded), func(i int) (basedb.Obj, error) {
+		if err := opt.Db.SetMany(opstorage.OperatorStoragePrefix, len(sharesSSZEncoded), func(i int) (basedb.Obj, error) {
 			return sharesSSZEncoded[i], nil
 		}); err != nil {
 			return fmt.Errorf("SetMany: %w", err)
 		}
 
 		sharesSSZTotal := 0
-		if err := opt.Db.GetAll(append(storagePrefix, sharesPrefixSSZ...), func(i int, obj basedb.Obj) error {
-			shareSSZ := &storageShareSSZ{}
+		if err := opt.Db.GetAll(storage.SharesDBPrefix(opstorage.OperatorStoragePrefix), func(i int, obj basedb.Obj) error {
+			shareSSZ := &storage.Share{}
 			err := shareSSZ.Decode(obj.Value)
 			if err != nil {
 				return fmt.Errorf("decode ssz share: %w", err)
@@ -115,7 +114,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return fmt.Errorf("total SSZ shares count %d doesn't match GOB shares count %d", sharesSSZTotal, sharesGOBTotal)
 		}
 
-		if err = opt.Db.DropPrefix(append(storagePrefix, sharesPrefixGOB...)); err != nil {
+		if err = opt.Db.DropPrefix(append(opstorage.OperatorStoragePrefix, sharesPrefixGOB...)); err != nil {
 			err = fmt.Errorf("DropPrefix (GOB shares): %w", err)
 			return
 		}
@@ -128,7 +127,7 @@ func shareID(validatorPubkey []byte) string {
 	return string(validatorPubkey)
 }
 
-func matchGOBvsSSZ(shareGOB *storageShareGOB, shareSSZ *storageShareSSZ) bool {
+func matchGOBvsSSZ(shareGOB *storageShareGOB, shareSSZ *storage.Share) bool {
 	// note, ssz share no longer has OperatorID field
 
 	if !bytes.Equal(shareGOB.ValidatorPubKey, shareSSZ.ValidatorPubKey) {

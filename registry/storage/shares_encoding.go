@@ -7,13 +7,13 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 )
 
-// MarshalSSZ ssz marshals the storageShare object
-func (s *storageShare) MarshalSSZ() ([]byte, error) {
+// MarshalSSZ ssz marshals the Share object
+func (s *Share) MarshalSSZ() ([]byte, error) {
 	return ssz.MarshalSSZ(s)
 }
 
-// MarshalSSZTo ssz marshals the storageShare object to a target array
-func (s *storageShare) MarshalSSZTo(buf []byte) (dst []byte, err error) {
+// MarshalSSZTo ssz marshals the Share object to a target array
+func (s *Share) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = buf
 	offset := int(129)
 
@@ -22,7 +22,7 @@ func (s *storageShare) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 
 	// Field (1) 'ValidatorPubKey'
 	if size := len(s.ValidatorPubKey); size != 48 {
-		err = ssz.ErrBytesLengthFn("storageShare.ValidatorPubKey", size, 48)
+		err = ssz.ErrBytesLengthFn("Share.ValidatorPubKey", size, 48)
 		return
 	}
 	dst = append(dst, s.ValidatorPubKey...)
@@ -61,14 +61,14 @@ func (s *storageShare) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 
 	// Field (2) 'SharePubKey'
 	if size := len(s.SharePubKey); size > 48 {
-		err = ssz.ErrBytesLengthFn("storageShare.SharePubKey", size, 48)
+		err = ssz.ErrBytesLengthFn("Share.SharePubKey", size, 48)
 		return
 	}
 	dst = append(dst, s.SharePubKey...)
 
 	// Field (3) 'Committee'
 	if size := len(s.Committee); size > 13 {
-		err = ssz.ErrListTooBigFn("storageShare.Committee", size, 13)
+		err = ssz.ErrListTooBigFn("Share.Committee", size, 13)
 		return
 	}
 	{
@@ -86,7 +86,7 @@ func (s *storageShare) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 
 	// Field (6) 'Graffiti'
 	if size := len(s.Graffiti); size > 32 {
-		err = ssz.ErrBytesLengthFn("storageShare.Graffiti", size, 32)
+		err = ssz.ErrBytesLengthFn("Share.Graffiti", size, 32)
 		return
 	}
 	dst = append(dst, s.Graffiti...)
@@ -94,8 +94,8 @@ func (s *storageShare) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	return
 }
 
-// UnmarshalSSZ ssz unmarshals the storageShare object
-func (s *storageShare) UnmarshalSSZ(buf []byte) error {
+// UnmarshalSSZ ssz unmarshals the Share object
+func (s *Share) UnmarshalSSZ(buf []byte) error {
 	var err error
 	size := uint64(len(buf))
 	if size < 129 {
@@ -199,8 +199,8 @@ func (s *storageShare) UnmarshalSSZ(buf []byte) error {
 	return err
 }
 
-// SizeSSZ returns the ssz encoded size in bytes for the storageShare object
-func (s *storageShare) SizeSSZ() (size int) {
+// SizeSSZ returns the ssz encoded size in bytes for the Share object
+func (s *Share) SizeSSZ() (size int) {
 	size = 129
 
 	// Field (2) 'SharePubKey'
@@ -218,13 +218,13 @@ func (s *storageShare) SizeSSZ() (size int) {
 	return
 }
 
-// HashTreeRoot ssz hashes the storageShare object
-func (s *storageShare) HashTreeRoot() ([32]byte, error) {
+// HashTreeRoot ssz hashes the Share object
+func (s *Share) HashTreeRoot() ([32]byte, error) {
 	return ssz.HashWithDefaultHasher(s)
 }
 
-// HashTreeRootWith ssz hashes the storageShare object with a hasher
-func (s *storageShare) HashTreeRootWith(hh ssz.HashWalker) (err error) {
+// HashTreeRootWith ssz hashes the Share object with a hasher
+func (s *Share) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	indx := hh.Index()
 
 	// Field (0) 'ValidatorIndex'
@@ -232,7 +232,7 @@ func (s *storageShare) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 
 	// Field (1) 'ValidatorPubKey'
 	if size := len(s.ValidatorPubKey); size != 48 {
-		err = ssz.ErrBytesLengthFn("storageShare.ValidatorPubKey", size, 48)
+		err = ssz.ErrBytesLengthFn("Share.ValidatorPubKey", size, 48)
 		return
 	}
 	hh.PutBytes(s.ValidatorPubKey)
@@ -299,8 +299,8 @@ func (s *storageShare) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	return
 }
 
-// GetTree ssz hashes the storageShare object
-func (s *storageShare) GetTree() (*ssz.Node, error) {
+// GetTree ssz hashes the Share object
+func (s *Share) GetTree() (*ssz.Node, error) {
 	return ssz.ProofTree(s)
 }
 
