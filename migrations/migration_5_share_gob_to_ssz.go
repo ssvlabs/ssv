@@ -50,11 +50,11 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 				return fmt.Errorf("have already seen GOB share with the same share ID: %s", sID)
 			}
 			sharesGOB[sID] = shareGOB
-			share, err := storageShareGOBToSpecShare(shareGOB)
+			share, err := storageShareGOBToDomainShare(shareGOB)
 			if err != nil {
-				return fmt.Errorf("convert storage share to spec share: %w", err)
+				return fmt.Errorf("convert gob storage share to domain share: %w", err)
 			}
-			shareSSZ := storage.FromSpecShare(share)
+			shareSSZ := storage.FromDomainShare(share)
 			key := storage.SharesDBKey(shareSSZ.ValidatorPubKey[:])
 			value, err := shareSSZ.Encode()
 			if err != nil {

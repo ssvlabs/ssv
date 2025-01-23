@@ -146,9 +146,9 @@ func (s *sharesStorage) loadFromDB() error {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
 
-		share, err := ToSpecShare(val)
+		share, err := ToDomainShare(val)
 		if err != nil {
-			return fmt.Errorf("failed to convert storage share to spec share: %w", err)
+			return fmt.Errorf("failed to convert storage share to domain share: %w", err)
 		}
 
 		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = share
@@ -253,7 +253,7 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	return s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
-		share := FromSpecShare(shares[i])
+		share := FromDomainShare(shares[i])
 		value, err := share.Encode()
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
@@ -262,7 +262,7 @@ func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare
 	})
 }
 
-func FromSpecShare(share *types.SSVShare) *Share {
+func FromDomainShare(share *types.SSVShare) *Share {
 	committee := make([]*storageOperator, len(share.Committee))
 	for i, c := range share.Committee {
 		committee[i] = &storageOperator{
@@ -288,7 +288,7 @@ func FromSpecShare(share *types.SSVShare) *Share {
 	}
 }
 
-func ToSpecShare(stShare *Share) (*types.SSVShare, error) {
+func ToDomainShare(stShare *Share) (*types.SSVShare, error) {
 	committee := make([]*spectypes.ShareMember, len(stShare.Committee))
 	for i, c := range stShare.Committee {
 		committee[i] = &spectypes.ShareMember{
@@ -304,7 +304,7 @@ func ToSpecShare(stShare *Share) (*types.SSVShare, error) {
 	var validatorPubKey spectypes.ValidatorPK
 	copy(validatorPubKey[:], stShare.ValidatorPubKey)
 
-	specShare := &types.SSVShare{
+	domainShare := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorIndex:      phase0.ValidatorIndex(stShare.ValidatorIndex),
 			ValidatorPubKey:     validatorPubKey,
@@ -320,7 +320,7 @@ func ToSpecShare(stShare *Share) (*types.SSVShare, error) {
 		Liquidated:      stShare.Liquidated,
 	}
 
-	return specShare, nil
+	return domainShare, nil
 }
 
 var errShareNotFound = errors.New("share not found")
