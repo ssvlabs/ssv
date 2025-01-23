@@ -125,10 +125,12 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 	}
 
 	if err := mc.assertSameChainID(chainID); err != nil {
-		mc.logger.Fatal("chain ID mismatch",
+		mc.logger.Fatal("client returned unexpected chain ID",
 			zap.String("observed_chain_id", mc.chainID.String()),
 			zap.String("checked_chain_id", chainID.String()),
-			zap.String("address", mc.nodeAddrs[clientIndex]))
+			zap.String("address", mc.nodeAddrs[clientIndex]),
+			zap.Error(err),
+		)
 	}
 
 	mc.clientsMu[clientIndex].Lock()
@@ -142,6 +144,10 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 func (mc *MultiClient) assertSameChainID(chainID *big.Int) error {
 	mc.chainIDMu.Lock()
 	defer mc.chainIDMu.Unlock()
+
+	if chainID == nil {
+		return fmt.Errorf("chain ID is nil")
+	}
 
 	if mc.chainID == nil {
 		mc.chainID = chainID

@@ -283,10 +283,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			if err := gc.assertSameGenesis(genesis.Data); err != nil {
 				gc.genesisMu.Lock()
 				defer gc.genesisMu.Unlock()
-				gc.log.Fatal("client genesis differs",
+
+				gc.log.Fatal("client returned unexpected genesis",
 					zap.String("address", s.Address()),
 					zap.Any("client_genesis", genesis.Data),
 					zap.Any("expected_genesis", gc.genesis),
+					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
 			}
@@ -320,6 +322,10 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 func (gc *GoClient) assertSameGenesis(genesis *apiv1.Genesis) error {
 	gc.genesisMu.Lock()
 	defer gc.genesisMu.Unlock()
+
+	if genesis == nil {
+		return fmt.Errorf("genesis is nil")
+	}
 
 	if gc.genesis == nil {
 		gc.genesis = genesis
