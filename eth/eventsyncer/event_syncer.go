@@ -105,36 +105,55 @@ func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) 
 
 // SyncHistory reads and processes historical events since the given fromBlock.
 func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, err error) {
-	fetchLogs, fetchError, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
-	if errors.Is(err, executionclient.ErrNothingToSync) {
-		// Nothing to sync, should keep ongoing sync from the given fromBlock.
-		return 0, executionclient.ErrNothingToSync
-	}
-	if err != nil {
-		return 0, fmt.Errorf("failed to fetch historical events: %w", err)
+	const maxTries = 3
+	var prevProcessedBlock uint64
+	for i := 0; i < maxTries; i++ {
+		fetchLogs, fetchError, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
+		if errors.Is(err, executionclient.ErrNothingToSync) {
+			// Nothing to sync, should keep ongoing sync from the given fromBlock.
+			return 0, executionclient.ErrNothingToSync
+		}
+		if err != nil {
+			return 0, fmt.Errorf("failed to fetch historical events: %w", err)
+		}
+
+		lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogs, false)
+		if err != nil {
+			return 0, fmt.Errorf("handle historical block events: %w", err)
+		}
+		// TODO: (Alan) should it really be here?
+		if err := <-fetchError; err != nil {
+			return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
+		}
+		if lastProcessedBlock == 0 {
+			return 0, fmt.Errorf("handle historical block events: lastProcessedBlock is 0")
+		}
+		if lastProcessedBlock < fromBlock {
+			// Event replay: this should never happen!
+			return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
+		}
+
+		if lastProcessedBlock == prevProcessedBlock {
+			// Not advancing, so can't sync any further.
+			break
+		}
+		prevProcessedBlock = lastProcessedBlock
+
+		err = es.blockBelowThreshold(ctx, new(big.Int).SetUint64(lastProcessedBlock))
+		if err == nil {
+			// Successfully synced up to a fresh block.
+			es.logger.Info("finished syncing historical events",
+				zap.Uint64("from_block", fromBlock),
+				zap.Uint64("last_processed_block", lastProcessedBlock))
+
+			return lastProcessedBlock, nil
+		}
+
+		fromBlock = lastProcessedBlock + 1
+		es.logger.Info("finished syncing up to a stale block, resuming", zap.Uint64("from_block", fromBlock))
 	}
 
-	lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogs, false)
-	if err != nil {
-		return 0, fmt.Errorf("handle historical block events: %w", err)
-	}
-	// TODO: (Alan) should it really be here?
-	if err := <-fetchError; err != nil {
-		return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
-	}
-	if lastProcessedBlock == 0 {
-		return 0, fmt.Errorf("handle historical block events: lastProcessedBlock is 0")
-	}
-	if lastProcessedBlock < fromBlock {
-		// Event replay: this should never happen!
-		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
-	}
-
-	es.logger.Info("finished syncing historical events",
-		zap.Uint64("from_block", fromBlock),
-		zap.Uint64("last_processed_block", lastProcessedBlock))
-
-	return lastProcessedBlock, nil
+	return 0, fmt.Errorf("highest block is too old (%d)", lastProcessedBlock)
 }
 
 // SyncOngoing streams and processes ongoing events as they come since the given fromBlock.

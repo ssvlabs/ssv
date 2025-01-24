@@ -80,7 +80,12 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 		publishLock:   make(chan struct{}, 1),
 	}
 
-	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
+	logger.Debug(
+		"configuring discv5 discovery",
+		zap.Any("discV5Opts", discOpts.DiscV5Opts),
+		zap.Any("hostAddress", discOpts.HostAddress),
+		zap.Any("hostDNS", discOpts.HostDNS),
+	)
 	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
 		return nil, err
 	}
