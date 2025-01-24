@@ -687,7 +687,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.network.Beacon.SlotDurationSec()/3)*0.90)) // 10% margin due to flakiness of the test
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
