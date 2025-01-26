@@ -42,7 +42,6 @@ type MultiClient struct {
 	nodeAddrs          []string
 	clientsMu          []sync.Mutex           // each client has own mutex
 	clients            []SingleClientProvider // nil if not connected
-	connectedCount     atomic.Uint64
 	currentClientIndex atomic.Int64
 }
 
@@ -74,6 +73,8 @@ func NewMulti(
 		opt(multiClient)
 	}
 
+	var connected bool
+
 	var multiErr error
 	for clientIndex := range nodeAddrs {
 		if err := multiClient.connect(ctx, clientIndex); err != nil {
@@ -85,10 +86,10 @@ func NewMulti(
 			continue
 		}
 
-		multiClient.connectedCount.Add(1)
+		connected = true
 	}
 
-	if multiClient.connectedCount.Load() == 0 {
+	if !connected {
 		return nil, fmt.Errorf("no available clients: %w", multiErr)
 	}
 
@@ -238,7 +239,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (mc *MultiClient) Healthy(ctx context.Context) error {
-	healthyClients := atomic.Int32{}
+	healthyClients := atomic.Bool{}
 	p := pool.New().WithErrors().WithContext(ctx)
 
 	for i := range mc.clients {
@@ -265,13 +266,13 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 
 				return err
 			}
-			healthyClients.Add(1)
+			healthyClients.Store(true)
 
 			return nil
 		})
 	}
 	err := p.Wait()
-	if healthyClients.Load() > 0 {
+	if healthyClients.Load() {
 		return nil
 	}
 	return fmt.Errorf("no healthy clients: %w", err)
@@ -337,8 +338,6 @@ func (mc *MultiClient) ChainID(_ context.Context) (*big.Int, error) {
 
 func (mc *MultiClient) Close() error {
 	close(mc.closed)
-
-	mc.connectedCount.Store(0)
 
 	var multiErr error
 	for i := range mc.clients {
