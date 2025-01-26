@@ -146,7 +146,7 @@ func (s *sharesStorage) loadFromDB() error {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
 
-		share, err := ToDomainShare(val)
+		share, err := ToSSVShare(val)
 		if err != nil {
 			return fmt.Errorf("failed to convert storage share to domain share: %w", err)
 		}
@@ -253,7 +253,7 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	return s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
-		share := FromDomainShare(shares[i])
+		share := FromSSVShare(shares[i])
 		value, err := share.Encode()
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
@@ -262,7 +262,7 @@ func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare
 	})
 }
 
-func FromDomainShare(share *types.SSVShare) *Share {
+func FromSSVShare(share *types.SSVShare) *Share {
 	committee := make([]*storageOperator, len(share.Committee))
 	for i, c := range share.Committee {
 		committee[i] = &storageOperator{
@@ -288,7 +288,7 @@ func FromDomainShare(share *types.SSVShare) *Share {
 	}
 }
 
-func ToDomainShare(stShare *Share) (*types.SSVShare, error) {
+func ToSSVShare(stShare *Share) (*types.SSVShare, error) {
 	committee := make([]*spectypes.ShareMember, len(stShare.Committee))
 	for i, c := range stShare.Committee {
 		committee[i] = &spectypes.ShareMember{

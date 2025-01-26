@@ -54,7 +54,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			if err != nil {
 				return fmt.Errorf("convert gob storage share to domain share: %w", err)
 			}
-			shareSSZ := storage.FromDomainShare(share)
+			shareSSZ := storage.FromSSVShare(share)
 			key := storage.SharesDBKey(shareSSZ.ValidatorPubKey[:])
 			value, err := shareSSZ.Encode()
 			if err != nil {
