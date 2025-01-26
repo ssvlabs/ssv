@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+
 	"github.com/sanity-io/litter"
 	opstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -187,6 +188,7 @@ func matchGOBvsSSZ(shareGOB *storageShareGOB, shareSSZ *storage.Share) bool {
 	if uint64(shareGOB.BeaconMetadata.Index) != shareSSZ.ValidatorIndex {
 		return false
 	}
+	// #nosec G115 - never above max int
 	if int(shareGOB.BeaconMetadata.Status) != int(shareSSZ.Status) {
 		return false
 	}
