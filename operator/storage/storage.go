@@ -18,7 +18,7 @@ import (
 var HashedPrivateKey = "hashed-private-key"
 
 var (
-	storagePrefix         = []byte("operator/")
+	OperatorStoragePrefix = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 	configKey             = []byte("config")
 )
@@ -63,13 +63,13 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
-		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, storagePrefix),
-		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
+		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix),
+		recipientStore: registrystorage.NewRecipientsStorage(logger, db, OperatorStoragePrefix),
 	}
 
 	var err error
 
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(db, storagePrefix)
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(db, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -172,11 +172,11 @@ func (s *storage) DropRegistryData() error {
 // TODO: review what's not needed anymore and delete
 
 func (s *storage) SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) error {
-	return s.db.Using(rw).Set(storagePrefix, lastProcessedBlockKey, offset.Bytes())
+	return s.db.Using(rw).Set(OperatorStoragePrefix, lastProcessedBlockKey, offset.Bytes())
 }
 
 func (s *storage) dropLastProcessedBlock() error {
-	return s.db.DropPrefix(append(storagePrefix, lastProcessedBlockKey...))
+	return s.db.DropPrefix(append(OperatorStoragePrefix, lastProcessedBlockKey...))
 }
 
 func (s *storage) DropOperators() error {
@@ -193,7 +193,7 @@ func (s *storage) DropShares() error {
 
 // GetLastProcessedBlock returns the last processed block.
 func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error) {
-	obj, found, err := s.db.UsingReader(r).Get(storagePrefix, lastProcessedBlockKey)
+	obj, found, err := s.db.UsingReader(r).Get(OperatorStoragePrefix, lastProcessedBlockKey)
 	if !found {
 		return nil, found, nil
 	}
@@ -207,7 +207,7 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 
 // GetPrivateKeyHash return sha256 hashed private key
 func (s *storage) GetPrivateKeyHash() (string, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, []byte(HashedPrivateKey))
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(HashedPrivateKey))
 	if !found {
 		return "", found, nil
 	}
@@ -219,11 +219,11 @@ func (s *storage) GetPrivateKeyHash() (string, bool, error) {
 
 // SavePrivateKeyHash saves operator private key hash
 func (s *storage) SavePrivateKeyHash(hashedKey string) error {
-	return s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
+	return s.db.Set(OperatorStoragePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
 }
 
 func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {
-	obj, found, err := s.db.Using(rw).Get(storagePrefix, configKey)
+	obj, found, err := s.db.Using(rw).Get(OperatorStoragePrefix, configKey)
 	if err != nil {
 		return nil, false, fmt.Errorf("db: %w", err)
 	}
@@ -245,7 +245,7 @@ func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	if err := s.db.Using(rw).Set(storagePrefix, configKey, b); err != nil {
+	if err := s.db.Using(rw).Set(OperatorStoragePrefix, configKey, b); err != nil {
 		return fmt.Errorf("db: %w", err)
 	}
 
@@ -253,5 +253,5 @@ func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
 }
 
 func (s *storage) DeleteConfig(rw basedb.ReadWriter) error {
-	return s.db.Using(rw).Delete(storagePrefix, configKey)
+	return s.db.Using(rw).Delete(OperatorStoragePrefix, configKey)
 }
