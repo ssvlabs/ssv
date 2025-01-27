@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -190,6 +191,7 @@ func CustomNode(t *testing.T,
 	record := enr.Record{}
 
 	// Set entries
+	record.Set(enr.WithEntry("ssv", true)) // marks node as SSV-related (we filter out SSV-unrelated ones)
 	record.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
 	record.Set(enr.UDP(12000))
 	record.Set(enr.TCP(13000))
@@ -303,13 +305,13 @@ func (mc *MockConnection) Connectedness(id peer.ID) network.Connectedness {
 	return network.NotConnected
 }
 
-func (mc *MockConnection) CanConnect(id peer.ID) bool {
+func (mc *MockConnection) CanConnect(id peer.ID) error {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	if can, ok := mc.canConnect[id]; ok {
-		return can
+	if can, ok := mc.canConnect[id]; ok && can {
+		return nil
 	}
-	return false
+	return fmt.Errorf("cannot connect")
 }
 
 func (mc *MockConnection) AtLimit(dir network.Direction) bool {
