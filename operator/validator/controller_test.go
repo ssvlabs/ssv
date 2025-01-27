@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -15,7 +17,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ekm"
@@ -95,7 +96,7 @@ func TestNewController(t *testing.T) {
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
-	passedEpoch := phase0.Epoch(1)
+	passedEpoch, exitEpoch := phase0.Epoch(1), phase0.Epoch(math.MaxUint64)
 	operators := buildOperators(t)
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(0, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
@@ -115,18 +116,22 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
-			Status:          3, // ValidatorStatePendingInitialized
-			ActivationEpoch: passedEpoch,
-			Liquidated:      false,
+			Status:                    eth2apiv1.ValidatorStateActiveOngoing,
+			ActivationEpoch:           passedEpoch,
+			ExitEpoch:                 exitEpoch,
+			Liquidated:                false,
+			BeaconMetadataLastUpdated: time.Now(),
 		},
 		{
 			Share: spectypes.Share{
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
-			Status:          3, // Some other status
-			ActivationEpoch: passedEpoch,
-			Liquidated:      false,
+			Status:                    eth2apiv1.ValidatorStateActiveOngoing,
+			ActivationEpoch:           passedEpoch,
+			ExitEpoch:                 exitEpoch,
+			Liquidated:                false,
+			BeaconMetadataLastUpdated: time.Now(),
 		},
 	}
 	_ = sharesWithMetadata
@@ -134,7 +139,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	sharesWithoutMetadata := []*types.SSVShare{
 		{
 			Share: spectypes.Share{
-				//OperatorID:      1,
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
@@ -142,7 +146,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 		},
 		{
 			Share: spectypes.Share{
-				//OperatorID:      2,
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
@@ -305,7 +308,7 @@ func TestSetupValidators(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	// Init global variables
-	passedEpoch := phase0.Epoch(1)
+	activationEpoch, exitEpoch := phase0.Epoch(1), phase0.Epoch(math.MaxUint64)
 	operatorIds := []uint64{1, 2, 3, 4}
 	var validatorPublicKey phase0.BLSPubKey
 
@@ -331,18 +334,18 @@ func TestSetupValidators(t *testing.T) {
 
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorIndex: 1,
-			// OperatorID:      2,
+			ValidatorIndex:  1,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
-		Status:          3, // ValidatorStateActiveOngoing
-		ActivationEpoch: passedEpoch,
+		Status:                    eth2apiv1.ValidatorStateActiveOngoing,
+		ActivationEpoch:           activationEpoch,
+		ExitEpoch:                 exitEpoch,
+		BeaconMetadataLastUpdated: time.Now(),
 	}
 
 	shareWithoutMetaData := &types.SSVShare{
 		Share: spectypes.Share{
-			// OperatorID:      2,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
@@ -364,10 +367,11 @@ func TestSetupValidators(t *testing.T) {
 
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		0: {
-			Status: 3,
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
 			Index:  2,
 			Validator: &phase0.Validator{
-				ActivationEpoch: passedEpoch,
+				ActivationEpoch: activationEpoch,
+				ExitEpoch:       exitEpoch,
 				PublicKey:       validatorPublicKey,
 			},
 		},
@@ -584,7 +588,7 @@ func TestGetValidatorStats(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
-	passedEpoch := phase0.Epoch(1)
+	activationEpoch, exitEpoch := phase0.Epoch(1), phase0.Epoch(math.MaxUint64)
 
 	netCfg := networkconfig.TestNetwork
 	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
@@ -603,15 +607,15 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				ActivationEpoch: activationEpoch,
+				ExitEpoch:       exitEpoch,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators[1:],
 				},
-				Status:          1, // Some other status
-				ActivationEpoch: passedEpoch,
+				Status: eth2apiv1.ValidatorStatePendingInitialized, // Some other status
 			},
 		}
 
@@ -650,8 +654,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -682,8 +685,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: nil,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -721,15 +723,13 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          1,
-				ActivationEpoch: passedEpoch,
+				Status: eth2apiv1.ValidatorStatePendingInitialized,
 			},
 		}
 
