@@ -366,15 +366,14 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 	// Iterate over the clients in round-robin fashion,
 	// starting from the most likely healthy client (currentClientIndex).
-	var startingIndex = int(mc.currentClientIndex.Load())
+	startingIndex := int(mc.currentClientIndex.Load())
 	var allErrs error
 	for i := range mc.clients {
-		mc.clientsMu[i].Lock()
-
 		clientIndex := (startingIndex + i) % len(mc.clients)
 		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
-		client := mc.clients[clientIndex]
 
+		mc.clientsMu[i].Lock()
+		client := mc.clients[clientIndex]
 		if client == nil {
 			if err := mc.connect(ctx, i); err != nil {
 				mc.logger.Warn("failed to connect to client",
@@ -386,7 +385,10 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				mc.clientsMu[i].Unlock()
 				continue
 			}
+
+			client = mc.clients[clientIndex]
 		}
+		mc.clientsMu[i].Unlock()
 
 		logger := mc.logger.With(
 			zap.String("addr", mc.nodeAddrs[clientIndex]),
@@ -401,7 +403,6 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 			allErrs = errors.Join(allErrs, err)
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
-			mc.clientsMu[i].Unlock()
 			continue
 		}
 
@@ -410,7 +411,6 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 			mc.logger.Debug("received graceful closure from client", zap.Error(err))
-			mc.clientsMu[i].Unlock()
 			return v, err
 		}
 
@@ -421,13 +421,11 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 			allErrs = errors.Join(allErrs, err)
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
-			mc.clientsMu[i].Unlock()
 			continue
 		}
 
 		// Update currentClientIndex to the successful client.
 		mc.currentClientIndex.Store(int64(clientIndex))
-		mc.clientsMu[i].Unlock()
 		return v, nil
 	}
 
