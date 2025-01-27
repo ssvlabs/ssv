@@ -265,21 +265,18 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// keep discovered peers in the pool so we can choose the best ones
 		for proposal := range connectorProposals {
 			if peers.DiscoveredPeersPool.Has(proposal.ID) {
-				// TODO - comment out
 				// this log line is commented out as it is too spammy
-				n.interfaceLogger.Debug(
-					"discovery proposed peer, this proposal is already in proposal-pool",
-					zap.String("peer_id", string(proposal.ID)),
-				)
+				//n.interfaceLogger.Debug(
+				//	"discovery proposed peer, this proposal is already in proposal-pool",
+				//	zap.String("peer_id", string(proposal.ID)),
+				//)
 				continue // this proposal is already "on the table"
 			}
 			discoveredPeer := peers.DiscoveredPeer{
 				AddrInfo:       proposal,
 				ConnectRetries: 0,
 			}
-			// TODO
 			peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer)
-			//peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer, ttlcache.DefaultTTL)
 
 			n.interfaceLogger.Debug(
 				"discovery proposed peer, adding it to the pool",
@@ -312,19 +309,18 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 		// peersByPriority keeps track of best peers (by their peer score)
 		peersByPriority := lane.NewMaxPriorityQueue[peers.DiscoveredPeer, float64]()
-		// TODO
 		peers.DiscoveredPeersPool.Range(func(key peer.ID, value peers.DiscoveredPeer) bool {
 			const retryLimit = 2
 			if value.ConnectRetries >= retryLimit {
 				// this discovered peer has been tried many times already, we'll ignore him but won't
 				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
 				// peer again (essentially resetting this peer's retry attempts counter to 0)
-				// TODO - comment out ??
+
 				// this log line is commented out as it is too spammy
-				n.interfaceLogger.Debug(
-					"Not gonna propose discovered peer: ran out of retries",
-					zap.String("peer_id", string(key)),
-				)
+				//n.interfaceLogger.Debug(
+				//	"Not gonna propose discovered peer: ran out of retries",
+				//	zap.String("peer_id", string(key)),
+				//)
 				return true
 			}
 			proposalScore := n.peerScore(key)
@@ -334,27 +330,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			peersByPriority.Push(value, proposalScore)
 			return true
 		})
-		//peers.DiscoveredPeersPool.Range(func(item *ttlcache.Item[peer.ID, peers.DiscoveredPeer]) bool {
-		//	const retryLimit = 2
-		//	if item.Value().ConnectRetries >= retryLimit {
-		//		// this discovered peer has been tried many times already, we'll ignore him but won't
-		//		// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
-		//		// peer again (essentially resetting this peer's retry attempts counter to 0)
-		//		// TODO - comment out ??
-		//		// this log line is commented out as it is too spammy
-		//		n.interfaceLogger.Debug(
-		//			"Not gonna propose discovered peer: ran out of retries",
-		//			zap.String("peer_id", string(item.Key())),
-		//		)
-		//		return true
-		//	}
-		//	proposalScore := n.peerScore(item.Key())
-		//	if proposalScore <= 0 {
-		//		return true // we are not interested in this peer at all
-		//	}
-		//	peersByPriority.Push(item.Value(), proposalScore)
-		//	return true
-		//})
 
 		// propose only half as many peers as we have outbound slots available because this
 		// leaves some vacant slots for the next iteration - on the next iteration better
@@ -371,15 +346,10 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				maxScore = priority
 			}
 			// update retry counter for this peer so we eventually skip it after certain number of retries
-			// TODO
 			peers.DiscoveredPeersPool.Set(peerCandidate.ID, peers.DiscoveredPeer{
 				AddrInfo:       peerCandidate.AddrInfo,
 				ConnectRetries: peerCandidate.ConnectRetries + 1,
 			})
-			//peers.DiscoveredPeersPool.Set(peerCandidate.ID, peers.DiscoveredPeer{
-			//	AddrInfo:       peerCandidate.AddrInfo,
-			//	ConnectRetries: peerCandidate.ConnectRetries + 1,
-			//}, ttlcache.DefaultTTL)
 			connector <- peerCandidate.AddrInfo // try to connect to best peer
 		}
 
