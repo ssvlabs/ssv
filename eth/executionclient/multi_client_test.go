@@ -1330,7 +1330,7 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 		return client.streamLogsToChan(context.TODO(), nil, 200)
 	}
 
-	_, err := mc.call(context.Background(), f)
+	_, err := mc.call(context.Background(), f, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "all clients failed")
 }
