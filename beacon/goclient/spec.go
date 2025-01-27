@@ -37,22 +37,15 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	specResponse, err := gc.multiClient.Spec(gc.ctx, &api.SpecOpts{})
 	recordRequestDuration(gc.ctx, "Spec", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Spec"),
-			zap.Error(err),
-		)
+		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
 		return nil, fmt.Errorf("failed to obtain spec response: %w", err)
 	}
 	if specResponse == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "Spec"),
-		)
+		gc.log.Error(clNilResponseErrMsg, zap.String("api", "Spec"))
 		return nil, fmt.Errorf("spec response is nil")
 	}
 	if specResponse.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Spec"),
-		)
+		gc.log.Error(clNilResponseDataErrMsg, zap.String("api", "Spec"))
 		return nil, fmt.Errorf("spec response data is nil")
 	}
 
@@ -154,22 +147,15 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	genesisResponse, err := gc.multiClient.Genesis(gc.ctx, &api.GenesisOpts{})
 	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Genesis"),
-			zap.Error(err),
-		)
+		gc.log.Error(clResponseErrMsg, zap.String("api", "Genesis"), zap.Error(err))
 		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
 	if genesisResponse == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "Genesis"),
-		)
+		gc.log.Error(clNilResponseErrMsg, zap.String("api", "Genesis"))
 		return nil, fmt.Errorf("genesis response is nil")
 	}
 	if genesisResponse.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Genesis"),
-		)
+		gc.log.Error(clNilResponseDataErrMsg, zap.String("api", "Genesis"))
 		return nil, fmt.Errorf("genesis response data is nil")
 	}
 
