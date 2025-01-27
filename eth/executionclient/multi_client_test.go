@@ -100,8 +100,12 @@ func TestMultiClient_assertSameChainIDs(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 
-	require.NoError(t, mc.assertSameChainID(big.NewInt(5)))
-	require.NoError(t, mc.assertSameChainID(big.NewInt(5)))
+	expected, err := mc.assertSameChainID(big.NewInt(5))
+	require.NoError(t, err)
+	require.EqualValues(t, 5, expected.Uint64())
+	expected, err = mc.assertSameChainID(big.NewInt(5))
+	require.NoError(t, err)
+	require.EqualValues(t, 5, expected.Uint64())
 
 	chainID, err := mc.ChainID(context.Background())
 	require.NoError(t, err)
@@ -118,8 +122,12 @@ func TestMultiClient_assertSameChainIDs_Error(t *testing.T) {
 		closed: make(chan struct{}),
 	}
 
-	require.NoError(t, mc.assertSameChainID(big.NewInt(5)))
-	require.Error(t, mc.assertSameChainID(big.NewInt(6)))
+	expected, err := mc.assertSameChainID(big.NewInt(5))
+	require.NoError(t, err)
+	require.EqualValues(t, 5, expected.Uint64())
+	expected, err = mc.assertSameChainID(big.NewInt(6))
+	require.Error(t, err)
+	require.EqualValues(t, 5, expected.Uint64())
 
 	chainID, err := mc.ChainID(context.Background())
 	require.NoError(t, err)
@@ -1142,10 +1150,10 @@ func TestMultiClient_Filterer_Integration(t *testing.T) {
 
 func TestMultiClient_ChainID(t *testing.T) {
 	mc := &MultiClient{
-		chainID: big.NewInt(5),
-		logger:  zap.NewNop(),
-		closed:  make(chan struct{}),
+		logger: zap.NewNop(),
+		closed: make(chan struct{}),
 	}
+	mc.chainID.Store(big.NewInt(5))
 
 	cid, err := mc.ChainID(context.Background())
 	require.NoError(t, err)
@@ -1154,9 +1162,8 @@ func TestMultiClient_ChainID(t *testing.T) {
 
 func TestMultiClient_ChainID_NotSet(t *testing.T) {
 	mc := &MultiClient{
-		chainID: nil,
-		logger:  zap.NewNop(),
-		closed:  make(chan struct{}),
+		logger: zap.NewNop(),
+		closed: make(chan struct{}),
 	}
 
 	cid, err := mc.ChainID(context.Background())

@@ -35,8 +35,7 @@ type MultiClient struct {
 	syncDistanceTolerance       uint64
 
 	contractAddress ethcommon.Address
-	chainIDMu       sync.Mutex
-	chainID         *big.Int
+	chainID         atomic.Pointer[big.Int]
 	closed          chan struct{}
 
 	nodeAddrs          []string
@@ -142,9 +141,9 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		return fmt.Errorf("get chain ID: %w", err)
 	}
 
-	if err := mc.assertSameChainID(chainID); err != nil {
+	if expected, err := mc.assertSameChainID(chainID); err != nil {
 		mc.logger.Fatal("client returned unexpected chain ID",
-			zap.String("observed_chain_id", mc.chainID.String()),
+			zap.String("expected_chain_id", expected.String()),
 			zap.String("checked_chain_id", chainID.String()),
 			zap.String("address", mc.nodeAddrs[clientIndex]),
 			zap.Error(err),
@@ -157,25 +156,21 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 
 // assertSameChainID checks if client has the same chain ID.
 // It sets mc.chainID to the chain ID of the first healthy client encountered.
-func (mc *MultiClient) assertSameChainID(chainID *big.Int) error {
-	mc.chainIDMu.Lock()
-	defer mc.chainIDMu.Unlock()
-
+func (mc *MultiClient) assertSameChainID(chainID *big.Int) (*big.Int, error) {
 	if chainID == nil {
-		return fmt.Errorf("chain ID is nil")
+		return nil, fmt.Errorf("chain ID is nil")
 	}
 
-	if mc.chainID == nil {
-		mc.chainID = chainID
-		return nil
+	if mc.chainID.CompareAndSwap(nil, chainID) {
+		return chainID, nil
 	}
 
-	if mc.chainID.Cmp(chainID) != 0 {
-		return fmt.Errorf("different chain ID, expected %v, got %v",
-			mc.chainID.String(), chainID.String())
+	expected := mc.chainID.Load()
+	if expected.Cmp(chainID) != 0 {
+		return expected, fmt.Errorf("different chain ID, expected %v, got %v", expected.String(), chainID.String())
 	}
 
-	return nil
+	return expected, nil
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
@@ -343,7 +338,7 @@ func (mc *MultiClient) Filterer() (*contract.ContractFilterer, error) {
 }
 
 func (mc *MultiClient) ChainID(_ context.Context) (*big.Int, error) {
-	return mc.chainID, nil
+	return mc.chainID.Load(), nil
 }
 
 func (mc *MultiClient) Close() error {
