@@ -26,20 +26,11 @@ type DiscoveredPeer struct {
 }
 
 var (
-	// TODO - which implementation we should use ?
 	// DiscoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
 	// the best candidates to connect to.
 	DiscoveredPeersPool = ttl.New[peer.ID, DiscoveredPeer](15*time.Minute, 5*time.Minute)
-	//DiscoveredPeersPool = ttlcache.New(ttlcache.WithTTL[peer.ID, DiscoveredPeer](10 * time.Minute))
-	TrimmedRecently = ttl.New[peer.ID, struct{}](30*time.Minute, 5*time.Minute)
-	//TrimmedRecently = ttlcache.New(ttlcache.WithTTL[peer.ID, struct{}](30 * time.Minute))
+	TrimmedRecently     = ttl.New[peer.ID, struct{}](30*time.Minute, 5*time.Minute)
 )
-
-func init() {
-	// TODO - for ttlcache we need to start cleanup go-routines here
-	//go TrimmedRecently.Start()     // start cleanup go-routine
-	//go DiscoveredPeersPool.Start() // start cleanup go-routine
-}
 
 // ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.
 // exposing an abstract interface so we can have the flexibility of doing some stuff manually
@@ -87,8 +78,6 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 			if err := c.disconnect(pid, net); err != nil {
 				logger.Debug("error closing peer", fields.PeerID(pid), zap.Error(err))
 			}
-			// TODO
-			//TrimmedRecently.Set(pid, struct{}{}, ttlcache.DefaultTTL) // record stats
 			TrimmedRecently.Set(pid, struct{}{}) // record stats
 			trimmed = append(trimmed, pid)
 			if len(trimmed) >= maxTrims {
