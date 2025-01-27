@@ -411,12 +411,12 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-			mc.logger.Debug("received graceful closure from client", zap.Error(err))
+			logger.Debug("received graceful closure from client", zap.Error(err))
 			return v, err
 		}
 
 		if err != nil {
-			mc.logger.Error("call failed, trying another client",
+			logger.Error("call failed, trying another client",
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
