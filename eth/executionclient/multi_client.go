@@ -262,7 +262,7 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		p.Go(func(ctx context.Context) error {
 			client, err := mc.getClient(ctx, i)
 			if err != nil {
-				mc.logger.Warn("failed to get client",
+				mc.logger.Warn("client unavailable",
 					zap.String("addr", mc.nodeAddrs[i]),
 					zap.Error(err))
 
@@ -382,7 +382,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		client, err := mc.getClient(ctx, clientIndex)
 		if err != nil {
-			mc.logger.Warn("failed to get client",
+			mc.logger.Warn("client unavailable, switching to next client",
 				zap.String("addr", mc.nodeAddrs[i]),
 				zap.Error(err))
 
