@@ -135,14 +135,14 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 
 	chainID, err := singleClient.ChainID(ctx)
 	if err != nil {
-		mc.logger.Error("failed to get chain ID",
+		logger.Error("failed to get chain ID",
 			zap.String("address", mc.nodeAddrs[clientIndex]),
 			zap.Error(err))
 		return fmt.Errorf("get chain ID: %w", err)
 	}
 
 	if expected, err := mc.assertSameChainID(chainID); err != nil {
-		mc.logger.Fatal("client returned unexpected chain ID",
+		logger.Fatal("client returned unexpected chain ID",
 			zap.String("expected_chain_id", expected.String()),
 			zap.String("checked_chain_id", chainID.String()),
 			zap.String("address", mc.nodeAddrs[clientIndex]),
