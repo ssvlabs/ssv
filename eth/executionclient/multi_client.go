@@ -40,7 +40,7 @@ type MultiClient struct {
 	closed          chan struct{}
 
 	nodeAddrs          []string
-	clientsMu          []sync.Mutex           // each client has own mutex
+	clientsMu          []sync.Mutex           // each client has own mutex, mutex is only locked in getClient and Close (on state transition)
 	clients            []SingleClientProvider // nil if not connected
 	currentClientIndex atomic.Int64
 }
@@ -94,6 +94,21 @@ func NewMulti(
 	}
 
 	return multiClient, nil
+}
+
+// getClient gets a client at index.
+// If it's nil (which means it's not connected), it attempts to connect to it and store connected client instead of nil.
+func (mc *MultiClient) getClient(ctx context.Context, clientIndex int) (SingleClientProvider, error) {
+	mc.clientsMu[clientIndex].Lock()
+	defer mc.clientsMu[clientIndex].Unlock()
+
+	if mc.clients[clientIndex] == nil {
+		if err := mc.connect(ctx, clientIndex); err != nil {
+			return nil, fmt.Errorf("connect: %w", err)
+		}
+	}
+
+	return mc.clients[clientIndex], nil
 }
 
 // connect connects to a client by clientIndex and updates mc.clients[clientIndex] without locks.
@@ -245,21 +260,16 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 	for i := range mc.clients {
 		i := i
 		p.Go(func(ctx context.Context) error {
-			mc.clientsMu[i].Lock()
-			defer mc.clientsMu[i].Unlock()
+			client, err := mc.getClient(ctx, i)
+			if err != nil {
+				mc.logger.Warn("failed to get client",
+					zap.String("addr", mc.nodeAddrs[i]),
+					zap.Error(err))
 
-			if mc.clients[i] == nil {
-				if err := mc.connect(ctx, i); err != nil {
-					mc.logger.Warn("failed to connect to client",
-						zap.String("addr", mc.nodeAddrs[i]),
-						zap.Error(err))
-
-					return err
-				}
+				return err
 			}
 
-			err := mc.clients[i].Healthy(ctx)
-			if err != nil {
+			if err := client.Healthy(ctx); err != nil {
 				mc.logger.Warn("client is not healthy",
 					zap.String("addr", mc.nodeAddrs[i]),
 					zap.Error(err))
@@ -342,18 +352,16 @@ func (mc *MultiClient) Close() error {
 	var multiErr error
 	for i := range mc.clients {
 		mc.clientsMu[i].Lock()
-
-		if mc.clients[i] == nil {
-			mc.clientsMu[i].Unlock()
-			continue
-		}
-		if err := mc.clients[i].Close(); err != nil {
-			mc.logger.Debug("Failed to close client", zap.String("address", mc.nodeAddrs[i]), zap.Error(err))
-			multiErr = errors.Join(multiErr, err)
-		}
+		client := mc.clients[i]
 		mc.clients[i] = nil
-
 		mc.clientsMu[i].Unlock()
+
+		if client != nil {
+			if err := client.Close(); err != nil {
+				mc.logger.Debug("Failed to close client", zap.String("address", mc.nodeAddrs[i]), zap.Error(err))
+				multiErr = errors.Join(multiErr, err)
+			}
+		}
 	}
 
 	return multiErr
@@ -372,23 +380,16 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		clientIndex := (startingIndex + i) % len(mc.clients)
 		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
 
-		mc.clientsMu[i].Lock()
-		client := mc.clients[clientIndex]
-		if client == nil {
-			if err := mc.connect(ctx, i); err != nil {
-				mc.logger.Warn("failed to connect to client",
-					zap.String("addr", mc.nodeAddrs[i]),
-					zap.Error(err))
+		client, err := mc.getClient(ctx, clientIndex)
+		if err != nil {
+			mc.logger.Warn("failed to get client",
+				zap.String("addr", mc.nodeAddrs[i]),
+				zap.Error(err))
 
-				allErrs = errors.Join(allErrs, err)
-				mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
-				mc.clientsMu[i].Unlock()
-				continue
-			}
-
-			client = mc.clients[clientIndex]
+			allErrs = errors.Join(allErrs, err)
+			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
+			continue
 		}
-		mc.clientsMu[i].Unlock()
 
 		logger := mc.logger.With(
 			zap.String("addr", mc.nodeAddrs[clientIndex]),
