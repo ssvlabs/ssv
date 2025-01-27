@@ -298,7 +298,11 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	defer ec.healthyChMu.Unlock()
 
 	if err := ec.healthy(ctx); err != nil {
-		close(ec.healthyCh)
+		select {
+		case <-ec.healthyCh: // already closed
+		default:
+			close(ec.healthyCh)
+		}
 		return fmt.Errorf("unhealthy: %w", err)
 	}
 
