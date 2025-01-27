@@ -106,10 +106,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	switch t.role {
 	case spectypes.RoleCommittee:
 		// third of the slot time
-		baseDuration = t.beaconNetwork.SlotDuration / 3
+		baseDuration = t.beaconNetwork.IntervalDuration()
 	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
 		// two-third of the slot time
-		baseDuration = t.beaconNetwork.SlotDuration / 3 * 2
+		baseDuration = 2 * t.beaconNetwork.IntervalDuration()
 	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
