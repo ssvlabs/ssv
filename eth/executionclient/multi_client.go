@@ -39,7 +39,7 @@ type MultiClient struct {
 	closed          chan struct{}
 
 	nodeAddrs          []string
-	clientsMu          []sync.Mutex           // each client has own mutex, mutex is only locked in getClient and Close (on state transition)
+	clientsMu          []sync.Mutex           // clientsMu allow for lazy initialization of each client in `clients` slice in thread-safe manner (atomically)
 	clients            []SingleClientProvider // nil if not connected
 	currentClientIndex atomic.Int64
 }
