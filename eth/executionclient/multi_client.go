@@ -96,6 +96,8 @@ func NewMulti(
 	return multiClient, nil
 }
 
+// connect connects to a client by clientIndex and updates mc.clients[clientIndex] without locks.
+// Caller must lock mc.clientsMu[clientIndex].
 func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 	// ExecutionClient may call Fatal on unsuccessful reconnection attempt.
 	// Therefore, we need to override its Fatal behavior to avoid crashing.
@@ -134,9 +136,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		)
 	}
 
-	mc.clientsMu[clientIndex].Lock()
 	mc.clients[clientIndex] = singleClient
-	mc.clientsMu[clientIndex].Unlock()
 	return nil
 }
 
