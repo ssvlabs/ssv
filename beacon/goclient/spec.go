@@ -25,9 +25,6 @@ const (
 
 // BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
 func (gc *GoClient) BeaconConfig() networkconfig.Beacon {
-	if gc.beaconConfig == nil {
-		gc.log.Fatal("BeaconConfig must be called after GoClient is initialized (gc.beaconConfig is set)")
-	}
 	return *gc.beaconConfig
 }
 
