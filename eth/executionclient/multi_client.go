@@ -115,7 +115,7 @@ func (mc *MultiClient) getClient(ctx context.Context, clientIndex int) (SingleCl
 func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 	// ExecutionClient may call Fatal on unsuccessful reconnection attempt.
 	// Therefore, we need to override its Fatal behavior to avoid crashing.
-	logger := mc.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop))
+	logger := mc.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop), zap.WithPanicHook(zapcore.WriteThenNoop))
 
 	singleClient, err := New(
 		ctx,
