@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -114,8 +115,7 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
-	genesisMu sync.Mutex
-	genesis   *apiv1.Genesis
+	genesisVersion atomic.Pointer[phase0.Version]
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -280,14 +280,11 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return
 			}
 
-			if err := gc.assertSameGenesis(genesis.Data); err != nil {
-				gc.genesisMu.Lock()
-				defer gc.genesisMu.Unlock()
-
-				gc.log.Fatal("client returned unexpected genesis",
+			if expected, err := gc.assertSameGenesisVersion(genesis.Data.GenesisForkVersion); err != nil {
+				gc.log.Fatal("client returned unexpected genesis fork version, make sure all clients use the same Ethereum network",
 					zap.String("address", s.Address()),
-					zap.Any("client_genesis", genesis.Data),
-					zap.Any("expected_genesis", gc.genesis),
+					zap.Any("client_genesis", genesis.Data.GenesisForkVersion),
+					zap.Any("expected_genesis", expected),
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
@@ -319,40 +316,17 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 // so we decided that it's best to assert that GenesisForkVersion is the same.
 // To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
 // as they should be same too.
-func (gc *GoClient) assertSameGenesis(genesis *apiv1.Genesis) error {
-	gc.genesisMu.Lock()
-	defer gc.genesisMu.Unlock()
-
-	if genesis == nil {
-		return fmt.Errorf("genesis is nil")
+func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
+	if gc.genesisVersion.CompareAndSwap(nil, &genesisVersion) {
+		return genesisVersion, nil
 	}
 
-	if gc.genesis == nil {
-		gc.genesis = genesis
-		return nil
+	expected := *gc.genesisVersion.Load()
+	if expected != genesisVersion {
+		return expected, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected, genesisVersion)
 	}
 
-	if err := sameGenesis(gc.genesis, genesis); err != nil {
-		return fmt.Errorf("different genesis: %w", err)
-	}
-
-	return nil
-}
-
-func sameGenesis(a, b *apiv1.Genesis) error {
-	if !a.GenesisTime.Equal(b.GenesisTime) {
-		return fmt.Errorf("genesis time mismatch, got %v and %v", a.GenesisTime, b.GenesisTime)
-	}
-
-	if a.GenesisValidatorsRoot != b.GenesisValidatorsRoot {
-		return fmt.Errorf("genesis validators root mismatch, got %v and %v", a.GenesisValidatorsRoot, b.GenesisValidatorsRoot)
-	}
-
-	if a.GenesisForkVersion != b.GenesisForkVersion {
-		return fmt.Errorf("genesis fork version mismatch, got %v and %v", a.GenesisForkVersion, b.GenesisForkVersion)
-	}
-
-	return nil
+	return expected, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
