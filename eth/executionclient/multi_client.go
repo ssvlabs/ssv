@@ -348,7 +348,6 @@ func (mc *MultiClient) Close() error {
 	for i := range mc.clients {
 		mc.clientsMu[i].Lock()
 		client := mc.clients[i]
-		mc.clients[i] = nil
 		mc.clientsMu[i].Unlock()
 
 		if client != nil {
