@@ -1,10 +1,10 @@
 package networkconfig
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/sanity-io/litter"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -45,7 +45,7 @@ type NetworkConfig struct {
 }
 
 func (n NetworkConfig) String() string {
-	return fmt.Sprintf("%#v", n)
+	return litter.Sdump(n)
 }
 
 // SlotDuration returns slot duration

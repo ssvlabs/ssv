@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/sanity-io/litter"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -37,7 +38,7 @@ type SSV struct {
 }
 
 func (s SSV) String() string {
-	return fmt.Sprintf("%#v", s)
+	return litter.Sdump(s)
 }
 
 func (s SSV) MarshalYAML() (interface{}, error) {

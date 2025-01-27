@@ -686,7 +686,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSV, error) {
 	}
 
 	logger.Info("setting ssv network",
-		fields.Config(ssvConfig),
+		fields.SSVConfig(ssvConfig),
 		zap.String("node_type", nodeType),
 	)
 

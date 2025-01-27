@@ -1,12 +1,12 @@
 package networkconfig
 
 import (
-	"fmt"
 	"math"
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/sanity-io/litter"
 )
 
 type Beacon struct {
@@ -24,7 +24,7 @@ type Beacon struct {
 }
 
 func (b Beacon) String() string {
-	return fmt.Sprintf("%#v", b)
+	return litter.Sdump(b)
 }
 
 func (b Beacon) GenesisTime() time.Time {

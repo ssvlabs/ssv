@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/sanity-io/litter"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -389,8 +390,8 @@ func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
 }
 
-func Config(val networkconfig.SSV) zap.Field {
-	return zap.String(FieldConfig, fmt.Sprintf("%#v", val))
+func SSVConfig(val networkconfig.SSV) zap.Field {
+	return zap.String(FieldConfig, litter.Sdump(val))
 }
 
 func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
