@@ -33,6 +33,7 @@ require (
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e
 	github.com/prysmaticlabs/prysm/v4 v4.0.8
 	github.com/rs/zerolog v1.32.0
+	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.4.2
@@ -56,8 +57,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.72.0
 )
-
-require github.com/felixge/httpsnoop v1.0.4 // indirect
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
@@ -92,6 +91,7 @@ require (
 	github.com/ethereum/c-kzg-4844 v1.0.0 // indirect
 	github.com/ethereum/go-verkle v0.1.1-0.20240306133620-7d920df305f0 // indirect
 	github.com/fatih/color v1.17.0 // indirect
+	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect

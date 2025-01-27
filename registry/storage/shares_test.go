@@ -52,7 +52,7 @@ func TestValidatorSerializer(t *testing.T) {
 		Key:   validatorShare.ValidatorPubKey[:],
 		Value: b,
 	}
-	v1 := &storageShare{}
+	v1 := &Share{}
 	require.NoError(t, v1.Decode(obj.Value))
 	require.NotNil(t, v1.ValidatorPubKey)
 	require.Equal(t, hex.EncodeToString(v1.ValidatorPubKey[:]), hex.EncodeToString(validatorShare.ValidatorPubKey[:]))
@@ -498,7 +498,7 @@ func requireEqualShares(t *testing.T, expected, actual []*ssvtypes.SSVShare, msg
 	}
 }
 
-func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*storageShare, *bls.SecretKey) {
+func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*Share, *bls.SecretKey) {
 	sk1 := bls.SecretKey{}
 	sk1.SetByCSPRNG()
 
@@ -518,7 +518,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 
 	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(splitKeys)))
 
-	return &storageShare{
+	return &Share{
 		ValidatorIndex:      3,
 		ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 		SharePubKey:         sk2.GetPublicKey().Serialize(),
@@ -606,7 +606,7 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 	}
 }
 
-func generateMaxPossibleShare() (*storageShare, error) {
+func generateMaxPossibleShare() (*Share, error) {
 	threshold.Init()
 
 	sk := &bls.SecretKey{}
