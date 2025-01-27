@@ -97,8 +97,8 @@ func NewMulti(
 }
 
 func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
-	// The underlying client may call Fatal on unsuccessful reconnection attempt.
-	// Therefore, we need to override Fatal's behavior to avoid crashing.
+	// ExecutionClient may call Fatal on unsuccessful reconnection attempt.
+	// Therefore, we need to override its Fatal behavior to avoid crashing.
 	logger := mc.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop))
 
 	singleClient, err := New(
