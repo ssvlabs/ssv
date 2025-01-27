@@ -9,12 +9,11 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
+	"go.uber.org/zap"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
@@ -141,6 +140,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
+
 			return nil
 		}
 
@@ -167,13 +167,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return
 			}
 
-			// Handle the connection without blocking.
+			// Handle the connection (could be either incoming or outgoing) without blocking.
 			go func() {
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
 				if err == nil {
 					if ch.connIdx.AtLimit(conn.Stat().Direction) {
-						err = errors.New("reached peers limit")
+						err = errors.New("reached total connected peers limit")
 					}
 				}
 				if errors.Is(err, ignoredConnection) {
@@ -181,7 +181,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				}
 				if err != nil {
 					disconnect(logger, net, conn)
-					logger.Debug("failed to accept connection", zap.Error(err))
+					logger.Debug("not gonna connect this peer", zap.Error(err))
 					return
 				}
 
@@ -190,6 +190,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
+
+				// if this connection is the one we found through discovery - remove it from DiscoveredPeersPool
+				// so we stop retrying connecting to that same peer (because we aren't interested in duplicate
+				// connections). Note, this is best-effort solution meaning we still might try connecting to this
+				// peer even though we've connected him here - this is because it would be hard to implement the
+				// prevention for this that works atomically.
+				peers.DiscoveredPeersPool.Delete(conn.RemotePeer())
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
