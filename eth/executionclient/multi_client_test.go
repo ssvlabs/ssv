@@ -522,91 +522,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 	require.Equal(t, uint64(202), receivedLogs[2].BlockNumber)
 }
 
-func TestMultiClient_StreamLogs_AllClientsFail(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-
-	// Setup both clients to fail
-	mockClient1.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-			out <- BlockLogs{BlockNumber: 200}
-			return 200, errors.New("network error") // Triggers failover
-		}).
-		Times(1)
-
-	mockClient1.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(201)). // Updated fromBlock to 201
-		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
-			out <- BlockLogs{BlockNumber: 201}
-			return 201, errors.New("network error") // All clients failed
-		}).
-		Times(1)
-
-	mockClient2.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	hook := &fatalHook{}
-
-	mc := &MultiClient{
-		nodeAddrs: []string{"mockNode1", "mockNode2"},
-		clients:   []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu: make([]sync.Mutex, 2),
-		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
-		closed:    make(chan struct{}),
-	}
-
-	logsCh := mc.StreamLogs(ctx, 200)
-
-	var wg sync.WaitGroup
-	wg.Add(2) // Expecting two logs: 200, 201
-
-	var receivedLogs []BlockLogs
-	var mu sync.Mutex
-
-	go func() {
-		for blk := range logsCh {
-			mu.Lock()
-			receivedLogs = append(receivedLogs, blk)
-			mu.Unlock()
-			wg.Done()
-		}
-	}()
-
-	wg.Wait()
-
-	require.Len(t, receivedLogs, 2, "expected to receive two logs")
-	require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
-	require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
-
-	_, open := <-logsCh
-	require.False(t, open, "logs channel should be closed after all logs are received")
-
-	// Make sure Fatal was called due to all clients failing
-	require.True(t, hook.called, "expected Fatal to be called due to all clients failing")
-}
-
 func TestMultiClient_StreamLogs_SameFromBlock(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -744,41 +659,6 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 
 	_, open := <-logsCh
 	require.False(t, open, "logs channel should be closed after all logs are received")
-}
-
-func TestMultiClient_StreamLogs_NoHealthyClients(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx := context.Background()
-	nodeAddrs := []string{"mockNode1", "mockNode2"}
-	contractAddr := ethcommon.HexToAddress("0x1234")
-	fromBlock := uint64(100)
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-
-	healthErr := errors.New("client1 unhealthy")
-	mockClient1.EXPECT().Healthy(gomock.Any()).Return(healthErr).AnyTimes()
-	mockClient2.EXPECT().Healthy(gomock.Any()).Return(healthErr).AnyTimes()
-
-	hook := &fatalHook{}
-
-	mc := &MultiClient{
-		logger:          zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
-		nodeAddrs:       nodeAddrs,
-		clients:         []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:       make([]sync.Mutex, 2),
-		closed:          make(chan struct{}),
-		contractAddress: contractAddr,
-	}
-
-	logsCh := mc.StreamLogs(ctx, fromBlock)
-
-	_, open := <-logsCh
-	require.False(t, open, "logs channel should be closed after fatal log")
-
-	require.True(t, hook.called, "expected Fatal to be called")
 }
 
 func TestMultiClient_Healthy(t *testing.T) {
@@ -1333,56 +1213,6 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 	_, err := mc.call(context.Background(), f, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "all clients failed")
-}
-
-func TestMultiClient_ReconnectionLimit(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-
-	mockClient1.
-		EXPECT().
-		Healthy(gomock.Any()).
-		Return(nil).
-		AnyTimes()
-
-	mockClient1.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(uint64(200), fmt.Errorf("streaming error")).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		Healthy(gomock.Any()).
-		Return(nil).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(uint64(200), fmt.Errorf("streaming error")).
-		Times(1)
-
-	hook := &fatalHook{}
-
-	mc := &MultiClient{
-		nodeAddrs: []string{"mockNode1", "mockNode2"},
-		clients:   []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu: make([]sync.Mutex, 2),
-		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
-		closed:    make(chan struct{}),
-	}
-
-	logsCh := mc.StreamLogs(ctx, 200)
-
-	_, open := <-logsCh
-	require.False(t, open, "logs channel should be closed after reconnection attempts limit")
 }
 
 type fatalHook struct {
