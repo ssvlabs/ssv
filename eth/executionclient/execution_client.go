@@ -442,14 +442,14 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	defer cancel()
 
 	start := time.Now()
-	var err error
-	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
+	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "DialContext"),
 			zap.Error(err))
 		return err
 	}
+	ec.client = client
 
 	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
 	return nil
