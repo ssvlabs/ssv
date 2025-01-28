@@ -101,26 +101,6 @@ func transformToParticipantResponse(role spectypes.BeaconRole, entry qbftstorage
 	return response
 }
 
-type committeeTraceResponse struct {
-	Data []committeeTrace `json:"data"`
-}
-
-type committeeTrace struct {
-	Slot phase0.Slot `json:"slot"`
-}
-
-func toCommitteeTrace(*model.CommitteeDutyTrace) committeeTrace {
-	return committeeTrace{}
-}
-
-func toCommitteeTraceResponse(duties []*model.CommitteeDutyTrace) *committeeTraceResponse {
-	r := &committeeTraceResponse{}
-	for _, t := range duties {
-		r.Data = append(r.Data, toCommitteeTrace(t))
-	}
-	return r
-}
-
 func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
 		From       uint64   `json:"from"`
@@ -185,22 +165,10 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toCommitteeTraceResponse(duties))
 }
 
-type validatorTraceResponse struct {
-	Data []validatorTrace `json:"data"`
-}
-
-type validatorTrace struct {
-	Slot phase0.Slot `json:"slot"`
-}
-
-func toValidatorTrace(*model.ValidatorDutyTrace) validatorTrace {
-	return validatorTrace{}
-}
-
-func toValidatorTraceResponse(duties []*model.ValidatorDutyTrace) *validatorTraceResponse {
-	r := &validatorTraceResponse{}
+func toCommitteeTraceResponse(duties []*model.CommitteeDutyTrace) *committeeTraceResponse {
+	r := new(committeeTraceResponse)
 	for _, t := range duties {
-		r.Data = append(r.Data, toValidatorTrace(t))
+		r.Data = append(r.Data, toCommitteeTrace(t))
 	}
 	return r
 }
@@ -257,4 +225,12 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	return api.Render(w, r, toValidatorTraceResponse(results))
+}
+
+func toValidatorTraceResponse(duties []*model.ValidatorDutyTrace) *validatorTraceResponse {
+	r := new(validatorTraceResponse)
+	for _, t := range duties {
+		r.Data = append(r.Data, toValidatorTrace(t))
+	}
+	return r
 }

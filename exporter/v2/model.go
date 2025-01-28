@@ -5,7 +5,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path . --objs ValidatorDutyTrace,CommitteeDutyTrace
+//go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace
 type ValidatorDutyTrace struct {
 	DutyTrace
 	Pre       []*MessageTrace `ssz-max:"13"`
@@ -51,13 +51,13 @@ type RoundTrace struct {
 
 type RoundChangeTrace struct {
 	MessageTrace
-	preparedRound   uint8
-	PrepareMessages []*MessageTrace `ssz-max:"32"`
+	PreparedRound   uint8
+	PrepareMessages []*MessageTrace `ssz-max:"13"`
 }
 
 type MessageTrace struct {
+	Round        uint8
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
-	Validator    phase0.ValidatorIndex // Only present in CommitteeDutyTrace.Post -> remove
-	ReceivedTime uint64                // TODO fix time
+	ReceivedTime uint64 // TODO fix time
 }
