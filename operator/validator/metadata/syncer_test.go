@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
-	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
+	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, ExitEpoch: phase0.Epoch(math.MaxUint64), Status: eth2apiv1.ValidatorStateActiveOngoing}
 
 	pubKey := spectypes.ValidatorPK{0x1}
 
@@ -443,6 +444,7 @@ func TestSyncer_Stream(t *testing.T) {
 			},
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
 			ActivationEpoch: 0,
+			ExitEpoch:       0,
 			Liquidated:      false,
 		}
 
@@ -476,6 +478,7 @@ func TestSyncer_Stream(t *testing.T) {
 					Index:           1,
 					Status:          eth2apiv1.ValidatorStateActiveOngoing,
 					ActivationEpoch: 0,
+					ExitEpoch:       0,
 				},
 			}
 
