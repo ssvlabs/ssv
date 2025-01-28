@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -116,7 +116,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
-			Status:                    eth2apiv1.ValidatorStateActiveOngoing,
+			Status:                    v1.ValidatorStateActiveOngoing,
 			ActivationEpoch:           passedEpoch,
 			ExitEpoch:                 exitEpoch,
 			Liquidated:                false,
@@ -127,7 +127,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
-			Status:                    eth2apiv1.ValidatorStateActiveOngoing,
+			Status:                    v1.ValidatorStateActiveOngoing,
 			ActivationEpoch:           passedEpoch,
 			ExitEpoch:                 exitEpoch,
 			Liquidated:                false,
@@ -338,7 +338,7 @@ func TestSetupValidators(t *testing.T) {
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 		},
-		Status:                    eth2apiv1.ValidatorStateActiveOngoing,
+		Status:                    v1.ValidatorStateActiveOngoing,
 		ActivationEpoch:           activationEpoch,
 		ExitEpoch:                 exitEpoch,
 		BeaconMetadataLastUpdated: time.Now(),
@@ -365,9 +365,9 @@ func TestSetupValidators(t *testing.T) {
 
 	opStorage.SaveOperatorData(nil, buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 
-	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
+	bcResponse := map[phase0.ValidatorIndex]*v1.Validator{
 		0: {
-			Status: eth2apiv1.ValidatorStateActiveOngoing,
+			Status: v1.ValidatorStateActiveOngoing,
 			Index:  2,
 			Validator: &phase0.Validator{
 				ActivationEpoch: activationEpoch,
@@ -387,7 +387,7 @@ func TestSetupValidators(t *testing.T) {
 		name               string
 		shares             []*types.SSVShare
 		recipientData      *registrystorage.RecipientData
-		bcResponse         map[phase0.ValidatorIndex]*eth2apiv1.Validator
+		bcResponse         map[phase0.ValidatorIndex]*v1.Validator
 		validatorStartFunc func(validator *validator.Validator) (bool, error)
 	}{
 		{
@@ -607,7 +607,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				Status:          v1.ValidatorStateActiveOngoing,
 				ActivationEpoch: activationEpoch,
 				ExitEpoch:       exitEpoch,
 			},
@@ -615,7 +615,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators[1:],
 				},
-				Status: eth2apiv1.ValidatorStatePendingInitialized, // Some other status
+				Status: v1.ValidatorStatePendingInitialized, // Some other status
 			},
 		}
 
@@ -654,7 +654,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -685,7 +685,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: nil,
 				},
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -723,13 +723,13 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status: eth2apiv1.ValidatorStatePendingInitialized,
+				Status: v1.ValidatorStatePendingInitialized,
 			},
 		}
 
