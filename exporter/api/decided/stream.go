@@ -28,6 +28,6 @@ func NewStreamPublisher(domainTypeProvider networkconfig.NetworkConfig, logger *
 		c.SetDefault(key, true)
 
 		logger.Debug("broadcast decided stream", fields.PubKey(msg.PubKey[:]), fields.Slot(msg.Slot))
-		feed.Send(api.NewParticipantsAPIMsg(domainTypeProvider.DomainType, msg))
+		feed.Send(api.NewParticipantsAPIMsg(domainTypeProvider.DomainType(), msg))
 	}
 }

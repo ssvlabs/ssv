@@ -21,6 +21,10 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ekmcore "github.com/ssvlabs/eth2-key-manager/core"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -35,16 +39,12 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 var (
@@ -67,12 +67,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	operatorsCount += uint64(len(ops))
 
 	currentSlot := &utils.SlotValue{}
-	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
-	mockNetworkConfig := &networkconfig.NetworkConfig{
-		Beacon: mockBeaconNetwork,
-	}
 
-	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
+	netCfg := networkconfig.TestingNetworkConfig
+	eh, _, err := setupEventHandler(t, ctx, logger, &netCfg, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -963,14 +960,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-
-		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, currentSlot.GetSlot())
+		require.Equal(t, netCfg.EstimatedCurrentSlot(), highestProposal)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -1013,13 +1009,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, currentSlot.GetSlot())
+		require.Equal(t, netCfg.Beacon.EstimatedCurrentSlot(), highestProposal)
 
 		blockNum++
 	})
@@ -1104,8 +1100,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Greater(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Greater(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Greater(t, highestAttestation.Source.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
@@ -1357,7 +1353,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
+			Beacon: networkconfig.TestingBeaconConfig,
 		}
 	}
 
@@ -1370,7 +1366,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		bc := beacon.NewMockBeaconNode(ctrl)
 		validatorCtrl := mocks.NewMockController(ctrl)
 
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -1386,7 +1381,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
-			bc,
 			WithFullNode(),
 			WithLogger(logger),
 		)
@@ -1399,7 +1393,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
 		NetworkConfig:     *network,
@@ -1424,7 +1417,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
-		bc,
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {

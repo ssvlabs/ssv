@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -31,8 +30,7 @@ type CommitteeObserver struct {
 	msgID                  spectypes.MessageID
 	logger                 *zap.Logger
 	Storage                *storage.ParticipantStores
-	beaconNetwork          beacon.BeaconNetwork
-	networkConfig          networkconfig.NetworkConfig
+	beaconConfig           networkconfig.Beacon
 	ValidatorStore         registrystorage.ValidatorStore
 	newDecidedHandler      qbftcontroller.NewDecidedHandler
 	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
@@ -63,8 +61,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		msgID:                  msgID,
 		logger:                 opts.Logger,
 		Storage:                opts.Storage,
-		beaconNetwork:          opts.NetworkConfig.Beacon,
-		networkConfig:          opts.NetworkConfig,
+		beaconConfig:           opts.NetworkConfig.Beacon,
 		ValidatorStore:         opts.ValidatorStore,
 		newDecidedHandler:      opts.NewDecidedHandler,
 		attesterRoots:          opts.AttesterRoots,
@@ -305,7 +302,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
-	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+	epoch := ncv.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
 	if err := ncv.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
 		return err

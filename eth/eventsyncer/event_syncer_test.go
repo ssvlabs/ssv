@@ -34,7 +34,6 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -152,7 +151,7 @@ func setupEventHandler(
 	privateKey keys.OperatorPrivateKey,
 ) *eventhandler.EventHandler {
 	operatorDataStore := operatordatastore.New(operatorData)
-	testNetworkConfig := networkconfig.TestNetwork
+	testNetworkConfig := networkconfig.TestingNetworkConfig
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {
@@ -162,7 +161,6 @@ func setupEventHandler(
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
 		NetworkConfig:     testNetworkConfig,
@@ -185,7 +183,6 @@ func setupEventHandler(
 		operatorDataStore,
 		privateKey,
 		keyManager,
-		bc,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger))
 

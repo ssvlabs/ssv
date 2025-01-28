@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -32,7 +33,7 @@ type Syncer struct {
 	logger            *zap.Logger
 	shareStorage      shareStorage
 	validatorStore    selfValidatorStore
-	beaconNetwork     beacon.BeaconNetwork
+	beaconConfig      networkconfig.Beacon
 	beaconNode        beacon.BeaconNode
 	fixedSubnets      records.Subnets
 	syncInterval      time.Duration
@@ -54,7 +55,7 @@ func NewSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
-	beaconNetwork beacon.BeaconNetwork,
+	beaconConfig networkconfig.Beacon,
 	beaconNode beacon.BeaconNode,
 	fixedSubnets records.Subnets,
 	opts ...Option,
@@ -63,7 +64,7 @@ func NewSyncer(
 		logger:            logger,
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
-		beaconNetwork:     beaconNetwork,
+		beaconConfig:      beaconConfig,
 		beaconNode:        beaconNode,
 		fixedSubnets:      fixedSubnets,
 		syncInterval:      defaultSyncInterval,
@@ -261,14 +262,14 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 		pubKeys[i] = share.ValidatorPubKey
 	}
 
-	indicesBefore := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
+	indicesBefore := s.allActiveIndices(ctx, s.beaconConfig.EstimatedCurrentEpoch())
 
 	validators, err := s.Sync(ctx, pubKeys)
 	if err != nil {
 		return SyncBatch{}, false, fmt.Errorf("sync: %w", err)
 	}
 
-	indicesAfter := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
+	indicesAfter := s.allActiveIndices(ctx, s.beaconConfig.EstimatedCurrentEpoch())
 
 	update := SyncBatch{
 		IndicesBefore: indicesBefore,

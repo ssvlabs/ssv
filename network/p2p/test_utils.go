@@ -55,7 +55,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestingNetworkConfig, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -180,12 +180,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
 	cfg.MessageValidator = validation.New(
-		networkconfig.TestNetwork,
+		networkconfig.TestingNetworkConfig,
 		nodeStorage.ValidatorStore(),
 		dutyStore,
 		signatureVerifier,
 	)
-	cfg.Network = networkconfig.TestNetwork
+	cfg.Network = networkconfig.TestingNetworkConfig
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
@@ -205,7 +205,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
 		cfg.MessageValidator = validation.New(
-			networkconfig.TestNetwork,
+			networkconfig.TestingNetworkConfig,
 			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,

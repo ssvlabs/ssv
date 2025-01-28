@@ -17,13 +17,15 @@ import (
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
 )
 
 var TestNetwork = networkconfig.NetworkConfig{
-	Beacon:     beacon.NewNetwork(spectypes.BeaconTestNetwork),
-	DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+	Beacon: networkconfig.TestingBeaconConfig,
+	SSV: networkconfig.SSV{
+		DomainType:              spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		TotalEthereumValidators: networkconfig.TestingSSVConfig.TotalEthereumValidators,
+	},
 }
 
 func TestCheckPeer(t *testing.T) {

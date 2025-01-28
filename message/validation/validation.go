@@ -15,13 +15,14 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"go.uber.org/zap"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -32,7 +33,7 @@ type MessageValidator interface {
 
 type messageValidator struct {
 	logger                *zap.Logger
-	netCfg                networkconfig.NetworkConfig
+	netCfg                networkconfig.Interface
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
@@ -50,7 +51,7 @@ type messageValidator struct {
 
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
-	netCfg networkconfig.NetworkConfig,
+	netCfg networkconfig.Interface,
 	validatorStore storage.ValidatorStore,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
@@ -248,7 +249,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is not active
-	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = share.Status.String()
 		return CommitteeInfo{}, e
@@ -278,7 +279,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.SlotsPerEpoch() * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

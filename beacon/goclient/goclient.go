@@ -18,15 +18,11 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/utils/casts"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -108,16 +104,14 @@ type MultiClient interface {
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log         *zap.Logger
-	ctx         context.Context
-	network     beaconprotocol.Network
-	clients     []Client
-	multiClient MultiClient
+	log          *zap.Logger
+	ctx          context.Context
+	beaconConfig *networkconfig.Beacon // using pointer to make sure it's fetched
+	clients      []Client
+	multiClient  MultiClient
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
-
-	operatorDataStore operatordatastore.OperatorDataStore
 
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
@@ -139,11 +133,9 @@ type GoClient struct {
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
-	operatorDataStore operatordatastore.OperatorDataStore,
-	slotTickerProvider slotticker.Provider,
+	opt Options,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
 
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
@@ -217,24 +209,29 @@ func New(
 	client := &GoClient{
 		log:                   logger,
 		ctx:                   opt.Context,
-		network:               opt.Network,
 		clients:               consensusClients,
 		multiClient:           consensusClient,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
-		operatorDataStore:     operatorDataStore,
 		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		attestationDataCache: ttlcache.New(
-			// we only fetch attestation data during the slot of the relevant duty (and never later),
-			// hence caching it for 2 slots is sufficient
-			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
-		),
-		commonTimeout: commonTimeout,
-		longTimeout:   longTimeout,
+		commonTimeout:         commonTimeout,
+		longTimeout:           longTimeout,
 	}
 
 	client.nodeSyncingFn = client.nodeSyncing
 
-	go client.registrationSubmitter(slotTickerProvider)
+	beaconConfig, err := client.fetchBeaconConfig()
+	if err != nil {
+		return nil, fmt.Errorf("fetch spec config: %w", err)
+	}
+
+	client.beaconConfig = beaconConfig
+
+	client.attestationDataCache = ttlcache.New(
+		// we only fetch attestation data during the slot of the relevant duty (and never later),
+		// hence caching it for 2 slots is sufficient
+		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * beaconConfig.SlotDuration),
+	)
+
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
@@ -355,19 +352,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
 
 	return nil
-}
-
-// GetBeaconNetwork returns the beacon network the node is on
-func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return gc.network.BeaconNetwork
-}
-
-// SlotStartTime returns the start time in terms of its unix epoch
-// value.
-func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * casts.DurationFromUint64(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
-	startTime := time.Unix(gc.network.MinGenesisTime(), 0).Add(duration)
-	return startTime
 }
 
 func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {

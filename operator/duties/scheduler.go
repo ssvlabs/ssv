@@ -17,7 +17,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
@@ -25,7 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 //go:generate mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -77,7 +75,7 @@ type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconNode          BeaconNode
 	ExecutionClient     ExecutionClient
-	Network             networkconfig.NetworkConfig
+	Network             networkconfig.Interface
 	ValidatorProvider   ValidatorProvider
 	ValidatorController ValidatorController
 	DutyExecutor        DutyExecutor
@@ -91,7 +89,7 @@ type SchedulerOptions struct {
 type Scheduler struct {
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
+	network             networkconfig.Interface
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
@@ -255,8 +253,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
+			delay := s.network.IntervalDuration() /* a third of the slot duration */
+			finalTime := s.network.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 
 			if waitDuration > 0 {
@@ -282,12 +280,12 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		var zeroRoot phase0.Root
 
 		data := event.Data.(*eth2apiv1.HeadEvent)
-		if data.Slot != s.network.Beacon.EstimatedCurrentSlot() {
+		if data.Slot != s.network.EstimatedCurrentSlot() {
 			return
 		}
 
 		// check for reorg
-		epoch := s.network.Beacon.EstimatedEpochAtSlot(data.Slot)
+		epoch := s.network.EstimatedEpochAtSlot(data.Slot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, data.Slot, data.Slot%32+1)
 		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
@@ -340,8 +338,8 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		s.currentDutyDependentRoot = data.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(data.Slot).Add(delay)
+		delay := s.network.IntervalDuration()
+		slotStartTimeWithDelay := s.network.GetSlotStartTime(data.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
@@ -362,7 +360,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.network.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
@@ -382,10 +380,10 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
-		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+		dutyEpoch := s.network.EstimatedEpochAtSlot(duty.Slot)
 		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
 
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.network.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
@@ -403,27 +401,27 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Va
 	return logger.
 		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.network.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
+		With(fields.Epoch(s.network.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+		With(fields.StartTimeUnixMilli(s.network.GetSlotStartTime(duty.Slot)))
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
-	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+	dutyEpoch := s.network.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
 	return logger.
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).
-		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.network.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+		With(fields.StartTimeUnixMilli(s.network.GetSlotStartTime(duty.Slot)))
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
