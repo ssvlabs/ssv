@@ -113,7 +113,9 @@ func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topic
 				median = subnetPeerCounts[len(subnetPeerCounts)/2]
 				max = subnetPeerCounts[len(subnetPeerCounts)-1]
 			}
-			logger.Debug("topic peers distribution",
+			logger.Debug(
+				"topic peers distribution",
+				zap.Int("subnets_subscribed_total", len(ctrl.Topics())),
 				zap.Int("min", min),
 				zap.Int("median", median),
 				zap.Int("max", max),
