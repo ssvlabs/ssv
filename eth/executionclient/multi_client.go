@@ -429,6 +429,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			continue
 		}
 
+		logger.Debug("call succeeded")
 		// Update currentClientIndex to the successful client.
 		mc.currentClientIndex.Store(int64(clientIndex))
 		return v, nil
