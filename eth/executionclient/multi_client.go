@@ -3,7 +3,6 @@ package executionclient
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -193,7 +192,7 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 		return nil, nil
 	}
 
-	_, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs"), f, false)
+	_, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs"), f, len(mc.clients))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -234,7 +233,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					return nil, nil
 				}
 
-				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, true)
+				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
 				if err != nil && !errors.Is(err, ErrClosed) && !errors.Is(err, context.Canceled) {
 					// NOTE: There are unit tests that trigger Fatal and override its behavior.
 					// Therefore, the code must call `return` afterward.
@@ -289,7 +288,7 @@ func (mc *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) 
 	f := func(client SingleClientProvider) (any, error) {
 		return client.BlockByNumber(ctx, blockNumber)
 	}
-	res, err := mc.call(contextWithMethod(ctx, "BlockByNumber"), f, false)
+	res, err := mc.call(contextWithMethod(ctx, "BlockByNumber"), f, len(mc.clients))
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +301,7 @@ func (mc *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int)
 	f := func(client SingleClientProvider) (any, error) {
 		return client.HeaderByNumber(ctx, blockNumber)
 	}
-	res, err := mc.call(contextWithMethod(ctx, "HeaderByNumber"), f, false)
+	res, err := mc.call(contextWithMethod(ctx, "HeaderByNumber"), f, len(mc.clients))
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +313,7 @@ func (mc *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.Filte
 	f := func(client SingleClientProvider) (any, error) {
 		return client.SubscribeFilterLogs(ctx, q, ch)
 	}
-	res, err := mc.call(contextWithMethod(ctx, "SubscribeFilterLogs"), f, false)
+	res, err := mc.call(contextWithMethod(ctx, "SubscribeFilterLogs"), f, len(mc.clients))
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +325,7 @@ func (mc *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) (
 	f := func(client SingleClientProvider) (any, error) {
 		return client.FilterLogs(ctx, q)
 	}
-	res, err := mc.call(contextWithMethod(ctx, "FilterLogs"), f, false)
+	res, err := mc.call(contextWithMethod(ctx, "FilterLogs"), f, len(mc.clients))
 	if err != nil {
 		return nil, err
 	}
@@ -363,11 +362,16 @@ func (mc *MultiClient) Close() error {
 }
 
 // call calls f for all clients until it succeeds.
-// If forever is false, it tries all clients only once and if no client is available then it returns an error.
-// If forever is true, it iterates clients forever.
-// It's used in StreamLogs because it's called once per the node lifetime,
-// and it's possible that clients go up and down several times, therefore there's no limit.
-func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error), forever bool) (any, error) {
+//
+// If there's only one client, call just calls f for it. The maxTries parameter is ignored in this case.
+// If forever is not 0, it tries all clients in a round-robin logic until the limit is hit,
+// and if no client is available then it returns an error.
+// If maxTries is 0, it iterates clients forever.
+//
+// It must be called with maxTries == 0 from StreamLogs because StreamLogs is called once per the node lifetime,
+// and it's possible that clients go up and down several times, therefore there should be no limit.
+// It must be called with maxTries != 0 from other methods to return an error if all nodes are down.
+func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error), maxTries int) (any, error) {
 	if len(mc.clients) == 1 {
 		return f(mc.clients[0]) // no need for mutex because one client is always non-nil
 	}
@@ -376,11 +380,8 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	// starting from the most likely healthy client (currentClientIndex).
 	startingIndex := int(mc.currentClientIndex.Load())
 	var allErrs error
-	limit := len(mc.clients)
-	if forever {
-		limit = math.MaxInt32
-	}
-	for i := 0; i < limit; i++ {
+	// Iterate maxTries times if maxTries != 0. Iterate forever if maxTries == 0
+	for i := 0; (maxTries == 0) || (i < maxTries); i++ {
 		clientIndex := (startingIndex + i) % len(mc.clients)
 		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
 
