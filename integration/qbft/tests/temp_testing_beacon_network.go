@@ -58,7 +58,7 @@ func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(registration *ap
 func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
 	return bn.Bn.SubmitVoluntaryExit(voluntaryExit)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*spectypes.VersionedAttestationResponse) error {
+func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
 	return bn.Bn.SubmitAttestations(attestations)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {

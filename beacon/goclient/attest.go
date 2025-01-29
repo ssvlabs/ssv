@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
@@ -98,9 +96,9 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 }
 
 // SubmitAttestations implements Beacon interface
-func (gc *GoClient) SubmitAttestations(attestations []*spectypes.VersionedAttestationResponse) error {
+func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
 	start := time.Now()
-	err := gc.multiClient.SubmitAttestations(gc.ctx, attestations)
+	err := gc.multiClient.SubmitAttestations(gc.ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
 	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,

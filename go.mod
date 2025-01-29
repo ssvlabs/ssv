@@ -4,7 +4,7 @@ go 1.22.6
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.23.1-0.20250123113554-ea64849115de // electra branch TODO point to release
+	github.com/attestantio/go-eth2-client v0.23.1-0.20250127133620-39cd237a54a9 // electra branch TODO point to release
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -251,4 +251,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/ssvlabs/ssv-spec => github.com/MFrancoLink/ssv-spec v0.0.0-20250129062739-bbac672888cc
+replace github.com/ssvlabs/ssv-spec => github.com/MFrancoLink/ssv-spec v0.0.0-20250129133819-31b03ac9635f

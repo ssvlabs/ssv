@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -343,7 +344,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	var anyErr error
-	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spectypes.VersionedAttestationResponse)
+	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
 	// Get unique roots to avoid repetition
@@ -428,9 +429,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				syncCommitteeMessagesToSubmit[validator] = syncMsg
 
 			} else if role == spectypes.BNRoleAttester {
-				att := sszObject.(*spectypes.VersionedAttestationResponse)
+				att := sszObject.(*spec.VersionedAttestation)
 				// Insert signature
-				err := att.WithSignature(specSig)
+				att, err = specssv.VersionedAttestationWithSignature(att, specSig)
 				if err != nil {
 					anyErr = errors.Wrap(err, "could not insert signature in versioned attestation")
 					continue
@@ -447,7 +448,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	logger = logger.With(fields.PostConsensusTime(cr.measurements.PostConsensusTime()))
 
 	// Submit multiple attestations
-	attestations := make([]*spectypes.VersionedAttestationResponse, 0, len(attestationsToSubmit))
+	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
 	for _, att := range attestationsToSubmit {
 		attestations = append(attestations, att)
 	}
@@ -472,7 +473,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				spectypes.BNRoleAttester)
 		}
 
-		attData, err := attestations[0].AttestationData()
+		attData, err := attestations[0].Data()
 		if err != nil {
 			return errors.Wrap(err, "could not get attestation data")
 			// TODO return error?
@@ -619,11 +620,11 @@ func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot,
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *zap.Logger) (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot, error error,
+	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, error error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
-	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot)
+	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
 	duty := cr.BaseRunner.State.StartingDuty
 	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
@@ -648,7 +649,11 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			// Attestation object
 			dataVersion := cr.beacon.DataVersion(cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(validatorDuty.Slot))
 			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion)
-			attestationResponse := spectypes.ConstrusctVersionedAttestationResponseWithoutSignature(attestationData, dataVersion, validatorDuty)
+			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
+			if err != nil {
+				logger.Debug("failed to construct attestation", zap.Error(err))
+				continue
+			}
 
 			// Root
 			domain, err := cr.GetBeaconNode().DomainData(epoch, spectypes.DomainAttester)
@@ -666,7 +671,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			// Add to map
 			attestationMap[validatorDuty.ValidatorIndex] = root
 			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]ssz.HashRoot)
+				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
 			}
 			beaconObjects[validatorDuty.ValidatorIndex][root] = attestationResponse
 		case spectypes.BNRoleSyncCommittee:
@@ -694,7 +699,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			// Set root and beacon object
 			syncCommitteeMap[validatorDuty.ValidatorIndex] = root
 			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]ssz.HashRoot)
+				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
 			}
 			beaconObjects[validatorDuty.ValidatorIndex][root] = syncMsg
 		default:

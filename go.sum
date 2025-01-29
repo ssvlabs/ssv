@@ -16,8 +16,8 @@ github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c h1:pxW6RcqyfI9/k
 github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/DataDog/zstd v1.5.2 h1:vUG4lAyuPCXO0TLbXvPv7EB7cNK1QV/luu55UHLrrn8=
 github.com/DataDog/zstd v1.5.2/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
-github.com/MFrancoLink/ssv-spec v0.0.0-20250129062739-bbac672888cc h1:lLoBXSEuSFqY4Fl1d9rjA2+LzhIurBZGn1V/u7Shb1M=
-github.com/MFrancoLink/ssv-spec v0.0.0-20250129062739-bbac672888cc/go.mod h1:roRwQCC7vkMi5kh5ij9C3YkKbqz4qqza4PGFs16fO80=
+github.com/MFrancoLink/ssv-spec v0.0.0-20250129133819-31b03ac9635f h1:lmyzWJPx+Ml8NcyHNuxuOSSlGAZvSJh1LSk2p2ZfNYs=
+github.com/MFrancoLink/ssv-spec v0.0.0-20250129133819-31b03ac9635f/go.mod h1:xLCvAOp5KepwtL2dtJ5IDEHMGgWf71sA5qGJ5wfRXKs=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/Shopify/sarama v1.26.1/go.mod h1:NbSGBSSndYaIhRcBtY9V0U7AyH+x71bG668AuWys/yU=
@@ -40,8 +40,8 @@ github.com/aristanetworks/glog v0.0.0-20191112221043-67e8567f59f3/go.mod h1:KASm
 github.com/aristanetworks/goarista v0.0.0-20200805130819-fd197cf57d96 h1:XJH0YfVFKbq782tlNThzN/Ud5qm/cx6LXOA/P6RkTxc=
 github.com/aristanetworks/goarista v0.0.0-20200805130819-fd197cf57d96/go.mod h1:QZe5Yh80Hp1b6JxQdpfSEEe8X7hTyTEZSosSrFf/oJE=
 github.com/aristanetworks/splunk-hec-go v0.3.3/go.mod h1:1VHO9r17b0K7WmOlLb9nTk/2YanvOEnLMUgsFrxBROc=
-github.com/attestantio/go-eth2-client v0.23.1-0.20250123113554-ea64849115de h1:HGO+Gg7Xy5z7yz+cgLquM3FddLA3Y2ubDYdrwonj2W0=
-github.com/attestantio/go-eth2-client v0.23.1-0.20250123113554-ea64849115de/go.mod h1:vy5jU/uDZ2+RcVzq5BfnG+bQ3/6uu9DGwCrGsPtjJ1A=
+github.com/attestantio/go-eth2-client v0.23.1-0.20250127133620-39cd237a54a9 h1:0GjrZ5f9JwgeXUA8t0iFSBSnQn8CwHl2KMm79CcFprM=
+github.com/attestantio/go-eth2-client v0.23.1-0.20250127133620-39cd237a54a9/go.mod h1:vy5jU/uDZ2+RcVzq5BfnG+bQ3/6uu9DGwCrGsPtjJ1A=
 github.com/bazelbuild/rules_go v0.23.2 h1:Wxu7JjqnF78cKZbsBsARLSXx/jlGaSLCnUV3mTlyHvM=
 github.com/bazelbuild/rules_go v0.23.2/go.mod h1:MC23Dc/wkXEyk3Wpq6lCqz0ZAYOZDw2DR5y3N1q2i7M=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
