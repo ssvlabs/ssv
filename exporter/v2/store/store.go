@@ -192,7 +192,7 @@ func (s *DutyTraceStore) makeCommiteeOperatorPrefixes(ii []spectypes.OperatorID,
 		prefix := make([]byte, 0, len(commiteeOperatorIndexKey)+4+32)
 		prefix = append(prefix, []byte(commiteeOperatorIndexKey)...)
 		prefix = append(prefix, slotToByteSlice(slot)...)
-		prefix = append(prefix, uInt64ToByteSlice(uint64(index))...)
+		prefix = append(prefix, uInt64ToByteSlice(index)...)
 		keys = append(keys, prefix)
 	}
 

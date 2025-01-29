@@ -113,9 +113,7 @@ func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	var indexes []spectypes.OperatorID
-	for _, id := range request.OperatorID {
-		indexes = append(indexes, spectypes.OperatorID(id))
-	}
+	indexes = append(indexes, request.OperatorID...)
 
 	var duties []*model.CommitteeDutyTrace
 	for s := request.From; s <= request.To; s++ {
