@@ -14,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -39,11 +41,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -185,6 +185,12 @@ type controller struct {
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
+
+	tracer DutyTracer
+}
+
+type DutyTracer interface {
+	Trace(*queue.SSVMessage)
 }
 
 // NewController creates a new validator controller instance
@@ -229,7 +235,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
+	inMem := NewTracer(logger)
+
 	ctrl := controller{
+		tracer:            inMem,
 		logger:            logger.Named(logging.NameController),
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
@@ -361,6 +370,8 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
+
+	c.tracer.Trace(ssvMsg)
 
 	item := c.getNonCommitteeValidators(ssvMsg.GetID())
 	if item == nil {
@@ -774,7 +785,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.SSVShare = share
 		opts.Operator = operator
 
-		committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
+		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
 
 		logger := c.logger.With([]zap.Field{
 			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
