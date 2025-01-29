@@ -158,7 +158,7 @@ func New(
 	}
 
 	client := &GoClient{
-		log:                   logger,
+		log:                   logger.Named("consensus_client"),
 		ctx:                   opt.Context,
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
