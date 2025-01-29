@@ -412,8 +412,6 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			continue
 		}
 
-		logger.Debug("calling client")
-
 		v, err := f(client)
 		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 			logger.Debug("received graceful closure from client", zap.Error(err))
@@ -430,7 +428,6 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			continue
 		}
 
-		logger.Debug("call succeeded")
 		// Update currentClientIndex to the successful client.
 		mc.currentClientIndex.Store(int64(clientIndex))
 		return v, nil
