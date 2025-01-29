@@ -364,7 +364,7 @@ func (mc *MultiClient) Close() error {
 // call calls f for all clients until it succeeds.
 //
 // If there's only one client, call just calls f for it. The maxTries parameter is ignored in this case.
-// If forever is not 0, it tries all clients in a round-robin logic until the limit is hit,
+// If maxTries is not 0, it tries all clients in a round-robin logic until the limit is hit,
 // and if no client is available then it returns an error.
 // If maxTries is 0, it iterates clients forever.
 //
