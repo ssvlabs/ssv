@@ -57,7 +57,7 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 	require.Equal(t, phase0.Slot(2), trace.Slot)
 	require.Equal(t, phase0.ValidatorIndex(39393), trace.Validator)
 
-	trace, err = store.GetValidatorDuty(types.BNRoleAttester, phase0.Slot(3), phase0.ValidatorIndex(39393))
+	_, err = store.GetValidatorDuty(types.BNRoleAttester, phase0.Slot(3), phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
 	traces, err := store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(1))

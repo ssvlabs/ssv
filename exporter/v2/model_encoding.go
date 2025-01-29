@@ -656,7 +656,7 @@ func (c *CommitteeMessageTrace) UnmarshalSSZ(buf []byte) error {
 			c.Validators[ii] = phase0.ValidatorIndex(val)
 		}
 	}
-	
+
 	return err
 }
 
