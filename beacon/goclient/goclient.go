@@ -18,6 +18,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
@@ -113,6 +114,7 @@ type GoClient struct {
 	network     beaconprotocol.Network
 	clients     []Client
 	multiClient MultiClient
+	specssv.VersionCalls
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -131,6 +133,9 @@ type GoClient struct {
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
 	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+
+	// versionDataCache helps reuse recently fetched version data.
+	versionDataCache *ttlcache.Cache[phase0.Epoch, *spec.DataVersion]
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
@@ -228,6 +233,9 @@ func New(
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
+		versionDataCache: ttlcache.New(
+			ttlcache.WithTTL[phase0.Epoch, *spec.DataVersion](64 * opt.Network.SlotDurationSec()),
+		),
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
 	}
@@ -237,6 +245,7 @@ func New(
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
+	go client.versionDataCache.Start()
 
 	return client, nil
 }

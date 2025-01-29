@@ -8,6 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"go.uber.org/zap"
@@ -29,7 +30,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
 	}
 
-	attData, _, err := gc.GetAttestationData(slot, committeeIndex)
+	attData, _, err := gc.GetAttestationData(slot)
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
@@ -69,17 +70,26 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
 
+	if aggDataResp.Data.Version == spec.DataVersionElectra {
+		return &electra.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Electra,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	}
+
 	return &phase0.AggregateAndProof{
 		AggregatorIndex: index,
-		Aggregate:       aggDataResp.Data,
+		Aggregate:       aggDataResp.Data.Deneb,
 		SelectionProof:  selectionProof,
-	}, spec.DataVersionPhase0, nil
+	}, aggDataResp.Data.Version, nil
 }
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
-func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
+func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *spec.VersionedSignedAggregateAndProof) error {
 	start := time.Now()
-	err := gc.multiClient.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
+
+	err := gc.multiClient.SubmitAggregateAttestations(gc.ctx, &api.SubmitAggregateAttestationsOpts{SignedAggregateAndProofs: []*spec.VersionedSignedAggregateAndProof{msg}})
 	recordRequestDuration(gc.ctx, "SubmitAggregateAttestations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	return err
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -696,9 +697,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	//// Get error when receiving a message with over 13 partial signatures
 	t.Run("partial message too big", func(t *testing.T) {
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
+		// slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 		for i := 0; i < 1512; i++ {
 			msg.Messages = append(msg.Messages, msg.Messages[0])
 		}
@@ -739,7 +739,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)))
+		msg := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)))
 		msg.OperatorIDs = []spectypes.OperatorID{0}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
@@ -754,7 +754,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1))
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb))
 		ssvMessage.MsgID = committeeIdentifier
 		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 		partialSigSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
@@ -774,7 +774,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 		messages.Messages = nil
 		ssvMessage := spectestingutils.SSVMsgAggregator(nil, messages)
 		ssvMessage.MsgID = committeeIdentifier
@@ -792,7 +792,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)))
+		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)))
 		partialSigSSVMessage.Signatures = [][]byte{{1}}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
@@ -830,7 +830,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 						validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 
-						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)
+						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 						messages.Type = msgType
 
 						encodedMessages, err := messages.Encode()
@@ -863,7 +863,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("invalid message type", func(t *testing.T) {
 			validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 
-			messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)
+			messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 			messages.Type = math.MaxUint64
 
 			encodedMessages, err := messages.Encode()
@@ -909,7 +909,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 						validator := New(netCfg, validatorStore, ds, signatureVerifier).(*messageValidator)
 
-						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)
+						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 						messages.Type = msgType
 
 						encodedMessages, err := messages.Encode()
@@ -1643,7 +1643,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1))
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb))
 		ssvMessage.MsgID = committeeIdentifier
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 		signedSSVMessage.FullData = []byte{1}
@@ -1660,7 +1660,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1))
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb))
 		ssvMessage.MsgID = committeeIdentifier
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2}
@@ -1678,7 +1678,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 		for i := 0; i < 12; i++ {
 			messages.Messages = append(messages.Messages, messages.Messages[0])
 		}
@@ -1706,7 +1706,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 		for i := 0; i < 3; i++ {
 			messages.Messages = append(messages.Messages, messages.Messages[0])
 		}
@@ -1734,7 +1734,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionDeneb)
 		messages.Messages[0].ValidatorIndex = math.MaxUint64
 
 		data, err := messages.Encode()
