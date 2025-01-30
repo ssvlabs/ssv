@@ -73,7 +73,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	switch aggDataResp.Data.Version {
 	case spec.DataVersionElectra:
 		if aggDataResp.Data.Electra == nil {
-			gc.log.Error(clNilResponseDataErrMsg,
+			gc.log.Error(clNilResponseForkDataErrMsg,
 				zap.String("api", "AggregateAttestation"),
 			)
 			return nil, DataVersionNil, fmt.Errorf("aggregate attestation electra data is nil")
@@ -85,7 +85,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		}, aggDataResp.Data.Version, nil
 	case spec.DataVersionDeneb:
 		if aggDataResp.Data.Deneb == nil {
-			gc.log.Error(clNilResponseDataErrMsg,
+			gc.log.Error(clNilResponseForkDataErrMsg,
 				zap.String("api", "AggregateAttestation"),
 			)
 			return nil, DataVersionNil, fmt.Errorf("aggregate attestation deneb data is nil")
@@ -97,7 +97,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		}, aggDataResp.Data.Version, nil
 	case spec.DataVersionCapella:
 		if aggDataResp.Data.Capella == nil {
-			gc.log.Error(clNilResponseDataErrMsg,
+			gc.log.Error(clNilResponseForkDataErrMsg,
 				zap.String("api", "AggregateAttestation"),
 			)
 			return nil, DataVersionNil, fmt.Errorf("aggregate attestation capella data is nil")
@@ -109,7 +109,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		}, aggDataResp.Data.Version, nil
 	case spec.DataVersionBellatrix:
 		if aggDataResp.Data.Bellatrix == nil {
-			gc.log.Error(clNilResponseDataErrMsg,
+			gc.log.Error(clNilResponseForkDataErrMsg,
 				zap.String("api", "AggregateAttestation"),
 			)
 			return nil, DataVersionNil, fmt.Errorf("aggregate attestation bellatrix data is nil")
@@ -121,7 +121,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		}, aggDataResp.Data.Version, nil
 	case spec.DataVersionAltair:
 		if aggDataResp.Data.Altair == nil {
-			gc.log.Error(clNilResponseDataErrMsg,
+			gc.log.Error(clNilResponseForkDataErrMsg,
 				zap.String("api", "AggregateAttestation"),
 			)
 			return nil, DataVersionNil, fmt.Errorf("aggregate attestation altair data is nil")
@@ -133,7 +133,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		}, aggDataResp.Data.Version, nil
 	default:
 		if aggDataResp.Data.Phase0 == nil {
-			gc.log.Error(clNilResponseDataErrMsg,
+			gc.log.Error(clNilResponseForkDataErrMsg,
 				zap.String("api", "AggregateAttestation"),
 			)
 			return nil, DataVersionNil, fmt.Errorf("aggregate attestation phase0 data is nil")

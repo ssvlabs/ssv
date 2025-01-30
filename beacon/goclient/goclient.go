@@ -39,9 +39,10 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
-	clResponseErrMsg        = "Consensus client returned an error"
-	clNilResponseErrMsg     = "Consensus client returned a nil response"
-	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
+	clResponseErrMsg            = "Consensus client returned an error"
+	clNilResponseErrMsg         = "Consensus client returned a nil response"
+	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
+	clNilResponseForkDataErrMsg = "Consensus client returned a nil response fork data"
 )
 
 // NodeClient is the type of the Beacon node.
