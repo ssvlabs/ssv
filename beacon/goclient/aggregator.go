@@ -70,19 +70,44 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
 
-	if aggDataResp.Data.Version == spec.DataVersionElectra {
+	switch aggDataResp.Data.Version {
+	case spec.DataVersionElectra:
 		return &electra.AggregateAndProof{
 			AggregatorIndex: index,
 			Aggregate:       aggDataResp.Data.Electra,
 			SelectionProof:  selectionProof,
 		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionDeneb:
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Deneb,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionCapella:
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Capella,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionBellatrix:
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Bellatrix,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionAltair:
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Altair,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	default:
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Phase0,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
 	}
-
-	return &phase0.AggregateAndProof{
-		AggregatorIndex: index,
-		Aggregate:       aggDataResp.Data.Deneb,
-		SelectionProof:  selectionProof,
-	}, aggDataResp.Data.Version, nil
 }
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
