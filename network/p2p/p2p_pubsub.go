@@ -14,7 +14,6 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/network/records"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"go.uber.org/zap"
@@ -77,7 +76,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.fixedSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
+	n.fixedSubnets, _ = commons.Subnets{}.FromString(commons.AllSubnets)
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
@@ -92,14 +91,14 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if numSubnets > commons.Subnets() {
-		numSubnets = commons.Subnets()
+	if numSubnets > commons.SubnetsCount {
+		numSubnets = commons.SubnetsCount
 	}
 
 	var randomSubnets []int
 	for {
 		// pick random subnets
-		randomSubnets = rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets()) // #nosec G404
+		randomSubnets = rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.SubnetsCount) // #nosec G404
 		randomSubnets = randomSubnets[:numSubnets]
 		// check if any of subnets we've generated in this random set is already being used by us
 		randSubnetAlreadyInUse := false
@@ -124,7 +123,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	}
 
 	// Update the subnets slice.
-	subnets := make([]byte, commons.Subnets())
+	subnets := make([]byte, commons.SubnetsCount)
 	copy(subnets, n.fixedSubnets)
 	for _, subnet := range randomSubnets {
 		subnets[subnet] = byte(1)
@@ -137,7 +136,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 // SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets and the active committees/validators.
 func (n *p2pNetwork) SubscribedSubnets() []byte {
 	// Compute the new subnets according to the active committees/validators.
-	updatedSubnets := make([]byte, commons.Subnets())
+	updatedSubnets := make([]byte, commons.SubnetsCount)
 	copy(updatedSubnets, n.fixedSubnets)
 
 	n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
@@ -155,7 +154,7 @@ func (n *p2pNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	actv := records.Subnets(n.SubscribedSubnets()).Active()
+	actv := commons.Subnets(n.SubscribedSubnets()).Active()
 
 	if actv < MinConnectivitySubnets {
 		// Subscribe to random subnets.

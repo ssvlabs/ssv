@@ -122,8 +122,9 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
-
-	opts = commons.AddOptions(opts)
+	opts = append(opts, libp2p.Ping(true))
+	opts = append(opts, libp2p.EnableNATService())
+	opts = append(opts, libp2p.AutoNATServiceRateLimit(15, 3, 1*time.Minute))
 
 	return opts, nil
 }

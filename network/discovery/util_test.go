@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/commons"
 	"net"
 	"sync"
 	"testing"
@@ -59,7 +60,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	allSubs, _ := commons.Subnets{}.FromString(commons.AllSubnets)
 	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
 	connectionIndex := NewMockConnection()
 

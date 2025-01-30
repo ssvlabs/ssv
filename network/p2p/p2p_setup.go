@@ -92,14 +92,14 @@ func (n *p2pNetwork) initCfg() error {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
 	}
 	if len(n.cfg.Subnets) > 0 {
-		s := make(records.Subnets, 0)
+		s := make(p2pcommons.Subnets, 0)
 		subnets, err := s.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
 		n.fixedSubnets = subnets
 	} else {
-		n.fixedSubnets = make(records.Subnets, p2pcommons.Subnets())
+		n.fixedSubnets = make(p2pcommons.Subnets, p2pcommons.SubnetsCount)
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
@@ -190,13 +190,13 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     records.Subnets(n.fixedSubnets).String(),
+		Subnets:     p2pcommons.Subnets(n.fixedSubnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute, peers.NewGossipScoreIndex())
+	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.SubnetsCount, 10*time.Minute, peers.NewGossipScoreIndex())
 	logger.Debug("peers index is ready")
 
 	var ids identify.IDService
@@ -242,11 +242,11 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) ActiveSubnets() records.Subnets {
+func (n *p2pNetwork) ActiveSubnets() p2pcommons.Subnets {
 	return n.activeSubnets
 }
 
-func (n *p2pNetwork) FixedSubnets() records.Subnets {
+func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
 	return n.fixedSubnets
 }
 

@@ -2,13 +2,13 @@ package peers
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/network/commons"
 	"time"
 
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/utils/ttl"
 	"go.uber.org/zap"
 )
@@ -41,7 +41,7 @@ type ConnManager interface {
 	// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 	DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwork.Network, allPeers []peer.ID) int
 	// DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
-	DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int
+	DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets commons.Subnets) int
 }
 
 // connManager implements ConnManager
@@ -109,11 +109,11 @@ func (c connManager) DisconnectFromBadPeers(logger *zap.Logger, net libp2pnetwor
 }
 
 // DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
-func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets records.Subnets) int {
+func (c connManager) DisconnectFromIrrelevantPeers(logger *zap.Logger, disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets commons.Subnets) int {
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
-		sharedSubnets := records.SharedSubnets(mySubnets, peerSubnets, 0)
+		sharedSubnets := commons.SharedSubnets(mySubnets, peerSubnets, 0)
 
 		// If there's no common subnet, disconnect from peer.
 		if len(sharedSubnets) == 0 {

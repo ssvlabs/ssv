@@ -113,7 +113,7 @@ func TestCheckPeer(t *testing.T) {
 	}
 
 	// Run the tests.
-	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
+	subnetIndex := peers.NewSubnetsIndex(commons.SubnetsCount)
 	dvs := &DiscV5Service{
 		ctx:           ctx,
 		conns:         &mock.MockConnectionIndex{LimitValue: false},
@@ -146,7 +146,7 @@ type checkPeerTest struct {
 }
 
 func mockSubnets(active ...int) []byte {
-	subnets := make([]byte, commons.Subnets())
+	subnets := make([]byte, commons.SubnetsCount)
 	for _, subnet := range active {
 		subnets[subnet] = 1
 	}

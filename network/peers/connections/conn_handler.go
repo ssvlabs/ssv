@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/network/commons"
 	"sync"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
 )
 
@@ -231,10 +231,10 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 
 	logger = logger.With(fields.Subnets(subnets), zap.String("my_subnets", mySubnets.String()))
 
-	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets
+	if mySubnets.String() == commons.ZeroSubnets { // this node has no subnets
 		return true
 	}
-	shared := records.SharedSubnets(mySubnets, subnets, 1)
+	shared := commons.SharedSubnets(mySubnets, subnets, 1)
 	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
 	return len(shared) == 1

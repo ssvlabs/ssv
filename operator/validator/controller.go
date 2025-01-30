@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/commons"
 	"sync"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
@@ -138,8 +138,8 @@ type P2PNetwork interface {
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	SubscribeFillerSubnets(logger *zap.Logger) error
-	ActiveSubnets() records.Subnets
-	FixedSubnets() records.Subnets
+	ActiveSubnets() commons.Subnets
+	FixedSubnets() commons.Subnets
 }
 
 // controller implements Controller

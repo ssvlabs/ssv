@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"encoding/hex"
+	"github.com/ssvlabs/ssv/network/commons"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -29,7 +30,7 @@ var errConsumingMessage = errors.New("error consuming message")
 type HandshakeFilter func(senderID peer.ID, sni *records.NodeInfo) error
 
 // SubnetsProvider returns the subnets of or node
-type SubnetsProvider func() records.Subnets
+type SubnetsProvider func() commons.Subnets
 
 // Handshaker is the interface for handshaking with peers.
 // it uses node info protocol to exchange information with other nodes and decide whether we want to connect.
@@ -197,7 +198,7 @@ func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
 	if ni.Metadata != nil {
-		subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
+		subnets, err := commons.Subnets{}.FromString(ni.Metadata.Subnets)
 		if err == nil {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {
