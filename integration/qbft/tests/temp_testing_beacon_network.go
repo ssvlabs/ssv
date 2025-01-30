@@ -31,6 +31,9 @@ func (bn *TestingBeaconNodeWrapped) GetBeaconNode() *spectestingutils.TestingBea
 func (bn *TestingBeaconNodeWrapped) GetAttestationData(slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	return bn.Bn.GetAttestationData(slot)
 }
+func (bn *TestingBeaconNodeWrapped) DataVersion(epoch phase0.Epoch) spec.DataVersion {
+	return bn.Bn.DataVersion(epoch)
+}
 func (bn *TestingBeaconNodeWrapped) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return bn.Bn.DomainData(epoch, domain)
 }
