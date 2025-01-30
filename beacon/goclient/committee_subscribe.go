@@ -11,16 +11,21 @@ import (
 
 // SubmitBeaconCommitteeSubscriptions is implementation for subscribing committee to subnet (p2p topic)
 func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error {
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitBeaconCommitteeSubscriptions"),
+		zap.String("client_addr", clientAddress))
+
 	start := time.Now()
 	err := gc.multiClient.SubmitBeaconCommitteeSubscriptions(ctx, subscription)
-	recordRequestDuration(gc.ctx, "SubmitBeaconCommitteeSubscriptions", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(gc.ctx, "SubmitBeaconCommitteeSubscriptions", clientAddress, http.MethodPost, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "SubmitBeaconCommitteeSubscriptions"),
-			zap.Error(err),
-		)
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
 	}
-	return err
+
+	logger.Debug("consensus client submitted beacon committee subscriptions")
+	return nil
 }
 
 // SubmitSyncCommitteeSubscriptions is implementation for subscribing sync committee to subnet (p2p topic)
