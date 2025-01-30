@@ -416,7 +416,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		client, err := mc.getClient(ctx, clientIndex)
 		if err != nil {
-			mc.logger.Warn("client unavailable, switching to next client",
+			mc.logger.Warn("client unavailable, switching to the next client",
 				zap.String("addr", mc.nodeAddrs[i]),
 				zap.Error(err))
 
@@ -432,7 +432,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		// Make sure this client is healthy. This shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
-			logger.Warn("client is not healthy, switching to next client",
+			logger.Warn("client is not healthy, switching to the next client",
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
@@ -448,7 +448,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		}
 
 		if err != nil {
-			logger.Error("call failed, trying another client",
+			logger.Error("call failed, switching to the next client",
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
