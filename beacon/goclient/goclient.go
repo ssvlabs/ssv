@@ -134,11 +134,14 @@ type GoClient struct {
 	// data regardless of the requested committeeIndex.
 	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
 
-	// versionDataCache helps reuse recently fetched version data.
-	versionDataCache *ttlcache.Cache[phase0.Epoch, *spec.DataVersion]
-
 	commonTimeout time.Duration
 	longTimeout   time.Duration
+
+	ForkEpochElectra   phase0.Epoch
+	ForkEpochDeneb     phase0.Epoch
+	ForkEpochCapella   phase0.Epoch
+	ForkEpochBellatrix phase0.Epoch
+	ForkEpochAltair    phase0.Epoch
 }
 
 // New init new client and go-client instance
@@ -233,11 +236,13 @@ func New(
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		versionDataCache: ttlcache.New(
-			ttlcache.WithTTL[phase0.Epoch, *spec.DataVersion](64 * opt.Network.SlotDurationSec()),
-		),
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
+	}
+
+	// Get the fork epochs.
+	if err := fetchStaticValues(client); err != nil {
+		return nil, fmt.Errorf("fetch static values: %w", err)
 	}
 
 	client.nodeSyncingFn = client.nodeSyncing
@@ -245,7 +250,6 @@ func New(
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
-	go client.versionDataCache.Start()
 
 	return client, nil
 }

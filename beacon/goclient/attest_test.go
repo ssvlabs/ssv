@@ -58,7 +58,12 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 					"SYNC_COMMITTEE_SUBNET_COUNT": "4",
 					"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
 					"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
-					"INTERVALS_PER_SLOT": "3"
+					"INTERVALS_PER_SLOT": "3",
+					"ALTAIR_FORK_EPOCH": "74240",
+					"BELLATRIX_FORK_EPOCH": "144896",
+					"CAPELLA_FORK_EPOCH": "194048",
+					"DENEB_FORK_EPOCH": "269568",
+					"ELECTRA_FORK_EPOCH": "18446744073709551615"
 				  }
 				}`),
 				"/eth/v1/beacon/genesis": []byte(`{
