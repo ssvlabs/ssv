@@ -67,7 +67,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.13.0 // indirect
-	github.com/cockroachdb/errors v1.11.3 // indirect
+	github.com/cockroachdb/errors v1.11.3
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/pebble v1.1.1 // indirect
@@ -250,3 +250,9 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
+
+// github.com/attestantio/go-eth2-client considers node as synced if is_syncing is false,
+// however, it's been observed that it may take up to around 50 slots until is_syncing becomes true,
+// which causes downtime.
+// Using a fix from https://github.com/nkryuchkov/go-eth2-client/commits/fix-multi-rotation-v0.21.7/
+replace github.com/attestantio/go-eth2-client => github.com/nkryuchkov/go-eth2-client v0.0.0-20250128220448-69c1f6bda599

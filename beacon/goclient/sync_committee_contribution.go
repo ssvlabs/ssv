@@ -125,16 +125,21 @@ func (gc *GoClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitSyncCommitteeContributions"),
+		zap.String("client_addr", clientAddress))
+
 	start := time.Now()
 	err := gc.multiClient.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
-	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeContributions", clientAddress, http.MethodPost, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "SubmitSyncCommitteeContributions"),
-			zap.Error(err),
-		)
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
 	}
-	return err
+
+	logger.Debug("consensus client submitted signed contribution and proof")
+	return nil
 }
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)

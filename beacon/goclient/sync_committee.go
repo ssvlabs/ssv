@@ -73,14 +73,19 @@ func (gc *GoClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 
 // SubmitSyncMessages submits a signed sync committee msg
 func (gc *GoClient) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitSyncCommitteeMessages"),
+		zap.String("client_addr", clientAddress))
+
 	reqStart := time.Now()
 	err := gc.multiClient.SubmitSyncCommitteeMessages(gc.ctx, msgs)
-	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeMessages", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+	recordRequestDuration(gc.ctx, "SubmitSyncCommitteeMessages", clientAddress, http.MethodPost, time.Since(reqStart), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "SubmitSyncCommitteeMessages"),
-			zap.Error(err),
-		)
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
 	}
-	return err
+
+	logger.Debug("consensus client submitted sync messages")
+	return nil
 }

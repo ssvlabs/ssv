@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -49,7 +48,6 @@ var _ Provider = &ExecutionClient{}
 
 var (
 	ErrClosed        = fmt.Errorf("closed")
-	ErrUnhealthy     = fmt.Errorf("unhealthy")
 	ErrNotConnected  = fmt.Errorf("not connected")
 	ErrBadInput      = fmt.Errorf("bad input")
 	ErrNothingToSync = errors.New("nothing to sync")
@@ -81,8 +79,6 @@ type ExecutionClient struct {
 	client         *ethclient.Client
 	closed         chan struct{}
 	lastSyncedTime atomic.Int64
-	healthyChMu    sync.Mutex
-	healthyCh      chan struct{}
 }
 
 // New creates a new instance of ExecutionClient.
@@ -98,7 +94,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
-		healthyCh:                   make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -246,8 +241,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				return
 			case <-ec.closed:
 				return
-			case <-ec.healthyCh:
-				return
 			default:
 				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
@@ -294,22 +287,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 
-	ec.healthyChMu.Lock()
-	defer ec.healthyChMu.Unlock()
-
-	if err := ec.healthy(ctx); err != nil {
-		close(ec.healthyCh)
-		return fmt.Errorf("unhealthy: %w", err)
-	}
-
-	// Reset the healthyCh channel if it was closed.
-	select {
-	case <-ec.healthyCh:
-	default:
-		ec.healthyCh = make(chan struct{})
-	}
-
-	return nil
+	return ec.healthy(ctx)
 }
 
 func (ec *ExecutionClient) healthy(ctx context.Context) error {
@@ -441,9 +419,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case <-ec.healthyCh:
-			return fromBlock, ErrUnhealthy
-
 		case err := <-sub.Err():
 			if err == nil {
 				return fromBlock, ErrClosed
@@ -482,14 +457,14 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	defer cancel()
 
 	start := time.Now()
-	var err error
-	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
+	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "DialContext"),
 			zap.Error(err))
 		return err
 	}
+	ec.client = client
 
 	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
 	return nil
