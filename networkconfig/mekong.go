@@ -10,7 +10,7 @@ import (
 var Mekong = NetworkConfig{
 	Name: "mekong",
 	// Beacon:               beacon.NewNetwork(spectypes.MekongNetwork),
-	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x2}, // TODO
+	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x1}, // TODO
 	GenesisEpoch:         1,
 	RegistrySyncOffset:   new(big.Int).SetInt64(181612),                // TODO
 	RegistryContractAddr: "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA", // TODO
