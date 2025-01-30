@@ -59,7 +59,7 @@ type Metadata struct {
 	Liquidated     bool
 }
 
-func storageShareGOBToSpecShare(share *storageShareGOB) (*types.SSVShare, error) {
+func storageShareGOBToDomainShare(share *storageShareGOB) (*types.SSVShare, error) {
 	committee := make([]*spectypes.ShareMember, len(share.Committee))
 	for i, c := range share.Committee {
 		committee[i] = &spectypes.ShareMember{
@@ -75,7 +75,7 @@ func storageShareGOBToSpecShare(share *storageShareGOB) (*types.SSVShare, error)
 	var validatorPubKey spectypes.ValidatorPK
 	copy(validatorPubKey[:], share.ValidatorPubKey)
 
-	specShare := &types.SSVShare{
+	domainShare := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorPubKey:     validatorPubKey,
 			SharePubKey:         share.SharePubKey,
@@ -89,10 +89,10 @@ func storageShareGOBToSpecShare(share *storageShareGOB) (*types.SSVShare, error)
 	}
 
 	if share.BeaconMetadata != nil {
-		specShare.ValidatorIndex = share.BeaconMetadata.Index
-		specShare.Status = share.BeaconMetadata.Status
-		specShare.ActivationEpoch = share.BeaconMetadata.ActivationEpoch
+		domainShare.ValidatorIndex = share.BeaconMetadata.Index
+		domainShare.Status = share.BeaconMetadata.Status
+		domainShare.ActivationEpoch = share.BeaconMetadata.ActivationEpoch
 	}
 
-	return specShare, nil
+	return domainShare, nil
 }
