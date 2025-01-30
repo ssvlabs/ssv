@@ -18,6 +18,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
@@ -38,9 +39,10 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
-	clResponseErrMsg        = "Consensus client returned an error"
-	clNilResponseErrMsg     = "Consensus client returned a nil response"
-	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
+	clResponseErrMsg            = "Consensus client returned an error"
+	clNilResponseErrMsg         = "Consensus client returned a nil response"
+	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
+	clNilResponseForkDataErrMsg = "Consensus client returned a nil response fork data"
 )
 
 // NodeClient is the type of the Beacon node.
@@ -113,6 +115,7 @@ type GoClient struct {
 	network     beaconprotocol.Network
 	clients     []Client
 	multiClient MultiClient
+	specssv.VersionCalls
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -134,6 +137,12 @@ type GoClient struct {
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
+
+	ForkEpochElectra   phase0.Epoch
+	ForkEpochDeneb     phase0.Epoch
+	ForkEpochCapella   phase0.Epoch
+	ForkEpochBellatrix phase0.Epoch
+	ForkEpochAltair    phase0.Epoch
 }
 
 // New init new client and go-client instance
@@ -230,6 +239,11 @@ func New(
 		),
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
+	}
+
+	// Get the fork epochs.
+	if err := fetchStaticValues(client); err != nil {
+		return nil, fmt.Errorf("fetch static values: %w", err)
 	}
 
 	client.nodeSyncingFn = client.nodeSyncing

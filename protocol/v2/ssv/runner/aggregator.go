@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -150,13 +152,13 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	decidedValue := encDecidedValue.(*spectypes.ValidatorConsensusData)
 
-	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
+	_, aggregateAndProofHashRoot, err := decidedValue.GetAggregateAndProof()
 	if err != nil {
 		return errors.Wrap(err, "could not get aggregate and proof")
 	}
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), aggregateAndProof, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
+	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), aggregateAndProofHashRoot, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
@@ -228,14 +230,14 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if err != nil {
 			return errors.Wrap(err, "could not create consensus data")
 		}
-		aggregateAndProof, err := cd.GetAggregateAndProof()
+		aggregateAndProof, _, err := cd.GetAggregateAndProof()
 		if err != nil {
 			return errors.Wrap(err, "could not get aggregate and proof")
 		}
 
-		msg := &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof,
-			Signature: specSig,
+		msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
+		if err != nil {
+			return errors.Wrap(err, "could not construct versioned aggregate and proof")
 		}
 
 		start := time.Now()
@@ -277,12 +279,12 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 	if err != nil {
 		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
 	}
-	aggregateAndProof, err := cd.GetAggregateAndProof()
+	_, hashRoot, err := cd.GetAggregateAndProof()
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get aggregate and proof")
 	}
 
-	return []ssz.HashRoot{aggregateAndProof}, spectypes.DomainAggregateAndProof, nil
+	return []ssz.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
 }
 
 // executeDuty steps:
@@ -390,5 +392,49 @@ func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 		return [32]byte{}, errors.Wrap(err, "could not encode AggregatorRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
+	return ret, nil
+}
+
+// Constructs a VersionedSignedAggregateAndProof from a VersionedAggregateAndProof and a signature
+func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedAggregateAndProof, signature phase0.BLSSignature) (*spec.VersionedSignedAggregateAndProof, error) {
+	ret := &spec.VersionedSignedAggregateAndProof{
+		Version: aggregateAndProof.Version,
+	}
+
+	switch ret.Version {
+	case spec.DataVersionPhase0:
+		ret.Phase0 = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Phase0,
+			Signature: signature,
+		}
+	case spec.DataVersionAltair:
+		ret.Altair = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Altair,
+			Signature: signature,
+		}
+	case spec.DataVersionBellatrix:
+		ret.Bellatrix = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Bellatrix,
+			Signature: signature,
+		}
+	case spec.DataVersionCapella:
+		ret.Capella = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Capella,
+			Signature: signature,
+		}
+	case spec.DataVersionDeneb:
+		ret.Deneb = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Deneb,
+			Signature: signature,
+		}
+	case spec.DataVersionElectra:
+		ret.Electra = &electra.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Electra,
+			Signature: signature,
+		}
+	default:
+		return nil, errors.New("unknown version for signed aggregate and proof")
+	}
+
 	return ret, nil
 }
