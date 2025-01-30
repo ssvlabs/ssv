@@ -3,6 +3,7 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ssvlabs/ssv/network/commons"
 	"net"
 	"net/url"
 	"strconv"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
-	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/utils/format"
@@ -161,7 +161,7 @@ func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
 	return zap.Stringer(FieldUpdatedENRLocalNode, val.Node())
 }
 
-func Subnets(val records.Subnets) zapcore.Field {
+func Subnets(val commons.Subnets) zapcore.Field {
 	return zap.Stringer(FieldSubnets, val)
 }
 

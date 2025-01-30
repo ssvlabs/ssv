@@ -588,7 +588,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(time.Second)
-	registeredSubnets := make([]byte, commons.Subnets())
+	registeredSubnets := make([]byte, commons.SubnetsCount)
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
@@ -621,7 +621,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = records.Subnets(n.activeSubnets).String()
+			self.Metadata.Subnets = commons.Subnets(n.activeSubnets).String()
 			return self
 		})
 
@@ -658,8 +658,8 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
 		}
 
-		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		subnetsList := records.SharedSubnets(allSubs, n.activeSubnets, 0)
+		allSubs, _ := commons.Subnets{}.FromString(commons.AllSubnets)
+		subnetsList := commons.SharedSubnets(allSubs, n.activeSubnets, 0)
 		logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),
@@ -716,12 +716,12 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 }
 
 // peerScore calculates a score for peerID based on how valuable this peer's contribution
-// to us is based on each subnet contribution he offers to us (as calculated by score func).
+// to us assessing each subnet-contribution he makes (as estimated by score func).
 func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 	result := 0.0
 
 	peerSubnets := n.idx.GetPeerSubnets(peerID)
-	sharedSubnets := records.SharedSubnets(n.activeSubnets, peerSubnets, 0)
+	sharedSubnets := commons.SharedSubnets(n.activeSubnets, peerSubnets, 0)
 	for _, subnet := range sharedSubnets {
 		result += n.score(peerID, subnet)
 	}
@@ -730,7 +730,7 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 }
 
 // score assesses how valuable the contribution of peerID to specified subnet is by calculating
-// "how valuable this peer would have been if we didn't have him, but then connected with".
+// how valuable this peer would have been if we didn't have him, but then connected with.
 func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
 	filterOutPeer := func(peerID peer.ID, peerIDs []peer.ID) []peer.ID {
 		if len(peerIDs) == 0 {

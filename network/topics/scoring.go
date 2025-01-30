@@ -208,7 +208,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts := params.NewSubnetTopicOpts(totalValidators, commons.Subnets(), topicCommittees)
+		opts := params.NewSubnetTopicOpts(totalValidators, commons.SubnetsCount, topicCommittees)
 
 		// Generate topic parameters
 		tp, err := params.TopicParams(opts)

@@ -1,17 +1,16 @@
 package peers
 
 import (
+	"github.com/ssvlabs/ssv/network/commons"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-
-	"github.com/ssvlabs/ssv/network/records"
 )
 
 // subnetsIndex implements SubnetsIndex
 type subnetsIndex struct {
 	subnets     [][]peer.ID
-	peerSubnets map[peer.ID]records.Subnets
+	peerSubnets map[peer.ID]commons.Subnets
 
 	lock *sync.RWMutex
 }
@@ -19,12 +18,12 @@ type subnetsIndex struct {
 func NewSubnetsIndex(count int) SubnetsIndex {
 	return &subnetsIndex{
 		subnets:     make([][]peer.ID, count),
-		peerSubnets: map[peer.ID]records.Subnets{},
+		peerSubnets: map[peer.ID]commons.Subnets{},
 		lock:        &sync.RWMutex{},
 	}
 }
 
-func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
+func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s commons.Subnets) bool {
 	si.lock.Lock()
 	defer si.lock.Unlock()
 
@@ -32,7 +31,7 @@ func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
 	if !ok {
 		existing = make([]byte, 0)
 	}
-	diff := records.DiffSubnets(existing, s)
+	diff := commons.DiffSubnets(existing, s)
 	if len(diff) == 0 {
 		return false
 	}
@@ -104,7 +103,7 @@ func (si *subnetsIndex) GetSubnetsStats() *SubnetsStats {
 	return stats
 }
 
-func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
+func (si *subnetsIndex) GetPeerSubnets(id peer.ID) commons.Subnets {
 	si.lock.RLock()
 	defer si.lock.RUnlock()
 
@@ -112,7 +111,7 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 	if !ok {
 		return nil
 	}
-	cp := make(records.Subnets, len(subnets))
+	cp := make(commons.Subnets, len(subnets))
 	copy(cp, subnets)
 	return cp
 }
@@ -120,11 +119,11 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 // GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
 // subnets with low peer count would get higher score, and overloaded subnets gets a lower score (possibly negative).
 // Subnets in which the node doesn't participate receive a score of 0.
-func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets records.Subnets, topicMaxPeers int) []float64 {
+func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets commons.Subnets, topicMaxPeers int) []float64 {
 	const activeSubnetBoost = 0.2
 
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	activeSubnets := records.SharedSubnets(allSubs, mySubnets, 0)
+	allSubs, _ := commons.Subnets{}.FromString(commons.AllSubnets)
+	activeSubnets := commons.SharedSubnets(allSubs, mySubnets, 0)
 
 	scores := make([]float64, len(allSubs))
 	for _, s := range activeSubnets {

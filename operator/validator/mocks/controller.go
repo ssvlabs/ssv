@@ -17,7 +17,7 @@ import (
 	common "github.com/ethereum/go-ethereum/common"
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
-	records "github.com/ssvlabs/ssv/network/records"
+	commons "github.com/ssvlabs/ssv/network/commons"
 	duties "github.com/ssvlabs/ssv/operator/duties"
 	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -398,10 +398,10 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 }
 
 // ActiveSubnets mocks base method.
-func (m *MockP2PNetwork) ActiveSubnets() records.Subnets {
+func (m *MockP2PNetwork) ActiveSubnets() commons.Subnets {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ActiveSubnets")
-	ret0, _ := ret[0].(records.Subnets)
+	ret0, _ := ret[0].(commons.Subnets)
 	return ret0
 }
 
@@ -425,6 +425,20 @@ func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
 }
 
+// FixedSubnets mocks base method.
+func (m *MockP2PNetwork) FixedSubnets() commons.Subnets {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FixedSubnets")
+	ret0, _ := ret[0].(commons.Subnets)
+	return ret0
+}
+
+// FixedSubnets indicates an expected call of FixedSubnets.
+func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FixedSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).FixedSubnets))
+}
+
 // SubscribeFillerSubnets mocks base method.
 func (m *MockP2PNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
 	m.ctrl.T.Helper()
@@ -437,20 +451,6 @@ func (m *MockP2PNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
 func (mr *MockP2PNetworkMockRecorder) SubscribeFillerSubnets(logger any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeFillerSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeFillerSubnets), logger)
-}
-
-// FixedSubnets mocks base method.
-func (m *MockP2PNetwork) FixedSubnets() records.Subnets {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FixedSubnets")
-	ret0, _ := ret[0].(records.Subnets)
-	return ret0
-}
-
-// FixedSubnets indicates an expected call of FixedSubnets.
-func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FixedSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).FixedSubnets))
 }
 
 // SubscribeRandoms mocks base method.

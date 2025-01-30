@@ -2,6 +2,7 @@ package records
 
 import (
 	crand "crypto/rand"
+	"github.com/ssvlabs/ssv/network/commons"
 	"reflect"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			Subnets:       AllSubnets,
+			Subnets:       commons.AllSubnets,
 		},
 	}
 
@@ -40,7 +41,7 @@ func TestNodeInfo_Marshal_Unmarshal(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			Subnets:       AllSubnets,
+			Subnets:       commons.AllSubnets,
 		},
 	}
 

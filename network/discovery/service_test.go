@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/network/commons"
 	"testing"
 	"time"
 
@@ -280,7 +281,7 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs.conns.(*MockConnection).SetAtLimit(false)
 
 	// Valid peer but no common subnet
-	subnets := make([]byte, len(records.ZeroSubnets))
+	subnets := make([]byte, len(commons.ZeroSubnets))
 	subnets[10] = 1
 	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
