@@ -192,10 +192,11 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				logger.Debug("peer connected")
 
 				// if this connection is the one we found through discovery - remove it from DiscoveredPeersPool
-				// so we stop retrying connecting to that same peer (because we aren't interested in duplicate
-				// connections). Note, this is best-effort solution meaning we still might try connecting to this
-				// peer even though we've connected him here - this is because it would be hard to implement the
-				// prevention for this that works atomically.
+				// so we won't be retrying connecting that same peer again until discovery stumbles upon it again
+				// (discovery also filters out peers we are already connected to, meaning it should re-discover
+				// that same peer only after we'll disconnect him). Note, this is best-effort solution meaning
+				// we still might try connecting to this peer even though we've connected him here - this is
+				// because it would be hard to implement the prevention for this that works atomically
 				peers.DiscoveredPeersPool.Delete(conn.RemotePeer())
 			}()
 		},
