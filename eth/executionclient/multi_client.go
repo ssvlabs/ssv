@@ -21,6 +21,35 @@ import (
 
 var _ Provider = &MultiClient{}
 
+// MultiClient wraps several execution clients and uses the current available one.
+//
+// There are several scenarios of node outage:
+//
+// 1) SSV node uses EL1, EL2, CL1, CL2; CL1 uses only EL1, CL2 uses only EL2. EL1 becomes unavailable.
+//
+// The execution client MultiClient switches to EL2, consensus multi client (another package) remains on CL1.
+// CL1 remains available and responds to requests but its syncing distance increases until EL1 is up.
+// The consensus multi client cannot determine that it's unhealthy until the sync distance reaches SyncDistanceTolerance,
+// but when it does, it switches to CL2 and then SSV node uses EL2 and CL2.
+// This case usually causes duty misses approximately for duration of SyncDistanceTolerance.
+//
+// 2) SSV node uses EL1, EL2, CL1, CL2; CL1 uses EL1 and other available ELs, CL2 uses any available EL.
+// EL1 becomes unavailable.
+//
+// The execution MultiClient switches to EL2, the consensus multi client remains on CL1,
+// which should switch its execution client from EL1 to an available one.
+// Possible duty misses up to SyncDistanceTolerance duration
+//
+// 3) SSV node uses EL1, EL2, CL1, CL2; CL1 uses any available EL, CL2 uses any available EL.
+// EL1 becomes unavailable.
+//
+// The execution MultiClient switches to EL2, the consensus multi client remains on CL1,
+// which should remain working. This shouldn't cause significant duty misses.
+//
+// 4) SSV node uses EL1, EL2, CL1, CL2; CL1 uses only EL1, CL2 uses only EL2. EL1 and CL1 become unavailable.
+//
+// The execution MultiClient switches to EL2, the consensus multi client switches to CL2,
+// This shouldn't cause significant duty misses.
 type MultiClient struct {
 	// optional
 	logger *zap.Logger
