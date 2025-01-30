@@ -26,7 +26,8 @@ type Controller interface {
 	Subscribe(logger *zap.Logger, name string) error
 	// Unsubscribe unsubscribes from the given topic
 	Unsubscribe(logger *zap.Logger, topicName string, hard bool) error
-	// Peers returns a list of peers we are connected to in the given topic.
+	// Peers returns a list of peers we are connected to in the given topic, if topicName
+	// param is an empty string it returns a list of all peers we are connected to.
 	Peers(topicName string) ([]peer.ID, error)
 	// Topics lists all topics this node is subscribed to
 	Topics() []string
