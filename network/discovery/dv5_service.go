@@ -166,7 +166,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	return nil
 }
 
-var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
+var zeroSubnets, _ = commons.Subnets{}.FromString(commons.ZeroSubnets)
 
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
@@ -332,7 +332,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64)
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), subnets, nil)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, subnets, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
@@ -351,7 +351,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint6
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), nil, subnets)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, nil, subnets)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
