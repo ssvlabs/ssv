@@ -362,7 +362,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 
 		// prepare a pool of peers we'll be choosing best-synergy-peers from
-		peersToProposePool := make([]peers.DiscoveredPeer, 0, peersToProposePoolCnt)
+		peersToProposePoolDesc := make([]peers.DiscoveredPeer, 0, peersToProposePoolCnt)
 		minScore, maxScore := math.MaxFloat64, 0.0 // used for printing debugging info
 		for i := 0; i < peersToProposePoolCnt; i++ {
 			peerCandidate, priority, _ := peersByPriority.Pop()
@@ -372,7 +372,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			if maxScore < priority {
 				maxScore = priority
 			}
-			peersToProposePool = append(peersToProposePool, peerCandidate)
+			peersToProposePoolDesc = append(peersToProposePoolDesc, peerCandidate)
 		}
 
 		// SubnetSum represents a sum of 0 or more subnets, each byte at index K counts how many
@@ -386,23 +386,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 			return result
 		}
-		// scoreSubnetSumSynergy estimates how good/bad a SubnetSum is based on how many unhealthy
-		// (we are mostly really interested in dead and solo subnets) subnets it has
-		scoreSubnetSumSynergy := func(s SubnetSum) float64 {
-			const deadPriorityMultiplier = 5 // we value resolving dead subnets 5x higher over resolving solo subnets
-			const maxPossibleScore = commons.SubnetsCount * deadPriorityMultiplier
-			deadSubnetCnt := 0 // how many dead subnets SubnetSum has
-			soloSubnetCnt := 0 // how many solo subnets SubnetSum has
-			for i := 0; i < commons.SubnetsCount; i++ {
-				if s[i] == 0 {
-					deadSubnetCnt++
-				}
-				if s[i] == 1 {
-					soloSubnetCnt++
-				}
-			}
-			return float64(maxPossibleScore - (deadPriorityMultiplier*deadSubnetCnt + soloSubnetCnt))
-		}
+
 		// ownSubnetSum represents subnet sum of peers we already have open connections with
 		ownSubnetSum := SubnetSum{}
 		allPeerIDs, err := n.topicsCtrl.Peers("")
@@ -414,44 +398,98 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			pSubnets := n.idx.GetPeerSubnets(pID)
 			ownSubnetSum = addSubnets(ownSubnetSum, SubnetSum(pSubnets))
 		}
+		// scoreSubnetSumSynergy is same as scorePeerSet but for subnet sum
+		scoreSubnetSumSynergy := func(s SubnetSum) (score float64, highestPossible bool) {
+			const deadPriorityMultiplier = 5 // we value resolving dead subnets 5x higher over resolving solo subnets
+			const maxPossibleScore = commons.SubnetsCount * deadPriorityMultiplier
 
+			highestPossible = true
+			deadSubnetCnt := 0 // how many dead subnets SubnetSum has
+			soloSubnetCnt := 0 // how many solo subnets SubnetSum has
+			for i := 0; i < commons.SubnetsCount; i++ {
+				if s[i] == 0 {
+					deadSubnetCnt++
+					highestPossible = false
+				}
+				if s[i] == 1 {
+					soloSubnetCnt++
+					highestPossible = false
+				}
+			}
+			score = float64(maxPossibleScore - (deadPriorityMultiplier*deadSubnetCnt + soloSubnetCnt))
+			return score, highestPossible
+		}
+		// scorePeerSet estimates how good/bad a peerSet is based on how many unhealthy
+		// (we are mostly really interested in dead and solo subnets) subnets we still have
+		// once we've connected this set of peers
+		scorePeerSet := func(peerSet uint64, allPeersDesc []peers.DiscoveredPeer) (score float64, highestPossible bool) {
+			// totalSubnetSum will represent a subnet sum of our own subnets + all the subnets in this candidate
+			// peer-set, it will be used to estimate how "valuable" this candidate peer-set is to us (so we can
+			// find the best peer-set)
+			totalSubnetSum := ownSubnetSum
+			for peerIdx, peerMask := 0, uint64(1); peerIdx < len(allPeersDesc); peerIdx, peerMask = peerIdx+1, peerMask<<1 {
+				peerPresentInCandidateSet := peerSet & peerMask
+				if peerPresentInCandidateSet == uint64(0) {
+					continue // this peerIdx isn't part of candidate peer-set
+				}
+				p := allPeersDesc[peerIdx]
+				pSubnets := n.idx.GetPeerSubnets(p.ID)
+				totalSubnetSum = addSubnets(totalSubnetSum, SubnetSum(pSubnets))
+			}
+			return scoreSubnetSumSynergy(totalSubnetSum)
+		}
+		// peerSetToPeerList picks peers peerSet describes out of allPeers compiling them into new slice
+		peerSetToPeerList := func(peerSet uint64, allPeers []peers.DiscoveredPeer) []peers.DiscoveredPeer {
+			result := make([]peers.DiscoveredPeer, 0, peersToProposeCnt)
+			for peerIdx, peerMask := 0, uint64(1); peerIdx < len(allPeers); peerIdx, peerMask = peerIdx+1, peerMask<<1 {
+				peerPresentInCandidateSet := peerSet & peerMask
+				if peerPresentInCandidateSet == uint64(0) {
+					continue // this peerIdx isn't part of candidate peer-set
+				}
+				p := allPeers[peerIdx]
+				result = append(result, p)
+			}
+			return result
+		}
+
+		// now we can identify the best synergy peer-set, but first check if we even need to
+		// brute-force search for it - we don't if top peersToProposeCnt peers already give us
+		// the highest possible score
+		topPeerSet := uint64(0)
+		for peerIdx, peerMask := 0, uint64(1); peerIdx < peersToProposeCnt; peerIdx, peerMask = peerIdx+1, peerMask<<1 {
+			topPeerSet |= peerMask
+		}
+		var (
+			bestSynergyScore     float64
+			bestSynergyPeers     []peers.DiscoveredPeer
+			skipBruteForceSearch bool
+		)
+		topSynergyScore, highestPossibleScore := scorePeerSet(topPeerSet, peersToProposePoolDesc)
+		if highestPossibleScore {
+			bestSynergyScore = topSynergyScore
+			bestSynergyPeers = peerSetToPeerList(topPeerSet, peersToProposePoolDesc)
+			skipBruteForceSearch = true // no reason to brute-force search
+		}
 		// iterate over all possible peer-sets of size peersToProposePoolCnt that can be generated from
-		// peersToProposePool (a peer-set is represented by uint64 number, each 1-value bit represents
+		// peersToProposePoolDesc (a peer-set is represented by uint64 number, each 1-value bit represents
 		// peer presence while each 0-bit represents peer absence in such peer-set) and find a peer-set
 		// of size peersToProposeCnt that has peers with the best synergy
-		var (
-			bestSynergyScore float64
-			bestSynergyPeers []peers.DiscoveredPeer
-		)
+		//
 		// peersToProposePoolLastSet is the last peer-set represented by 2^peersToProposePoolCnt
 		peersToProposePoolLastSet := uint64(1) << peersToProposePoolCnt
-		for candidateSet := uint64(0); candidateSet < peersToProposePoolLastSet; candidateSet++ {
+		for candidateSet := uint64(0); !skipBruteForceSearch && candidateSet < peersToProposePoolLastSet; candidateSet++ {
 			// we are only interested in peer-set that have exactly peersToProposeCnt peers in them
 			candidateSetSize := bits.OnesCount64(candidateSet)
 			if candidateSetSize != peersToProposeCnt {
 				continue // not interested in this peer-set
 			}
-
-			// tmpSubnetSum will represent a subnet sum of our own subnets + all the subnets in this candidate
-			// peer-set, it will be used to estimate how "valuable" this candidate peer-set is to us (so we can
-			// find the best peer-set)
-			tmpSubnetSum := ownSubnetSum
-			tmpSynergyPeers := make([]peers.DiscoveredPeer, 0, peersToProposeCnt)
-			for peerIdx, peerMask := 0, uint64(1); peerIdx < peersToProposePoolCnt; peerIdx, peerMask = peerIdx+1, peerMask<<1 {
-				peerPresentInCandidateSet := candidateSet & peerMask
-				if peerPresentInCandidateSet == uint64(0) {
-					continue // this peerIdx isn't part of candidate peer-set
-				}
-				p := peersToProposePool[peerIdx]
-				tmpSynergyPeers = append(tmpSynergyPeers, p)
-				pSubnets := n.idx.GetPeerSubnets(p.ID)
-				tmpSubnetSum = addSubnets(tmpSubnetSum, SubnetSum(pSubnets))
-			}
-			tmpSynergyScore := scoreSubnetSumSynergy(tmpSubnetSum)
-
-			if tmpSynergyScore > bestSynergyScore {
+			tmpSynergyScore, highestPossibleScore := scorePeerSet(candidateSet, peersToProposePoolDesc)
+			if highestPossibleScore || tmpSynergyScore > bestSynergyScore {
 				bestSynergyScore = tmpSynergyScore
-				bestSynergyPeers = tmpSynergyPeers
+				bestSynergyPeers = peerSetToPeerList(candidateSet, peersToProposePoolDesc)
+			}
+			if highestPossibleScore {
+				break // no reason to search further
 			}
 		}
 
