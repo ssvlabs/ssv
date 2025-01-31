@@ -377,7 +377,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 		// SubnetSum represents a sum of 0 or more subnets, each byte at index K counts how many
 		// of that particular subnet at index K the summed subnet-sets have
-		type SubnetSum []byte
+		type SubnetSum [commons.SubnetsCount]byte
 		// addSubnets combines two sums to calculate the resulting subnet sum
 		addSubnets := func(a SubnetSum, b SubnetSum) SubnetSum {
 			result := SubnetSum{}
