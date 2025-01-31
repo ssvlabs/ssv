@@ -23,8 +23,6 @@ func TestSaveCommitteeDutyTrace(t *testing.T) {
 	trace1 := makeCTrace(1)
 	trace2 := makeCTrace(2)
 
-	_, _ = trace1, trace2
-
 	store := store.New(db)
 	require.NoError(t, store.SaveCommiteeDuty(trace1))
 	require.NoError(t, store.SaveCommiteeDuty(trace2))
