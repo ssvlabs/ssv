@@ -109,7 +109,7 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) commons.Subnets {
 
 	subnets, ok := si.peerSubnets[id]
 	if !ok {
-		return nil
+		return make(commons.Subnets, commons.SubnetsCount)
 	}
 	cp := make(commons.Subnets, len(subnets))
 	copy(cp, subnets)
