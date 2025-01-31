@@ -308,3 +308,22 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 
 	return ln, routers, nil
 }
+
+func Test_score(t *testing.T) {
+	const desiredScore = 3
+
+	score0 := score(desiredScore, 0)
+	score1 := score(desiredScore, 1)
+	score2 := score(desiredScore, 2)
+	score3 := score(desiredScore, 3)
+	score4 := score(desiredScore, 4)
+	score5 := score(desiredScore, 5)
+	score6 := score(desiredScore, 6)
+
+	assert.GreaterOrEqual(t, score0, 5*score1)
+	assert.GreaterOrEqual(t, score1, 4*score2)
+	assert.GreaterOrEqual(t, score2, 3*score3)
+	assert.GreaterOrEqual(t, score3, 2*score4)
+	assert.GreaterOrEqual(t, score4, score5)
+	assert.GreaterOrEqual(t, score5, score6)
+}

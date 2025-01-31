@@ -12,7 +12,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -34,7 +33,7 @@ type Syncer struct {
 	validatorStore    selfValidatorStore
 	beaconNetwork     beacon.BeaconNetwork
 	beaconNode        beacon.BeaconNode
-	fixedSubnets      records.Subnets
+	fixedSubnets      networkcommons.Subnets
 	syncInterval      time.Duration
 	streamInterval    time.Duration
 	updateSendTimeout time.Duration
@@ -56,7 +55,7 @@ func NewSyncer(
 	validatorStore selfValidatorStore,
 	beaconNetwork beacon.BeaconNetwork,
 	beaconNode beacon.BeaconNode,
-	fixedSubnets records.Subnets,
+	fixedSubnets networkcommons.Subnets,
 	opts ...Option,
 ) *Syncer {
 	u := &Syncer{
@@ -356,14 +355,14 @@ func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 
 // selfSubnets calculates the operator's subnets by adding up the fixed subnets and the active committees
 // it recvs big int buffer for memory reusing, if is nil it will allocate new
-func (s *Syncer) selfSubnets(buf *big.Int) records.Subnets {
+func (s *Syncer) selfSubnets(buf *big.Int) networkcommons.Subnets {
 	// Start off with a copy of the fixed subnets (e.g., exporter subscribed to all subnets).
 	localBuf := buf
 	if localBuf == nil {
 		localBuf = new(big.Int)
 	}
 
-	mySubnets := make(records.Subnets, networkcommons.SubnetsCount)
+	mySubnets := make(networkcommons.Subnets, networkcommons.SubnetsCount)
 	copy(mySubnets, s.fixedSubnets)
 
 	// Compute the new subnets according to the active committees/validators.

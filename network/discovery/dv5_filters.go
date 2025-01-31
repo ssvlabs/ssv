@@ -4,6 +4,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
 )
@@ -48,6 +50,26 @@ func (dvs *DiscV5Service) ssvNodeFilter(logger *zap.Logger) func(node *enode.Nod
 	}
 }
 
+func (dvs *DiscV5Service) alreadyConnectedFilter() func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pid, err := PeerID(node)
+		if err != nil {
+			return false
+		}
+		return dvs.conns.Connectedness(pid) != libp2pnetwork.Connected
+	}
+}
+
+func (dvs *DiscV5Service) recentlyTrimmedFilter() func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pid, err := PeerID(node)
+		if err != nil {
+			return false
+		}
+		return !peers.TrimmedRecently.Has(pid)
+	}
+}
+
 // subnetFilter checks if the node has an interest in the given subnet
 func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
@@ -78,7 +100,7 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 		if err != nil {
 			return false
 		}
-		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
+		shared := commons.SharedSubnets(dvs.subnets, nodeSubnets, n)
 		// logger.Debug("shared subnets", zap.Ints("shared", shared),
 		//	zap.String("node", node.String()))
 

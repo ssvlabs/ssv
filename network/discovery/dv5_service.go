@@ -11,15 +11,14 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -68,25 +67,25 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:           ctx,
 		cancel:        cancel,
-		conns:         discOpts.ConnIndex,
-		subnetsIdx:    discOpts.SubnetsIdx,
-		networkConfig: discOpts.NetworkConfig,
-		subnets:       discOpts.DiscV5Opts.Subnets,
+		conns:         opts.ConnIndex,
+		subnetsIdx:    opts.SubnetsIdx,
+		networkConfig: opts.NetworkConfig,
+		subnets:       opts.DiscV5Opts.Subnets,
 		publishLock:   make(chan struct{}, 1),
 	}
 
 	logger.Debug(
 		"configuring discv5 discovery",
-		zap.Any("discV5Opts", discOpts.DiscV5Opts),
-		zap.Any("hostAddress", discOpts.HostAddress),
-		zap.Any("hostDNS", discOpts.HostDNS),
+		zap.Any("discV5Opts", opts.DiscV5Opts),
+		zap.Any("hostAddress", opts.HostAddress),
+		zap.Any("hostDNS", opts.HostDNS),
 	)
-	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
+	if err := dvs.initDiscV5Listener(logger, opts); err != nil {
 		return nil, err
 	}
 	return &dvs, nil
@@ -162,12 +161,12 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			return
 		}
 		handler(e)
-	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
+	}, defaultDiscoveryInterval, dvs.ssvNodeFilter(logger), dvs.sharedSubnetsFilter(1), dvs.badNodeFilter(logger), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
 
 	return nil
 }
 
-var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
+var zeroSubnets, _ = commons.Subnets{}.FromString(commons.ZeroSubnets)
 
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
@@ -183,16 +182,16 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 	}
 
 	// Get the peer's subnets, skipping if it has none.
-	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
+	if bytes.Equal(zeroSubnets, peerSubnets) {
 		recordPeerSkipped(ctx, skipReasonZeroSubnets)
 		return errors.New("zero subnets")
 	}
 
-	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
@@ -333,7 +332,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64)
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), subnets, nil)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, subnets, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
@@ -352,7 +351,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint6
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), nil, subnets)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, nil, subnets)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
