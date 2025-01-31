@@ -8,9 +8,10 @@ import (
 //go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace
 type ValidatorDutyTrace struct {
 	DutyTrace
-	Pre       []*MessageTrace `ssz-max:"13"`
-	Post      []*MessageTrace `ssz-max:"13"`
-	Role      spectypes.BeaconRole
+	Pre  []*MessageTrace `ssz-max:"13"`
+	Post []*MessageTrace `ssz-max:"13"`
+	Role spectypes.BeaconRole
+	// this could be a pubkey
 	Validator phase0.ValidatorIndex
 }
 
@@ -35,18 +36,24 @@ type CommitteeMessageTrace struct {
 }
 
 type DutyTrace struct {
-	Slot   phase0.Slot
-	Rounds []*RoundTrace `ssz-max:"15"`
+	Slot     phase0.Slot
+	Rounds   []*RoundTrace   `ssz-max:"15"`
+	Decideds []*DecidedTrace `ssz-max:"256"` // TODO max
+}
+
+type DecidedTrace struct {
+	MessageTrace
+	// Value []byte // full data needed?
+	Signers []spectypes.OperatorID
 }
 
 type RoundTrace struct {
 	Proposer spectypes.OperatorID // can be computed or saved
 	// ProposalData
-	ProposalRoot         phase0.Root         `ssz-size:"32"`
-	ProposalReceivedTime uint64              // TODO fix time
-	Prepares             []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
-	Commits              []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
-	RoundChanges         []*RoundChangeTrace `ssz-max:"13"`
+	ProposalTrace *ProposalTrace
+	Prepares      []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
+	Commits       []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
+	RoundChanges  []*RoundChangeTrace `ssz-max:"13"`
 }
 
 type RoundChangeTrace struct {
@@ -55,8 +62,14 @@ type RoundChangeTrace struct {
 	PrepareMessages []*MessageTrace `ssz-max:"13"`
 }
 
+type ProposalTrace struct {
+	MessageTrace
+	RoundChanges    []*RoundChangeTrace `ssz-max:"13"`
+	PrepareMessages []*MessageTrace     `ssz-max:"13"`
+}
+
 type MessageTrace struct {
-	Round        uint8
+	Round        uint8       // same for
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
 	ReceivedTime uint64 // TODO fix time
