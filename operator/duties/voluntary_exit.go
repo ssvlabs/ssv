@@ -117,7 +117,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	h.duties.RemoveSlot(slot - phase0.Slot(h.network.SlotsPerEpoch()))
 
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
+		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution)
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))

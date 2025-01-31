@@ -13,6 +13,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -23,9 +27,6 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 func TestSubmitProposal(t *testing.T) {
@@ -44,7 +45,7 @@ func TestSubmitProposal(t *testing.T) {
 	network := networkconfig.TestNetwork
 	populateStorage(t, logger, shareStorage, operatorData)
 
-	frCtrl := NewController(&ControllerOptions{
+	frCtrl := NewController(logger, &ControllerOptions{
 		Ctx:               context.TODO(),
 		Network:           network,
 		ShareStorage:      shareStorage,
@@ -76,7 +77,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start()
 
 		slots := []phase0.Slot{
 			1,                                        // first time
@@ -116,7 +117,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start()
 		mockTimeChan <- time.Now()
 		wg.Add(2)
 		wg.Wait()

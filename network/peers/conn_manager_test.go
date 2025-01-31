@@ -11,12 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
 func TestTagBestPeers(t *testing.T) {
-	logger := logging.TestLogger(t)
 	connMgrMock := newConnMgr()
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
@@ -36,7 +34,7 @@ func TestTagBestPeers(t *testing.T) {
 	best := cm.getBestPeers(40, mySubnets, pids, 10)
 	require.Len(t, best, 40)
 
-	cm.TagBestPeers(logger, 20, mySubnets, pids, 10)
+	cm.TagBestPeers(20, mySubnets, pids, 10)
 	require.Equal(t, 20, len(connMgrMock.tags))
 }
 
