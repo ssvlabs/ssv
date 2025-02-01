@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
@@ -30,15 +32,15 @@ type round struct {
 
 type roundChange struct {
 	message
-	PreparedRound   uint8     `json:"preparedRound"`
+	PreparedRound   uint64    `json:"preparedRound"`
 	PrepareMessages []message `json:"prepareMessages"`
 }
 
 type message struct {
-	Round        uint8                `json:"round"`
+	Round        uint64               `json:"round"`
 	BeaconRoot   phase0.Root          `json:"beaconRoot"`
 	Signer       spectypes.OperatorID `json:"signer"`
-	ReceivedTime uint64               `json:"time"`
+	ReceivedTime time.Time            `json:"time"`
 }
 
 func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
@@ -67,9 +69,7 @@ func toMessageTrace(m []*model.MessageTrace) (out []message) {
 func toRoundTrace(r []*model.RoundTrace) (out []round) {
 	for _, rt := range r {
 		out = append(out, round{
-			Proposer:             rt.Proposer,
-			ProposalRoot:         rt.ProposalRoot,
-			ProposalReceivedTime: rt.ProposalReceivedTime,
+			Proposer: rt.Proposer,
 		})
 	}
 	return
@@ -94,7 +94,7 @@ type committeeMessage struct {
 	BeaconRoot   []phase0.Root           `json:"beaconRoot"`
 	Validators   []phase0.ValidatorIndex `json:"validators"`
 	Signer       spectypes.OperatorID    `json:"signer"`
-	ReceivedTime uint64                  `json:"time"`
+	ReceivedTime time.Time               `json:"time"`
 }
 
 func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {

@@ -1,6 +1,8 @@
 package exporter
 
 import (
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -32,7 +34,7 @@ type CommitteeMessageTrace struct {
 	Validators []phase0.ValidatorIndex `ssz-max:"1500"`
 
 	Signer       spectypes.OperatorID
-	ReceivedTime uint64 // TODO fixme
+	ReceivedTime time.Time
 }
 
 type DutyTrace struct {
@@ -44,7 +46,7 @@ type DutyTrace struct {
 type DecidedTrace struct {
 	MessageTrace
 	// Value []byte // full data needed?
-	Signers []spectypes.OperatorID
+	Signers []spectypes.OperatorID `ssz-max:"13"`
 }
 
 type RoundTrace struct {
@@ -58,7 +60,7 @@ type RoundTrace struct {
 
 type RoundChangeTrace struct {
 	MessageTrace
-	PreparedRound   uint8
+	PreparedRound   uint64
 	PrepareMessages []*MessageTrace `ssz-max:"13"`
 }
 
@@ -69,8 +71,8 @@ type ProposalTrace struct {
 }
 
 type MessageTrace struct {
-	Round        uint8       // same for
+	Round        uint64      // same for
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
-	ReceivedTime uint64 // TODO fix time
+	ReceivedTime time.Time
 }
