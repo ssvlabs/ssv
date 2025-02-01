@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"encoding/hex"
 	"sync"
 	"time"
 
@@ -47,13 +46,13 @@ func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *model.ValidatorDuty
 
 func (n *InMemTracer) getRound(trace *model.ValidatorDutyTrace, round uint64) *model.RoundTrace {
 	var count = uint64(len(trace.Rounds))
-	if count == 0 || count > round-1 {
+	for round+1 > count {
 		var r model.RoundTrace
 		trace.Rounds = append(trace.Rounds, &r)
-		return &r
+		count = uint64(len(trace.Rounds))
 	}
 
-	return trace.Rounds[round-1]
+	return trace.Rounds[round]
 }
 
 // id -> validator or committee id
@@ -63,7 +62,7 @@ func getOperators(id string) []spectypes.OperatorID {
 
 func (n *InMemTracer) toMockState(msg *specqbft.Message, operatorIDs []spectypes.OperatorID) *specqbft.State {
 	var mockState = &specqbft.State{}
-	mockState.Height = specqbft.Height(msg.Height)
+	mockState.Height = msg.Height
 	mockState.CommitteeMember = &spectypes.CommitteeMember{
 		Committee: make([]*spectypes.Operator, 0, len(operatorIDs)),
 	}
@@ -91,7 +90,7 @@ func decodeJustificationWithPrepares(justifications [][]byte) []*model.MessageTr
 		}
 
 		var justificationTrace = new(model.MessageTrace)
-		justificationTrace.Round = uint8(qbftMsg.Round)
+		justificationTrace.Round = uint64(qbftMsg.Round)
 		justificationTrace.BeaconRoot = qbftMsg.Root
 		justificationTrace.Signer = signedMsg.OperatorIDs[0]
 		traces = append(traces, justificationTrace)
@@ -116,7 +115,7 @@ func decodeJustificationWithRoundChanges(justifications [][]byte) []*model.Round
 			// n.logger.Error("failed to decode round change justification", zap.Error(err))
 		}
 
-		receivedTime := uint64(0) // we can't know the time when the sender received the message
+		var receivedTime time.Time // we can't know the time when the sender received the message
 
 		var roundChangeTrace = createRoundChangeTrace(qbftMsg, signedMsg, receivedTime)
 		traces = append(traces, roundChangeTrace)
@@ -125,10 +124,10 @@ func decodeJustificationWithRoundChanges(justifications [][]byte) []*model.Round
 	return traces
 }
 
-func createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, receivedTime uint64) *model.RoundChangeTrace {
+func createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, receivedTime time.Time) *model.RoundChangeTrace {
 	var roundChangeTrace = new(model.RoundChangeTrace)
-	roundChangeTrace.PreparedRound = uint8(msg.DataRound)
-	roundChangeTrace.Round = uint8(msg.Round)
+	roundChangeTrace.PreparedRound = uint64(msg.DataRound)
+	roundChangeTrace.Round = uint64(msg.Round)
 	roundChangeTrace.BeaconRoot = msg.Root
 	roundChangeTrace.Signer = signedMsg.OperatorIDs[0]
 	roundChangeTrace.ReceivedTime = receivedTime
@@ -140,10 +139,10 @@ func createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSS
 
 func createProposalTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
 	var proposalTrace = new(model.ProposalTrace)
-	proposalTrace.Round = uint8(msg.Round)
+	proposalTrace.Round = uint64(msg.Round)
 	proposalTrace.BeaconRoot = msg.Root
 	proposalTrace.Signer = signedMsg.OperatorIDs[0]
-	proposalTrace.ReceivedTime = uint64(time.Now().Unix()) // correct
+	proposalTrace.ReceivedTime = time.Now() // correct
 
 	proposalTrace.RoundChanges = decodeJustificationWithRoundChanges(msg.RoundChangeJustification)
 	proposalTrace.PrepareMessages = decodeJustificationWithPrepares(msg.PrepareJustification)
@@ -153,13 +152,6 @@ func createProposalTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMe
 
 func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) {
 	slot := uint64(msg.Height)
-
-	fields := []zap.Field{
-		fields.Slot(phase0.Slot(slot)),
-		fields.Round(msg.Round),
-		zap.String("identifier", hex.EncodeToString(msg.Identifier[len(msg.Identifier)-5:])),
-		zap.String("root", hex.EncodeToString(msg.Root[len(msg.Root)-5:])),
-	}
 
 	// validator pubkey
 	msgID := spectypes.MessageID(msg.Identifier[:]) // validator + pubkey + role + network
@@ -174,14 +166,14 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 
 	{ // proposer
 		operatorIDs := getOperators(validatorID)
-		var mockState = n.toMockState(msg, operatorIDs)
-		round.Proposer = specqbft.RoundRobinProposer(mockState, msg.Round)
+		if len(operatorIDs) > 0 {
+			var mockState = n.toMockState(msg, operatorIDs)
+			round.Proposer = specqbft.RoundRobinProposer(mockState, msg.Round)
+		}
 	}
 
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
-		fields = append(fields, zap.String("messageType", "proposal"))
-
 		var data = new(spectypes.ValidatorConsensusData)
 		err := data.Decode(signedMsg.FullData)
 		if err != nil {
@@ -193,42 +185,32 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 		round.ProposalTrace = createProposalTrace(msg, signedMsg)
 
 	case specqbft.PrepareMsgType:
-		fields = append(fields, zap.String("messageType", "prepare"))
-
 		var m = new(model.MessageTrace)
-		m.Round = uint8(msg.Round)
+		m.Round = uint64(msg.Round)
 		m.BeaconRoot = msg.Root
 		m.Signer = signedMsg.OperatorIDs[0]
-		m.ReceivedTime = uint64(time.Now().Unix()) // TODO fixme
+		m.ReceivedTime = time.Now() // TODO fixme
 
 		round.Prepares = append(round.Prepares, m)
 
 	case specqbft.CommitMsgType:
-		fields = append(fields, zap.String("messageType", "commit"))
-
 		var m = new(model.MessageTrace)
-		m.Round = uint8(msg.Round)
+		m.Round = uint64(msg.Round)
 		m.BeaconRoot = msg.Root
 		m.Signer = signedMsg.OperatorIDs[0]
-		m.ReceivedTime = uint64(time.Now().Unix()) // TODO fixme
+		m.ReceivedTime = time.Now() // TODO fixme
 
 		round.Commits = append(round.Commits, m)
 
 	case specqbft.RoundChangeMsgType:
-		fields = append(fields, zap.String("messageType", "round change"))
 		// optional - only if round change is proposing a value
 
-		now := uint64(time.Now().Unix())
+		now := time.Now()
 		roundChangeTrace := createRoundChangeTrace(msg, signedMsg, now)
 
 		round.RoundChanges = append(round.RoundChanges, roundChangeTrace)
 	}
 
-	fields = append(fields, zap.Int("duty rounds", len(trace.Rounds)))
-
-	n.logger.Info("qbft", fields...)
-
-	// trace the message
 	// n.validatorTraces = append(n.validatorTraces, model.ValidatorDutyTrace{})
 }
 
