@@ -367,7 +367,11 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	recordBeaconClientStatus(ctx, statusSyncing, gc.multiClient.Address())
 	recordSyncDistance(ctx, syncState.SyncDistance, gc.multiClient.Address())
 
-	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
+	if syncState.ELOffline {
+		gc.log.Error("Consensus client using offline execution node")
+		return fmt.Errorf("eloffline")
+	}
+
 	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
 		gc.log.Error("Consensus client is not synced")
 		return errSyncing
