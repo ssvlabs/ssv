@@ -366,11 +366,11 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	syncState := nodeSyncingResp.Data
 	recordBeaconClientStatus(ctx, statusSyncing, gc.multiClient.Address())
 	recordSyncDistance(ctx, syncState.SyncDistance, gc.multiClient.Address())
-
-	if syncState.ELOffline {
-		gc.log.Error("Consensus client using offline execution node")
-		return fmt.Errorf("eloffline")
-	}
+	//
+	//if syncState.ELOffline {
+	//	gc.log.Error("Consensus client using offline execution node")
+	//	return fmt.Errorf("eloffline")
+	//}
 
 	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
 		gc.log.Error("Consensus client is not synced")
