@@ -254,5 +254,6 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 // github.com/attestantio/go-eth2-client considers node as synced if is_syncing is false,
 // however, it's been observed that it may take up to around 50 slots until is_syncing becomes true,
 // which causes downtime.
+// Using el_offline flag doesn't solve the issue because Prysm doesn't set it (TODO: check behavior of other clients).
 // Using a fix from https://github.com/ssvlabs/go-eth2-client/commits/fix-multi-rotation-v0.21.7/
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250128220448-69c1f6bda599
