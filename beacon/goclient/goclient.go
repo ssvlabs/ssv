@@ -234,7 +234,7 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithReducedMemoryUsage(true),
 		eth2clienthttp.WithAllowDelayedStart(true),
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
-		eth2clienthttp.WithELConnectionCheck(true),
+		eth2clienthttp.WithSyncDistanceTolerance(gc.syncDistanceTolerance),
 	)
 	if err != nil {
 		gc.log.Error("Consensus http client initialization failed",
