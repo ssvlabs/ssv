@@ -1,16 +1,15 @@
 package validator
 
 import (
+	"encoding/hex"
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -18,50 +17,48 @@ type InMemTracer struct {
 	sync.Mutex
 	logger *zap.Logger
 	// consider having the validator pubkey before of the slot
-	validatorTraces map[uint64]map[string]*model.ValidatorDutyTrace
+	validatorTraces map[uint64]map[string]*validatorDutyTrace
 }
 
 func NewTracer(logger *zap.Logger) *InMemTracer {
 	return &InMemTracer{
 		logger:          logger,
-		validatorTraces: make(map[uint64]map[string]*model.ValidatorDutyTrace),
+		validatorTraces: make(map[uint64]map[string]*validatorDutyTrace),
 	}
 }
 
-func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *model.ValidatorDutyTrace {
+func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *validatorDutyTrace {
 	n.Lock()
 	defer n.Unlock()
 
 	mp, ok := n.validatorTraces[slot]
 	if !ok {
-		mp = make(map[string]*model.ValidatorDutyTrace)
+		mp = make(map[string]*validatorDutyTrace)
 		n.validatorTraces[slot] = mp
 	}
 
 	trace, ok := mp[vPubKey]
 	if !ok {
-		trace = new(model.ValidatorDutyTrace)
+		trace = new(validatorDutyTrace)
 		mp[vPubKey] = trace
 	}
 
 	return trace
 }
 
-func getRound(trace *model.ValidatorDutyTrace, round uint64) *model.RoundTrace {
+func getRound(trace *validatorDutyTrace, round uint64) *round {
 	trace.Lock()
 	defer trace.Unlock()
 
-	var count = uint64(len(trace.Rounds))
-	for round+1 > count {
-		var r model.RoundTrace
-		trace.Rounds = append(trace.Rounds, &r)
-		count = uint64(len(trace.Rounds))
+	var count = len(trace.Rounds)
+	for round+1 > uint64(count) { //nolint:gosec
+		count = trace.addRound()
 	}
 
-	return trace.Rounds[round]
+	return trace.getRound(round)
 }
 
-// id -> validator or committee id
+// HOW TO? id -> validator or committee id
 func getOperators(id string) []spectypes.OperatorID {
 	return []spectypes.OperatorID{}
 }
@@ -181,15 +178,23 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
-		var data = new(spectypes.ValidatorConsensusData)
-		err := data.Decode(signedMsg.FullData)
-		if err != nil {
-			n.logger.Error("failed to decode proposal data", zap.Error(err))
-		}
-		// beacon vote (for committee duty)
+		msgID := signedMsg.SSVMessage.GetID()
+		switch msgID.GetRoleType() {
+		case spectypes.RoleCommittee:
+			n.logger.Info("qbft proposal for committee duty: to be implemented")
+		default:
+			var data = new(spectypes.ValidatorConsensusData)
+			err := data.Decode(signedMsg.FullData)
+			if err != nil {
+				n.logger.Error("failed to decode proposal data", zap.Error(err))
+			}
+			// beacon vote (for committee duty)
+			trace.Lock()
+			trace.Validator = data.Duty.ValidatorIndex
+			trace.Unlock()
 
-		trace.Validator = data.Duty.ValidatorIndex
-		round.ProposalTrace = createProposalTrace(msg, signedMsg)
+			round.ProposalTrace = createProposalTrace(msg, signedMsg)
+		}
 
 	case specqbft.PrepareMsgType:
 		var m = new(model.MessageTrace)
@@ -221,48 +226,52 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 	// n.validatorTraces = append(n.validatorTraces, model.ValidatorDutyTrace{})
 }
 
-func (n *InMemTracer) signed(msg *spectypes.PartialSignatureMessages) {
+func (n *InMemTracer) signed(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, validatorPubKey string) {
 	slot := uint64(msg.Slot)
 
+	trace := n.getTrace(slot, validatorPubKey)
+	trace.Lock()
+	defer trace.Unlock()
+
+	if trace.Validator == 0 {
+		trace.Validator = msg.Messages[0].ValidatorIndex
+	}
+
+	switch ssvMsg.MsgID.GetRoleType() {
+	case spectypes.RoleCommittee:
+		n.logger.Warn("unexpected committee duty") // we get this every slot
+	case spectypes.RoleProposer:
+		trace.Role = spectypes.BNRoleProposer
+	case spectypes.RoleAggregator:
+		trace.Role = spectypes.BNRoleAggregator
+	case spectypes.RoleSyncCommitteeContribution:
+		trace.Role = spectypes.BNRoleSyncCommitteeContribution
+	case spectypes.RoleValidatorRegistration:
+		trace.Role = spectypes.BNRoleValidatorRegistration
+	case spectypes.RoleVoluntaryExit:
+		trace.Role = spectypes.BNRoleVoluntaryExit
+	}
+
 	fields := []zap.Field{
-		fields.Slot(phase0.Slot(slot)),
-	}
-
-	validatorID := string("TODO")
-
-	trace := n.getTrace(slot, validatorID)
-
-	fields = append(fields, zap.Int("messages", len(msg.Messages)))
-	fields = append(fields, zap.Int("duty rounds", len(trace.Rounds)))
-
-	r := uint64(0) // TODO
-	round := getRound(trace, r)
-	round.Lock()
-	defer round.Unlock()
-
-	// Q: how to map Message to RoundTrace?
-	for _, pSigMsg := range msg.Messages {
-		round.Proposer = pSigMsg.Signer
-		_ = pSigMsg.ValidatorIndex
-	}
-
-	// Q: usage of msg.Type?
-	switch msg.Type {
-	case spectypes.PostConsensusPartialSig:
-		fields = append(fields, zap.String("messageType", "post consensus"))
-	case spectypes.ContributionProofs:
-		fields = append(fields, zap.String("messageType", "contribution proofs"))
-	case spectypes.RandaoPartialSig:
-		fields = append(fields, zap.String("messageType", "randao"))
-	case spectypes.SelectionProofPartialSig:
-		fields = append(fields, zap.String("messageType", "selection proof"))
-	case spectypes.ValidatorRegistrationPartialSig:
-		fields = append(fields, zap.String("messageType", "validator registration"))
-	case spectypes.VoluntaryExitPartialSig:
-		fields = append(fields, zap.String("messageType", "voluntary exit"))
+		zap.Uint64("slot", slot),
+		zap.String("validator", hex.EncodeToString([]byte(validatorPubKey[len(validatorPubKey)-4:]))),
+		zap.String("type", trace.Role.String()),
 	}
 
 	n.logger.Info("signed", fields...)
+
+	var tr model.PartialSigMessageTrace
+	tr.Type = msg.Type
+	tr.BeaconRoot = msg.Messages[0].SigningRoot
+	tr.Signer = msg.Messages[0].Signer
+	tr.ReceivedTime = time.Now()
+
+	if msg.Type == spectypes.PostConsensusPartialSig {
+		trace.Post = append(trace.Post, &tr)
+		return
+	}
+
+	trace.Pre = append(trace.Pre, &tr)
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
@@ -273,15 +282,39 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := new(spectypes.PartialSignatureMessages)
-		signedMsg := msg.SignedSSVMessage
-		ssvMsg := signedMsg.SSVMessage
-
-		_ = signedMsg.OperatorIDs
-		_ = signedMsg.Signatures
-
-		err := pSigMessages.Decode(ssvMsg.GetData())
-		if err == nil {
-			n.signed(pSigMessages)
+		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
+		if err != nil {
+			n.logger.Error("failed to decode partial signature messages", zap.Error(err))
+			return
+		}
+		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+			validatorPubKey := msg.MsgID.GetDutyExecutorID()
+			n.signed(pSigMessages, msg, string(validatorPubKey))
+		} else { // to be refined
+			committeeID := msg.MsgID.GetDutyExecutorID()
+			n.signed(pSigMessages, msg, string(committeeID))
 		}
 	}
+}
+
+type validatorDutyTrace struct {
+	sync.Mutex
+	model.ValidatorDutyTrace
+}
+
+func (t *validatorDutyTrace) addRound() int {
+	t.Rounds = append(t.Rounds, &model.RoundTrace{})
+	return len(t.Rounds)
+}
+
+func (t *validatorDutyTrace) getRound(rnd uint64) *round {
+	r := t.Rounds[rnd]
+	return &round{
+		RoundTrace: *r,
+	}
+}
+
+type round struct {
+	sync.Mutex
+	model.RoundTrace
 }

@@ -1,7 +1,6 @@
 package exporter
 
 import (
-	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -10,37 +9,18 @@ import (
 
 //go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace
 type ValidatorDutyTrace struct {
-	sync.Mutex
-	DutyTrace
-	Pre  []*MessageTrace `ssz-max:"13"`
-	Post []*MessageTrace `ssz-max:"13"`
+	// sync.Mutex
+	ConsensusTrace
+
+	Slot phase0.Slot
+	Pre  []*PartialSigMessageTrace `ssz-max:"13"`
+	Post []*PartialSigMessageTrace `ssz-max:"13"`
 	Role spectypes.BeaconRole
 	// this could be a pubkey
 	Validator phase0.ValidatorIndex
 }
 
-type CommitteeDutyTrace struct {
-	DutyTrace
-	Post []*CommitteeMessageTrace `ssz-max:"13"`
-
-	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
-	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`
-
-	// maybe not needed
-	AttestationDataRoot      phase0.Root `ssz-size:"32"`
-	SyncCommitteeMessageRoot phase0.Root `ssz-size:"32"`
-}
-
-type CommitteeMessageTrace struct {
-	BeaconRoot []phase0.Root           `ssz-max:"1500" ssz-size:"32"`
-	Validators []phase0.ValidatorIndex `ssz-max:"1500"`
-
-	Signer       spectypes.OperatorID
-	ReceivedTime time.Time
-}
-
-type DutyTrace struct {
-	Slot     phase0.Slot
+type ConsensusTrace struct {
 	Rounds   []*RoundTrace   `ssz-max:"15"`
 	Decideds []*DecidedTrace `ssz-max:"256"` // TODO max
 }
@@ -52,7 +32,7 @@ type DecidedTrace struct {
 }
 
 type RoundTrace struct {
-	sync.Mutex
+	// sync.Mutex
 	Proposer spectypes.OperatorID // can be computed or saved
 	// ProposalData
 	ProposalTrace *ProposalTrace
@@ -78,4 +58,47 @@ type MessageTrace struct {
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
 	ReceivedTime time.Time
+}
+
+type PartialSigMessageTrace struct {
+	Type         spectypes.PartialSigMsgType
+	BeaconRoot   phase0.Root `ssz-size:"32"`
+	Signer       spectypes.OperatorID
+	ReceivedTime time.Time
+}
+
+// Committee
+type CommitteeDutyTrace struct {
+	ConsensusTrace
+
+	Slot phase0.Slot
+	Post []*CommitteePartialSigMessageTrace `ssz-max:"13"`
+
+	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
+	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`
+
+	// maybe not needed
+	AttestationDataRoot      phase0.Root `ssz-size:"32"`
+	SyncCommitteeMessageRoot phase0.Root `ssz-size:"32"`
+}
+
+// where used?
+type CommitteeMessageTrace struct {
+	BeaconRoot []phase0.Root           `ssz-max:"1500" ssz-size:"32"`
+	Validators []phase0.ValidatorIndex `ssz-max:"1500"`
+
+	Signer       spectypes.OperatorID
+	ReceivedTime time.Time
+}
+
+type CommitteePartialSigMessageTrace struct {
+	PartialSigMessageTrace
+
+	Messages []*PartialSigMessage `ssz-max:"15"` // TODO confirm
+}
+
+type PartialSigMessage struct {
+	BeaconRoot     phase0.Root `ssz-size:"32"`
+	Signer         spectypes.OperatorID
+	ValidatorIndex phase0.ValidatorIndex
 }
