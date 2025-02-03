@@ -69,9 +69,7 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 
 func makeVTrace(slot phase0.Slot) *model.ValidatorDutyTrace {
 	return &model.ValidatorDutyTrace{
-		DutyTrace: model.DutyTrace{
-			Slot: slot,
-		},
+		Slot:      slot,
 		Role:      types.BNRoleAttester,
 		Validator: phase0.ValidatorIndex(39393),
 	}
@@ -79,9 +77,7 @@ func makeVTrace(slot phase0.Slot) *model.ValidatorDutyTrace {
 
 func makeCTrace(slot phase0.Slot) *model.CommitteeDutyTrace {
 	return &model.CommitteeDutyTrace{
-		DutyTrace: model.DutyTrace{
-			Slot: slot,
-		},
+		Slot:                     slot,
 		CommitteeID:              [32]byte{'a'},
 		OperatorIDs:              nil,
 		AttestationDataRoot:      [32]byte{},

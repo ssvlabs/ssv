@@ -15,10 +15,18 @@ type validatorTraceResponse struct {
 type validatorTrace struct {
 	Slot      phase0.Slot `json:"slot"`
 	Rounds    []round
+	Decideds  []decided
 	Pre       []message             `json:"pre"`
 	Post      []message             `json:"post"`
 	Role      spectypes.BeaconRole  `json:"role"`
 	Validator phase0.ValidatorIndex `json:"validator"`
+}
+
+type decided struct {
+	Round        uint64
+	BeaconRoot   phase0.Root
+	Signer       spectypes.OperatorID
+	ReceivedTime time.Time
 }
 
 type round struct {
@@ -37,10 +45,10 @@ type roundChange struct {
 }
 
 type message struct {
-	Round        uint64               `json:"round"`
-	BeaconRoot   phase0.Root          `json:"beaconRoot"`
-	Signer       spectypes.OperatorID `json:"signer"`
-	ReceivedTime time.Time            `json:"time"`
+	Type         spectypes.PartialSigMsgType `json:"type"`
+	BeaconRoot   phase0.Root                 `json:"beaconRoot"`
+	Signer       spectypes.OperatorID        `json:"signer"`
+	ReceivedTime time.Time                   `json:"time"`
 }
 
 func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
@@ -54,10 +62,10 @@ func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 	}
 }
 
-func toMessageTrace(m []*model.MessageTrace) (out []message) {
+func toMessageTrace(m []*model.PartialSigMessageTrace) (out []message) {
 	for _, mt := range m {
 		out = append(out, message{
-			Round:        mt.Round,
+			Type:         mt.Type,
 			BeaconRoot:   mt.BeaconRoot,
 			Signer:       mt.Signer,
 			ReceivedTime: mt.ReceivedTime,
@@ -82,15 +90,17 @@ type committeeTraceResponse struct {
 }
 
 type committeeTrace struct {
-	Slot   phase0.Slot        `json:"slot"`
-	Rounds []round            `json:"rounds"`
-	Post   []committeeMessage `json:"post"`
+	Slot     phase0.Slot        `json:"slot"`
+	Rounds   []round            `json:"rounds"`
+	Decideds []decided          `json:"decideds"`
+	Post     []committeeMessage `json:"post"`
 
 	CommitteeID spectypes.CommitteeID  `json:"committeeID"`
 	OperatorIDs []spectypes.OperatorID `json:"operatorIDs"`
 }
 
 type committeeMessage struct {
+	message
 	BeaconRoot   []phase0.Root           `json:"beaconRoot"`
 	Validators   []phase0.ValidatorIndex `json:"validators"`
 	Signer       spectypes.OperatorID    `json:"signer"`
@@ -107,11 +117,12 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 	}
 }
 
-func toCommitteeMessageTrace(m []*model.CommitteeMessageTrace) (out []committeeMessage) {
+func toCommitteeMessageTrace(m []*model.CommitteePartialSigMessageTrace) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
-			BeaconRoot:   mt.BeaconRoot,
-			Validators:   mt.Validators,
+			// Type:         mt.Type,
+			// BeaconRoot:   mt.BeaconRoot,
+			// Validators:   mt.Validators,
 			Signer:       mt.Signer,
 			ReceivedTime: mt.ReceivedTime,
 		})
