@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -9,6 +10,7 @@ import (
 
 //go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace
 type ValidatorDutyTrace struct {
+	sync.Mutex
 	DutyTrace
 	Pre  []*MessageTrace `ssz-max:"13"`
 	Post []*MessageTrace `ssz-max:"13"`
@@ -50,6 +52,7 @@ type DecidedTrace struct {
 }
 
 type RoundTrace struct {
+	sync.Mutex
 	Proposer spectypes.OperatorID // can be computed or saved
 	// ProposalData
 	ProposalTrace *ProposalTrace
