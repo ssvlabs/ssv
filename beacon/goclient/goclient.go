@@ -234,7 +234,7 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithReducedMemoryUsage(true),
 		eth2clienthttp.WithAllowDelayedStart(true),
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
-		eth2clienthttp.WithSyncDistanceTolerance(gc.syncDistanceTolerance),
+		eth2clienthttp.WithELConnectionCheck(true),
 	)
 	if err != nil {
 		gc.log.Error("Consensus http client initialization failed",
@@ -367,7 +367,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	recordBeaconClientStatus(ctx, statusSyncing, gc.multiClient.Address())
 	recordSyncDistance(ctx, syncState.SyncDistance, gc.multiClient.Address())
 
-	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
 		gc.log.Error("Consensus client is not synced")
 		return errSyncing
@@ -375,6 +374,10 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
+	}
+	if syncState.ELOffline {
+		gc.log.Error("Consensus client's EL node is offline")
+		return fmt.Errorf("EL is offline")
 	}
 
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
