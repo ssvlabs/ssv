@@ -423,7 +423,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		client, err := mc.getClient(ctx, clientIndex)
 		if err != nil {
 			mc.logger.Warn("client unavailable, switching to the next client",
-				zap.String("addr", mc.nodeAddrs[i]),
+				zap.String("addr", mc.nodeAddrs[clientIndex]),
 				zap.Error(err))
 
 			allErrs = errors.Join(allErrs, err)
