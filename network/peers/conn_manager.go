@@ -17,8 +17,6 @@ const (
 	ProtectedTag = "ssv/subnets"
 )
 
-type PeerScore float64
-
 type DiscoveredPeer struct {
 	peer.AddrInfo
 	// ConnectRetries keeps track of how many times we tried to connect to this peer.

@@ -42,8 +42,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	return opts.Ttl, nil
 }
 
-// FindPeers discovers peers providing a service
-// implementation of discovery.Discoverer
+// FindPeers discovers peers providing a service implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
 	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
 	subnet, err := dvs.nsToSubnet(ns)
