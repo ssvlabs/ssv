@@ -71,9 +71,7 @@ type MultiClient struct {
 	clientsMu          []sync.Mutex           // clientsMu allow for lazy initialization of each client in `clients` slice in thread-safe manner (atomically)
 	clients            []SingleClientProvider // nil if not connected
 	currentClientIndex atomic.Int64
-
-	healthyMu   sync.Mutex
-	lastHealthy time.Time
+	lastHealthy        atomic.Int64
 }
 
 // NewMulti creates a new instance of MultiClient.
@@ -281,10 +279,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (mc *MultiClient) Healthy(ctx context.Context) error {
-	mc.healthyMu.Lock()
-	defer mc.healthyMu.Unlock()
-
-	if time.Since(mc.lastHealthy) <= mc.healthInvalidationInterval {
+	if time.Since(time.Unix(mc.lastHealthy.Load(), 0)) <= mc.healthInvalidationInterval {
 		return nil
 	}
 
@@ -317,7 +312,7 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 	}
 	err := p.Wait()
 	if healthyClients.Load() {
-		mc.lastHealthy = time.Now()
+		mc.lastHealthy.Store(time.Now().Unix())
 		return nil
 	}
 	return fmt.Errorf("no healthy clients: %w", err)
