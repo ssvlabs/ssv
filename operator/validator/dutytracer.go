@@ -29,6 +29,9 @@ func NewTracer(logger *zap.Logger) *InMemTracer {
 }
 
 func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *model.ValidatorDutyTrace {
+	n.Lock()
+	defer n.Unlock()
+
 	mp, ok := n.validatorTraces[slot]
 	if !ok {
 		mp = make(map[string]*model.ValidatorDutyTrace)
@@ -44,7 +47,10 @@ func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *model.ValidatorDuty
 	return trace
 }
 
-func (n *InMemTracer) getRound(trace *model.ValidatorDutyTrace, round uint64) *model.RoundTrace {
+func getRound(trace *model.ValidatorDutyTrace, round uint64) *model.RoundTrace {
+	trace.Lock()
+	defer trace.Unlock()
+
 	var count = uint64(len(trace.Rounds))
 	for round+1 > count {
 		var r model.RoundTrace
@@ -162,14 +168,15 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 	trace := n.getTrace(slot, validatorID)
 
 	// first round is 1
-	var round = n.getRound(trace, uint64(msg.Round))
+	var round = getRound(trace, uint64(msg.Round))
+	round.Lock()
+	defer round.Unlock()
 
-	{ // proposer
-		operatorIDs := getOperators(validatorID)
-		if len(operatorIDs) > 0 {
-			var mockState = n.toMockState(msg, operatorIDs)
-			round.Proposer = specqbft.RoundRobinProposer(mockState, msg.Round)
-		}
+	// proposer
+	operatorIDs := getOperators(validatorID)
+	if len(operatorIDs) > 0 {
+		var mockState = n.toMockState(msg, operatorIDs)
+		round.Proposer = specqbft.RoundRobinProposer(mockState, msg.Round)
 	}
 
 	switch msg.MsgType {
@@ -228,12 +235,14 @@ func (n *InMemTracer) signed(msg *spectypes.PartialSignatureMessages) {
 	fields = append(fields, zap.Int("messages", len(msg.Messages)))
 	fields = append(fields, zap.Int("duty rounds", len(trace.Rounds)))
 
-	round := uint64(0) // TODO
-	lastRound := n.getRound(trace, round)
+	r := uint64(0) // TODO
+	round := getRound(trace, r)
+	round.Lock()
+	defer round.Unlock()
 
 	// Q: how to map Message to RoundTrace?
 	for _, pSigMsg := range msg.Messages {
-		lastRound.Proposer = pSigMsg.Signer
+		round.Proposer = pSigMsg.Signer
 		_ = pSigMsg.ValidatorIndex
 	}
 
