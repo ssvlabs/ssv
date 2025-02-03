@@ -279,7 +279,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (mc *MultiClient) Healthy(ctx context.Context) error {
-	if time.Since(time.Unix(mc.lastHealthy.Load(), 0)) <= mc.healthInvalidationInterval {
+	if time.Since(time.Unix(mc.lastHealthy.Load(), 0)) < mc.healthInvalidationInterval {
 		return nil
 	}
 
