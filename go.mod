@@ -254,5 +254,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 // github.com/attestantio/go-eth2-client doesn't support el_offline flag, it causes downtime when EL node is down but CL node is up
-// Using a fix from https://github.com/nkryuchkov/go-eth2-client/commits/syncing-el-offline/
-replace github.com/attestantio/go-eth2-client => github.com/nkryuchkov/go-eth2-client v0.0.0-20250203144740-518589d0f564
+// Using a fix from https://github.com/ssvlabs/go-eth2-client/commits/syncing-el-offline/
+replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250203144740-518589d0f564
