@@ -531,8 +531,6 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8m
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86/go.mod h1:kHJEU3ofeGjhHklVoIGuVj85JJwZ6kWPaJwCIxgnFmo=
 github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a/Q4r9LP1IltGz7tA7iOK1WonHEYhu1HRBA7ZiM=
-github.com/nkryuchkov/go-eth2-client v0.0.0-20250128220448-69c1f6bda599 h1:2+BPHc7DR3H4lYwSXP7MVUIyd/R2U14RwqedznYAvMc=
-github.com/nkryuchkov/go-eth2-client v0.0.0-20250128220448-69c1f6bda599/go.mod h1:d7ZPNrMX8jLfIgML5u7QZxFo2AukLM+5m08iMaLdqb8=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
 github.com/nxadm/tail v1.4.11 h1:8feyoE3OzPrcshW5/MJ4sGESc5cqmGkGCWlco4l0bqY=
@@ -740,6 +738,8 @@ github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.0.0/go.mod h1:A8kyI5cUJhb8N+3pkfONlcEcZbueH6nhAm0Fq7SrnBM=
 github.com/ssvlabs/eth2-key-manager v1.4.2 h1:YdeI7vk9jSa8vfSKogx2aSjtYz4eS9Bp85E0yfQF95o=
 github.com/ssvlabs/eth2-key-manager v1.4.2/go.mod h1:RqsGIMCsOeUJQmC2nytr82z5vqn5gN3i3VAoY0OydV8=
+github.com/ssvlabs/go-eth2-client v0.6.31-0.20250128220448-69c1f6bda599 h1:9H7WQVMup3LekXyEk1CmmZIgwYa9yDxiO46hXTjnn9o=
+github.com/ssvlabs/go-eth2-client v0.6.31-0.20250128220448-69c1f6bda599/go.mod h1:d7ZPNrMX8jLfIgML5u7QZxFo2AukLM+5m08iMaLdqb8=
 github.com/ssvlabs/ssv-spec v1.0.2 h1:wq0YUo0DOjFUvfwrr6UUvs38EKvSg8r1k6auBrcNvlI=
 github.com/ssvlabs/ssv-spec v1.0.2/go.mod h1:lTqsNeTUIfpacMoztbN7YqvFttDigCLjINjy/8I2Wuc=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
