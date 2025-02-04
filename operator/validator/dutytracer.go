@@ -165,7 +165,10 @@ func (n *InMemTracer) createProposalTrace(msg *specqbft.Message, signedMsg *spec
 	return proposalTrace
 }
 
-func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, trace *model.ConsensusTrace, round *round) {
+func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *round) {
+	round.Lock()
+	defer round.Unlock()
+
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		round.ProposalTrace = n.createProposalTrace(msg, signedMsg)
@@ -248,7 +251,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	trace.Pre = append(trace.Pre, &tr)
 }
 
-func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, committeeID string) {
+func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignatureMessages, committeeID string) {
 	slot := uint64(msg.Slot)
 
 	trace := n.getCommitteeTrace(slot, committeeID)
@@ -276,6 +279,7 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 
 	fields := []zap.Field{
 		zap.Uint64("slot", slot),
+		zap.Int("post len", len(trace.Post)),
 	}
 
 	n.logger.Info("signed committee", fields...)
@@ -293,31 +297,43 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			case spectypes.RoleCommittee:
 				commiteeID := string(executorID)
 				trace := n.getCommitteeTrace(slot, commiteeID)
-				trace.Lock() // take a second look here (locking trace vs round etc)
-				defer trace.Unlock()
+				round := trace.getRound(uint64(subMsg.Round))
 
-				var round = trace.getRound(uint64(subMsg.Round))
-				round.Lock()
-				defer round.Unlock()
+				func() { // populate proposer
+					operatorIDs := getOperators(commiteeID)
+					if len(operatorIDs) > 0 {
+						mockState := n.toMockState(subMsg, operatorIDs)
+						round.Lock()
+						defer round.Unlock()
+						round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
+					}
+				}()
 
-				// populate proposer
-				operatorIDs := getOperators(commiteeID)
-				if len(operatorIDs) > 0 {
-					var mockState = n.toMockState(subMsg, operatorIDs)
-					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
-				}
-
-				n.processConsensus(subMsg, msg.SignedSSVMessage, &trace.ConsensusTrace, round)
+				n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 			default:
 				validatorPubKey := string(executorID)
 				trace := n.getValidatorTrace(slot, validatorPubKey)
-				trace.Lock() // take a second look here
-				defer trace.Unlock()
 
-				var round = trace.getRound(uint64(subMsg.Round))
-				round.Lock()
-				defer round.Unlock()
+				stop := func() bool {
+					trace.Lock()
+					defer trace.Unlock()
 
+					var data = new(spectypes.ValidatorConsensusData)
+					err := data.Decode(msg.SignedSSVMessage.FullData)
+					if err != nil {
+						n.logger.Error("failed to decode validator proposal data", zap.Error(err))
+						return true
+					}
+
+					trace.Validator = data.Duty.ValidatorIndex
+					return false
+				}()
+
+				if stop {
+					return
+				}
+
+				round := trace.getRound(uint64(subMsg.Round))
 				// populate proposer
 				operatorIDs := getOperators(validatorPubKey)
 				if len(operatorIDs) > 0 {
@@ -325,16 +341,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
 				}
 
-				var data = new(spectypes.ValidatorConsensusData)
-				err := data.Decode(msg.SignedSSVMessage.FullData)
-				if err != nil {
-					n.logger.Error("failed to decode validator proposal data", zap.Error(err))
-					return
-				}
-
-				trace.Validator = data.Duty.ValidatorIndex
-
-				n.processConsensus(subMsg, msg.SignedSSVMessage, &trace.ConsensusTrace, round)
+				n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 			}
 		}
 	case spectypes.SSVPartialSignatureMsgType:
@@ -345,14 +352,14 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			return
 		}
 
+		executorID := string(msg.MsgID.GetDutyExecutorID())
+
 		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-			committeeID := msg.MsgID.GetDutyExecutorID()
-			n.processPartialSigCommittee(pSigMessages, msg, string(committeeID))
+			n.processPartialSigCommittee(pSigMessages, executorID)
 			return
 		}
 
-		validatorPubKey := msg.MsgID.GetDutyExecutorID()
-		n.processPartialSigValidator(pSigMessages, msg, string(validatorPubKey))
+		n.processPartialSigValidator(pSigMessages, msg, executorID)
 	}
 }
 
@@ -392,6 +399,12 @@ type committeeDutyTrace struct {
 func (trace *committeeDutyTrace) getRound(rnd uint64) *round {
 	trace.Lock()
 	defer trace.Unlock()
+
+	var count = len(trace.Rounds)
+	for rnd+1 > uint64(count) { //nolint:gosec
+		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})
+		count = len(trace.Rounds)
+	}
 
 	return &round{
 		RoundTrace: trace.Rounds[rnd],
