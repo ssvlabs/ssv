@@ -3,10 +3,11 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/ssvlabs/ssv/message/validation"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/ssvlabs/ssv/message/validation"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
