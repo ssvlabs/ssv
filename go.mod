@@ -37,7 +37,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.4.2
-	github.com/ssvlabs/ssv-spec v1.0.2
+	github.com/ssvlabs/ssv-spec v0.0.0-20250204071012-0499cc474ce4
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -250,5 +250,3 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-replace github.com/ssvlabs/ssv-spec => github.com/MFrancoLink/ssv-spec v0.0.0-20250131102333-4bfea9f46f31
