@@ -31,7 +31,7 @@ type Options struct {
 	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override the SSV domain type. This is used to isolate the node from the rest of the network. Do not set unless you know what you are doing. This would be incremented by 1 for Alan, for example: 0x01020304 becomes 0x01020305 post-fork."`
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
-	ExecutionClient     *executionclient.ExecutionClient
+	ExecutionClient     executionclient.Provider
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	DB                  basedb.Database
@@ -49,10 +49,10 @@ type Node struct {
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions
 	consensusClient  beaconprotocol.BeaconNode
-	executionClient  *executionclient.ExecutionClient
+	executionClient  executionclient.Provider
 	net              network.P2PNetwork
 	storage          storage.Storage
-	qbftStorage      *qbftstorage.QBFTStores
+	qbftStorage      *qbftstorage.ParticipantStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 
@@ -61,7 +61,7 @@ type Node struct {
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.QBFTStores) *Node {
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	node := &Node{
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
@@ -105,7 +105,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start(logger *zap.Logger) error {
-	logger.Named(logging.NameOperator)
+	logger = logger.Named(logging.NameOperator)
 
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
@@ -134,11 +134,11 @@ func (n *Node) Start(logger *zap.Logger) error {
 	}
 	go n.net.UpdateSubnets(logger)
 	go n.net.UpdateScoreParams(logger)
-	n.validatorsCtrl.StartValidators()
+	n.validatorsCtrl.StartValidators(n.context)
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+	go n.validatorsCtrl.HandleMetadataUpdates(n.context)
 	go n.validatorsCtrl.ReportValidatorStatuses(n.context)
 
 	if err := n.dutyScheduler.Wait(); err != nil {

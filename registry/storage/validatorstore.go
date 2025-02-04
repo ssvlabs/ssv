@@ -1,15 +1,15 @@
 package storage
 
 import (
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"golang.org/x/exp/maps"
-
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"golang.org/x/exp/maps"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
@@ -232,31 +232,68 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
-			c.byValidatorIndex[share.BeaconMetadata.Index] = share
+			c.byValidatorIndex[share.ValidatorIndex] = share
 		}
 
 		// Update byCommitteeID
-		committee := c.byCommitteeID[share.CommitteeID()]
-		if committee == nil {
-			committee = buildCommittee([]*types.SSVShare{share})
-		} else {
+		committeeID := share.CommitteeID()
+		committee, exists := c.byCommitteeID[committeeID]
+		if exists {
+			// Verify share does not already exist in committee.
+			if containsShare(committee.Validators, share) {
+				// Corrupt state.
+				return fmt.Errorf("share already exists in committee. validator_pubkey=%s committee_id=%s",
+					hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committeeID[:]))
+			}
+
+			// Rebuild committee.
 			committee = buildCommittee(append(committee.Validators, share))
+		} else {
+			// Build new committee.
+			committee = buildCommittee([]*types.SSVShare{share})
 		}
 		c.byCommitteeID[committee.ID] = committee
 
 		// Update byOperatorID
+		seenOperators := make(map[spectypes.OperatorID]struct{})
 		for _, operator := range share.Committee {
-			data := c.byOperatorID[operator.Signer]
-			if data == nil {
+			if _, seen := seenOperators[operator.Signer]; seen {
+				// Corrupt state.
+				return fmt.Errorf("duplicate operator in share. operator_id=%d", operator.Signer)
+			}
+			seenOperators[operator.Signer] = struct{}{}
+
+			data, exists := c.byOperatorID[operator.Signer]
+			if !exists {
 				data = &sharesAndCommittees{
-					shares:     []*types.SSVShare{share},
-					committees: []*Committee{committee},
+					shares:     []*types.SSVShare{},
+					committees: []*Committee{},
 				}
-			} else {
-				data.shares = append(data.shares, share)
-				data.committees = append(data.committees, committee)
 			}
 
+			if containsShare(data.shares, share) {
+				// Corrupt state.
+				return fmt.Errorf("share already exists in operator. validator_pubkey=%s operator_id=%d",
+					hex.EncodeToString(share.ValidatorPubKey[:]), operator.Signer)
+			}
+			data.shares = append(data.shares, share)
+
+			// Copy `committees` to avoid shared state issues.
+			updated := false
+			newCommittees := make([]*Committee, len(data.committees))
+			copy(newCommittees, data.committees)
+			for i, c := range newCommittees {
+				if c.ID == committee.ID {
+					newCommittees[i] = committee
+					updated = true
+					break
+				}
+			}
+
+			if !updated {
+				newCommittees = append(newCommittees, committee)
+			}
+			data.committees = newCommittees
 			c.byOperatorID[operator.Signer] = data
 		}
 	}
@@ -273,44 +310,62 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 	defer c.mu.Unlock()
 
 	// Update byValidatorIndex
-	if share.BeaconMetadata != nil {
-		delete(c.byValidatorIndex, share.BeaconMetadata.Index)
+	if share.HasBeaconMetadata() {
+		delete(c.byValidatorIndex, share.ValidatorIndex)
 	}
 
 	// Update byCommitteeID
-	committee := c.byCommitteeID[share.CommitteeID()]
-	if committee != nil {
-		validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
-		indices := make([]phase0.ValidatorIndex, 0, len(committee.Validators)-1)
-		for _, validator := range committee.Validators {
-			if validator.ValidatorPubKey != share.ValidatorPubKey {
-				validators = append(validators, validator)
-				indices = append(indices, validator.ValidatorIndex)
-			}
-		}
-		if len(validators) == 0 {
-			delete(c.byCommitteeID, committee.ID)
-		} else {
-			committee.Validators = validators
-			committee.Indices = indices
-		}
+	committeeID := share.CommitteeID()
+	committee, exists := c.byCommitteeID[committeeID]
+	if !exists {
+		return fmt.Errorf("committee not found. id=%s", hex.EncodeToString(committeeID[:]))
+	}
+
+	newCommittee, err := removeShareFromCommittee(committee, share)
+	if err != nil {
+		return fmt.Errorf("failed to remove share from committee. %w", err)
+	}
+
+	committeeRemoved := len(newCommittee.Validators) == 0
+	if committeeRemoved {
+		delete(c.byCommitteeID, newCommittee.ID)
+	} else {
+		c.byCommitteeID[newCommittee.ID] = newCommittee
 	}
 
 	// Update byOperatorID
 	for _, operator := range share.Committee {
-		data := c.byOperatorID[operator.Signer]
-		if data != nil {
-			shares := make([]*types.SSVShare, 0, len(data.shares)-1)
-			for _, s := range data.shares {
-				if s.ValidatorPubKey != share.ValidatorPubKey {
-					shares = append(shares, s)
+		data, exists := c.byOperatorID[operator.Signer]
+		if !exists {
+			return fmt.Errorf("operator not found. operator_id=%d", operator.Signer)
+		}
+
+		if !removeShareFromOperator(data, share) {
+			return fmt.Errorf("share not found in operator. validator_pubkey=%s operator_id=%d",
+				hex.EncodeToString(share.ValidatorPubKey[:]), operator.Signer)
+		}
+
+		// Copy `committees` to avoid shared state issues.
+		newCommittees := make([]*Committee, len(data.committees))
+		copy(newCommittees, data.committees)
+		for i, c := range newCommittees {
+			if c.ID == committeeID {
+				if committeeRemoved {
+					// Remove the committee if it was completely removed
+					newCommittees = append(newCommittees[:i], newCommittees[i+1:]...)
+				} else {
+					// Replace the committee with the updated one
+					newCommittees[i] = newCommittee
 				}
+				break
 			}
-			if len(shares) == 0 {
-				delete(c.byOperatorID, operator.Signer)
-			} else {
-				data.shares = shares
-			}
+		}
+		data.committees = newCommittees
+
+		if len(data.shares) == 0 {
+			delete(c.byOperatorID, operator.Signer)
+		} else {
+			c.byOperatorID[operator.Signer] = data
 		}
 	}
 
@@ -325,34 +380,56 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 		if share == nil {
 			return fmt.Errorf("nil share")
 		}
+
 		// Update byValidatorIndex
 		if share.HasBeaconMetadata() {
-			c.byValidatorIndex[share.BeaconMetadata.Index] = share
+			c.byValidatorIndex[share.ValidatorIndex] = share
 		}
 
 		// Update byCommitteeID
-		committee := c.byCommitteeID[share.CommitteeID()]
-		if committee != nil {
-			for i, validator := range committee.Validators {
-				if validator.ValidatorPubKey == share.ValidatorPubKey {
-					committee.Validators[i] = share
-					committee.Indices[i] = share.ValidatorIndex
-					break
-				}
-			}
+		committeeID := share.CommitteeID()
+		committee, exists := c.byCommitteeID[committeeID]
+		if !exists {
+			return fmt.Errorf("committee not found. id=%s", hex.EncodeToString(committeeID[:]))
 		}
+
+		newCommittee, err := updateCommitteeWithShare(committee, share)
+		if err != nil {
+			return fmt.Errorf("failed to update share in committee. %w", err)
+		}
+		c.byCommitteeID[committeeID] = newCommittee
 
 		// Update byOperatorID
 		for _, shareMember := range share.Committee {
-			data := c.byOperatorID[shareMember.Signer]
-			if data != nil {
-				for i, s := range data.shares {
-					if s.ValidatorPubKey == share.ValidatorPubKey {
-						data.shares[i] = share
-						break
-					}
+			data, exists := c.byOperatorID[shareMember.Signer]
+			if !exists {
+				return fmt.Errorf("operator not found. operator_id=%d", shareMember.Signer)
+			}
+
+			updated := false
+			for i, s := range data.shares {
+				if s.ValidatorPubKey == share.ValidatorPubKey {
+					data.shares[i] = share
+					updated = true
+					break
 				}
 			}
+			if !updated {
+				return fmt.Errorf("share not found in operator. validator_pubkey=%s operator_id=%d",
+					hex.EncodeToString(share.ValidatorPubKey[:]), shareMember.Signer)
+			}
+
+			// Copy `committees` to avoid shared state issues.
+			newCommittees := make([]*Committee, len(data.committees))
+			copy(newCommittees, data.committees)
+			for i, c := range newCommittees {
+				if c.ID == committeeID {
+					newCommittees[i] = newCommittee
+					break
+				}
+			}
+			data.committees = newCommittees
+			c.byOperatorID[shareMember.Signer] = data
 		}
 	}
 
@@ -368,6 +445,78 @@ func (c *validatorStore) handleDrop() {
 	c.byOperatorID = make(map[spectypes.OperatorID]*sharesAndCommittees)
 }
 
+func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
+	for _, existing := range shares {
+		if existing.ValidatorPubKey == share.ValidatorPubKey {
+			return true
+		}
+	}
+	return false
+}
+
+func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShare) (*Committee, error) {
+	var shares []*types.SSVShare
+	removed := false
+
+	for i, share := range committee.Validators {
+		if share.ValidatorPubKey == shareToRemove.ValidatorPubKey {
+			if share.ValidatorIndex != committee.Indices[i] {
+				// Corrupt state.
+				return nil, fmt.Errorf("share index mismatch. validator_pubkey=%s committee_id=%s validator_index=%d committee_index=%d",
+					hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]), share.ValidatorIndex, committee.Indices[i])
+			}
+			removed = true
+			continue // Skip adding this share
+		}
+
+		shares = append(shares, share)
+	}
+
+	if !removed {
+		// Corrupt state.
+		return nil, fmt.Errorf("share not found in committee. validator_pubkey=%s committee_id=%s",
+			hex.EncodeToString(shareToRemove.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
+	}
+
+	if len(shares) == 0 {
+		return &Committee{
+			ID: committee.ID,
+		}, nil
+	}
+
+	return buildCommittee(shares), nil
+}
+
+func updateCommitteeWithShare(committee *Committee, shareToUpdate *types.SSVShare) (*Committee, error) {
+	shares := make([]*types.SSVShare, len(committee.Validators))
+	copy(shares, committee.Validators)
+
+	updated := false
+	for i, share := range shares {
+		if share.ValidatorPubKey == shareToUpdate.ValidatorPubKey {
+			shares[i] = shareToUpdate
+			updated = true
+		}
+	}
+
+	if !updated {
+		return nil, fmt.Errorf("share not found in committee. validator_pubkey=%s committee_id=%s",
+			hex.EncodeToString(shareToUpdate.ValidatorPubKey[:]), hex.EncodeToString(committee.ID[:]))
+	}
+
+	return buildCommittee(shares), nil
+}
+
+func removeShareFromOperator(data *sharesAndCommittees, share *types.SSVShare) (found bool) {
+	for i, s := range data.shares {
+		if s.ValidatorPubKey == share.ValidatorPubKey {
+			data.shares = append(data.shares[:i], data.shares[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func buildCommittee(shares []*types.SSVShare) *Committee {
 	committee := &Committee{
 		ID:         shares[0].CommitteeID(),
@@ -376,16 +525,15 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		Indices:    make([]phase0.ValidatorIndex, 0, len(shares)),
 	}
 
-	seenOperators := make(map[spectypes.OperatorID]struct{})
-
-	for _, share := range shares {
-		for _, shareMember := range share.Committee {
-			seenOperators[shareMember.Signer] = struct{}{}
-		}
-		committee.Indices = append(committee.Indices, share.ValidatorIndex)
+	// Set operator IDs.
+	for _, member := range shares[0].Committee {
+		committee.Operators = append(committee.Operators, member.Signer)
 	}
 
-	committee.Operators = maps.Keys(seenOperators)
+	// Set validator indices.
+	for _, share := range shares {
+		committee.Indices = append(committee.Indices, share.ValidatorIndex)
+	}
 	slices.Sort(committee.Operators)
 
 	return committee

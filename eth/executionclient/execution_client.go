@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -21,6 +22,29 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
+
+//go:generate mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
+
+type Provider interface {
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
+	StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
+	Filterer() (*contract.ContractFilterer, error)
+	BlockByNumber(ctx context.Context, number *big.Int) (*ethtypes.Block, error)
+	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
+	ChainID(ctx context.Context) (*big.Int, error)
+	Healthy(ctx context.Context) error
+	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error)
+	FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error)
+	Close() error
+}
+
+type SingleClientProvider interface {
+	Provider
+	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
+	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
+}
+
+var _ Provider = &ExecutionClient{}
 
 var (
 	ErrClosed        = fmt.Errorf("closed")
@@ -45,14 +69,16 @@ type ExecutionClient struct {
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
+	healthInvalidationInterval  time.Duration
 	logBatchSize                uint64
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	client *ethclient.Client
-	closed chan struct{}
+	client         *ethclient.Client
+	closed         chan struct{}
+	lastSyncedTime atomic.Int64
 }
 
 // New creates a new instance of ExecutionClient.
@@ -65,6 +91,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
+		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
 	}
@@ -79,6 +106,11 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	client.syncProgressFn = client.syncProgress
 
 	return client, nil
+}
+
+// TODO: add comments about SyncProgress, syncProgress, syncProgressFn
+func (ec *ExecutionClient) SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
+	return ec.syncProgressFn(ctx)
 }
 
 func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
@@ -178,13 +210,16 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					}
 					validLogs = append(validLogs, log)
 				}
-				if len(validLogs) == 0 {
-					// Emit empty block logs to indicate that we have advanced to this block.
-					logs <- BlockLogs{BlockNumber: toBlock}
-				} else {
-					for _, blockLogs := range PackLogs(validLogs) {
-						logs <- blockLogs
+				var highestBlock uint64
+				for _, blockLogs := range PackLogs(validLogs) {
+					logs <- blockLogs
+					if blockLogs.BlockNumber > highestBlock {
+						highestBlock = blockLogs.BlockNumber
 					}
+				}
+				// Emit empty block logs to indicate that we have advanced to this block.
+				if highestBlock < toBlock {
+					logs <- BlockLogs{BlockNumber: toBlock}
 				}
 			}
 		}
@@ -229,7 +264,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 
 				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
-				ec.reconnect(ctx)
+				ec.reconnect(ctx) // TODO: ethclient implements reconnection, consider removing this logic after thorough testing
 				fromBlock = lastBlock + 1
 			}
 		}
@@ -246,11 +281,21 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ErrClosed
 	}
 
+	lastHealthyTime := time.Unix(ec.lastSyncedTime.Load(), 0)
+	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
+		// Synced recently, reuse the result (only if ec.healthInvalidationInterval is set).
+		return nil
+	}
+
+	return ec.healthy(ctx)
+}
+
+func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
 	start := time.Now()
-	sp, err := ec.syncProgressFn(ctx)
+	sp, err := ec.SyncProgress(ctx)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 		ec.logger.Error(elResponseErrMsg,
@@ -261,21 +306,20 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
 	if sp != nil {
-		recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
-
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
-
 		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
 		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
+			recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
 			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
+	} else {
+		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
-
-	syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+	ec.lastSyncedTime.Store(time.Now().Unix())
 
 	return nil
 }
@@ -290,6 +334,42 @@ func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.I
 	}
 
 	return b, nil
+}
+
+func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
+	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getBlockByNumber"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return h, nil
+}
+
+func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
+	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "EthSubscribe"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return logs, nil
+}
+
+func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+	logs, err := ec.client.FilterLogs(ctx, q)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getLogs"),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return logs, nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {
@@ -307,6 +387,21 @@ func (ec *ExecutionClient) isClosed() bool {
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
 
+	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
+	//
+	// We must receive all events as they determine the state of the ssv network, so a discrepancy can result in slashing.
+	// Therefore, we must be sure that we don't miss any log while streaming.
+	//
+	// With SubscribeFilterLogs we cannot specify the block we subscribe from, it always starts at the highest.
+	// So with streaming we had some bugs because of missing blocks:
+	// - first sync history from genesis to block 100, but then stream sometimes starts late at 102 (missed 101)
+	// - inevitably miss blocks during any stream connection interruptions (such as EL restarts)
+	//
+	// Thus, we decided not to rely on log streaming and use SubscribeNewHead + FilterLogs.
+	//
+	// It also allowed us to implement more 'atomic' behaviour easier:
+	// We can revert the tx if there was an error in processing all the events of a block.
+	// So we can restart from this block once everything is good.
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
@@ -362,14 +457,14 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	defer cancel()
 
 	start := time.Now()
-	var err error
-	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
+	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "DialContext"),
 			zap.Error(err))
 		return err
 	}
+	ec.client = client
 
 	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
 	return nil
@@ -404,4 +499,8 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 	return contract.NewContractFilterer(ec.contractAddress, ec.client)
+}
+
+func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
+	return ec.client.ChainID(ctx)
 }

@@ -637,7 +637,7 @@ func TestSyncProgress(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := New(ctx, addr, contractAddr)
+	client, err := New(ctx, addr, contractAddr, WithHealthInvalidationInterval(0))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
@@ -650,11 +650,9 @@ func TestSyncProgress(t *testing.T) {
 			p.HighestBlock = 6
 			return p, nil
 		}
-
 		err = client.Healthy(ctx)
 		require.ErrorIs(t, err, errSyncing)
 	})
-
 	t.Run("within tolerable limits", func(t *testing.T) {
 		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
 		require.NoError(t, err)
@@ -665,7 +663,6 @@ func TestSyncProgress(t *testing.T) {
 			p.HighestBlock = 7
 			return p, nil
 		}
-
 		err = client.Healthy(ctx)
 		require.NoError(t, err)
 	})
