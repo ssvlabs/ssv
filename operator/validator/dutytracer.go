@@ -18,12 +18,14 @@ type InMemTracer struct {
 	logger *zap.Logger
 	// consider having the validator pubkey before of the slot
 	validatorTraces map[uint64]map[string]*validatorDutyTrace
+	committeeTraces map[uint64]map[string]*committeeDutyTrace
 }
 
 func NewTracer(logger *zap.Logger) *InMemTracer {
 	return &InMemTracer{
 		logger:          logger,
 		validatorTraces: make(map[uint64]map[string]*validatorDutyTrace),
+		committeeTraces: make(map[uint64]map[string]*committeeDutyTrace),
 	}
 }
 
@@ -41,6 +43,25 @@ func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *validatorDutyTrace 
 	if !ok {
 		trace = new(validatorDutyTrace)
 		mp[vPubKey] = trace
+	}
+
+	return trace
+}
+
+func (n *InMemTracer) getCommitteeTrace(slot uint64, committeeID string) *committeeDutyTrace {
+	n.Lock()
+	defer n.Unlock()
+
+	mp, ok := n.committeeTraces[slot]
+	if !ok {
+		mp = make(map[string]*committeeDutyTrace)
+		n.committeeTraces[slot] = mp
+	}
+
+	trace, ok := mp[committeeID]
+	if !ok {
+		trace = new(committeeDutyTrace)
+		mp[committeeID] = trace
 	}
 
 	return trace
@@ -144,7 +165,7 @@ func (n *InMemTracer) createProposalTrace(msg *specqbft.Message, signedMsg *spec
 	return proposalTrace
 }
 
-func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) {
+func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) {
 	slot := uint64(msg.Height)
 
 	msgID := spectypes.MessageID(msg.Identifier[:]) // validator + pubkey + role + network
@@ -216,7 +237,7 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 	// n.validatorTraces = append(n.validatorTraces, model.ValidatorDutyTrace{})
 }
 
-func (n *InMemTracer) signed(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, validatorPubKey string) {
+func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, validatorPubKey string) {
 	slot := uint64(msg.Slot)
 
 	trace := n.getTrace(slot, validatorPubKey)
@@ -229,7 +250,7 @@ func (n *InMemTracer) signed(msg *spectypes.PartialSignatureMessages, ssvMsg *qu
 
 	switch ssvMsg.MsgID.GetRoleType() {
 	case spectypes.RoleCommittee:
-		n.logger.Warn("unexpected committee duty") // we get this every slot
+		n.logger.Warn("unexpected committee duty") // we get this often
 	case spectypes.RoleProposer:
 		trace.Role = spectypes.BNRoleProposer
 	case spectypes.RoleAggregator:
@@ -248,7 +269,7 @@ func (n *InMemTracer) signed(msg *spectypes.PartialSignatureMessages, ssvMsg *qu
 		zap.String("type", trace.Role.String()),
 	}
 
-	n.logger.Info("signed", fields...)
+	n.logger.Info("signed validator", fields...)
 
 	var tr model.PartialSigMessageTrace
 	tr.Type = msg.Type
@@ -264,11 +285,46 @@ func (n *InMemTracer) signed(msg *spectypes.PartialSignatureMessages, ssvMsg *qu
 	trace.Pre = append(trace.Pre, &tr)
 }
 
+func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, committeeID string) {
+	slot := uint64(msg.Slot)
+
+	trace := n.getCommitteeTrace(slot, committeeID)
+	trace.Lock()
+	defer trace.Unlock()
+
+	//trace.CommitteeID = [32]byte(committeeID[:]) //fixme
+	trace.OperatorIDs = getOperators(committeeID)
+	trace.Slot = msg.Slot
+
+	var cTrace model.CommitteePartialSigMessageTrace
+	cTrace.Type = msg.Type
+	cTrace.Signer = msg.Messages[0].Signer
+	cTrace.ReceivedTime = time.Now()
+
+	for _, partialSigMsg := range msg.Messages {
+		tr := model.PartialSigMessage{}
+		tr.BeaconRoot = partialSigMsg.SigningRoot
+		tr.Signer = partialSigMsg.Signer
+		tr.ValidatorIndex = partialSigMsg.ValidatorIndex
+		cTrace.Messages = append(cTrace.Messages, &tr)
+	}
+
+	trace.Post = append(trace.Post, &cTrace)
+
+	fields := []zap.Field{
+		zap.Uint64("slot", slot),
+	}
+
+	n.logger.Info("signed committee", fields...)
+
+	// tbc
+}
+
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		if subMsg, ok := msg.Body.(*specqbft.Message); ok {
-			n.qbft(subMsg, msg.SignedSSVMessage)
+			n.processConsensus(subMsg, msg.SignedSSVMessage)
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := new(spectypes.PartialSignatureMessages)
@@ -277,13 +333,15 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			n.logger.Error("failed to decode partial signature messages", zap.Error(err))
 			return
 		}
-		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
-			validatorPubKey := msg.MsgID.GetDutyExecutorID()
-			n.signed(pSigMessages, msg, string(validatorPubKey))
-		} else { // to be refined
+
+		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 			committeeID := msg.MsgID.GetDutyExecutorID()
-			n.signed(pSigMessages, msg, string(committeeID))
+			n.processPartialSigCommittee(pSigMessages, msg, string(committeeID))
+			return
 		}
+
+		validatorPubKey := msg.MsgID.GetDutyExecutorID()
+		n.processPartialSigValidator(pSigMessages, msg, string(validatorPubKey))
 	}
 }
 
@@ -311,4 +369,11 @@ func (trace *validatorDutyTrace) getRound(rnd uint64) *round {
 	return &round{
 		RoundTrace: r,
 	}
+}
+
+// committee
+
+type committeeDutyTrace struct {
+	sync.Mutex
+	model.CommitteeDutyTrace
 }
