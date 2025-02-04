@@ -46,18 +46,6 @@ func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *validatorDutyTrace 
 	return trace
 }
 
-func getRound(trace *validatorDutyTrace, round uint64) *round {
-	trace.Lock()
-	defer trace.Unlock()
-
-	var count = len(trace.Rounds)
-	for round+1 > uint64(count) { //nolint:gosec
-		count = trace.addRound()
-	}
-
-	return trace.getRound(round)
-}
-
 // HOW TO? id -> validator or committee id
 func getOperators(id string) []spectypes.OperatorID {
 	return []spectypes.OperatorID{}
@@ -77,19 +65,21 @@ func (n *InMemTracer) toMockState(msg *specqbft.Message, operatorIDs []spectypes
 	return mockState
 }
 
-func decodeJustificationWithPrepares(justifications [][]byte) []*model.MessageTrace {
+func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) []*model.MessageTrace {
 	var traces = make([]*model.MessageTrace, 0, len(justifications))
 	for _, rcj := range justifications {
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
 		if err != nil {
-			// n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			continue
 		}
 
 		var qbftMsg = new(specqbft.Message)
 		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
 		if err != nil {
-			// n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			continue
 		}
 
 		var justificationTrace = new(model.MessageTrace)
@@ -102,32 +92,33 @@ func decodeJustificationWithPrepares(justifications [][]byte) []*model.MessageTr
 	return traces
 }
 
-func decodeJustificationWithRoundChanges(justifications [][]byte) []*model.RoundChangeTrace {
+func (n *InMemTracer) decodeJustificationWithRoundChanges(justifications [][]byte) []*model.RoundChangeTrace {
 	var traces = make([]*model.RoundChangeTrace, 0, len(justifications))
 	for _, rcj := range justifications {
-
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
 		if err != nil {
-			// n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			continue
 		}
 
 		var qbftMsg = new(specqbft.Message)
 		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
 		if err != nil {
-			// n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			continue
 		}
 
-		var receivedTime time.Time // we can't know the time when the sender received the message
+		var receivedTime time.Time // zero value becausewe can't know the time when the sender received the message
 
-		var roundChangeTrace = createRoundChangeTrace(qbftMsg, signedMsg, receivedTime)
+		var roundChangeTrace = n.createRoundChangeTrace(qbftMsg, signedMsg, receivedTime)
 		traces = append(traces, roundChangeTrace)
 	}
 
 	return traces
 }
 
-func createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, receivedTime time.Time) *model.RoundChangeTrace {
+func (n *InMemTracer) createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, receivedTime time.Time) *model.RoundChangeTrace {
 	var roundChangeTrace = new(model.RoundChangeTrace)
 	roundChangeTrace.PreparedRound = uint64(msg.DataRound)
 	roundChangeTrace.Round = uint64(msg.Round)
@@ -135,20 +126,20 @@ func createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSS
 	roundChangeTrace.Signer = signedMsg.OperatorIDs[0]
 	roundChangeTrace.ReceivedTime = receivedTime
 
-	roundChangeTrace.PrepareMessages = decodeJustificationWithPrepares(msg.RoundChangeJustification)
+	roundChangeTrace.PrepareMessages = n.decodeJustificationWithPrepares(msg.RoundChangeJustification)
 
 	return roundChangeTrace
 }
 
-func createProposalTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
+func (n *InMemTracer) createProposalTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
 	var proposalTrace = new(model.ProposalTrace)
 	proposalTrace.Round = uint64(msg.Round)
 	proposalTrace.BeaconRoot = msg.Root
 	proposalTrace.Signer = signedMsg.OperatorIDs[0]
 	proposalTrace.ReceivedTime = time.Now() // correct
 
-	proposalTrace.RoundChanges = decodeJustificationWithRoundChanges(msg.RoundChangeJustification)
-	proposalTrace.PrepareMessages = decodeJustificationWithPrepares(msg.PrepareJustification)
+	proposalTrace.RoundChanges = n.decodeJustificationWithRoundChanges(msg.RoundChangeJustification)
+	proposalTrace.PrepareMessages = n.decodeJustificationWithPrepares(msg.PrepareJustification)
 
 	return proposalTrace
 }
@@ -156,7 +147,6 @@ func createProposalTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMe
 func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) {
 	slot := uint64(msg.Height)
 
-	// validator pubkey
 	msgID := spectypes.MessageID(msg.Identifier[:]) // validator + pubkey + role + network
 	validatorPubKey := msgID.GetDutyExecutorID()    // validator pubkey or committee id
 	validatorID := string(validatorPubKey)
@@ -164,8 +154,7 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 	// get or create trace
 	trace := n.getTrace(slot, validatorID)
 
-	// first round is 1
-	var round = getRound(trace, uint64(msg.Round))
+	var round = trace.getRound(uint64(msg.Round))
 	round.Lock()
 	defer round.Unlock()
 
@@ -187,13 +176,14 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 			err := data.Decode(signedMsg.FullData)
 			if err != nil {
 				n.logger.Error("failed to decode proposal data", zap.Error(err))
+				return
 			}
 			// beacon vote (for committee duty)
 			trace.Lock()
 			trace.Validator = data.Duty.ValidatorIndex
 			trace.Unlock()
 
-			round.ProposalTrace = createProposalTrace(msg, signedMsg)
+			round.ProposalTrace = n.createProposalTrace(msg, signedMsg)
 		}
 
 	case specqbft.PrepareMsgType:
@@ -218,7 +208,7 @@ func (n *InMemTracer) qbft(msg *specqbft.Message, signedMsg *spectypes.SignedSSV
 		// optional - only if round change is proposing a value
 
 		now := time.Now()
-		roundChangeTrace := createRoundChangeTrace(msg, signedMsg, now)
+		roundChangeTrace := n.createRoundChangeTrace(msg, signedMsg, now)
 
 		round.RoundChanges = append(round.RoundChanges, roundChangeTrace)
 	}
@@ -297,24 +287,28 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 	}
 }
 
+type round struct {
+	sync.Mutex
+	model.RoundTrace
+}
+
 type validatorDutyTrace struct {
 	sync.Mutex
 	model.ValidatorDutyTrace
 }
 
-func (t *validatorDutyTrace) addRound() int {
-	t.Rounds = append(t.Rounds, &model.RoundTrace{})
-	return len(t.Rounds)
-}
+func (trace *validatorDutyTrace) getRound(rnd uint64) *round {
+	trace.Lock()
+	defer trace.Unlock()
 
-func (t *validatorDutyTrace) getRound(rnd uint64) *round {
-	r := t.Rounds[rnd]
+	var count = len(trace.Rounds)
+	for rnd+1 > uint64(count) { //nolint:gosec
+		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})
+		count = len(trace.Rounds)
+	}
+
+	r := trace.Rounds[rnd]
 	return &round{
 		RoundTrace: *r,
 	}
-}
-
-type round struct {
-	sync.Mutex
-	model.RoundTrace
 }
