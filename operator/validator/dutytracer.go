@@ -289,7 +289,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 type round struct {
 	sync.Mutex
-	model.RoundTrace
+	*model.RoundTrace
 }
 
 type validatorDutyTrace struct {
@@ -309,6 +309,6 @@ func (trace *validatorDutyTrace) getRound(rnd uint64) *round {
 
 	r := trace.Rounds[rnd]
 	return &round{
-		RoundTrace: *r,
+		RoundTrace: r,
 	}
 }
