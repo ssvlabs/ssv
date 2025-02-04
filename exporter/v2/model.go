@@ -82,19 +82,10 @@ type CommitteeDutyTrace struct {
 	SyncCommitteeMessageRoot phase0.Root `ssz-size:"32"`
 }
 
-// where used?
-type CommitteeMessageTrace struct {
-	BeaconRoot []phase0.Root           `ssz-max:"1500" ssz-size:"32"`
-	Validators []phase0.ValidatorIndex `ssz-max:"1500"`
-
-	Signer       spectypes.OperatorID
-	ReceivedTime time.Time
-}
-
 type CommitteePartialSigMessageTrace struct {
 	PartialSigMessageTrace
 
-	Messages []*PartialSigMessage `ssz-max:"15"` // TODO confirm
+	Messages []*PartialSigMessage `ssz-max:"1512"`
 }
 
 type PartialSigMessage struct {
