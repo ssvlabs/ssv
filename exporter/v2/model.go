@@ -83,9 +83,10 @@ type CommitteeDutyTrace struct {
 }
 
 type CommitteePartialSigMessageTrace struct {
-	PartialSigMessageTrace
-
-	Messages []*PartialSigMessage `ssz-max:"1512"`
+	Type         spectypes.PartialSigMsgType
+	Signer       spectypes.OperatorID
+	Messages     []*PartialSigMessage `ssz-max:"1512"`
+	ReceivedTime time.Time
 }
 
 type PartialSigMessage struct {

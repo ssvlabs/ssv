@@ -29,7 +29,7 @@ func NewTracer(logger *zap.Logger) *InMemTracer {
 	}
 }
 
-func (n *InMemTracer) getTrace(slot uint64, vPubKey string) *validatorDutyTrace {
+func (n *InMemTracer) getValidatorTrace(slot uint64, vPubKey string) *validatorDutyTrace {
 	n.Lock()
 	defer n.Unlock()
 
@@ -165,47 +165,10 @@ func (n *InMemTracer) createProposalTrace(msg *specqbft.Message, signedMsg *spec
 	return proposalTrace
 }
 
-func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) {
-	slot := uint64(msg.Height)
-
-	msgID := spectypes.MessageID(msg.Identifier[:]) // validator + pubkey + role + network
-	validatorPubKey := msgID.GetDutyExecutorID()    // validator pubkey or committee id
-	validatorID := string(validatorPubKey)
-
-	// get or create trace
-	trace := n.getTrace(slot, validatorID)
-
-	var round = trace.getRound(uint64(msg.Round))
-	round.Lock()
-	defer round.Unlock()
-
-	// proposer
-	operatorIDs := getOperators(validatorID)
-	if len(operatorIDs) > 0 {
-		var mockState = n.toMockState(msg, operatorIDs)
-		round.Proposer = specqbft.RoundRobinProposer(mockState, msg.Round)
-	}
-
+func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, trace *model.ConsensusTrace, round *round) {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
-		msgID := signedMsg.SSVMessage.GetID()
-		switch msgID.GetRoleType() {
-		case spectypes.RoleCommittee:
-			n.logger.Info("qbft proposal for committee duty: to be implemented")
-		default:
-			var data = new(spectypes.ValidatorConsensusData)
-			err := data.Decode(signedMsg.FullData)
-			if err != nil {
-				n.logger.Error("failed to decode proposal data", zap.Error(err))
-				return
-			}
-			// beacon vote (for committee duty)
-			trace.Lock()
-			trace.Validator = data.Duty.ValidatorIndex
-			trace.Unlock()
-
-			round.ProposalTrace = n.createProposalTrace(msg, signedMsg)
-		}
+		round.ProposalTrace = n.createProposalTrace(msg, signedMsg)
 
 	case specqbft.PrepareMsgType:
 		var m = new(model.MessageTrace)
@@ -240,7 +203,7 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, validatorPubKey string) {
 	slot := uint64(msg.Slot)
 
-	trace := n.getTrace(slot, validatorPubKey)
+	trace := n.getValidatorTrace(slot, validatorPubKey)
 	trace.Lock()
 	defer trace.Unlock()
 
@@ -250,7 +213,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 
 	switch ssvMsg.MsgID.GetRoleType() {
 	case spectypes.RoleCommittee:
-		n.logger.Warn("unexpected committee duty") // we get this often
+		n.logger.Error("unexpected committee duty")
 	case spectypes.RoleProposer:
 		trace.Role = spectypes.BNRoleProposer
 	case spectypes.RoleAggregator:
@@ -316,15 +279,63 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	}
 
 	n.logger.Info("signed committee", fields...)
-
-	// tbc
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		if subMsg, ok := msg.Body.(*specqbft.Message); ok {
-			n.processConsensus(subMsg, msg.SignedSSVMessage)
+			slot := uint64(subMsg.Height)
+			msgID := spectypes.MessageID(subMsg.Identifier[:]) // validator + pubkey + role + network
+			executorID := msgID.GetDutyExecutorID()            // validator pubkey or committee id
+
+			switch msgID.GetRoleType() {
+			case spectypes.RoleCommittee:
+				commiteeID := string(executorID)
+				trace := n.getCommitteeTrace(slot, commiteeID)
+				trace.Lock() // take a second look here (locking trace vs round etc)
+				defer trace.Unlock()
+
+				var round = trace.getRound(uint64(subMsg.Round))
+				round.Lock()
+				defer round.Unlock()
+
+				// populate proposer
+				operatorIDs := getOperators(commiteeID)
+				if len(operatorIDs) > 0 {
+					var mockState = n.toMockState(subMsg, operatorIDs)
+					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
+				}
+
+				n.processConsensus(subMsg, msg.SignedSSVMessage, &trace.ConsensusTrace, round)
+			default:
+				validatorPubKey := string(executorID)
+				trace := n.getValidatorTrace(slot, validatorPubKey)
+				trace.Lock() // take a second look here
+				defer trace.Unlock()
+
+				var round = trace.getRound(uint64(subMsg.Round))
+				round.Lock()
+				defer round.Unlock()
+
+				// populate proposer
+				operatorIDs := getOperators(validatorPubKey)
+				if len(operatorIDs) > 0 {
+					var mockState = n.toMockState(subMsg, operatorIDs)
+					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
+				}
+
+				var data = new(spectypes.ValidatorConsensusData)
+				err := data.Decode(msg.SignedSSVMessage.FullData)
+				if err != nil {
+					n.logger.Error("failed to decode validator proposal data", zap.Error(err))
+					return
+				}
+
+				trace.Validator = data.Duty.ValidatorIndex
+
+				n.processConsensus(subMsg, msg.SignedSSVMessage, &trace.ConsensusTrace, round)
+			}
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := new(spectypes.PartialSignatureMessages)
@@ -376,4 +387,13 @@ func (trace *validatorDutyTrace) getRound(rnd uint64) *round {
 type committeeDutyTrace struct {
 	sync.Mutex
 	model.CommitteeDutyTrace
+}
+
+func (trace *committeeDutyTrace) getRound(rnd uint64) *round {
+	trace.Lock()
+	defer trace.Unlock()
+
+	return &round{
+		RoundTrace: trace.Rounds[rnd],
+	}
 }
