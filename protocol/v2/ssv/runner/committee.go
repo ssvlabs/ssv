@@ -651,6 +651,8 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			// Attestation object
 			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion)
 			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
+			// TODO: this should be done inside ConstructVersionedAttestationWithoutSignature
+			attestationResponse.ValidatorIndex = &validatorDuty.ValidatorIndex
 			if err != nil {
 				logger.Debug("failed to construct attestation", zap.Error(err))
 				continue
