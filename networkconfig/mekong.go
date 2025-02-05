@@ -12,8 +12,8 @@ var Mekong = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.MekongNetwork),
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x1},
 	GenesisEpoch:         1,
-	RegistrySyncOffset:   new(big.Int).SetInt64(589008),
-	RegistryContractAddr: "0x2196C292d792d235b21b00E9e8c39BcE5404007C",
+	RegistrySyncOffset:   new(big.Int).SetInt64(12609),
+	RegistryContractAddr: "0xa2A44482e752D3D956AAFaA94CFDD21Aacfc2959",
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	Bootnodes: []string{
 		// SSV Labs
