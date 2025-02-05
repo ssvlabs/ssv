@@ -87,6 +87,8 @@ func WithSyncInterval(interval time.Duration) Option {
 }
 
 func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+	s.logger.Debug("starting sync on startup", zap.String("fixed_subnets", s.fixedSubnets.String()))
+
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
