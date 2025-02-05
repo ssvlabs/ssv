@@ -9,7 +9,6 @@ import (
 
 //go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace
 type ValidatorDutyTrace struct {
-	// sync.Mutex
 	ConsensusTrace
 
 	Slot phase0.Slot
@@ -32,7 +31,6 @@ type DecidedTrace struct {
 }
 
 type RoundTrace struct {
-	// sync.Mutex
 	Proposer spectypes.OperatorID // can be computed or saved
 	// ProposalData
 	ProposalTrace *ProposalTrace

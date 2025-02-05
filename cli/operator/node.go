@@ -353,6 +353,9 @@ var StartNodeCmd = &cobra.Command{
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
+		tracer := validator.NewTracer(logger)
+		cfg.SSVOptions.ValidatorOptions.DutyTracer = tracer
+
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
@@ -460,6 +463,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Exporter{
 					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
+					TraceStore:        traceStoreAdapter(tracer, logger),
 				},
 			)
 			go func() {

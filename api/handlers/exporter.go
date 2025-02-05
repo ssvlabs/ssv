@@ -12,14 +12,20 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	model "github.com/ssvlabs/ssv/exporter/v2"
-	trace "github.com/ssvlabs/ssv/exporter/v2/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 )
 
 type Exporter struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
-	TraceStore        trace.DutyTraceStore
+	TraceStore        DutyTraceStore
+}
+
+type DutyTraceStore interface {
+	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
+	GetCommitteeDutiesByOperator(indexes []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 }
 
 type ParticipantResponse struct {
@@ -143,12 +149,17 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 
-	if len(request.CommitteeID) != 32 {
-		return api.BadRequestError(fmt.Errorf("committee ID is required"))
+	committeeIDBytes, err := hex.DecodeString(request.CommitteeID)
+	if err != nil {
+		return api.BadRequestError(fmt.Errorf("decode committee ID: %w", err))
+	}
+
+	if len(committeeIDBytes) != 32 {
+		return api.BadRequestError(fmt.Errorf("invalid committee ID length"))
 	}
 
 	var committeeID spectypes.CommitteeID
-	copy(committeeID[:], []byte(request.CommitteeID))
+	copy(committeeID[:], committeeIDBytes)
 
 	var duties []*model.CommitteeDutyTrace
 	for s := request.From; s <= request.To; s++ {
