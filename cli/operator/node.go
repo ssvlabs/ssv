@@ -331,13 +331,24 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 
+		fixedSubnets, err := records.Subnets{}.FromString(cfg.P2pNetworkConfig.Subnets)
+		if err != nil {
+			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
+		}
+		if cfg.SSVOptions.ValidatorOptions.Exporter {
+			fixedSubnets, err = records.Subnets{}.FromString(records.AllSubnets)
+			if err != nil {
+				logger.Fatal("failed to parse fixed subnets", zap.Error(err))
+			}
+		}
+
 		metadataSyncer := metadata.NewSyncer(
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
 			networkConfig.Beacon,
 			consensusClient,
-			p2pNetwork.FixedSubnets(),
+			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
