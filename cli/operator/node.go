@@ -274,6 +274,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
+		if cfg.SSVOptions.ValidatorOptions.Exporter {
+			cfg.P2pNetworkConfig.Subnets = records.AllSubnets
+		}
+
 		p2pNetwork := setupP2P(logger, db)
 
 		cfg.SSVOptions.Context = cmd.Context()
