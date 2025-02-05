@@ -69,7 +69,7 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 
 	var err error
 
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(db, OperatorStoragePrefix)
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(logger, db, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}

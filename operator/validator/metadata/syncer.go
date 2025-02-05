@@ -108,7 +108,7 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 	for _, share := range shares {
 		pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey)
 		if !share.HasBeaconMetadata() {
-			needToSync = true
+			s.logger.Debug("Fetch metadata initial", fields.Validator(share.ValidatorPubKey[:]), zap.Int("share.Status", int(share.Status)))
 		}
 	}
 	if !needToSync {

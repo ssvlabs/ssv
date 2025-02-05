@@ -10,9 +10,11 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 )
 
@@ -117,14 +119,14 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		shares:        make(map[string]*types.SSVShare),
 		db:            db,
 		storagePrefix: prefix,
 	}
 
-	if err := storage.loadFromDB(); err != nil {
+	if err := storage.loadFromDB(logger); err != nil {
 		return nil, nil, err
 	}
 	storage.validatorStore = newValidatorStore(
@@ -138,7 +140,7 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 }
 
 // loadFromDB reads all shares from db.
-func (s *sharesStorage) loadFromDB() error {
+func (s *sharesStorage) loadFromDB(logger *zap.Logger) error {
 	// not locking since at this point nobody has the reference to this object
 	return s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
 		val := &Share{}
@@ -152,6 +154,8 @@ func (s *sharesStorage) loadFromDB() error {
 		}
 
 		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = share
+
+		logger.Debug("LoadFromDB", fields.Validator(val.ValidatorPubKey), zap.Int("share.Status", int(share.Status)))
 		return nil
 	})
 }
