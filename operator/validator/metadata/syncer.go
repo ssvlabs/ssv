@@ -181,6 +181,8 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Vali
 			ActivationEpoch: v.Validator.ActivationEpoch,
 		}
 		results[spectypes.ValidatorPK(v.Validator.PublicKey)] = meta
+
+		s.logger.Debug("Fetch metadata", fields.Validator(v.Validator.PublicKey[:]), zap.Int("meta.Status", int(meta.Status)))
 	}
 
 	return results, nil
