@@ -2,11 +2,13 @@ package validator
 
 import (
 	"encoding/hex"
+	"errors"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
@@ -61,6 +63,7 @@ func (n *InMemTracer) getCommitteeTrace(slot uint64, committeeID []byte) *commit
 	trace, ok := mp[string(committeeID)]
 	if !ok {
 		trace = new(committeeDutyTrace)
+		n.logger.Info("add new committee", zap.String("id", hex.EncodeToString(committeeID)))
 		mp[string(committeeID)] = trace
 	}
 
@@ -226,8 +229,8 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	}
 
 	fields := []zap.Field{
-		zap.Uint64("slot", slot),
 		zap.String("validator", hex.EncodeToString(validatorPubKey[len(validatorPubKey)-4:])),
+		zap.Uint64("slot", slot),
 		zap.String("type", trace.Role.String()),
 	}
 
@@ -257,6 +260,13 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	trace.CommitteeID = [32]byte(committeeID[:])
 	trace.OperatorIDs = getOperators(committeeID)
 	trace.Slot = msg.Slot
+
+	fields := []zap.Field{
+		zap.String("committeeID", hex.EncodeToString(trace.CommitteeID[:])),
+		zap.Uint64("slot", slot),
+	}
+
+	n.logger.Info("signed committee", fields...)
 
 	var cTrace model.CommitteePartialSigMessageTrace
 	cTrace.Type = msg.Type
@@ -399,4 +409,31 @@ func (trace *committeeDutyTrace) getRound(rnd uint64) *round {
 	return &round{
 		RoundTrace: trace.Rounds[rnd],
 	}
+}
+
+// tmp hack
+
+func (n *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
+	n.Lock()
+	defer n.Unlock()
+
+	m, ok := n.committeeTraces[uint64(slot)]
+	if !ok {
+		return nil, errors.New("slot not found")
+	}
+
+	var mapID [48]byte
+	copy(mapID[16:], committeeID[:])
+
+	n.logger.Info("committee", zap.String("committeeID", hex.EncodeToString(mapID[:])))
+
+	trace, ok := m[string(mapID[:])]
+	if !ok {
+		return nil, errors.New("committe ID not found: " + hex.EncodeToString(mapID[:]))
+	}
+
+	trace.Lock()
+	defer trace.Unlock()
+
+	return &trace.CommitteeDutyTrace, nil
 }

@@ -77,6 +77,7 @@ type ControllerOptions struct {
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
+	DutyTracer                 DutyTracer
 	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
@@ -235,10 +236,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
-	inMem := NewTracer(logger)
-
 	ctrl := controller{
-		tracer:            inMem,
 		logger:            logger.Named(logging.NameController),
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
@@ -252,6 +250,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
+		tracer:            options.DutyTracer,
 
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
