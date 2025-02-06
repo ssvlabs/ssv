@@ -31,10 +31,20 @@ type decided struct {
 }
 
 type round struct {
-	Proposer     spectypes.OperatorID `json:"proposer"`
-	Prepares     []message            `json:"prepares"`
-	Commits      []message            `json:"commits"`
-	RoundChanges []roundChange        `json:"roundChanges"`
+	ProposalTrace *proposalTrace       `json:"proposal"`
+	Proposer      spectypes.OperatorID `json:"proposer"`
+	Prepares      []message            `json:"prepares"`
+	Commits       []message            `json:"commits"`
+	RoundChanges  []roundChange        `json:"roundChanges"`
+}
+
+type proposalTrace struct {
+	Round           uint64               `json:"round"`
+	BeaconRoot      phase0.Root          `json:"beaconRoot"`
+	Signer          spectypes.OperatorID `json:"signer"`
+	RoundChanges    []roundChange        `json:"roundChanges"`
+	PrepareMessages []message            `json:"prepareMessages"`
+	ReceivedTime    time.Time            `json:"time"`
 }
 
 type roundChange struct {
@@ -50,6 +60,12 @@ type message struct {
 	ReceivedTime time.Time            `json:"time"`
 }
 
+type partialSigMessage struct {
+	BeaconRoot phase0.Root           `json:"beaconRoot"`
+	Signer     spectypes.OperatorID  `json:"signer"`
+	Validator  phase0.ValidatorIndex `json:"validator"`
+}
+
 func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 	return validatorTrace{
 		Slot:      t.Slot,
@@ -57,7 +73,7 @@ func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 		Validator: t.Validator,
 		Pre:       toMessageTrace(t.Pre),
 		Post:      toMessageTrace(t.Post),
-		Rounds:    toRoundTrace(t.Rounds),
+		Rounds:    toRounds(t.Rounds),
 	}
 }
 
@@ -72,16 +88,31 @@ func toMessageTrace(m []*model.PartialSigMessageTrace) (out []message) {
 	return
 }
 
-func toRoundTrace(r []*model.RoundTrace) (out []round) {
+func toRounds(r []*model.RoundTrace) (out []round) {
 	for _, rt := range r {
 		out = append(out, round{
-			Proposer:     rt.Proposer,
-			Prepares:     toUIMessageTrace(rt.Prepares),
-			Commits:      toUIMessageTrace(rt.Commits),
-			RoundChanges: toUIRoundChangeTrace(rt.RoundChanges),
+			Proposer:      rt.Proposer,
+			ProposalTrace: toProposalTrace(rt.ProposalTrace),
+			Prepares:      toUIMessageTrace(rt.Prepares),
+			Commits:       toUIMessageTrace(rt.Commits),
+			RoundChanges:  toUIRoundChangeTrace(rt.RoundChanges),
 		})
 	}
 	return
+}
+
+func toProposalTrace(rt *model.ProposalTrace) *proposalTrace {
+	if rt == nil {
+		return nil
+	}
+	return &proposalTrace{
+		Round:           rt.Round,
+		BeaconRoot:      rt.BeaconRoot,
+		Signer:          rt.Signer,
+		ReceivedTime:    rt.ReceivedTime,
+		RoundChanges:    toUIRoundChangeTrace(rt.RoundChanges),
+		PrepareMessages: toUIMessageTrace(rt.PrepareMessages),
+	}
 }
 
 func toUIMessageTrace(m []*model.MessageTrace) (out []message) {
@@ -130,21 +161,21 @@ type committeeTrace struct {
 }
 
 type committeeMessage struct {
-	message
-	BeaconRoot   []phase0.Root           `json:"beaconRoot"`
-	Validators   []phase0.ValidatorIndex `json:"validators"`
-	Signer       spectypes.OperatorID    `json:"signer"`
-	ReceivedTime time.Time               `json:"time"`
+	Type         spectypes.PartialSigMsgType `json:"type"`
+	Signer       spectypes.OperatorID        `json:"signer"`
+	Messages     []partialSigMessage         `json:"messages"`
+	ReceivedTime time.Time                   `json:"time"`
 }
 
 func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 	return committeeTrace{
+		// consensus trace
+		Rounds:      toRounds(t.Rounds),
+		Decideds:    toDecidedTrace(t.Decideds),
 		Slot:        t.Slot,
-		Rounds:      toRoundTrace(t.Rounds),
-		Post:        toCommitteeMessageTrace(t.Post),
+		Post:        toCommitteePost(t.Post),
 		CommitteeID: hex.EncodeToString(t.CommitteeID[:]),
 		OperatorIDs: t.OperatorIDs,
-		Decideds:    toDecidedTrace(t.Decideds),
 	}
 }
 
@@ -161,15 +192,26 @@ func toDecidedTrace(d []*model.DecidedTrace) (out []decided) {
 	return
 }
 
-func toCommitteeMessageTrace(m []*model.CommitteePartialSigMessageTrace) (out []committeeMessage) {
+func toCommitteePost(m []*model.CommitteePartialSigMessageTrace) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
-			// Type:         mt.Type,
-			// BeaconRoot:   mt.BeaconRoot,
-			// Validators:   mt.Validators,
+			Type:         mt.Type,
 			Signer:       mt.Signer,
+			Messages:     toCommitteePartSigMessage(mt.Messages),
 			ReceivedTime: mt.ReceivedTime,
 		})
 	}
+	return
+}
+
+func toCommitteePartSigMessage(m []*model.PartialSigMessage) (out []partialSigMessage) {
+	for _, mt := range m {
+		out = append(out, partialSigMessage{
+			BeaconRoot: mt.BeaconRoot,
+			Signer:     mt.Signer,
+			Validator:  mt.ValidatorIndex,
+		})
+	}
+
 	return
 }
