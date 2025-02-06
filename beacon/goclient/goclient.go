@@ -141,6 +141,7 @@ type GoClient struct {
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
+	ForkLock           sync.RWMutex
 	ForkEpochElectra   phase0.Epoch
 	ForkEpochDeneb     phase0.Epoch
 	ForkEpochCapella   phase0.Epoch
@@ -204,11 +205,6 @@ func New(
 	}
 
 	client.nodeSyncingFn = client.nodeSyncing
-
-	// Get the fork epochs.
-	if err := fetchStaticValues(client); err != nil {
-		return nil, fmt.Errorf("fetch static values: %w", err)
-	}
 
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
@@ -303,6 +299,24 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
+			}
+
+			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "Spec"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			if err := gc.checkForkValues(spec); err != nil {
+				gc.log.Error("failed to check fork values",
+					zap.String("address", s.Address()),
+					zap.Error(err),
+				)
+				return
 			}
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
