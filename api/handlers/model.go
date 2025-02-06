@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/hex"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -30,12 +31,10 @@ type decided struct {
 }
 
 type round struct {
-	Proposer             spectypes.OperatorID `json:"proposer"`
-	ProposalRoot         phase0.Root          `json:"proposalRoot"`
-	ProposalReceivedTime uint64               `json:"time"`
-	Prepares             []message            `json:"prepares"`
-	Commits              []message            `json:"commits"`
-	RoundChanges         []roundChange        `json:"roundChanges"`
+	Proposer     spectypes.OperatorID `json:"proposer"`
+	Prepares     []message            `json:"prepares"`
+	Commits      []message            `json:"commits"`
+	RoundChanges []roundChange        `json:"roundChanges"`
 }
 
 type roundChange struct {
@@ -45,10 +44,10 @@ type roundChange struct {
 }
 
 type message struct {
-	Type         spectypes.PartialSigMsgType `json:"type"`
-	BeaconRoot   phase0.Root                 `json:"beaconRoot"`
-	Signer       spectypes.OperatorID        `json:"signer"`
-	ReceivedTime time.Time                   `json:"time"`
+	Round        uint64               `json:"round"`
+	BeaconRoot   phase0.Root          `json:"beaconRoot"`
+	Signer       spectypes.OperatorID `json:"signer"`
+	ReceivedTime time.Time            `json:"time"`
 }
 
 func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
@@ -65,7 +64,6 @@ func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 func toMessageTrace(m []*model.PartialSigMessageTrace) (out []message) {
 	for _, mt := range m {
 		out = append(out, message{
-			Type:         mt.Type,
 			BeaconRoot:   mt.BeaconRoot,
 			Signer:       mt.Signer,
 			ReceivedTime: mt.ReceivedTime,
@@ -77,7 +75,39 @@ func toMessageTrace(m []*model.PartialSigMessageTrace) (out []message) {
 func toRoundTrace(r []*model.RoundTrace) (out []round) {
 	for _, rt := range r {
 		out = append(out, round{
-			Proposer: rt.Proposer,
+			Proposer:     rt.Proposer,
+			Prepares:     toUIMessageTrace(rt.Prepares),
+			Commits:      toUIMessageTrace(rt.Commits),
+			RoundChanges: toUIRoundChangeTrace(rt.RoundChanges),
+		})
+	}
+	return
+}
+
+func toUIMessageTrace(m []*model.MessageTrace) (out []message) {
+	for _, mt := range m {
+		out = append(out, message{
+			Round:        mt.Round,
+			BeaconRoot:   mt.BeaconRoot,
+			Signer:       mt.Signer,
+			ReceivedTime: mt.ReceivedTime,
+		})
+	}
+
+	return
+}
+
+func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
+	for _, mt := range m {
+		out = append(out, roundChange{
+			message: message{
+				Round:        mt.Round,
+				BeaconRoot:   mt.BeaconRoot,
+				Signer:       mt.Signer,
+				ReceivedTime: mt.ReceivedTime,
+			},
+			PreparedRound:   mt.PreparedRound,
+			PrepareMessages: toUIMessageTrace(mt.PrepareMessages),
 		})
 	}
 	return
@@ -95,7 +125,7 @@ type committeeTrace struct {
 	Decideds []decided          `json:"decideds"`
 	Post     []committeeMessage `json:"post"`
 
-	CommitteeID spectypes.CommitteeID  `json:"committeeID"`
+	CommitteeID string                 `json:"committeeID"`
 	OperatorIDs []spectypes.OperatorID `json:"operatorIDs"`
 }
 
@@ -112,9 +142,23 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 		Slot:        t.Slot,
 		Rounds:      toRoundTrace(t.Rounds),
 		Post:        toCommitteeMessageTrace(t.Post),
-		CommitteeID: t.CommitteeID,
+		CommitteeID: hex.EncodeToString(t.CommitteeID[:]),
 		OperatorIDs: t.OperatorIDs,
+		Decideds:    toDecidedTrace(t.Decideds),
 	}
+}
+
+func toDecidedTrace(d []*model.DecidedTrace) (out []decided) {
+	for _, dt := range d {
+		out = append(out, decided{
+			Round:        dt.Round,
+			BeaconRoot:   dt.BeaconRoot,
+			Signer:       dt.Signer,
+			ReceivedTime: dt.ReceivedTime,
+		})
+	}
+
+	return
 }
 
 func toCommitteeMessageTrace(m []*model.CommitteePartialSigMessageTrace) (out []committeeMessage) {

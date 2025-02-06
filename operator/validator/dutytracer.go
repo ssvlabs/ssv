@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
@@ -19,32 +21,52 @@ type InMemTracer struct {
 	sync.Mutex
 	logger *zap.Logger
 	// consider having the validator pubkey before of the slot
-	validatorTraces map[uint64]map[string]*validatorDutyTrace
-	committeeTraces map[uint64]map[string]*committeeDutyTrace
+	validatorTraces *ttlcache.Cache[uint64, map[string]*validatorDutyTrace]
+	committeeTraces *ttlcache.Cache[uint64, map[string]*committeeDutyTrace]
 }
 
 func NewTracer(logger *zap.Logger) *InMemTracer {
-	return &InMemTracer{
-		logger:          logger,
-		validatorTraces: make(map[uint64]map[string]*validatorDutyTrace),
-		committeeTraces: make(map[uint64]map[string]*committeeDutyTrace),
+	tracer := &InMemTracer{
+		logger: logger,
+		validatorTraces: ttlcache.New(
+			ttlcache.WithTTL[uint64, map[string]*validatorDutyTrace](3 * time.Minute),
+		),
+		committeeTraces: ttlcache.New(
+			ttlcache.WithTTL[uint64, map[string]*committeeDutyTrace](3 * time.Minute),
+		),
 	}
+
+	tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
+		logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+	})
+
+	tracer.committeeTraces.OnInsertion(func(_ context.Context, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
+		logger.Info("insertion", zap.Uint64("slot", item.Key()))
+		for k := range item.Value() {
+			logger.Info("committee", zap.String("id", hex.EncodeToString([]byte(k))))
+		}
+	})
+
+	go func() {
+		for {
+			<-time.After(time.Minute)
+			tracer.committeeTraces.DeleteExpired()
+		}
+	}()
+
+	return tracer
 }
 
 func (n *InMemTracer) getValidatorTrace(slot uint64, vPubKey string) *validatorDutyTrace {
 	n.Lock()
 	defer n.Unlock()
 
-	mp, ok := n.validatorTraces[slot]
-	if !ok {
-		mp = make(map[string]*validatorDutyTrace)
-		n.validatorTraces[slot] = mp
-	}
+	mp, _ := n.validatorTraces.GetOrSet(slot, make(map[string]*validatorDutyTrace))
 
-	trace, ok := mp[vPubKey]
+	trace, ok := mp.Value()[vPubKey]
 	if !ok {
 		trace = new(validatorDutyTrace)
-		mp[vPubKey] = trace
+		mp.Value()[vPubKey] = trace
 	}
 
 	return trace
@@ -54,17 +76,12 @@ func (n *InMemTracer) getCommitteeTrace(slot uint64, committeeID []byte) *commit
 	n.Lock()
 	defer n.Unlock()
 
-	mp, ok := n.committeeTraces[slot]
-	if !ok {
-		mp = make(map[string]*committeeDutyTrace)
-		n.committeeTraces[slot] = mp
-	}
+	mp, _ := n.committeeTraces.GetOrSet(slot, make(map[string]*committeeDutyTrace))
 
-	trace, ok := mp[string(committeeID)]
+	trace, ok := mp.Value()[string(committeeID)]
 	if !ok {
 		trace = new(committeeDutyTrace)
-		n.logger.Info("add new committee", zap.String("id", hex.EncodeToString(committeeID)))
-		mp[string(committeeID)] = trace
+		mp.Value()[string(committeeID)] = trace
 	}
 
 	return trace
@@ -133,7 +150,7 @@ func (n *InMemTracer) decodeJustificationWithRoundChanges(justifications [][]byt
 			continue
 		}
 
-		var receivedTime time.Time // zero value becausewe can't know the time when the sender received the message
+		var receivedTime time.Time // zero value because we can't know the time when the sender received the message
 
 		var roundChangeTrace = n.createRoundChangeTrace(qbftMsg, signedMsg, receivedTime)
 		traces = append(traces, roundChangeTrace)
@@ -261,27 +278,20 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	trace.OperatorIDs = getOperators(committeeID)
 	trace.Slot = msg.Slot
 
-	fields := []zap.Field{
-		zap.String("committeeID", hex.EncodeToString(trace.CommitteeID[:])),
-		zap.Uint64("slot", slot),
-	}
-
-	n.logger.Info("signed committee", fields...)
-
-	var cTrace model.CommitteePartialSigMessageTrace
+	var cTrace = new(model.CommitteePartialSigMessageTrace)
 	cTrace.Type = msg.Type
 	cTrace.Signer = msg.Messages[0].Signer
 	cTrace.ReceivedTime = time.Now()
 
 	for _, partialSigMsg := range msg.Messages {
-		tr := model.PartialSigMessage{}
+		tr := new(model.PartialSigMessage)
 		tr.BeaconRoot = partialSigMsg.SigningRoot
 		tr.Signer = partialSigMsg.Signer
 		tr.ValidatorIndex = partialSigMsg.ValidatorIndex
-		cTrace.Messages = append(cTrace.Messages, &tr)
+		cTrace.Messages = append(cTrace.Messages, tr)
 	}
 
-	trace.Post = append(trace.Post, &cTrace)
+	trace.Post = append(trace.Post, cTrace)
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
@@ -378,12 +388,12 @@ func (trace *validatorDutyTrace) getRound(rnd uint64) *round {
 	defer trace.Unlock()
 
 	var count = len(trace.Rounds)
-	for rnd+1 > uint64(count) { //nolint:gosec
+	for rnd > uint64(count) { //nolint:gosec
 		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})
 		count = len(trace.Rounds)
 	}
 
-	r := trace.Rounds[rnd]
+	r := trace.Rounds[rnd-1]
 	return &round{
 		RoundTrace: r,
 	}
@@ -401,13 +411,13 @@ func (trace *committeeDutyTrace) getRound(rnd uint64) *round {
 	defer trace.Unlock()
 
 	var count = len(trace.Rounds)
-	for rnd+1 > uint64(count) { //nolint:gosec
+	for rnd > uint64(count) { //nolint:gosec
 		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})
 		count = len(trace.Rounds)
 	}
 
 	return &round{
-		RoundTrace: trace.Rounds[rnd],
+		RoundTrace: trace.Rounds[rnd-1],
 	}
 }
 
@@ -417,17 +427,18 @@ func (n *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.C
 	n.Lock()
 	defer n.Unlock()
 
-	m, ok := n.committeeTraces[uint64(slot)]
-	if !ok {
+	if !n.committeeTraces.Has(uint64(slot)) {
 		return nil, errors.New("slot not found")
 	}
+
+	m := n.committeeTraces.Get(uint64(slot))
 
 	var mapID [48]byte
 	copy(mapID[16:], committeeID[:])
 
 	n.logger.Info("committee", zap.String("committeeID", hex.EncodeToString(mapID[:])))
 
-	trace, ok := m[string(mapID[:])]
+	trace, ok := m.Value()[string(mapID[:])]
 	if !ok {
 		return nil, errors.New("committe ID not found: " + hex.EncodeToString(mapID[:]))
 	}
