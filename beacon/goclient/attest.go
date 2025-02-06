@@ -223,24 +223,23 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 	}
 	cancel()
 
-	gc.log.
-		With(
-			zap.Duration("elapsed", time.Since(started)),
-			zap.Int("responded", responded),
-			zap.Int("errored", errored),
-			zap.Int("timed_out", timedOut),
-		).Debug("results")
-
+	logger := gc.log.With(
+		zap.Duration("elapsed", time.Since(started)),
+		zap.Int("responded", responded),
+		zap.Int("errored", errored),
+		zap.Int("timed_out", timedOut),
+		zap.Bool("with_weighted_attestation_data", true),
+	)
 	if bestAttestationData == nil {
+		logger.Error("no attestations received")
 		return nil, fmt.Errorf("no attestations received")
 	}
 
-	gc.log.
+	logger.
 		With(
 			zap.String("client_addr", bestClient),
-			zap.Stringer("attestation_data", bestAttestationData),
-			zap.Float64("score", bestScore),
-		).Debug("selected best attestation")
+			zap.Float64("score", bestScore)).
+		Debug("successfully fetched attestation data")
 
 	return bestAttestationData, nil
 }
@@ -272,6 +271,12 @@ func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.Attestation
 		)
 		return nil, fmt.Errorf("attestation data is nil")
 	}
+
+	gc.log.
+		With(
+			zap.Duration("elapsed", time.Since(attDataReqStart)),
+			zap.Bool("with_weighted_attestation_data", false),
+		).Debug("successfully fetched attestation data")
 
 	return resp.Data, nil
 }
