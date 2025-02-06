@@ -4,7 +4,7 @@ go 1.22.6
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.23.2-0.20250205171128-0c99cbcafc0b // TODO point to release
+	github.com/attestantio/go-eth2-client v0.23.2-0.20250204090132-2e07a2cbc932 // electra branch TODO point to release
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -36,8 +36,8 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.4.2
-	github.com/ssvlabs/ssv-spec v0.0.0-20250205075039-1a0ef3930d41
+	github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250205075737-3d5e8bd9c3db
+	github.com/ssvlabs/ssv-spec v0.0.0-20250206134017-e73661470d2f
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -56,8 +56,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.72.0
 )
-
-require github.com/emicklei/dot v1.6.4 // indirect
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
@@ -249,12 +247,10 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
+require github.com/emicklei/dot v1.6.4 // indirect
+
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-// github.com/attestantio/go-eth2-client doesn't support el_offline flag, it causes downtime when EL node is down but CL node is up
-// Using a fix from https://github.com/ssvlabs/go-eth2-client/commits/syncing-el-offline-v0.21.7/ (https://github.com/attestantio/go-eth2-client/pull/192)
-// NOTE: Prysm doesn't set el_offline correctly (https://github.com/prysmaticlabs/prysm/issues/14226),
-// so the fix uses workaround with checking sync distance to check if EL is offline
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250206124345-c0674c73acc5
