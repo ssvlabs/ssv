@@ -182,11 +182,6 @@ func New(
 		longTimeout:   longTimeout,
 	}
 
-	// Get the fork epochs.
-	if err := fetchStaticValues(client); err != nil {
-		return nil, fmt.Errorf("fetch static values: %w", err)
-	}
-
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	if len(beaconAddrList) == 0 {
 		return nil, fmt.Errorf("no beacon node address provided")
@@ -209,6 +204,11 @@ func New(
 	}
 
 	client.nodeSyncingFn = client.nodeSyncing
+
+	// Get the fork epochs.
+	if err := fetchStaticValues(client); err != nil {
+		return nil, fmt.Errorf("fetch static values: %w", err)
+	}
 
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
