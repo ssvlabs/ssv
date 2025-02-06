@@ -97,16 +97,19 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitAttestations"),
+		zap.String("client_addr", clientAddress))
+
 	start := time.Now()
 	err := gc.multiClient.SubmitAttestations(gc.ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
-	recordRequestDuration(gc.ctx, "SubmitAttestations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "SubmitAttestations"),
-			zap.Error(err),
-		)
+		logger.Error(clResponseErrMsg, zap.Error(err))
 		return err
 	}
 
-	return err
+	logger.Debug("consensus client submitted attestations")
+	return nil
 }

@@ -234,16 +234,22 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 	// (because it must be submitted to the same node that returned that block),
 	// we need to submit it to client(s) directly.
 	if len(gc.clients) == 1 {
+		clientAddress := gc.clients[0].Address()
+		logger := gc.log.With(
+			zap.String("api", "SubmitBlindedProposal"),
+			zap.String("client_addr", clientAddress))
+
 		start := time.Now()
 		err := gc.clients[0].SubmitBlindedProposal(gc.ctx, opts)
-		recordRequestDuration(gc.ctx, "SubmitBlindedProposal", gc.clients[0].Address(), http.MethodPost, time.Since(start), err)
+		recordRequestDuration(gc.ctx, "SubmitBlindedProposal", clientAddress, http.MethodPost, time.Since(start), err)
 		if err != nil {
-			gc.log.Error(clResponseErrMsg,
-				zap.String("api", "SubmitBlindedProposal"),
+			logger.Error(clResponseErrMsg,
 				zap.Error(err),
 			)
 			return err
 		}
+
+		logger.Debug("consensus client submitted blinded beacon block")
 
 		return nil
 	}
@@ -266,12 +272,16 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 	for _, client := range gc.clients {
 		client := client
 		p.Go(func(ctx context.Context) error {
+			clientAddress := client.Address()
+			logger := logger.With(zap.String("client_addr", clientAddress))
+
 			if err := client.SubmitBlindedProposal(ctx, opts); err == nil {
 				logger.Debug("consensus client returned an error while submitting blinded proposal. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
-					zap.String("client_addr", client.Address()),
 					zap.Error(err))
 				return err
 			}
+
+			logger.Debug("consensus client submitted blinded beacon block")
 
 			submissions.Add(1)
 			return nil
@@ -354,16 +364,21 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitProposal"),
+		zap.String("client_addr", clientAddress))
+
 	start := time.Now()
 	err := gc.multiClient.SubmitProposal(gc.ctx, opts)
-	recordRequestDuration(gc.ctx, "SubmitProposal", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(gc.ctx, "SubmitProposal", clientAddress, http.MethodPost, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "SubmitProposal"),
-			zap.Error(err),
-		)
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
 	}
-	return err
+
+	logger.Debug("consensus client submitted beacon block")
+	return nil
 }
 
 func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
@@ -378,16 +393,22 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 			FeeRecipient:   recipient,
 		})
 	}
+
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitProposalPreparations"),
+		zap.String("client_addr", clientAddress))
+
 	start := time.Now()
 	err := gc.multiClient.SubmitProposalPreparations(gc.ctx, preparations)
-	recordRequestDuration(gc.ctx, "SubmitProposalPreparations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(gc.ctx, "SubmitProposalPreparations", clientAddress, http.MethodPost, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "SubmitProposalPreparations"),
-			zap.Error(err),
-		)
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
 	}
-	return err
+
+	logger.Debug("consensus client submitted proposal preparation")
+	return nil
 }
 
 func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
@@ -474,21 +495,23 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 			bs = len(registrations)
 		}
 
+		clientAddress := gc.multiClient.Address()
+		logger := gc.log.With(
+			zap.String("api", "SubmitValidatorRegistrations"),
+			zap.String("client_addr", clientAddress))
+
 		// TODO: Do we need to submit them to all nodes?
 		start := time.Now()
 		err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs])
-		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", clientAddress, http.MethodPost, time.Since(start), err)
 		if err != nil {
-			gc.log.Error(clResponseErrMsg,
-				zap.String("api", "SubmitValidatorRegistrations"),
-				zap.Error(err),
-			)
+			logger.Error(clResponseErrMsg, zap.Error(err))
 			return err
 		}
 
 		registrations = registrations[bs:]
 
-		gc.log.Info("submitted batched validator registrations",
+		logger.Info("submitted batched validator registrations",
 			fields.Slot(slot),
 			fields.Count(bs))
 	}
