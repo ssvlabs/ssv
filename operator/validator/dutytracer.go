@@ -40,12 +40,6 @@ func NewTracer(logger *zap.Logger) *InMemTracer {
 		logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
 	})
 
-	tracer.committeeTraces.OnInsertion(func(_ context.Context, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
-		for k := range item.Value() {
-			logger.Info("insertion", zap.Uint64("slot", item.Key()), zap.String("id", hex.EncodeToString([]byte(k[16:]))))
-		}
-	})
-
 	go func() {
 		for {
 			<-time.After(time.Minute)
@@ -331,23 +325,34 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				validatorPubKey := string(executorID)
 				trace := n.getValidatorTrace(slot, validatorPubKey)
 
-				stop := func() bool {
-					trace.Lock()
-					defer trace.Unlock()
-
-					var data = new(spectypes.ValidatorConsensusData)
-					err := data.Decode(msg.SignedSSVMessage.FullData)
+				if msg.MsgType == spectypes.SSVConsensusMsgType {
+					var qbftMsg specqbft.Message
+					err := qbftMsg.Decode(msg.Data)
 					if err != nil {
-						n.logger.Error("failed to decode validator proposal data", zap.Error(err))
-						return true
+						n.logger.Error("failed to decode validator consensus data", zap.Error(err))
+						return
 					}
 
-					trace.Validator = data.Duty.ValidatorIndex
-					return false
-				}()
+					if qbftMsg.MsgType == specqbft.ProposalMsgType {
+						stop := func() bool {
+							trace.Lock()
+							defer trace.Unlock()
 
-				if stop {
-					return
+							var data = new(spectypes.ValidatorConsensusData)
+							err := data.Decode(msg.SignedSSVMessage.FullData)
+							if err != nil {
+								n.logger.Error("failed to decode validator proposal data", zap.Error(err))
+								return true
+							}
+
+							trace.Validator = data.Duty.ValidatorIndex
+							return false
+						}()
+
+						if stop {
+							return
+						}
+					}
 				}
 
 				round := trace.getRound(uint64(subMsg.Round))

@@ -7,6 +7,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
+	qbftmsg "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 type validatorTraceResponse struct {
@@ -161,10 +162,10 @@ type committeeTrace struct {
 }
 
 type committeeMessage struct {
-	Type         spectypes.PartialSigMsgType `json:"type"`
-	Signer       spectypes.OperatorID        `json:"signer"`
-	Messages     []partialSigMessage         `json:"messages"`
-	ReceivedTime time.Time                   `json:"time"`
+	Type         string               `json:"type"`
+	Signer       spectypes.OperatorID `json:"signer"`
+	Messages     []partialSigMessage  `json:"messages"`
+	ReceivedTime time.Time            `json:"time"`
 }
 
 func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
@@ -195,7 +196,7 @@ func toDecidedTrace(d []*model.DecidedTrace) (out []decided) {
 func toCommitteePost(m []*model.CommitteePartialSigMessageTrace) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
-			Type:         mt.Type,
+			Type:         qbftmsg.PartialMsgTypeToString(mt.Type),
 			Signer:       mt.Signer,
 			Messages:     toCommitteePartSigMessage(mt.Messages),
 			ReceivedTime: mt.ReceivedTime,
