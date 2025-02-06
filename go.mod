@@ -4,7 +4,7 @@ go 1.22.6
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.23.2-0.20250204090132-2e07a2cbc932 // electra branch TODO point to release
+	github.com/attestantio/go-eth2-client v0.23.2-0.20250205171128-0c99cbcafc0b // TODO point to release
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -36,7 +36,7 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250205075737-3d5e8bd9c3db
+	github.com/ssvlabs/eth2-key-manager v1.4.2
 	github.com/ssvlabs/ssv-spec v0.0.0-20250205075039-1a0ef3930d41
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
@@ -252,3 +252,5 @@ require github.com/emicklei/dot v1.6.4 // indirect
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
+
+replace github.com/ssvlabs/ssv-spec => github.com/MFrancoLink/ssv-spec v0.0.0-20250205111700-ca9c4d2bd71d

@@ -225,18 +225,20 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
 	validDuties := 0
-	version := cr.beacon.DataVersion(cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot()))
 
-	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
-		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
-			logger.Warn("duty is no longer valid", fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+	epoch := cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
+	version := cr.beacon.DataVersion(epoch)
+
+	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
+			logger.Warn("duty is no longer valid", fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 			continue
 		}
-		switch duty.Type {
+		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			validDuties++
-			attestationData := constructAttestationData(beaconVote, duty, version)
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
+			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, attestationData, validatorDuty.DutySlot(),
 				spectypes.DomainAttester)
 			if err != nil {
 				return errors.Wrap(err, "failed signing attestation data")
@@ -249,8 +251,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				return errors.Wrap(err, "failed to hash attestation data")
 			}
 			logger.Debug("signed attestation data",
-				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
-				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
+				zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
+				zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
 				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
@@ -259,14 +261,14 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		case spectypes.BNRoleSyncCommittee:
 			validDuties++
 			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
 				return errors.Wrap(err, "failed signing sync committee message")
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 		default:
-			return fmt.Errorf("invalid duty type: %s", duty.Type)
+			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
 	}
 	if validDuties == 0 {
@@ -633,7 +635,10 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
 
-	dataVersion := cr.beacon.DataVersion(cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot()))
+	slot := duty.DutySlot()
+	epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+
+	dataVersion := cr.beacon.DataVersion(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {
@@ -651,8 +656,6 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			// Attestation object
 			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion)
 			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
-			// TODO: this should be done inside ConstructVersionedAttestationWithoutSignature
-			attestationResponse.ValidatorIndex = &validatorDuty.ValidatorIndex
 			if err != nil {
 				logger.Debug("failed to construct attestation", zap.Error(err))
 				continue
