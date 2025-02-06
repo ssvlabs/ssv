@@ -41,9 +41,8 @@ func NewTracer(logger *zap.Logger) *InMemTracer {
 	})
 
 	tracer.committeeTraces.OnInsertion(func(_ context.Context, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
-		logger.Info("insertion", zap.Uint64("slot", item.Key()))
 		for k := range item.Value() {
-			logger.Info("committee", zap.String("id", hex.EncodeToString([]byte(k))))
+			logger.Info("insertion", zap.Uint64("slot", item.Key()), zap.String("id", hex.EncodeToString([]byte(k[16:]))))
 		}
 	})
 
@@ -292,6 +291,16 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	}
 
 	trace.Post = append(trace.Post, cTrace)
+
+	trace.Decideds = append(trace.Decideds, &model.DecidedTrace{
+		MessageTrace: model.MessageTrace{
+			Round:        0,
+			BeaconRoot:   msg.Messages[0].SigningRoot, // Matheus:TODO: check if this is correct
+			Signer:       msg.Messages[0].Signer,
+			ReceivedTime: time.Now(),
+		},
+		Signers: []spectypes.OperatorID{msg.Messages[0].Signer}, // Matheus: WIP
+	})
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
@@ -435,8 +444,6 @@ func (n *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.C
 
 	var mapID [48]byte
 	copy(mapID[16:], committeeID[:])
-
-	n.logger.Info("committee", zap.String("committeeID", hex.EncodeToString(mapID[:])))
 
 	trace, ok := m.Value()[string(mapID[:])]
 	if !ok {
