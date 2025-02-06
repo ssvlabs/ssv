@@ -40,6 +40,7 @@ const (
 	FieldBlockVersion        = "block_version"
 	FieldClusterIndex        = "cluster_index"
 	FieldCommitteeID         = "committee_id"
+	FieldCommitteeIndex      = "committee_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldPreConsensusTime    = "pre_consensus_time"
@@ -398,6 +399,10 @@ func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
 
 func CommitteeID(val spectypes.CommitteeID) zap.Field {
 	return zap.String(FieldCommitteeID, hex.EncodeToString(val[:]))
+}
+
+func CommitteeIndex(val phase0.CommitteeIndex) zap.Field {
+	return zap.Uint64(FieldCommitteeIndex, uint64(val))
 }
 
 func Owner(addr common.Address) zap.Field {
