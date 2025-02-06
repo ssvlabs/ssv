@@ -100,6 +100,7 @@ type MultiClient interface {
 	eth2client.BeaconBlockRootProvider
 	eth2client.SyncCommitteeContributionProvider
 	eth2client.SyncCommitteeContributionsSubmitter
+	eth2client.BeaconBlockHeadersProvider
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
 	eth2client.EventsProvider
@@ -126,6 +127,7 @@ type GoClient struct {
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 
+	blockRootToSlotCache *ttlcache.Cache[phase0.Root, phase0.Slot]
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
 	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
@@ -137,6 +139,8 @@ type GoClient struct {
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
+
+	withWeightedAttestationData bool
 }
 
 // New init new client and go-client instance
@@ -163,14 +167,20 @@ func New(
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		operatorDataStore:     operatorDataStore,
-		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		registrationCache:     make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		commonTimeout: commonTimeout,
-		longTimeout:   longTimeout,
+		// `blockRootToSlotCache` is used for attestation data scoring. When multiple Consensus clients are used,
+		// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
+		// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
+		// intended for cases where some objects within the application may need to fetch attestation data for more than one slot.
+		blockRootToSlotCache:        ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](5)),
+		commonTimeout:               commonTimeout,
+		longTimeout:                 longTimeout,
+		withWeightedAttestationData: opt.WithWeightedAttestationData,
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
