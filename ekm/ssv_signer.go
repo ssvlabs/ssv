@@ -20,15 +20,14 @@ func NewSSVSignerKeyManagerAdapter(client *ssvsignerclient.Client) *SSVSignerKey
 	return &SSVSignerKeyManagerAdapter{client: client}
 }
 
-func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
-	var sharePubkey string // TODO
-	var payload []byte     // TODO
-	sig, err := s.client.Sign(sharePubkey, payload)
+func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, sharePubkey []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
+	var root [32]byte                                       // TODO: extract logic of building payload from obj+domain+domainType from ekm
+	sig, err := s.client.Sign(string(sharePubkey), root[:]) // TODO: check sharePubkey conversion correctness
 	if err != nil {
 		return spectypes.Signature{}, [32]byte{}, err
 	}
 
-	return []byte(sig), [32]byte{}, nil // TODO
+	return []byte(sig), root, nil // TODO: need sig hex decoding?
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
@@ -46,6 +45,7 @@ func (s *SSVSignerKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phas
 }
 
 func (s *SSVSignerKeyManagerAdapter) AddShare(shareKey *bls.SecretKey) error {
+	// TODO: need to change caller to pass encryptedShare instead of shareKey
 	// if err := s.client.AddValidator(encryptedShare, validatorPubKey); err != nil {
 	//     // TODO: if it fails on share decryption, which only the ssv-signer can know: return malformedError
 	//.    // TODO: if it fails for any other reason: retry X times or crash
@@ -76,12 +76,12 @@ func (s *SSVSignerOperatorSignerAdapter) Sign(payload []byte) ([]byte, error) {
 func (s *SSVSignerOperatorSignerAdapter) Public() keys.OperatorPublicKey {
 	pubkeyString, err := s.client.GetOperatorIdentity()
 	if err != nil {
-		return nil // TODO: handle
+		return nil // TODO: handle, consider changing the interface to return error
 	}
 
 	pubkey, err := keys.PublicKeyFromString(pubkeyString)
 	if err != nil {
-		return nil // TODO: handle
+		return nil // TODO: handle, consider changing the interface to return error
 	}
 
 	return pubkey
