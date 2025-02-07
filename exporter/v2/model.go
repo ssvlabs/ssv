@@ -12,8 +12,8 @@ type ValidatorDutyTrace struct {
 	ConsensusTrace
 
 	Slot phase0.Slot
-	Pre  []*PartialSigMessageTrace `ssz-max:"13"`
-	Post []*PartialSigMessageTrace `ssz-max:"13"`
+	Pre  []*PartialSigTrace `ssz-max:"13"`
+	Post []*PartialSigTrace `ssz-max:"13"`
 	Role spectypes.BeaconRole
 	// this could be a pubkey
 	Validator phase0.ValidatorIndex
@@ -25,40 +25,41 @@ type ConsensusTrace struct {
 }
 
 type DecidedTrace struct {
-	MessageTrace
-	// Value []byte // full data needed?
-	Signers []spectypes.OperatorID `ssz-max:"13"`
+	Round        uint64                 // same for
+	BeaconRoot   phase0.Root            `ssz-size:"32"`
+	Signers      []spectypes.OperatorID `ssz-max:"13"`
+	ReceivedTime time.Time
 }
 
 type RoundTrace struct {
 	Proposer spectypes.OperatorID // can be computed or saved
 	// ProposalData
 	ProposalTrace *ProposalTrace
-	Prepares      []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
-	Commits       []*MessageTrace     `ssz-max:"13"` // Only recorded if root matches proposal.
+	Prepares      []*QBFTTrace        `ssz-max:"13"` // Only recorded if root matches proposal.
+	Commits       []*QBFTTrace        `ssz-max:"13"` // Only recorded if root matches proposal.
 	RoundChanges  []*RoundChangeTrace `ssz-max:"13"`
 }
 
 type RoundChangeTrace struct {
-	MessageTrace
+	QBFTTrace
 	PreparedRound   uint64
-	PrepareMessages []*MessageTrace `ssz-max:"13"`
+	PrepareMessages []*QBFTTrace `ssz-max:"13"`
 }
 
 type ProposalTrace struct {
-	MessageTrace
+	QBFTTrace
 	RoundChanges    []*RoundChangeTrace `ssz-max:"13"`
-	PrepareMessages []*MessageTrace     `ssz-max:"13"`
+	PrepareMessages []*QBFTTrace        `ssz-max:"13"`
 }
 
-type MessageTrace struct {
+type QBFTTrace struct {
 	Round        uint64      // same for
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
 	ReceivedTime time.Time
 }
 
-type PartialSigMessageTrace struct {
+type PartialSigTrace struct {
 	Type         spectypes.PartialSigMsgType
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID

@@ -99,8 +99,8 @@ func (n *InMemTracer) toMockState(msg *specqbft.Message, operatorIDs []spectypes
 	return mockState
 }
 
-func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) []*model.MessageTrace {
-	var traces = make([]*model.MessageTrace, 0, len(justifications))
+func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) []*model.QBFTTrace {
+	var traces = make([]*model.QBFTTrace, 0, len(justifications))
 	for _, rcj := range justifications {
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
@@ -116,7 +116,7 @@ func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) [
 			continue
 		}
 
-		var justificationTrace = new(model.MessageTrace)
+		var justificationTrace = new(model.QBFTTrace)
 		justificationTrace.Round = uint64(qbftMsg.Round)
 		justificationTrace.BeaconRoot = qbftMsg.Root
 		justificationTrace.Signer = signedMsg.OperatorIDs[0]
@@ -178,7 +178,7 @@ func (n *InMemTracer) createProposalTrace(msg *specqbft.Message, signedMsg *spec
 	return proposalTrace
 }
 
-func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *round) {
+func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *round) *model.DecidedTrace {
 	round.Lock()
 	defer round.Unlock()
 
@@ -187,7 +187,7 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 		round.ProposalTrace = n.createProposalTrace(msg, signedMsg)
 
 	case specqbft.PrepareMsgType:
-		var m = new(model.MessageTrace)
+		var m = new(model.QBFTTrace)
 		m.Round = uint64(msg.Round)
 		m.BeaconRoot = msg.Root
 		m.Signer = signedMsg.OperatorIDs[0]
@@ -196,7 +196,16 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 		round.Prepares = append(round.Prepares, m)
 
 	case specqbft.CommitMsgType:
-		var m = new(model.MessageTrace)
+		if len(signedMsg.OperatorIDs) > 1 {
+			return &model.DecidedTrace{
+				Round:        uint64(msg.Round),
+				BeaconRoot:   msg.Root,
+				Signers:      signedMsg.OperatorIDs,
+				ReceivedTime: time.Now(),
+			}
+		}
+
+		var m = new(model.QBFTTrace)
 		m.Round = uint64(msg.Round)
 		m.BeaconRoot = msg.Root
 		m.Signer = signedMsg.OperatorIDs[0]
@@ -210,6 +219,8 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 
 		round.RoundChanges = append(round.RoundChanges, roundChangeTrace)
 	}
+
+	return nil
 }
 
 func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, validatorPubKey []byte) {
@@ -246,7 +257,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 
 	n.logger.Info("signed validator", fields...)
 
-	var tr model.PartialSigMessageTrace
+	var tr model.PartialSigTrace
 	tr.Type = msg.Type
 	tr.BeaconRoot = msg.Messages[0].SigningRoot
 	tr.Signer = msg.Messages[0].Signer
@@ -285,16 +296,6 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	}
 
 	trace.Post = append(trace.Post, cTrace)
-
-	trace.Decideds = append(trace.Decideds, &model.DecidedTrace{
-		MessageTrace: model.MessageTrace{
-			Round:        0,
-			BeaconRoot:   msg.Messages[0].SigningRoot, // Matheus:TODO: check if this is correct
-			Signer:       msg.Messages[0].Signer,
-			ReceivedTime: time.Now(),
-		},
-		Signers: []spectypes.OperatorID{msg.Messages[0].Signer}, // Matheus: WIP
-	})
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
@@ -320,7 +321,10 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					}
 				}()
 
-				n.processConsensus(subMsg, msg.SignedSSVMessage, round)
+				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
+				if decided != nil {
+					trace.Decideds = append(trace.Decideds, decided)
+				}
 			default:
 				validatorPubKey := string(executorID)
 				trace := n.getValidatorTrace(slot, validatorPubKey)
@@ -365,7 +369,10 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
 				}
 
-				n.processConsensus(subMsg, msg.SignedSSVMessage, round)
+				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
+				if decided != nil {
+					trace.Decideds = append(trace.Decideds, decided)
+				}
 			}
 		}
 	case spectypes.SSVPartialSignatureMsgType:
