@@ -335,7 +335,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.Less(t, time.Since(startTime), softTimeout)
 	})
 
-	t.Run("multiple beacon clients: awaits for soft timeout when one the servers slow responder", func(t *testing.T) {
+	t.Run("multiple beacon clients: awaits for soft timeout when one of the servers is a slow responder", func(t *testing.T) {
 		const numberOfFastServers = 2
 		var beaconServersURLs []string
 		for i := 0; i < numberOfFastServers; i++ {
