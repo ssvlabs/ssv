@@ -71,12 +71,12 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		if gc.withWeightedAttestationData {
 			attestationData, err = gc.weightedAttestationData(slot)
 			if err != nil {
-				return attestationData, err
+				return nil, err
 			}
 		} else {
 			attestationData, err = gc.simpleAttestationData(slot)
 			if err != nil {
-				return attestationData, err
+				return nil, err
 			}
 		}
 
