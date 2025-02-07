@@ -9,9 +9,10 @@ import (
 	"math/big"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/observability"
-	"go.opentelemetry.io/otel/metric"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"

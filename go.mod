@@ -1,6 +1,8 @@
 module github.com/ssvlabs/ssv
 
-go 1.22.6
+go 1.23
+
+toolchain go1.23.1
 
 require (
 	github.com/aquasecurity/table v1.8.0
@@ -37,6 +39,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.4.2
+	github.com/ssvlabs/ssv-signer v0.0.0-00010101000000-000000000000
 	github.com/ssvlabs/ssv-spec v1.0.2
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
@@ -57,7 +60,14 @@ require (
 	tailscale.com v1.72.0
 )
 
-require github.com/emicklei/dot v1.6.4 // indirect
+require (
+	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/emicklei/dot v1.6.4 // indirect
+	github.com/fasthttp/router v1.5.4 // indirect
+	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.58.0 // indirect
+)
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
@@ -133,7 +143,7 @@ require (
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/joho/godotenv v1.4.0 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/koron/go-ssdp v0.0.4 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -233,7 +243,7 @@ require (
 	go.uber.org/dig v1.18.0 // indirect
 	go.uber.org/fx v1.22.2 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/net v0.29.0 // indirect
+	golang.org/x/net v0.31.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
@@ -258,3 +268,6 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 // NOTE: Prysm doesn't set el_offline correctly (https://github.com/prysmaticlabs/prysm/issues/14226),
 // so the fix uses workaround with checking sync distance to check if EL is offline
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250203214635-0137e67b3b10
+
+// TODO: remove after github.com/ssvlabs/ssv-signer is created
+replace github.com/ssvlabs/ssv-signer => github.com/nkryuchkov/ssv-signer v0.0.0-20250206155938-dafe7ea3351f
