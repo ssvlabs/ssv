@@ -126,7 +126,10 @@ type GoClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
-
+	// `blockRootToSlotCache` is used for attestation data scoring. When multiple Consensus clients are used,
+	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
+	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
+	// intended for cases where some objects within the application may need to fetch attestation data for more than one slot.
 	blockRootToSlotCache *ttlcache.Cache[phase0.Root, phase0.Slot]
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
@@ -173,10 +176,6 @@ func New(
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		// `blockRootToSlotCache` is used for attestation data scoring. When multiple Consensus clients are used,
-		// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
-		// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
-		// intended for cases where some objects within the application may need to fetch attestation data for more than one slot.
 		blockRootToSlotCache:        ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](5)),
 		commonTimeout:               commonTimeout,
 		longTimeout:                 longTimeout,
