@@ -63,7 +63,7 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 					"BELLATRIX_FORK_EPOCH": "144896",
 					"CAPELLA_FORK_EPOCH": "194048",
 					"DENEB_FORK_EPOCH": "269568",
-					"ELECTRA_FORK_EPOCH": "539136"
+					"ELECTRA_FORK_EPOCH": "18446744073709551615"
 				  }
 				}`),
 				"/eth/v1/beacon/genesis": []byte(`{
