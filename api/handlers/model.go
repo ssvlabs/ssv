@@ -27,7 +27,7 @@ type validatorTrace struct {
 type decided struct {
 	Round        uint64
 	BeaconRoot   phase0.Root
-	Signer       spectypes.OperatorID
+	Signers      []spectypes.OperatorID
 	ReceivedTime time.Time
 }
 
@@ -78,7 +78,7 @@ func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 	}
 }
 
-func toMessageTrace(m []*model.PartialSigMessageTrace) (out []message) {
+func toMessageTrace(m []*model.PartialSigTrace) (out []message) {
 	for _, mt := range m {
 		out = append(out, message{
 			BeaconRoot:   mt.BeaconRoot,
@@ -116,7 +116,7 @@ func toProposalTrace(rt *model.ProposalTrace) *proposalTrace {
 	}
 }
 
-func toUIMessageTrace(m []*model.MessageTrace) (out []message) {
+func toUIMessageTrace(m []*model.QBFTTrace) (out []message) {
 	for _, mt := range m {
 		out = append(out, message{
 			Round:        mt.Round,
@@ -185,7 +185,7 @@ func toDecidedTrace(d []*model.DecidedTrace) (out []decided) {
 		out = append(out, decided{
 			Round:        dt.Round,
 			BeaconRoot:   dt.BeaconRoot,
-			Signer:       dt.Signer,
+			Signers:      dt.Signers,
 			ReceivedTime: dt.ReceivedTime,
 		})
 	}
