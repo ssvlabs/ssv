@@ -32,13 +32,17 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(obj ssz.HashRoot, domain p
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
-	//TODO implement me
-	panic("implement me")
+	// TODO: Consider if this needs to be implemented.
+	//  IsAttestationSlashable is called to avoid signing a slashable attestation, however,
+	//  ssv-signer's Sign must perform the slashability check.
+	return nil
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
-	//TODO implement me
-	panic("implement me")
+	// TODO: Consider if this needs to be implemented.
+	//  IsBeaconBlockSlashable is called to avoid signing a slashable attestation, however,
+	//  ssv-signer's Sign must perform the slashability check.
+	return nil
 }
 
 func (s *SSVSignerKeyManagerAdapter) AddShare(shareKey *bls.SecretKey) error {
