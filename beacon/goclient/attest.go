@@ -131,14 +131,13 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 		select {
 		case resp := <-respCh:
 			responded++
-			gc.log.
-				With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.String("client_addr", resp.clientAddr),
-					zap.Int("responded", responded),
-					zap.Int("errored", errored),
-					zap.Int("timed_out", timedOut),
-				).Debug("response received")
+			gc.log.With(
+				zap.Duration("elapsed", time.Since(started)),
+				zap.String("client_addr", resp.clientAddr),
+				zap.Int("responded", responded),
+				zap.Int("errored", errored),
+				zap.Int("timed_out", timedOut),
+			).Debug("response received")
 
 			if bestAttestationData == nil || resp.score > bestScore {
 				bestAttestationData = resp.attestationData
@@ -147,32 +146,30 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			}
 		case err := <-errCh:
 			errored++
-			gc.log.
-				With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.String("client_addr", err.clientAddr),
-					zap.Int("responded", responded),
-					zap.Int("errored", errored),
-					zap.Int("timed_out", timedOut),
-					zap.Error(err.err),
-				).Error("error received")
+			gc.log.With(
+				zap.Duration("elapsed", time.Since(started)),
+				zap.String("client_addr", err.clientAddr),
+				zap.Int("responded", responded),
+				zap.Int("errored", errored),
+				zap.Int("timed_out", timedOut),
+				zap.Error(err.err),
+			).Error("error received")
 		case <-softCtx.Done():
 			// If we have any responses at this point we consider the non-responders timed out.
 			if responded > 0 {
 				timedOut = requests - responded - errored
-				gc.log.
-					With(
-						zap.Duration("elapsed", time.Since(started)),
-						zap.Int("responded", responded),
-						zap.Int("errored", errored),
-						zap.Int("timed_out", timedOut),
-					).Debug("soft timeout reached with responses")
+				gc.log.With(
+					zap.Duration("elapsed", time.Since(started)),
+					zap.Int("responded", responded),
+					zap.Int("errored", errored),
+					zap.Int("timed_out", timedOut),
+				).Debug("soft timeout reached with responses")
 			} else {
-				gc.log.
-					With(
-						zap.Duration("elapsed", time.Since(started)),
-						zap.Int("errored", errored),
-					).Error("soft timeout reached with no responses")
+				gc.log.With(
+					zap.Duration("elapsed", time.Since(started)),
+					zap.Int("errored", errored),
+					zap.Int("timed_out", timedOut),
+				).Error("soft timeout reached with no successful responses")
 			}
 			// Set the number of requests that have soft timed out.
 			softTimedOut = requests - responded - errored - timedOut
@@ -185,14 +182,13 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 		select {
 		case resp := <-respCh:
 			responded++
-			gc.log.
-				With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.String("client_addr", resp.clientAddr),
-					zap.Int("responded", responded),
-					zap.Int("errored", errored),
-					zap.Int("timed_out", timedOut),
-				).Debug("response received")
+			gc.log.With(
+				zap.Duration("elapsed", time.Since(started)),
+				zap.String("client_addr", resp.clientAddr),
+				zap.Int("responded", responded),
+				zap.Int("errored", errored),
+				zap.Int("timed_out", timedOut),
+			).Debug("response received")
 			if bestAttestationData == nil || resp.score > bestScore {
 				bestAttestationData = resp.attestationData
 				bestScore = resp.score
@@ -200,25 +196,23 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			}
 		case err := <-errCh:
 			errored++
-			gc.log.
-				With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.String("client_addr", err.clientAddr),
-					zap.Int("responded", responded),
-					zap.Int("errored", errored),
-					zap.Int("timed_out", timedOut),
-					zap.Error(err.err),
-				).Error("error received")
+			gc.log.With(
+				zap.Duration("elapsed", time.Since(started)),
+				zap.String("client_addr", err.clientAddr),
+				zap.Int("responded", responded),
+				zap.Int("errored", errored),
+				zap.Int("timed_out", timedOut),
+				zap.Error(err.err),
+			).Error("error received")
 		case <-ctx.Done():
 			// Anyone not responded by now is considered errored.
 			timedOut = requests - responded - errored
-			gc.log.
-				With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.Int("responded", responded),
-					zap.Int("errored", errored),
-					zap.Int("timed_out", timedOut),
-				).Error("hard timeout reached")
+			gc.log.With(
+				zap.Duration("elapsed", time.Since(started)),
+				zap.Int("responded", responded),
+				zap.Int("errored", errored),
+				zap.Int("timed_out", timedOut),
+			).Error("hard timeout reached")
 		}
 	}
 	cancel()
@@ -235,10 +229,9 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 		return nil, fmt.Errorf("no attestations received")
 	}
 
-	logger.
-		With(
-			zap.String("client_addr", bestClient),
-			zap.Float64("score", bestScore)).
+	logger.With(
+		zap.String("client_addr", bestClient),
+		zap.Float64("score", bestScore)).
 		Debug("successfully fetched attestation data")
 
 	return bestAttestationData, nil
@@ -272,11 +265,10 @@ func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.Attestation
 		return nil, fmt.Errorf("attestation data is nil")
 	}
 
-	gc.log.
-		With(
-			zap.Duration("elapsed", time.Since(attDataReqStart)),
-			zap.Bool("with_weighted_attestation_data", false),
-		).Debug("successfully fetched attestation data")
+	gc.log.With(
+		zap.Duration("elapsed", time.Since(attDataReqStart)),
+		zap.Bool("with_weighted_attestation_data", false),
+	).Debug("successfully fetched attestation data")
 
 	return resp.Data, nil
 }
