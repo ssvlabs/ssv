@@ -104,7 +104,11 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 	// At the hard timeout, we return unconditionally.
 	// The soft timeout is half the duration of the hard timeout.
 	ctx, cancel := context.WithTimeout(gc.ctx, gc.commonTimeout)
+	defer cancel()
+
 	softCtx, softCancel := context.WithTimeout(ctx, gc.commonTimeout/2)
+	defer softCancel()
+
 	started := time.Now()
 
 	requests := len(gc.clients)
@@ -175,7 +179,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			softTimedOut = requests - responded - errored - timedOut
 		}
 	}
-	softCancel()
 
 	// Loop 2: after soft timeout.
 	for responded+errored+timedOut != requests {
@@ -215,7 +218,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			).Error("hard timeout reached")
 		}
 	}
-	cancel()
 
 	logger := gc.log.With(
 		zap.Duration("elapsed", time.Since(started)),
