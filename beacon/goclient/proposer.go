@@ -19,10 +19,9 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
+	"go.uber.org/zap"
 )
 
 const (
@@ -404,6 +403,18 @@ func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operat
 			gc.log.Error("Failed to submit validator registrations",
 				zap.Error(err),
 				fields.Slot(currentSlot))
+			return
+		}
+
+		// we can drop validator registrations now since all of them have been processed successfully
+		gc.registrationMu.Lock()
+		defer gc.registrationMu.Unlock()
+		err := gc.dropRegistrations(registrations)
+		if err != nil {
+			gc.log.Error("Failed to drop validator registrations",
+				zap.Error(err),
+				fields.Slot(currentSlot))
+			return
 		}
 
 		return
@@ -421,6 +432,19 @@ func (gc *GoClient) registrationList() []*api.VersionedSignedValidatorRegistrati
 	}
 
 	return result
+}
+
+// dropRegistrations is not thread-safe
+func (gc *GoClient) dropRegistrations(list []*api.VersionedSignedValidatorRegistration) error {
+	for _, registration := range list {
+		pk, err := registration.PubKey()
+		if err != nil {
+			return err
+		}
+		delete(gc.registrationCache, pk)
+	}
+
+	return nil
 }
 
 func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations []*api.VersionedSignedValidatorRegistration) error {
