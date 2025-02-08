@@ -143,9 +143,9 @@ var StartNodeCmd = &cobra.Command{
 		var operatorPrivKey keys.OperatorPrivateKey
 		var operatorPrivKeyText string
 		var operatorPubKey keys.OperatorPublicKey
-		var ssvSignerClient *ssvsignerclient.Client
+		var ssvSignerClient *ssvsignerclient.SSVSignerClient
 		if cfg.SSVSignerEndpoint != "" {
-			ssvSignerClient = ssvsignerclient.NewClient(cfg.SSVSignerEndpoint)
+			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint)
 			operatorPubKeyString, err := ssvSignerClient.GetOperatorIdentity()
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
@@ -209,21 +209,6 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
-		var keyManager ekm.KeyManager
-		if cfg.SSVSignerEndpoint != "" { // TODO: try to remove repetitive check
-			keyManager = ekm.NewSSVSignerKeyManagerAdapter(ssvSignerClient)
-		} else {
-			ekmHashedKey, err := operatorPrivKey.EKMHash()
-			if err != nil {
-				logger.Fatal("could not get operator private key hash", zap.Error(err))
-			}
-
-			keyManager, err = ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
-			if err != nil {
-				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
-			}
-		}
-
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 
 		slotTickerProvider := func() slotticker.SlotTicker {
@@ -281,6 +266,21 @@ var StartNodeCmd = &cobra.Command{
 			}
 
 			executionClient = ec
+		}
+
+		var keyManager ekm.KeyManager
+		if cfg.SSVSignerEndpoint != "" { // TODO: try to remove repetitive check
+			keyManager = ekm.NewSSVSignerKeyManagerAdapter(ssvSignerClient, consensusClient)
+		} else {
+			ekmHashedKey, err := operatorPrivKey.EKMHash()
+			if err != nil {
+				logger.Fatal("could not get operator private key hash", zap.Error(err))
+			}
+
+			keyManager, err = ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
+			if err != nil {
+				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
+			}
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage

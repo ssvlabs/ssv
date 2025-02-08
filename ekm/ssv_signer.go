@@ -11,17 +11,19 @@ import (
 	"github.com/ssvlabs/ssv-signer/web3signer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 // TODO: move to another package?
 
 type SSVSignerKeyManagerAdapter struct {
-	client *ssvsignerclient.SSVSignerClient
+	client          *ssvsignerclient.SSVSignerClient
+	consensusClient *goclient.GoClient
 }
 
-func NewSSVSignerKeyManagerAdapter(client *ssvsignerclient.SSVSignerClient) *SSVSignerKeyManagerAdapter {
-	return &SSVSignerKeyManagerAdapter{client: client}
+func NewSSVSignerKeyManagerAdapter(client *ssvsignerclient.SSVSignerClient, consensusClient *goclient.GoClient) *SSVSignerKeyManagerAdapter {
+	return &SSVSignerKeyManagerAdapter{client: client, consensusClient: consensusClient}
 }
 
 func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, sharePubkey []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
