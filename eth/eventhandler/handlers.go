@@ -10,6 +10,8 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -17,7 +19,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // b64 encrypted key length is 256
@@ -224,6 +225,8 @@ func (eh *EventHandler) handleShareCreation(
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
+	selfOperatorID := eh.operatorDataStore.GetOperatorID()
+
 	share, shareSecret, err := eh.validatorAddedEventToShare(
 		txn,
 		validatorEvent,
@@ -234,14 +237,38 @@ func (eh *EventHandler) handleShareCreation(
 		return nil, fmt.Errorf("could not extract validator share from event: %w", err)
 	}
 
-	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
+	if share.BelongsToOperator(selfOperatorID) {
 		if shareSecret == nil {
 			return nil, errors.New("could not decode shareSecret")
 		}
 
-		// Save secret key into BeaconSigner.
-		if err := eh.keyManager.AddShare(shareSecret); err != nil {
-			return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
+		// TODO: refactor
+		if ssvSignerAdapter, ok := eh.keyManager.(*ekm.SSVSignerKeyManagerAdapter); ok {
+			publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorEvent.PublicKey)
+			if err != nil {
+				return nil, fmt.Errorf("could not deserialize validator public key: %w", err)
+			}
+
+			var validatorPK spectypes.ValidatorPK
+			copy(validatorPK[:], publicKey.Serialize())
+
+			var encryptedShare []byte
+			for i, opID := range validatorEvent.OperatorIds {
+				if opID == selfOperatorID {
+					encryptedShare = encryptedKeys[i]
+				}
+			}
+			if encryptedShare != nil { // TODO: should never be nil because of share.BelongsToOperator(selfOperatorID)
+				// TODO: hex encode validator PK?
+				if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK); err != nil {
+					return nil, fmt.Errorf("could not add validator share: %w", err)
+				}
+			}
+		} else {
+			// Save secret key into BeaconSigner.
+			if err := eh.keyManager.AddShare(shareSecret); err != nil {
+				return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
+			}
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
