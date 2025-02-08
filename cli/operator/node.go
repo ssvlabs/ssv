@@ -161,7 +161,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("could not extract operator private key from file", zap.Error(err))
 			}
 
-			cfg.P2pNetworkConfig.OperatorSigner = ekm.NewSSVSignerOperatorSignerAdapter(ssvSignerClient)
+			cfg.P2pNetworkConfig.OperatorSigner = ekm.NewSSVSignerOperatorSignerAdapter(logger, ssvSignerClient)
 		} else {
 			if cfg.KeyStore.PrivateKeyFile != "" && cfg.KeyStore.PasswordFile != "" {
 				// nolint: gosec
@@ -268,19 +268,18 @@ var StartNodeCmd = &cobra.Command{
 			executionClient = ec
 		}
 
-		var keyManager ekm.KeyManager
-		if cfg.SSVSignerEndpoint != "" { // TODO: try to remove repetitive check
-			keyManager = ekm.NewSSVSignerKeyManagerAdapter(ssvSignerClient, consensusClient)
-		} else {
-			ekmHashedKey, err := operatorPrivKey.EKMHash()
-			if err != nil {
-				logger.Fatal("could not get operator private key hash", zap.Error(err))
-			}
+		ekmHashedKey, err := operatorPrivKey.EKMHash()
+		if err != nil {
+			logger.Fatal("could not get operator private key hash", zap.Error(err))
+		}
 
-			keyManager, err = ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
-			if err != nil {
-				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
-			}
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
+		if err != nil {
+			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
+		}
+
+		if cfg.SSVSignerEndpoint != "" { // TODO: try to remove repetitive check
+			keyManager = ekm.NewSSVSignerKeyManagerAdapter(logger, ssvSignerClient, consensusClient, keyManager)
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage

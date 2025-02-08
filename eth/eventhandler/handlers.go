@@ -260,7 +260,7 @@ func (eh *EventHandler) handleShareCreation(
 			}
 			if encryptedShare != nil { // TODO: should never be nil because of share.BelongsToOperator(selfOperatorID)
 				// TODO: hex encode validator PK?
-				if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK); err != nil {
+				if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK, shareSecret); err != nil {
 					return nil, fmt.Errorf("could not add validator share: %w", err)
 				}
 			}

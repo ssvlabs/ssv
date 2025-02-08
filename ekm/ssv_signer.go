@@ -10,6 +10,7 @@ import (
 	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
 	"github.com/ssvlabs/ssv-signer/web3signer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -18,17 +19,36 @@ import (
 // TODO: move to another package?
 
 type SSVSignerKeyManagerAdapter struct {
+	logger          *zap.Logger
 	client          *ssvsignerclient.SSVSignerClient
 	consensusClient *goclient.GoClient
+	fallback        KeyManager // temporary workaround to support what's not supported in SSVSignerKeyManagerAdapter
 }
 
-func NewSSVSignerKeyManagerAdapter(client *ssvsignerclient.SSVSignerClient, consensusClient *goclient.GoClient) *SSVSignerKeyManagerAdapter {
-	return &SSVSignerKeyManagerAdapter{client: client, consensusClient: consensusClient}
+func NewSSVSignerKeyManagerAdapter(
+	logger *zap.Logger,
+	client *ssvsignerclient.SSVSignerClient,
+	consensusClient *goclient.GoClient,
+	fallback KeyManager,
+) *SSVSignerKeyManagerAdapter {
+	return &SSVSignerKeyManagerAdapter{
+		logger:          logger.Named("SSVSignerKeyManagerAdapter"),
+		client:          client,
+		consensusClient: consensusClient,
+		fallback:        fallback,
+	}
 }
 
-func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, sharePubkey []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
+func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
+	obj ssz.HashRoot,
+	domain phase0.Domain,
+	sharePubkey []byte,
+	domainType phase0.DomainType,
+) (spectypes.Signature, [32]byte, error) {
 	switch domainType {
 	case spectypes.DomainAttester:
+		s.logger.Debug("Signing Attester")
+
 		data, ok := obj.(*phase0.AttestationData)
 		if !ok {
 			return nil, [32]byte{}, errors.New("could not cast obj to AttestationData")
@@ -54,17 +74,18 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(obj ssz.HashRoot, domain p
 		}
 
 		sig, err := s.client.Sign(sharePubkey, req)
+		s.logger.Debug("Signing Attester result", zap.Any("signature", sig), zap.Error(err))
 		if err != nil {
 			return spectypes.Signature{}, [32]byte{}, err
 		}
 
 		return []byte(sig), root, nil // TODO: need sig hex decoding?
 
-		// TODO: support other domains
 	default:
-		return nil, [32]byte{}, errors.New("domain unknown")
+		// TODO: support other domains
+		return s.fallback.SignBeaconObject(obj, domain, sharePubkey, domainType)
+		//return nil, [32]byte{}, errors.New("domain unknown")
 	}
-
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
@@ -87,34 +108,61 @@ func (s *SSVSignerKeyManagerAdapter) AddShare(shareKey *bls.SecretKey) error {
 	panic("should not be called")
 }
 
-func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(encryptedShare []byte, validatorPubKey spectypes.ValidatorPK) error {
+func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(
+	encryptedShare []byte,
+	validatorPubKey spectypes.ValidatorPK,
+	shareKey *bls.SecretKey, // for fallback
+) error {
+	if err := s.fallback.AddShare(shareKey); err != nil {
+		return err
+	}
+
+	s.logger.Debug("Adding Share")
+
 	// TODO: consider using spectypes.ValidatorPK
 	if err := s.client.AddValidator(encryptedShare, validatorPubKey[:]); err != nil {
+		s.logger.Debug("Adding Share err", zap.Error(err))
 		// TODO: if it fails on share decryption, which only the ssv-signer can know: return malformedError
 		// TODO: if it fails for any other reason: retry X times or crash
 		return err
 	}
+	s.logger.Debug("Adding Share ok")
+
 	return nil
 }
 
 func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey string) error {
+	if err := s.fallback.RemoveShare(pubKey); err != nil {
+		return err
+	}
+
+	s.logger.Debug("Removing Share")
 	decoded, _ := hex.DecodeString(pubKey) // TODO: caller passes hex encoded string, need to fix this workaround
 	return s.client.RemoveValidator(decoded)
 }
 
 type SSVSignerOperatorSignerAdapter struct {
+	logger *zap.Logger
 	client *ssvsignerclient.SSVSignerClient
 }
 
-func NewSSVSignerOperatorSignerAdapter(client *ssvsignerclient.SSVSignerClient) *SSVSignerOperatorSignerAdapter {
-	return &SSVSignerOperatorSignerAdapter{client: client}
+func NewSSVSignerOperatorSignerAdapter(
+	logger *zap.Logger,
+	client *ssvsignerclient.SSVSignerClient,
+) *SSVSignerOperatorSignerAdapter {
+	return &SSVSignerOperatorSignerAdapter{
+		logger: logger.Named("SSVSignerOperatorSignerAdapter"),
+		client: client,
+	}
 }
 
 func (s *SSVSignerOperatorSignerAdapter) Sign(payload []byte) ([]byte, error) {
+	s.logger.Debug("Signing payload")
 	return s.client.OperatorSign(payload)
 }
 
 func (s *SSVSignerOperatorSignerAdapter) Public() keys.OperatorPublicKey {
+	s.logger.Debug("Getting public key")
 	pubkeyString, err := s.client.GetOperatorIdentity()
 	if err != nil {
 		return nil // TODO: handle, consider changing the interface to return error
