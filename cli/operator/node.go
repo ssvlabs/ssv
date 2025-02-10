@@ -342,7 +342,11 @@ var StartNodeCmd = &cobra.Command{
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
-		tracer := validator.NewTracer(logger)
+		var tracer validator.DutyTracer = validator.NoOp()
+		if cfg.SSVOptions.ValidatorOptions.ExporterEnableDutyTracing {
+			logger.Info("exporter duty tracing enabled")
+			tracer = validator.NewTracer(logger)
+		}
 		cfg.SSVOptions.ValidatorOptions.DutyTracer = tracer
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
@@ -452,8 +456,9 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Exporter{
 					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
-					TraceStore:        traceStoreAdapter(tracer, logger),
+					TraceStore:        tracer.Store(),
 				},
+				cfg.SSVOptions.ValidatorOptions.ExporterEnableDutyTracing,
 			)
 			go func() {
 				err := apiServer.Run()

@@ -20,7 +20,7 @@ type validatorTrace struct {
 	Decideds  []decided
 	Pre       []message             `json:"pre"`
 	Post      []message             `json:"post"`
-	Role      spectypes.BeaconRole  `json:"role"`
+	Role      string                `json:"role"`
 	Validator phase0.ValidatorIndex `json:"validator"`
 }
 
@@ -70,7 +70,7 @@ type partialSigMessage struct {
 func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 	return validatorTrace{
 		Slot:      t.Slot,
-		Role:      t.Role,
+		Role:      t.Role.String(),
 		Validator: t.Validator,
 		Pre:       toMessageTrace(t.Pre),
 		Post:      toMessageTrace(t.Post),

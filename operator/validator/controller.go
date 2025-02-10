@@ -70,6 +70,7 @@ type ControllerOptions struct {
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"The number of slots to be keep back"`
+	ExporterEnableDutyTracing  bool   `yaml:"ExporterEnableDutyTracing" env:"EXPORTER_ENABLE_DUTY_TRACING" env-default:"false" env-description:"Expose all validator duties to the exporter"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -192,6 +193,7 @@ type controller struct {
 
 type DutyTracer interface {
 	Trace(*queue.SSVMessage)
+	Store() DutyTraceStore
 }
 
 // NewController creates a new validator controller instance
