@@ -41,7 +41,7 @@ const (
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
 	BlockRootToSlotCacheCapacityEpochs = 64
-    
+
 	clResponseErrMsg            = "Consensus client returned an error"
 	clNilResponseErrMsg         = "Consensus client returned a nil response"
 	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
