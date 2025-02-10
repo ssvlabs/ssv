@@ -19,6 +19,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
@@ -39,9 +40,10 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
-	clResponseErrMsg        = "Consensus client returned an error"
-	clNilResponseErrMsg     = "Consensus client returned a nil response"
-	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
+	clResponseErrMsg            = "Consensus client returned an error"
+	clNilResponseErrMsg         = "Consensus client returned a nil response"
+	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
+	clNilResponseForkDataErrMsg = "Consensus client returned a nil response fork data"
 )
 
 // NodeClient is the type of the Beacon node.
@@ -115,6 +117,7 @@ type GoClient struct {
 	network     beaconprotocol.Network
 	clients     []Client
 	multiClient MultiClient
+	specssv.VersionCalls
 
 	genesisVersion atomic.Pointer[phase0.Version]
 
@@ -148,6 +151,13 @@ type GoClient struct {
 	longTimeout   time.Duration
 
 	withWeightedAttestationData bool
+
+	ForkLock           sync.RWMutex
+	ForkEpochElectra   phase0.Epoch
+	ForkEpochDeneb     phase0.Epoch
+	ForkEpochCapella   phase0.Epoch
+	ForkEpochBellatrix phase0.Epoch
+	ForkEpochAltair    phase0.Epoch
 }
 
 // New init new client and go-client instance
@@ -302,6 +312,24 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
+			}
+
+			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "Spec"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			if err := gc.checkForkValues(spec); err != nil {
+				gc.log.Error("failed to check fork values",
+					zap.String("address", s.Address()),
+					zap.Error(err),
+				)
+				return
 			}
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
