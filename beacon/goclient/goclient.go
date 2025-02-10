@@ -40,6 +40,8 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
+	BlockRootToSlotCacheCapacityEpochs = 64
+
 	clResponseErrMsg            = "Consensus client returned an error"
 	clNilResponseErrMsg         = "Consensus client returned a nil response"
 	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
@@ -102,6 +104,7 @@ type MultiClient interface {
 	eth2client.BeaconBlockRootProvider
 	eth2client.SyncCommitteeContributionProvider
 	eth2client.SyncCommitteeContributionsSubmitter
+	eth2client.BeaconBlockHeadersProvider
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
 	eth2client.EventsProvider
@@ -128,10 +131,18 @@ type GoClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
-
+	// `blockRootToSlotCache` is used for attestation data scoring. When multiple Consensus clients are used,
+	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
+	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
+	// intended for cases where some objects within the application may need to fetch attestation data for more than one slot.
+	blockRootToSlotCache *ttlcache.Cache[phase0.Root, phase0.Slot]
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
 	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
+
+	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
+	// from running in parallel.
+	blockRootToSlotReqInflight singleflight.Group[phase0.Root, phase0.Slot]
 
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
@@ -141,6 +152,9 @@ type GoClient struct {
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
+	withWeightedAttestationData bool
+
+	ForkLock           sync.RWMutex
 	ForkEpochElectra   phase0.Epoch
 	ForkEpochDeneb     phase0.Epoch
 	ForkEpochCapella   phase0.Epoch
@@ -172,14 +186,18 @@ func New(
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		operatorDataStore:     operatorDataStore,
-		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		registrationCache:     make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		commonTimeout: commonTimeout,
-		longTimeout:   longTimeout,
+		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
+			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
+		),
+		commonTimeout:               commonTimeout,
+		longTimeout:                 longTimeout,
+		withWeightedAttestationData: opt.WithWeightedAttestationData,
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
@@ -204,11 +222,6 @@ func New(
 	}
 
 	client.nodeSyncingFn = client.nodeSyncing
-
-	// Get the fork epochs.
-	if err := fetchStaticValues(client); err != nil {
-		return nil, fmt.Errorf("fetch static values: %w", err)
-	}
 
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
@@ -303,6 +316,24 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
+			}
+
+			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "Spec"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			if err := gc.checkForkValues(spec); err != nil {
+				gc.log.Error("failed to check fork values",
+					zap.String("address", s.Address()),
+					zap.Error(err),
+				)
+				return
 			}
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {

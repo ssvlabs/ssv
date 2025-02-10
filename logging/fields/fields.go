@@ -40,6 +40,7 @@ const (
 	FieldBlockVersion        = "block_version"
 	FieldClusterIndex        = "cluster_index"
 	FieldCommitteeID         = "committee_id"
+	FieldCommitteeIndex      = "committee_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldPreConsensusTime    = "pre_consensus_time"
