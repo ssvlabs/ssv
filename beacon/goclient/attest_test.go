@@ -42,26 +42,47 @@ var (
 
 	beaconEndpointResponses = map[string][]byte{
 		"/eth/v1/node/syncing": []byte(`{
-		"data": {
-			"head_slot": "4239945",
-			"sync_distance": "1",
-			"is_syncing": false,
-			"is_optimistic": false,
-			"el_offline": false
-		}
-	}`),
+			"data": {
+				"head_slot": "4239945",
+				"sync_distance": "1",
+				"is_syncing": false,
+				"is_optimistic": false,
+				"el_offline": false
+			}
+		}`),
 		"/eth/v1/node/version": []byte(`{
-		"data": {
-			"version": "Lighthouse/v4.5.0-441fc16/x86_64-linux"
-		}
-	}`),
+			"data": {
+				"version": "Lighthouse/v4.5.0-441fc16/x86_64-linux"
+			}
+		}`),
 		"/eth/v1/beacon/genesis": []byte(`{
-		"data": {
-			"genesis_time": "1695902400",
-			"genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
-			"genesis_fork_version": "0x01017000"
-		}
-	}`),
+			"data": {
+				"genesis_time": "1695902400",
+				"genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
+				"genesis_fork_version": "0x01017000"
+			}
+		}`),
+		"/eth/v1/config/spec": []byte(`{
+			"data": {
+				"CONFIG_NAME": "holesky",
+				"GENESIS_FORK_VERSION": "0x01017000",
+				"CAPELLA_FORK_VERSION": "0x04017000",
+				"MIN_GENESIS_TIME": "1695902100",
+				"SECONDS_PER_SLOT": "12",
+				"SLOTS_PER_EPOCH": "32",
+				"EPOCHS_PER_SYNC_COMMITTEE_PERIOD": "256",
+				"SYNC_COMMITTEE_SIZE": "512",
+				"SYNC_COMMITTEE_SUBNET_COUNT": "4",
+				"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
+				"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
+				"INTERVALS_PER_SLOT": "3",
+				"ALTAIR_FORK_EPOCH": "74240",
+				"BELLATRIX_FORK_EPOCH": "144896",
+				"CAPELLA_FORK_EPOCH": "194048",
+				"DENEB_FORK_EPOCH": "269568",
+				"ELECTRA_FORK_EPOCH": "18446744073709551615"
+			}
+		}`),
 	}
 )
 
