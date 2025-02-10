@@ -40,6 +40,8 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
+	BlockRootToSlotCacheCapacityEpochs = 64
+    
 	clResponseErrMsg            = "Consensus client returned an error"
 	clNilResponseErrMsg         = "Consensus client returned a nil response"
 	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
@@ -190,7 +192,9 @@ func New(
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		blockRootToSlotCache:        ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](5)),
+		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
+			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
+		),
 		commonTimeout:               commonTimeout,
 		longTimeout:                 longTimeout,
 		withWeightedAttestationData: opt.WithWeightedAttestationData,
