@@ -401,10 +401,6 @@ func CommitteeID(val spectypes.CommitteeID) zap.Field {
 	return zap.String(FieldCommitteeID, hex.EncodeToString(val[:]))
 }
 
-func CommitteeIndex(val phase0.CommitteeIndex) zap.Field {
-	return zap.Uint64(FieldCommitteeIndex, uint64(val))
-}
-
 func Owner(addr common.Address) zap.Field {
 	return zap.String(FieldOwnerAddress, addr.Hex())
 }
