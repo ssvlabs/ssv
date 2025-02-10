@@ -739,8 +739,8 @@ github.com/spf13/pflag v1.0.1-0.20170901120850-7aff26db30c1/go.mod h1:DYY7MBk1bd
 github.com/spf13/pflag v1.0.5 h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=
 github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/spf13/viper v1.0.0/go.mod h1:A8kyI5cUJhb8N+3pkfONlcEcZbueH6nhAm0Fq7SrnBM=
-github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250205075737-3d5e8bd9c3db h1:6HNTOYH03Jpf3sIoL+xLeccVk2zjhPKI7p4FFKwnVcw=
-github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250205075737-3d5e8bd9c3db/go.mod h1:RqsGIMCsOeUJQmC2nytr82z5vqn5gN3i3VAoY0OydV8=
+github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250210084923-506ed4b28259 h1:Ax1XNOPH2bJhp3LnMmzXaf9e4LDO7KHBFdJqQuPkYDQ=
+github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250210084923-506ed4b28259/go.mod h1:6KvRV5R4WpeGQ5n0oOCORZ4T9M7bTUCza1YL3+RBCC4=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20250206124345-c0674c73acc5 h1:JH/TUFRdH/YlzGC73/HOZvyT1lhXrIbbik93KNFuiQ8=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20250206124345-c0674c73acc5/go.mod h1:/KTLN3WuH1xrJL7ZZrpBoWM1xCCihnFbzequD5L+83o=
 github.com/ssvlabs/ssv-spec v0.0.0-20250206134017-e73661470d2f h1:P9B7PLrKfGWkOeMxFhCmHSXa4A0urIs107ah6Bvv6x8=
