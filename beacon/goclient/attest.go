@@ -64,6 +64,15 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 ) {
 	// Have to make beacon node request and cache the result.
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
+		// Check cache.
+		cachedResult := gc.attestationDataCache.Get(slot)
+		if cachedResult != nil {
+			data, err := withCommitteeIndex(cachedResult.Value(), committeeIndex)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set committee index: %w", err)
+			}
+			return data, nil
+		}
 		var (
 			attestationData *phase0.AttestationData
 			err             error
