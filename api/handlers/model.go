@@ -25,10 +25,10 @@ type validatorTrace struct {
 }
 
 type decided struct {
-	Round        uint64
-	BeaconRoot   phase0.Root
-	Signers      []spectypes.OperatorID
-	ReceivedTime time.Time
+	Round        uint64                 `json:"round"`
+	BeaconRoot   phase0.Root            `json:"beaconRoot"`
+	Signers      []spectypes.OperatorID `json:"signers"`
+	ReceivedTime time.Time              `json:"time"`
 }
 
 type round struct {
@@ -86,6 +86,7 @@ func toMessageTrace(m []*model.PartialSigTrace) (out []message) {
 			ReceivedTime: mt.ReceivedTime,
 		})
 	}
+
 	return
 }
 
@@ -99,6 +100,7 @@ func toRounds(r []*model.RoundTrace) (out []round) {
 			RoundChanges:  toUIRoundChangeTrace(rt.RoundChanges),
 		})
 	}
+
 	return
 }
 
@@ -142,6 +144,7 @@ func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
 			PrepareMessages: toUIMessageTrace(mt.PrepareMessages),
 		})
 	}
+
 	return
 }
 
@@ -202,6 +205,7 @@ func toCommitteePost(m []*model.CommitteePartialSigMessageTrace) (out []committe
 			ReceivedTime: mt.ReceivedTime,
 		})
 	}
+
 	return
 }
 

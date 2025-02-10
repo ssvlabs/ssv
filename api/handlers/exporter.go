@@ -6,13 +6,13 @@ import (
 	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/networkconfig"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 type Exporter struct {
@@ -22,7 +22,7 @@ type Exporter struct {
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
+	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error)
 	GetCommitteeDutiesByOperator(indexes []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
@@ -136,9 +136,9 @@ func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error 
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From        uint64 `json:"from"`
-		To          uint64 `json:"to"`
-		CommitteeID string `json:"committeeID"`
+		From        uint64  `json:"from"`
+		To          uint64  `json:"to"`
+		CommitteeID api.Hex `json:"committeeID"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -149,17 +149,13 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 
-	committeeIDBytes, err := hex.DecodeString(request.CommitteeID)
-	if err != nil {
-		return api.BadRequestError(fmt.Errorf("decode committee ID: %w", err))
-	}
+	var committeeID spectypes.CommitteeID
 
-	if len(committeeIDBytes) != 32 {
+	if len(request.CommitteeID) != len(committeeID) {
 		return api.BadRequestError(fmt.Errorf("invalid committee ID length"))
 	}
 
-	var committeeID spectypes.CommitteeID
-	copy(committeeID[:], committeeIDBytes)
+	copy(committeeID[:], request.CommitteeID)
 
 	var duties []*model.CommitteeDutyTrace
 	for s := request.From; s <= request.To; s++ {
@@ -187,7 +183,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		From   uint64        `json:"from"`
 		To     uint64        `json:"to"`
 		Roles  api.RoleSlice `json:"roles"`
-		VIndex uint64        `json:"index"`
+		PubKey api.Hex       `json:"pubkey"` // optional
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -204,7 +200,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 
 	var results []*model.ValidatorDutyTrace
 
-	if request.VIndex == 0 {
+	if len(request.PubKey) == 0 {
 		for s := request.From; s <= request.To; s++ {
 			slot := phase0.Slot(s)
 			for _, r := range request.Roles {
@@ -219,13 +215,19 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return api.Render(w, r, toValidatorTraceResponse(results))
 	}
 
-	vIndex := phase0.ValidatorIndex(request.VIndex)
+	var pubkey spectypes.ValidatorPK
+
+	if len(request.PubKey) != len(pubkey) {
+		return api.BadRequestError(fmt.Errorf("invalid pubkey length"))
+	}
+
+	copy(pubkey[:], request.PubKey)
 
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
-			duty, err := e.TraceStore.GetValidatorDuty(role, slot, vIndex)
+			duty, err := e.TraceStore.GetValidatorDuty(role, slot, pubkey)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting duties: %w", err))
 			}

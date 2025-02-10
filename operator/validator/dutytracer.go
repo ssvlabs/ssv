@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"context"
 	"encoding/hex"
 	"errors"
 	"sync"
@@ -36,14 +35,35 @@ func NewTracer(logger *zap.Logger) *InMemTracer {
 		),
 	}
 
-	tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
-		logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
-	})
+	// tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
+	// 	logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+	// })
+
+	// tracer.committeeTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
+	// 	tracer.Lock()
+	// 	defer tracer.Unlock()
+	// 	for id := range i.Value() {
+	// 		logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
+	// 	}
+	// })
+
+	// tracer.validatorTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
+	// 	logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+	// })
+
+	// tracer.validatorTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
+	// 	tracer.Lock()
+	// 	defer tracer.Unlock()
+	// 	for id := range i.Value() {
+	// 		logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
+	// 	}
+	// })
 
 	go func() {
 		for {
 			<-time.After(time.Minute)
 			tracer.committeeTraces.DeleteExpired()
+			tracer.validatorTraces.DeleteExpired()
 		}
 	}()
 
@@ -443,6 +463,27 @@ func (trace *committeeDutyTrace) getRound(rnd uint64) *round {
 }
 
 // tmp hack
+
+func (n *InMemTracer) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error) {
+	n.Lock()
+	defer n.Unlock()
+
+	if !n.validatorTraces.Has(uint64(slot)) {
+		return nil, errors.New("slot not found")
+	}
+
+	m := n.validatorTraces.Get(uint64(slot))
+
+	trace, ok := m.Value()[string(pubkey[:])]
+	if !ok {
+		return nil, errors.New("validator not found")
+	}
+
+	trace.Lock()
+	defer trace.Unlock()
+
+	return &trace.ValidatorDutyTrace, nil
+}
 
 func (n *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
 	n.Lock()
