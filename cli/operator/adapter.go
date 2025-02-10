@@ -23,8 +23,20 @@ type adapter struct {
 	logger *zap.Logger
 }
 
-func (a *adapter) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
-	panic("not implemented")
+func (a *adapter) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error) {
+	trace, err := a.tracer.GetValidatorDuty(role, slot, pubkey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.ValidatorDutyTrace{
+		Slot: slot,
+		ConsensusTrace: model.ConsensusTrace{
+			Rounds:   trace.Rounds,
+			Decideds: trace.Decideds,
+		},
+		Post: trace.Post,
+	}, nil
 }
 
 func (a *adapter) GetCommitteeDutiesByOperator(indexes []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
