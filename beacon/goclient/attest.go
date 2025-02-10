@@ -371,14 +371,25 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root) (phas
 		return 0, fmt.Errorf("failed to obtain block header: %w", err)
 	}
 
-	fetchedSlot := blockResponse.Data.Header.Message.Slot
-	logger.
-		With(fields.Slot(fetchedSlot)).
-		Debug("slot was fetched from Consensus Client")
+	if isBlockHeaderResponseValid(blockResponse) {
+		fetchedSlot := blockResponse.Data.Header.Message.Slot
+		logger.
+			With(fields.Slot(fetchedSlot)).
+			Debug("slot was fetched from Consensus Client")
 
-	gc.blockRootToSlotCache.Set(root, fetchedSlot, ttlcache.NoTTL)
+		gc.blockRootToSlotCache.Set(root, fetchedSlot, ttlcache.NoTTL)
 
-	return fetchedSlot, nil
+		return fetchedSlot, nil
+	}
+
+	return 0, fmt.Errorf("failed to fetch slot via 'BeaconBlockHeader' call for root: '%s'", root.String())
+}
+
+func isBlockHeaderResponseValid(blockResponse *api.Response[*eth2apiv1.BeaconBlockHeader]) bool {
+	return blockResponse != nil &&
+		blockResponse.Data != nil &&
+		blockResponse.Data.Header != nil &&
+		blockResponse.Data.Header.Message != nil
 }
 
 // withCommitteeIndex returns a deep copy of the attestation data with the provided committee index set.
