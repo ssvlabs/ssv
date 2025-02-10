@@ -363,35 +363,40 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 
 func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root) (phase0.Slot, error) {
 	logger := gc.log.With(fields.BlockRoot(root))
-	cacheResult := gc.blockRootToSlotCache.Get(root)
-	if cacheResult != nil {
-		cachedSlot := cacheResult.Value()
-		logger.
-			With(fields.Slot(cachedSlot), zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
-			Debug("obtained slot from cache")
-		return cachedSlot, nil
-	}
 
-	logger.Debug("slot was not found in cache. Fetching from Consensus Client")
-	blockResponse, err := gc.multiClient.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{
-		Block: root.String(),
+	slot, err, _ := gc.blockRootToSlotReqInflight.Do(root, func() (phase0.Slot, error) {
+		cacheResult := gc.blockRootToSlotCache.Get(root)
+		if cacheResult != nil {
+			cachedSlot := cacheResult.Value()
+			logger.
+				With(fields.Slot(cachedSlot), zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
+				Debug("obtained slot from cache")
+			return cachedSlot, nil
+		}
+
+		logger.Debug("slot was not found in cache. Fetching from Consensus Client")
+		blockResponse, err := gc.multiClient.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{
+			Block: root.String(),
+		})
+		if err != nil {
+			return 0, fmt.Errorf("failed to obtain block header: %w", err)
+		}
+
+		if isBlockHeaderResponseValid(blockResponse) {
+			fetchedSlot := blockResponse.Data.Header.Message.Slot
+			logger.
+				With(fields.Slot(fetchedSlot)).
+				Debug("slot was fetched from Consensus Client")
+
+			gc.blockRootToSlotCache.Set(root, fetchedSlot, ttlcache.NoTTL)
+
+			return fetchedSlot, nil
+		}
+
+		return 0, fmt.Errorf("failed to fetch slot via 'BeaconBlockHeader' call for root: '%s'", root.String())
 	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to obtain block header: %w", err)
-	}
 
-	if isBlockHeaderResponseValid(blockResponse) {
-		fetchedSlot := blockResponse.Data.Header.Message.Slot
-		logger.
-			With(fields.Slot(fetchedSlot)).
-			Debug("slot was fetched from Consensus Client")
-
-		gc.blockRootToSlotCache.Set(root, fetchedSlot, ttlcache.NoTTL)
-
-		return fetchedSlot, nil
-	}
-
-	return 0, fmt.Errorf("failed to fetch slot via 'BeaconBlockHeader' call for root: '%s'", root.String())
+	return slot, err
 }
 
 func isBlockHeaderResponseValid(blockResponse *api.Response[*eth2apiv1.BeaconBlockHeader]) bool {

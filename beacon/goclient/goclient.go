@@ -135,6 +135,10 @@ type GoClient struct {
 	// from running in parallel.
 	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
 
+	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
+	// from running in parallel.
+	blockRootToSlotReqInflight singleflight.Group[phase0.Root, phase0.Slot]
+
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
