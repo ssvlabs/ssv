@@ -115,7 +115,7 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
-	genesisVersion atomic.Pointer[phase0.Version]
+	genesis atomic.Pointer[apiv1.Genesis]
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -281,7 +281,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return
 			}
 
-			if expected, err := gc.assertSameGenesisVersion(genesis.Data.GenesisForkVersion); err != nil {
+			if expected, err := gc.assertSameGenesisVersion(genesis.Data); err != nil {
 				gc.log.Fatal("client returned unexpected genesis fork version, make sure all clients use the same Ethereum network",
 					zap.String("address", s.Address()),
 					zap.Any("client_genesis", genesis.Data.GenesisForkVersion),
@@ -317,17 +317,21 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 // so we decided that it's best to assert that GenesisForkVersion is the same.
 // To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
 // as they should be same too.
-func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
-	if gc.genesisVersion.CompareAndSwap(nil, &genesisVersion) {
-		return genesisVersion, nil
+func (gc *GoClient) assertSameGenesisVersion(genesis *apiv1.Genesis) (phase0.Version, error) {
+	if gc.genesis.CompareAndSwap(nil, genesis) {
+		return genesis.GenesisForkVersion, nil
 	}
 
-	expected := *gc.genesisVersion.Load()
-	if expected != genesisVersion {
-		return expected, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected, genesisVersion)
+	if genesis == nil {
+		return phase0.Version{}, fmt.Errorf("genesis is nil")
 	}
 
-	return expected, nil
+	expected := *gc.genesis.Load()
+	if expected.GenesisForkVersion != genesis.GenesisForkVersion {
+		return expected.GenesisForkVersion, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected.GenesisForkVersion, genesis.GenesisForkVersion)
+	}
+
+	return expected.GenesisForkVersion, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
@@ -409,4 +413,8 @@ func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2cli
 	}
 
 	return nil
+}
+
+func (gc *GoClient) Genesis() *apiv1.Genesis {
+	return gc.genesis.Load()
 }

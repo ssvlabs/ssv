@@ -43,9 +43,9 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 	obj ssz.HashRoot,
 	domain phase0.Domain,
 	sharePubkey []byte,
-	domainType phase0.DomainType,
+	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, [32]byte, error) {
-	switch domainType {
+	switch signatureDomain {
 	case spectypes.DomainAttester:
 		s.logger.Debug("Signing Attester")
 
@@ -59,15 +59,17 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 			return nil, [32]byte{}, err
 		}
 
+		denebForkHolesky := web3signer.ForkType{
+			PreviousVersion: "0x04017000",
+			CurrentVersion:  "0x05017000",
+			Epoch:           29696,
+		}
+
 		req := web3signer.SignRequest{
-			Type: "ATTESTATION",
+			Type: web3signer.Attestation,
 			ForkInfo: web3signer.ForkInfo{
-				Fork: web3signer.ForkType{ // TODO
-					PreviousVersion: hex.EncodeToString([]byte{2, 0, 0, 0}),
-					CurrentVersion:  hex.EncodeToString([]byte{3, 0, 0, 0}),
-					Epoch:           194048,
-				},
-				GenesisValidatorsRoot: "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1", // TODO
+				Fork:                  denebForkHolesky,
+				GenesisValidatorsRoot: hex.EncodeToString(s.consensusClient.Genesis().GenesisValidatorsRoot[:]),
 			},
 			SigningRoot: hex.EncodeToString(root[:]),
 			Attestation: data,
@@ -83,7 +85,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 
 	default:
 		// TODO: support other domains
-		return s.fallback.SignBeaconObject(obj, domain, sharePubkey, domainType)
+		return s.fallback.SignBeaconObject(obj, domain, sharePubkey, signatureDomain)
 		//return nil, [32]byte{}, errors.New("domain unknown")
 	}
 }
