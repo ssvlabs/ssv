@@ -635,6 +635,8 @@ func setupOperatorStorage(
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
+	var encodedPubKey []byte
+
 	// nil if ssv-signer is disabled
 	if ssvSignerPublicKey != nil {
 		ssvSignerPubkeyB64, err := ssvSignerPublicKey.Base64()
@@ -654,8 +656,9 @@ func setupOperatorStorage(
 		} else if storedPubKey != string(ssvSignerPubkeyB64) {
 			logger.Fatal("operator public key is not matching the one in the storage")
 		}
-	} else {
 
+		encodedPubKey = ssvSignerPubkeyB64
+	} else {
 		storedPrivKeyHash, found, err := nodeStorage.GetPrivateKeyHash()
 		if err != nil {
 			logger.Fatal("could not get hashed private key", zap.Error(err))
@@ -686,11 +689,11 @@ func setupOperatorStorage(
 			configStoragePrivKeyLegacyHash != storedPrivKeyHash {
 			logger.Fatal("operator private key is not matching the one encrypted the storage")
 		}
-	}
 
-	encodedPubKey, err := configPrivKey.Public().Base64()
-	if err != nil {
-		logger.Fatal("could not encode public key", zap.Error(err))
+		encodedPubKey, err = configPrivKey.Public().Base64()
+		if err != nil {
+			logger.Fatal("could not encode public key", zap.Error(err))
+		}
 	}
 
 	logger.Info("successfully loaded operator keys", zap.String("pubkey", string(encodedPubKey)))
