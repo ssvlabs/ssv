@@ -208,7 +208,6 @@ func (o *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Ro
 	return nil
 }
 
-
 // nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
 func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 	if fullNode {
