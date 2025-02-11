@@ -145,6 +145,8 @@ var StartNodeCmd = &cobra.Command{
 		var operatorPubKey keys.OperatorPublicKey
 		var ssvSignerClient *ssvsignerclient.SSVSignerClient
 		if cfg.SSVSignerEndpoint != "" {
+			logger.Info("using ssv-signer for signing")
+
 			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint)
 			operatorPubKeyString, err := ssvSignerClient.GetOperatorIdentity()
 			if err != nil {
@@ -164,6 +166,8 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.OperatorSigner = ekm.NewSSVSignerOperatorSignerAdapter(logger, ssvSignerClient)
 		} else {
 			if cfg.KeyStore.PrivateKeyFile != "" && cfg.KeyStore.PasswordFile != "" {
+				logger.Info("getting operator private key from keystore")
+
 				// nolint: gosec
 				encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
 				if err != nil {
@@ -187,6 +191,8 @@ var StartNodeCmd = &cobra.Command{
 
 				operatorPrivKeyText = base64.StdEncoding.EncodeToString(decryptedKeystore)
 			} else if cfg.OperatorPrivateKey != "" {
+				logger.Info("getting operator private key from args")
+
 				operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
 				if err != nil {
 					logger.Fatal("could not decode operator private key", zap.Error(err))
