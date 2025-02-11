@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -97,7 +96,7 @@ var ConstructBaseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet, casts.RunnerRoleToConvertRole(identifier.GetRoleType()))
+	config := testing.TestingConfig(logger, keySet)
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
@@ -182,6 +181,7 @@ var ConstructBaseRunner = func(
 			net,
 			km,
 			opSigner,
+			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
@@ -352,7 +352,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = nil
 		}
 
-		config := testing.TestingConfig(logger, keySetInstance, casts.RunnerRoleToConvertRole(identifier.GetRoleType()))
+		config := testing.TestingConfig(logger, keySetInstance)
 		config.ValueCheckF = valCheck
 		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
@@ -432,6 +432,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			net,
 			km,
 			opSigner,
+			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(

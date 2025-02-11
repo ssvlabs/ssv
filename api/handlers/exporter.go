@@ -1,23 +1,22 @@
 package handlers
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/networkconfig"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 
 	"github.com/ssvlabs/ssv/api"
-	exporterapi "github.com/ssvlabs/ssv/exporter/api"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type Exporter struct {
-	DomainType spectypes.DomainType
-	QBFTStores *ibftstorage.QBFTStores
+	NetworkConfig     networkconfig.NetworkConfig
+	ParticipantStores *ibftstorage.ParticipantStores
 }
 
 type ParticipantResponse struct {
@@ -49,71 +48,52 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 
-	if len(request.PubKeys) == 0 {
-		return api.BadRequestError(fmt.Errorf("at least one public key is required"))
-	}
-
 	if len(request.Roles) == 0 {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
 	response.Data = []*ParticipantResponse{}
+	from := phase0.Slot(request.From)
+	to := phase0.Slot(request.To)
 
-	qbftStores := make(map[convert.RunnerRole]qbftstorage.QBFTStore, len(request.Roles))
-	for _, role := range request.Roles {
-		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
-		storage := e.QBFTStores.Get(runnerRole)
-		if storage == nil {
-			return api.Error(fmt.Errorf("role storage doesn't exist: %v", role))
-		}
+	for _, r := range request.Roles {
+		role := spectypes.BeaconRole(r)
+		store := e.ParticipantStores.Get(role)
 
-		qbftStores[runnerRole] = storage
-	}
+		var participantsRange []qbftstorage.ParticipantsRangeEntry
 
-	for _, role := range request.Roles {
-		runnerRole := casts.BeaconRoleToConvertRole(spectypes.BeaconRole(role))
-		qbftStore := qbftStores[runnerRole]
-
-		for _, pubKey := range request.PubKeys {
-			msgID := convert.NewMsgID(e.DomainType, pubKey, runnerRole)
-			from := phase0.Slot(request.From)
-			to := phase0.Slot(request.To)
-
-			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
+		if len(request.PubKeys) == 0 {
+			var err error
+			participantsRange, err = store.GetAllParticipantsInRange(from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
-
-			if len(participantsList) == 0 {
-				continue
-			}
-
-			data, err := exporterapi.ParticipantsAPIData(participantsList...)
+		}
+		// these two^ are mutually exclusive
+		for _, pubKey := range request.PubKeys {
+			participantsByPK, err := store.GetParticipantsInRange(spectypes.ValidatorPK(pubKey), from, to)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting participants API data: %w", err))
+				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
+			participantsRange = append(participantsRange, participantsByPK...)
+		}
 
-			apiData, ok := data.([]*exporterapi.ParticipantsAPI)
-			if !ok {
-				return api.Error(fmt.Errorf("invalid type for participants API data"))
-			}
-
-			for _, apiMsg := range apiData {
-				response.Data = append(response.Data, transformToParticipantResponse(apiMsg))
-			}
+		// map to API response
+		for _, pr := range participantsRange {
+			response.Data = append(response.Data, transformToParticipantResponse(role, pr))
 		}
 	}
 
 	return api.Render(w, r, response)
 }
 
-func transformToParticipantResponse(apiMsg *exporterapi.ParticipantsAPI) *ParticipantResponse {
+func transformToParticipantResponse(role spectypes.BeaconRole, entry qbftstorage.ParticipantsRangeEntry) *ParticipantResponse {
 	response := &ParticipantResponse{
-		Role:      apiMsg.Role,
-		Slot:      uint64(apiMsg.Slot),
-		PublicKey: apiMsg.ValidatorPK,
+		Role:      role.String(),
+		Slot:      uint64(entry.Slot),
+		PublicKey: hex.EncodeToString(entry.PubKey[:]),
 	}
-	response.Message.Signers = apiMsg.Signers
+	response.Message.Signers = entry.Signers
 
 	return response
 }

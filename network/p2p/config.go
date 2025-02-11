@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -41,8 +40,8 @@ type Config struct {
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
-	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External ip node is exposed for discovery"`
-	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External ip node is exposed for discovery, can be overridden by HostDNS"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery, overrides HostAddress if both are specified"`
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
@@ -78,8 +77,6 @@ type Config struct {
 	Network networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
-	// Metrics report metrics.
-	Metrics metricsreporter.MetricsReporter
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
@@ -152,10 +149,12 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// AddrFactory for host address if provided
-	if c.HostAddress != "" {
+	// note, only one of (HostDNS, HostAddress) can be used with libp2p - if multiple of these
+	// are set we have to prioritize between them.
+	if c.HostDNS != "" {
+		// AddrFactory for DNS address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
+			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 			if err != nil {
 				logger.Error("unable to create external multiaddress", zap.Error(err))
 			} else {
@@ -163,13 +162,12 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 			}
 			return addrs
 		}))
-	}
-	// AddrFactory for DNS address if provided
-	if c.HostDNS != "" {
+	} else if c.HostAddress != "" {
+		// AddrFactory for host address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
+			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
 			if err != nil {
-				logger.Warn("unable to create external multiaddress", zap.Error(err))
+				logger.Error("unable to create external multiaddress", zap.Error(err))
 			} else {
 				addrs = append(addrs, external)
 			}

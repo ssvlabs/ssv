@@ -4,7 +4,6 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -53,8 +52,8 @@ func (bn *TestingBeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 func (bn *TestingBeaconNodeWrapped) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	return bn.Bn.SubmitValidatorRegistration(pubkey, feeRecipient, sig)
+func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
+	return bn.Bn.SubmitValidatorRegistration(registration)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
 	return bn.Bn.SubmitVoluntaryExit(voluntaryExit)

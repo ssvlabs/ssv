@@ -6,25 +6,28 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
+	eth2clientmulti "github.com/attestantio/go-eth2-client/multi"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
-	"go.uber.org/zap"
-	"tailscale.com/util/singleflight"
 )
 
 const (
@@ -35,46 +38,11 @@ const (
 	// Client timeouts.
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
+
+	clResponseErrMsg        = "Consensus client returned an error"
+	clNilResponseErrMsg     = "Consensus client returned a nil response"
+	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
 )
-
-type beaconNodeStatus int32
-
-var (
-	allMetrics = []prometheus.Collector{
-		metricsBeaconNodeStatus,
-		metricsBeaconDataRequest,
-	}
-	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_beacon_status",
-		Help: "Status of the connected beacon node",
-	})
-
-	// metricsBeaconDataRequest is located here to avoid including waiting for 1/3 or 2/3 of slot time into request duration.
-	metricsBeaconDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_beacon_data_request_duration_seconds",
-		Help:    "Beacon data request duration (seconds)",
-		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-
-	metricsAttesterDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAttester.String())
-	metricsAggregatorDataRequest                = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAggregator.String())
-	metricsProposerDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleProposer.String())
-	metricsSyncCommitteeDataRequest             = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommittee.String())
-	metricsSyncCommitteeContributionDataRequest = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommitteeContribution.String())
-
-	statusUnknown beaconNodeStatus = 0
-	statusSyncing beaconNodeStatus = 1
-	statusOK      beaconNodeStatus = 2
-)
-
-func init() {
-	logger := zap.L()
-	for _, c := range allMetrics {
-		if err := prometheus.Register(c); err != nil {
-			logger.Debug("could not register prometheus collector")
-		}
-	}
-}
 
 // NodeClient is the type of the Beacon node.
 type NodeClient string
@@ -103,9 +71,15 @@ func ParseNodeClient(version string) NodeClient {
 
 // Client defines all go-eth2-client interfaces used in ssv
 type Client interface {
-	eth2client.Service
+	MultiClient
+
 	eth2client.NodeVersionProvider
 	eth2client.NodeClientProvider
+	eth2client.BlindedProposalSubmitter
+}
+
+type MultiClient interface {
+	eth2client.Service
 	eth2client.SpecProvider
 	eth2client.GenesisProvider
 
@@ -121,7 +95,6 @@ type Client interface {
 	eth2client.NodeSyncingProvider
 	eth2client.ProposalProvider
 	eth2client.ProposalSubmitter
-	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
 	eth2client.SyncCommitteeMessagesSubmitter
 	eth2client.BeaconBlockRootProvider
@@ -134,21 +107,18 @@ type Client interface {
 	eth2client.VoluntaryExitSubmitter
 }
 
-type NodeClientProvider interface {
-	NodeClient() NodeClient
-}
-
-var _ NodeClientProvider = (*GoClient)(nil)
-
 // GoClient implementing Beacon struct
 type GoClient struct {
 	log         *zap.Logger
 	ctx         context.Context
 	network     beaconprotocol.Network
-	client      Client
-	nodeVersion string
-	nodeClient  NodeClient
-	gasLimit    uint64
+	clients     []Client
+	multiClient MultiClient
+
+	genesisVersion atomic.Pointer[phase0.Version]
+
+	syncDistanceTolerance phase0.Slot
+	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -187,26 +157,13 @@ func New(
 		longTimeout = DefaultLongTimeout
 	}
 
-	httpClient, err := eth2clienthttp.New(opt.Context,
-		// WithAddress supplies the address of the beacon node, in host:port format.
-		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
-		// LogLevel supplies the level of logging to carry out.
-		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
-		eth2clienthttp.WithTimeout(commonTimeout),
-		eth2clienthttp.WithReducedMemoryUsage(true),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create http client: %w", err)
-	}
-
 	client := &GoClient{
-		log:               logger,
-		ctx:               opt.Context,
-		network:           opt.Network,
-		client:            httpClient.(*eth2clienthttp.Service),
-		gasLimit:          opt.GasLimit,
-		operatorDataStore: operatorDataStore,
-		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		log:                   logger.Named("consensus_client"),
+		ctx:                   opt.Context,
+		network:               opt.Network,
+		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
+		operatorDataStore:     operatorDataStore,
+		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
@@ -216,22 +173,28 @@ func New(
 		longTimeout:   longTimeout,
 	}
 
-	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get node version: %w", err)
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
+	if len(beaconAddrList) == 0 {
+		return nil, fmt.Errorf("no beacon node address provided")
 	}
-	if nodeVersionResp == nil {
-		return nil, fmt.Errorf("node version response is nil")
-	}
-	client.nodeVersion = nodeVersionResp.Data
-	client.nodeClient = ParseNodeClient(nodeVersionResp.Data)
 
-	logger.Info("consensus client connected",
-		fields.Name(httpClient.Name()),
-		fields.Address(httpClient.Address()),
-		zap.String("client", string(client.nodeClient)),
-		zap.String("version", client.nodeVersion),
-	)
+	for _, beaconAddr := range beaconAddrList {
+		if err := client.addSingleClient(opt.Context, beaconAddr); err != nil {
+			return nil, err
+		}
+	}
+
+	err := client.initMultiClient(opt.Context)
+	if err != nil {
+		logger.Error("Consensus multi client initialization failed",
+			zap.String("address", opt.BeaconNodeAddr),
+			zap.Error(err),
+		)
+
+		return nil, err
+	}
+
+	client.nodeSyncingFn = client.nodeSyncing
 
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
@@ -240,39 +203,185 @@ func New(
 	return client, nil
 }
 
-func (gc *GoClient) NodeClient() NodeClient {
-	return gc.nodeClient
+func (gc *GoClient) initMultiClient(ctx context.Context) error {
+	var services []eth2client.Service
+	for _, client := range gc.clients {
+		services = append(services, client)
+	}
+
+	multiClient, err := eth2clientmulti.New(
+		ctx,
+		eth2clientmulti.WithClients(services),
+		eth2clientmulti.WithLogLevel(zerolog.DebugLevel),
+		eth2clientmulti.WithTimeout(gc.commonTimeout),
+	)
+	if err != nil {
+		return fmt.Errorf("create multi client: %w", err)
+	}
+
+	gc.multiClient = multiClient.(*eth2clientmulti.Service)
+	return nil
 }
+
+func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
+	httpClient, err := eth2clienthttp.New(
+		ctx,
+		// WithAddress supplies the address of the beacon node, in host:port format.
+		eth2clienthttp.WithAddress(addr),
+		// LogLevel supplies the level of logging to carry out.
+		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
+		eth2clienthttp.WithTimeout(gc.commonTimeout),
+		eth2clienthttp.WithReducedMemoryUsage(true),
+		eth2clienthttp.WithAllowDelayedStart(true),
+		eth2clienthttp.WithHooks(gc.singleClientHooks()),
+		eth2clienthttp.WithELConnectionCheck(true),
+	)
+	if err != nil {
+		gc.log.Error("Consensus http client initialization failed",
+			zap.String("address", addr),
+			zap.Error(err),
+		)
+
+		return fmt.Errorf("create http client: %w", err)
+	}
+
+	gc.clients = append(gc.clients, httpClient.(*eth2clienthttp.Service))
+
+	return nil
+}
+
+func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
+	return &eth2clienthttp.Hooks{
+		OnActive: func(ctx context.Context, s *eth2clienthttp.Service) {
+			// If err is nil, nodeVersionResp is never nil.
+			nodeVersionResp, err := s.NodeVersion(ctx, &api.NodeVersionOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "NodeVersion"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			gc.log.Info("consensus client connected",
+				fields.Name(s.Name()),
+				fields.Address(s.Address()),
+				zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
+				zap.String("version", nodeVersionResp.Data),
+			)
+
+			genesis, err := s.Genesis(ctx, &api.GenesisOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "Genesis"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			if expected, err := gc.assertSameGenesisVersion(genesis.Data.GenesisForkVersion); err != nil {
+				gc.log.Fatal("client returned unexpected genesis fork version, make sure all clients use the same Ethereum network",
+					zap.String("address", s.Address()),
+					zap.Any("client_genesis", genesis.Data.GenesisForkVersion),
+					zap.Any("expected_genesis", expected),
+					zap.Error(err),
+				)
+				return // Tests may override Fatal's behavior
+			}
+		},
+		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
+			gc.log.Warn("consensus client disconnected",
+				fields.Name(s.Name()),
+				fields.Address(s.Address()),
+			)
+		},
+		OnSynced: func(ctx context.Context, s *eth2clienthttp.Service) {
+			gc.log.Info("consensus client synced",
+				fields.Name(s.Name()),
+				fields.Address(s.Address()),
+			)
+		},
+		OnDesynced: func(ctx context.Context, s *eth2clienthttp.Service) {
+			gc.log.Warn("consensus client desynced",
+				fields.Name(s.Name()),
+				fields.Address(s.Address()),
+			)
+		},
+	}
+}
+
+// assertSameGenesis checks if genesis is same.
+// Clients may have different values returned by Spec call,
+// so we decided that it's best to assert that GenesisForkVersion is the same.
+// To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
+// as they should be same too.
+func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
+	if gc.genesisVersion.CompareAndSwap(nil, &genesisVersion) {
+		return genesisVersion, nil
+	}
+
+	expected := *gc.genesisVersion.Load()
+	if expected != genesisVersion {
+		return expected, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected, genesisVersion)
+	}
+
+	return expected, nil
+}
+
+func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
+	return gc.multiClient.NodeSyncing(ctx, opts)
+}
+
+var errSyncing = errors.New("syncing")
 
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "NodeSyncing"),
+			zap.Error(err),
+		)
 		// TODO: get rid of global variable, pass metrics to goClient
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		recordBeaconClientStatus(ctx, statusUnknown, gc.multiClient.Address())
 		return fmt.Errorf("failed to obtain node syncing status: %w", err)
 	}
 	if nodeSyncingResp == nil {
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "NodeSyncing"),
+		)
+		recordBeaconClientStatus(ctx, statusUnknown, gc.multiClient.Address())
 		return fmt.Errorf("node syncing response is nil")
 	}
 	if nodeSyncingResp.Data == nil {
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "NodeSyncing"),
+		)
+		recordBeaconClientStatus(ctx, statusUnknown, gc.multiClient.Address())
 		return fmt.Errorf("node syncing data is nil")
 	}
 	syncState := nodeSyncingResp.Data
+	recordBeaconClientStatus(ctx, statusSyncing, gc.multiClient.Address())
+	recordSyncDistance(ctx, syncState.SyncDistance, gc.multiClient.Address())
 
-	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
-	metricsBeaconNodeStatus.Set(float64(statusSyncing))
-	if syncState.IsSyncing {
-		return fmt.Errorf("syncing")
+	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
+		gc.log.Error("Consensus client is not synced")
+		return errSyncing
 	}
 	if syncState.IsOptimistic {
+		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
 	}
+	if syncState.ELOffline {
+		gc.log.Error("Consensus client's EL node is offline")
+		return fmt.Errorf("EL is offline")
+	}
 
-	metricsBeaconNodeStatus.Set(float64(statusOK))
+	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
+
 	return nil
 }
 
@@ -290,5 +399,14 @@ func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 }
 
 func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
-	return gc.client.Events(ctx, topics, handler)
+	if err := gc.multiClient.Events(ctx, topics, handler); err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Events"),
+			zap.Error(err),
+		)
+
+		return err
+	}
+
+	return nil
 }

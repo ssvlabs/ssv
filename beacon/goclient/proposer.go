@@ -3,6 +3,8 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -15,6 +17,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -28,14 +31,24 @@ const (
 
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
-	resp, err := gc.client.ProposerDuties(ctx, &api.ProposerDutiesOpts{
+	start := time.Now()
+	resp, err := gc.multiClient.ProposerDuties(ctx, &api.ProposerDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
+	recordRequestDuration(gc.ctx, "ProposerDuties", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "ProposerDuties"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
 	}
 	if resp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "ProposerDuties"),
+		)
 		return nil, fmt.Errorf("proposer duties response is nil")
 	}
 
@@ -51,23 +64,34 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	copy(graffiti[:], graffitiBytes[:])
 
 	reqStart := time.Now()
-	proposalResp, err := gc.client.Proposal(gc.ctx, &api.ProposalOpts{
+	proposalResp, err := gc.multiClient.Proposal(gc.ctx, &api.ProposalOpts{
 		Slot:                   slot,
 		RandaoReveal:           sig,
 		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
 	})
+	recordRequestDuration(gc.ctx, "Proposal", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
+
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Proposal"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to get proposal: %w", err)
 	}
 	if proposalResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "Proposal"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("proposal response is nil")
 	}
 	if proposalResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "Proposal"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
 	}
 
-	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 	beaconBlock := proposalResp.Data
 
 	if beaconBlock.Blinded {
@@ -166,7 +190,74 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 		Proposal: signedBlock,
 	}
 
-	return gc.client.SubmitBlindedProposal(gc.ctx, opts)
+	// As gc.multiClient doesn't have a method for blinded block submission
+	// (because it must be submitted to the same node that returned that block),
+	// we need to submit it to client(s) directly.
+	if len(gc.clients) == 1 {
+		clientAddress := gc.clients[0].Address()
+		logger := gc.log.With(
+			zap.String("api", "SubmitBlindedProposal"),
+			zap.String("client_addr", clientAddress))
+
+		start := time.Now()
+		err := gc.clients[0].SubmitBlindedProposal(gc.ctx, opts)
+		recordRequestDuration(gc.ctx, "SubmitBlindedProposal", clientAddress, http.MethodPost, time.Since(start), err)
+		if err != nil {
+			logger.Error(clResponseErrMsg,
+				zap.Error(err),
+			)
+			return err
+		}
+
+		logger.Debug("consensus client submitted blinded beacon block")
+
+		return nil
+	}
+
+	// Although we got a blinded block from one node and that node has to submit it,
+	// other nodes might know this payload too and have a chance to submit it successfully.
+	//
+	// So we do the following:
+	//
+	// Submit the blinded proposal to all clients concurrently.
+	// If any client succeeds, cancel the remaining submissions.
+	// Wait for all submissions to finish or timeout after 1 minute.
+	//
+	// TODO: Make sure this the above is correct. Should we submit only to the node that returned the block?
+
+	logger := gc.log.With(zap.String("api", "SubmitBlindedProposal"))
+
+	submissions := atomic.Int32{}
+	p := pool.New().WithErrors().WithContext(gc.ctx)
+	for _, client := range gc.clients {
+		client := client
+		p.Go(func(ctx context.Context) error {
+			clientAddress := client.Address()
+			logger := logger.With(zap.String("client_addr", clientAddress))
+
+			if err := client.SubmitBlindedProposal(ctx, opts); err == nil {
+				logger.Debug("consensus client returned an error while submitting blinded proposal. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
+					zap.Error(err))
+				return err
+			}
+
+			logger.Debug("consensus client submitted blinded beacon block")
+
+			submissions.Add(1)
+			return nil
+		})
+	}
+	err := p.Wait()
+	if submissions.Load() > 0 {
+		// At least one client has submitted the proposal successfully,
+		// so we can return without error.
+		return nil
+	}
+	if err != nil {
+		logger.Error("no consensus clients have been able to submit blinded proposal. See adjacent logs for error details.")
+		return fmt.Errorf("no consensus clients have been able to submit blinded proposal")
+	}
+	return nil
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -212,11 +303,25 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	return gc.client.SubmitProposal(gc.ctx, opts)
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitProposal"),
+		zap.String("client_addr", clientAddress))
+
+	start := time.Now()
+	err := gc.multiClient.SubmitProposal(gc.ctx, opts)
+	recordRequestDuration(gc.ctx, "SubmitProposal", clientAddress, http.MethodPost, time.Since(start), err)
+	if err != nil {
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
+	}
+
+	logger.Debug("consensus client submitted beacon block")
+	return nil
 }
 
-func (gc *GoClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	return gc.updateBatchRegistrationCache(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
+func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
+	return gc.updateBatchRegistrationCache(registration)
 }
 
 func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
@@ -227,7 +332,22 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 			FeeRecipient:   recipient,
 		})
 	}
-	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
+
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitProposalPreparations"),
+		zap.String("client_addr", clientAddress))
+
+	start := time.Now()
+	err := gc.multiClient.SubmitProposalPreparations(gc.ctx, preparations)
+	recordRequestDuration(gc.ctx, "SubmitProposalPreparations", clientAddress, http.MethodPost, time.Since(start), err)
+	if err != nil {
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
+	}
+
+	logger.Debug("consensus client submitted proposal preparation")
+	return nil
 }
 
 func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
@@ -241,25 +361,6 @@ func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSign
 
 	gc.registrationCache[pk] = registration
 	return nil
-}
-
-func (gc *GoClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], pubkey)
-
-	signedReg := &api.VersionedSignedValidatorRegistration{
-		Version: spec.BuilderVersionV1,
-		V1: &eth2apiv1.SignedValidatorRegistration{
-			Message: &eth2apiv1.ValidatorRegistration{
-				FeeRecipient: feeRecipient,
-				GasLimit:     gc.gasLimit,
-				Timestamp:    gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
-				Pubkey:       pk,
-			},
-			Signature: sig,
-		},
-	}
-	return signedReg
 }
 
 func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
@@ -333,13 +434,23 @@ func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 			bs = len(registrations)
 		}
 
-		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
+		clientAddress := gc.multiClient.Address()
+		logger := gc.log.With(
+			zap.String("api", "SubmitValidatorRegistrations"),
+			zap.String("client_addr", clientAddress))
+
+		// TODO: Do we need to submit them to all nodes?
+		start := time.Now()
+		err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs])
+		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", clientAddress, http.MethodPost, time.Since(start), err)
+		if err != nil {
+			logger.Error(clResponseErrMsg, zap.Error(err))
 			return err
 		}
 
 		registrations = registrations[bs:]
 
-		gc.log.Info("submitted batched validator registrations",
+		logger.Info("submitted batched validator registrations",
 			fields.Slot(slot),
 			fields.Count(bs))
 	}
