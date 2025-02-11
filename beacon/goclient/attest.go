@@ -120,7 +120,7 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 
 	// Wait for all responses (or context done).
 	var (
-		responded,
+		succeeded,
 		errored,
 		softTimedOut,
 		hardTimedOut int
@@ -129,14 +129,14 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 		bestClient          string
 	)
 
-	for shouldWaitForAttestationDataResponse(responded, errored, softTimedOut, numberOfRequests) {
+	for shouldWaitForAttestationDataResponse(succeeded, errored, softTimedOut, numberOfRequests) {
 		select {
 		case resp := <-respCh:
-			responded++
+			succeeded++
 			gc.log.With(
 				zap.Duration("elapsed", time.Since(started)),
 				zap.String("client_addr", resp.clientAddr),
-				zap.Int("responded", responded),
+				zap.Int("succeeded", succeeded),
 				zap.Int("errored", errored),
 			).Debug("response received")
 
@@ -150,31 +150,31 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			gc.log.With(
 				zap.Duration("elapsed", time.Since(started)),
 				zap.String("client_addr", err.clientAddr),
-				zap.Int("responded", responded),
+				zap.Int("succeeded", succeeded),
 				zap.Int("errored", errored),
 				zap.Error(err.err),
 			).Error("error received")
 		case <-softCtx.Done():
-			softTimedOut = numberOfRequests - (responded + errored)
+			softTimedOut = numberOfRequests - (succeeded + errored)
 
 			gc.log.With(
 				zap.Duration("elapsed", time.Since(started)),
-				zap.Int("responded", responded),
+				zap.Int("succeeded", succeeded),
 				zap.Int("errored", errored),
 				zap.Int("soft_timed_out", softTimedOut),
 			).Debug("soft timeout reached")
 		}
 	}
 
-	if responded == 0 {
-		for shouldWaitForAttestationDataResponse(responded, errored, hardTimedOut, numberOfRequests) {
+	if succeeded == 0 {
+		for shouldWaitForAttestationDataResponse(succeeded, errored, hardTimedOut, numberOfRequests) {
 			select {
 			case resp := <-respCh:
-				responded++
+				succeeded++
 				gc.log.With(
 					zap.Duration("elapsed", time.Since(started)),
 					zap.String("client_addr", resp.clientAddr),
-					zap.Int("responded", responded),
+					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
 				).Debug("response received")
 				if bestAttestationData == nil || resp.score > bestScore {
@@ -187,15 +187,15 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 				gc.log.With(
 					zap.Duration("elapsed", time.Since(started)),
 					zap.String("client_addr", err.clientAddr),
-					zap.Int("responded", responded),
+					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
 					zap.Error(err.err),
-				).Error("error received")
+				).Error("received error fetching attestation data")
 			case <-ctx.Done():
-				hardTimedOut = numberOfRequests - (responded + errored)
+				hardTimedOut = numberOfRequests - (succeeded + errored)
 				gc.log.With(
 					zap.Duration("elapsed", time.Since(started)),
-					zap.Int("responded", responded),
+					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
 					zap.Int("hard_timed_out", hardTimedOut),
 				).Error("hard timeout reached")
@@ -205,7 +205,7 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 
 	logger := gc.log.With(
 		zap.Duration("elapsed", time.Since(started)),
-		zap.Int("responded", responded),
+		zap.Int("succeeded", succeeded),
 		zap.Int("errored", errored),
 		zap.Int("soft_timed_out", softTimedOut),
 		zap.Int("hard_timed_out", hardTimedOut),
@@ -244,15 +244,11 @@ func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.Attestation
 		return nil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
 	if resp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "AttestationData"),
-		)
+		gc.log.Error(clNilResponseErrMsg, zap.String("api", "AttestationData"))
 		return nil, fmt.Errorf("attestation data response is nil")
 	}
 	if resp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "AttestationData"),
-		)
+		gc.log.Error(clNilResponseDataErrMsg, zap.String("api", "AttestationData"))
 		return nil, fmt.Errorf("attestation data is nil")
 	}
 
