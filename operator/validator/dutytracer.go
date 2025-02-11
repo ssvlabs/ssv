@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"sync"
@@ -268,9 +267,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	}
 
 	slot := uint64(msg.Slot)
-	traceID := append(validatorPubKey, byte(role&0xff))
-
-	trace := n.getValidatorTrace(slot, string(traceID))
+	trace := n.getValidatorTrace(slot, string(validatorPubKey))
 	trace.Lock()
 	defer trace.Unlock()
 
@@ -278,7 +275,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	trace.Validator = msg.Messages[0].ValidatorIndex
 
 	fields := []zap.Field{
-		zap.String("validator", hex.EncodeToString(validatorPubKey[len(validatorPubKey)-4:])),
+		zap.String("pubkey", hex.EncodeToString(validatorPubKey)),
 		zap.Uint64("slot", slot),
 		zap.String("type", trace.Role.String()),
 	}
@@ -386,6 +383,11 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				}
 
 				round := trace.getRound(uint64(subMsg.Round))
+				if round == nil {
+					n.logger.Info("nil round at", zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
+					return
+				}
+
 				// populate proposer
 				operatorIDs := getOperators(executorID) // validator pubkey
 				if len(operatorIDs) > 0 {
@@ -466,19 +468,8 @@ func (n *InMemTracer) getValidatorDuty(role spectypes.BeaconRole, slot phase0.Sl
 
 	m := n.validatorTraces.Get(uint64(slot))
 
-	var (
-		trace *validatorDutyTrace
-		key   string
-	)
-
-	for key, trace = range m.Value() {
-		rol := spectypes.BeaconRole(key[48])
-		if bytes.Equal([]byte(key)[:48], pubkey[:]) && rol == role {
-			break
-		}
-	}
-
-	if trace == nil {
+	trace, ok := m.Value()[string(pubkey[:])]
+	if !ok {
 		return nil, errors.New("validator not found")
 	}
 
