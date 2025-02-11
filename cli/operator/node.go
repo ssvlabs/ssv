@@ -145,6 +145,7 @@ var StartNodeCmd = &cobra.Command{
 		var operatorPubKey keys.OperatorPublicKey
 		var ssvSignerClient *ssvsignerclient.SSVSignerClient
 		if cfg.SSVSignerEndpoint != "" {
+			logger := logger.With(zap.String("endpoint", cfg.SSVSignerEndpoint))
 			logger.Info("using ssv-signer for signing")
 
 			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint)
@@ -153,11 +154,12 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
 			}
 
+			logger = logger.With(zap.String("pubkey", operatorPubKeyString))
+			logger.Info("ssv-signer operator identity")
+
 			operatorPubKey, err = keys.PublicKeyFromString(operatorPubKeyString)
 			if err != nil {
-				logger.Fatal("ssv-signer returned malformed operator public key",
-					zap.String("operator_public_key", operatorPubKeyString),
-					zap.Error(err))
+				logger.Fatal("ssv-signer returned malformed operator public key", zap.Error(err))
 			}
 			if err != nil {
 				logger.Fatal("could not extract operator private key from file", zap.Error(err))
