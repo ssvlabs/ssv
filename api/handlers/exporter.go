@@ -136,9 +136,10 @@ func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error 
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From        uint64  `json:"from"`
-		To          uint64  `json:"to"`
-		CommitteeID api.Hex `json:"committeeID"`
+		From        uint64   `json:"from"`
+		To          uint64   `json:"to"`
+		CommitteeID api.Hex  `json:"committeeID"`
+		Operators   []uint64 `json:"operators"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -151,11 +152,14 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 
 	var committeeID spectypes.CommitteeID
 
-	if len(request.CommitteeID) != len(committeeID) {
-		return api.BadRequestError(fmt.Errorf("invalid committee ID length"))
+	if len(request.Operators) > 0 { // operators take precedence
+		committeeID = spectypes.GetCommitteeID(request.Operators)
+	} else {
+		if len(request.CommitteeID) != len(committeeID) {
+			return api.BadRequestError(fmt.Errorf("invalid committee ID length"))
+		}
+		copy(committeeID[:], request.CommitteeID)
 	}
-
-	copy(committeeID[:], request.CommitteeID)
 
 	var duties []*model.CommitteeDutyTrace
 	for s := request.From; s <= request.To; s++ {
