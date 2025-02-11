@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 	"sync"
 	"time"
 
@@ -176,8 +177,8 @@ type controller struct {
 	messageValidator     validation.MessageValidator
 
 	// committeeObservers is a cache of initialized committeeObserver instances
-	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
-	committeesObserversMutex sync.Mutex
+	committeesObservers      *hashmap.Map[spectypes.MessageID, *committeeObserver] // todo: need to evict?
+	committeesObserversMutex sync.RWMutex
 	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
@@ -255,9 +256,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		committeesObservers: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](cacheTTL),
-		),
+		committeesObservers: hashmap.New[spectypes.MessageID, *committeeObserver](),
 		attesterRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
@@ -274,8 +273,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageValidator: options.MessageValidator,
 	}
 
-	// Start automatic expired item deletion in committeeObserverValidators.
-	go ctrl.committeesObservers.Start()
 	// Delete old root and domain entries.
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
@@ -359,8 +356,7 @@ var committeeObserverValidatorTTLs = map[spectypes.RunnerRole]int{
 
 func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	ssvMsg := msg.(*queue.SSVMessage)
-
-	observer := c.getCommitteeObserver(ssvMsg)
+	observer := c.getCommitteeObserver(ssvMsg.GetID())
 
 	if err := c.handleCommitteeObserverMessage(ssvMsg, observer); err != nil {
 		return fmt.Errorf("failed to handle committee observer message: %w", err)
@@ -369,15 +365,20 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	return nil
 }
 
-func (c *controller) getCommitteeObserver(ssvMsg *queue.SSVMessage) *committeeObserver {
-	c.committeesObserversMutex.Lock()
-	defer c.committeesObserversMutex.Unlock()
+func (c *controller) getCommitteeObserver(msgID spectypes.MessageID) *committeeObserver {
+	c.committeesObserversMutex.RLock()
 
 	// Check if the observer already exists
-	existingObserver := c.committeesObservers.Get(ssvMsg.GetID())
-	if existingObserver != nil {
-		return existingObserver.Value()
+	existingObserver, ok := c.committeesObservers.Get(msgID)
+	if ok {
+		c.committeesObserversMutex.RUnlock()
+		return existingObserver
 	}
+
+	c.committeesObserversMutex.RUnlock()
+
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
 
 	// Create a new committee observer if it doesn't exist
 	committeeObserverOptions := validator.CommitteeObserverOptions{
@@ -395,27 +396,18 @@ func (c *controller) getCommitteeObserver(ssvMsg *queue.SSVMessage) *committeeOb
 		DomainCache:       c.domainCache,
 	}
 	newObserver := &committeeObserver{
-		CommitteeObserver: validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions),
+		CommitteeObserver: validator.NewCommitteeObserver(msgID, committeeObserverOptions),
 	}
 
 	c.committeesObservers.Set(
-		ssvMsg.GetID(),
+		msgID,
 		newObserver,
-		c.calculateObserverTTL(ssvMsg.MsgID.GetRoleType()),
 	)
 
 	return newObserver
 }
 
-func (c *controller) calculateObserverTTL(roleType spectypes.RunnerRole) time.Duration {
-	ttlSlots := committeeObserverValidatorTTLs[roleType]
-	return time.Duration(ttlSlots) * c.beacon.GetBeaconNetwork().SlotDurationSec()
-}
-
 func (c *controller) handleCommitteeObserverMessage(msg *queue.SSVMessage, observer *committeeObserver) error {
-	observer.Lock()
-	defer observer.Unlock()
-
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
 		// Process proposal messages for committee consensus only to get the roots

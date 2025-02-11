@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -40,6 +41,8 @@ type CommitteeObserver struct {
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache       *DomainCache
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
+
+	pccMtx                 *sync.Mutex
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -72,6 +75,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		attesterRoots:     opts.AttesterRoots,
 		syncCommRoots:     opts.SyncCommRoots,
 		domainCache:       opts.DomainCache,
+		pccMtx:            &sync.Mutex{},
 	}
 
 	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
@@ -228,6 +232,10 @@ func (o *CommitteeObserver) processMessage(
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
 
 	currentSlot := signedMsg.Slot
+
+	o.pccMtx.Lock()
+	defer o.pccMtx.Unlock()
+
 	slotValidators, exist := o.postConsensusContainer[currentSlot]
 	if !exist {
 		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
