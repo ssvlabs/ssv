@@ -22,20 +22,17 @@ type SSVSignerKeyManagerAdapter struct {
 	logger          *zap.Logger
 	client          *ssvsignerclient.SSVSignerClient
 	consensusClient *goclient.GoClient
-	fallback        KeyManager // temporary workaround to support what's not supported in SSVSignerKeyManagerAdapter
 }
 
 func NewSSVSignerKeyManagerAdapter(
 	logger *zap.Logger,
 	client *ssvsignerclient.SSVSignerClient,
 	consensusClient *goclient.GoClient,
-	fallback KeyManager,
 ) *SSVSignerKeyManagerAdapter {
 	return &SSVSignerKeyManagerAdapter{
 		logger:          logger.Named("SSVSignerKeyManagerAdapter"),
 		client:          client,
 		consensusClient: consensusClient,
-		fallback:        fallback,
 	}
 }
 
@@ -85,8 +82,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 
 	default:
 		// TODO: support other domains
-		return s.fallback.SignBeaconObject(obj, domain, sharePubkey, signatureDomain)
-		//return nil, [32]byte{}, errors.New("domain unknown")
+		return nil, [32]byte{}, errors.New("domain not supported at the moment")
 	}
 }
 
@@ -115,10 +111,6 @@ func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(
 	validatorPubKey spectypes.ValidatorPK,
 	shareKey *bls.SecretKey, // for fallback
 ) error {
-	if err := s.fallback.AddShare(shareKey); err != nil {
-		return err
-	}
-
 	s.logger.Debug("Adding Share")
 
 	// TODO: consider using spectypes.ValidatorPK
@@ -134,10 +126,6 @@ func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(
 }
 
 func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey string) error {
-	if err := s.fallback.RemoveShare(pubKey); err != nil {
-		return err
-	}
-
 	s.logger.Debug("Removing Share")
 	decoded, _ := hex.DecodeString(pubKey) // TODO: caller passes hex encoded string, need to fix this workaround
 	return s.client.RemoveValidator(decoded)

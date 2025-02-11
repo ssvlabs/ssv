@@ -274,18 +274,19 @@ var StartNodeCmd = &cobra.Command{
 			executionClient = ec
 		}
 
-		ekmHashedKey, err := operatorPrivKey.EKMHash()
-		if err != nil {
-			logger.Fatal("could not get operator private key hash", zap.Error(err))
-		}
-
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
-		if err != nil {
-			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
-		}
-
+		var keyManager ekm.KeyManager
 		if cfg.SSVSignerEndpoint != "" { // TODO: try to remove repetitive check
-			keyManager = ekm.NewSSVSignerKeyManagerAdapter(logger, ssvSignerClient, consensusClient, keyManager)
+			keyManager = ekm.NewSSVSignerKeyManagerAdapter(logger, ssvSignerClient, consensusClient)
+		} else {
+			ekmHashedKey, err := operatorPrivKey.EKMHash()
+			if err != nil {
+				logger.Fatal("could not get operator private key hash", zap.Error(err))
+			}
+
+			keyManager, err = ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
+			if err != nil {
+				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
+			}
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
