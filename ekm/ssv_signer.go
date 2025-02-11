@@ -109,7 +109,6 @@ func (s *SSVSignerKeyManagerAdapter) AddShare(shareKey *bls.SecretKey) error {
 func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(
 	encryptedShare []byte,
 	validatorPubKey spectypes.ValidatorPK,
-	shareKey *bls.SecretKey, // for fallback
 ) error {
 	s.logger.Debug("Adding Share")
 

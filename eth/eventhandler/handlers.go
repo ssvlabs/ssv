@@ -227,23 +227,18 @@ func (eh *EventHandler) handleShareCreation(
 ) (*ssvtypes.SSVShare, error) {
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 
-	share, shareSecret, err := eh.validatorAddedEventToShare(
-		txn,
-		validatorEvent,
-		sharePublicKeys,
-		encryptedKeys,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("could not extract validator share from event: %w", err)
-	}
-
-	if share.BelongsToOperator(selfOperatorID) {
-		if shareSecret == nil {
-			return nil, errors.New("could not decode shareSecret")
+	// TODO: refactor
+	if ssvSignerAdapter, ok := eh.keyManager.(*ekm.SSVSignerKeyManagerAdapter); ok {
+		share, err := eh.validatorAddedEventToShareNoSK(
+			txn,
+			validatorEvent,
+			sharePublicKeys,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("could not extract validator share from event: %w", err)
 		}
 
-		// TODO: refactor
-		if ssvSignerAdapter, ok := eh.keyManager.(*ekm.SSVSignerKeyManagerAdapter); ok {
+		if share.BelongsToOperator(selfOperatorID) {
 			publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorEvent.PublicKey)
 			if err != nil {
 				return nil, fmt.Errorf("could not deserialize validator public key: %w", err)
@@ -260,30 +255,53 @@ func (eh *EventHandler) handleShareCreation(
 			}
 			if encryptedShare != nil { // TODO: should never be nil because of share.BelongsToOperator(selfOperatorID)
 				// TODO: hex encode validator PK?
-				if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK, shareSecret); err != nil {
+				if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK); err != nil {
 					return nil, fmt.Errorf("could not add validator share: %w", err)
 				}
 			}
-		} else {
+		}
+
+		// Save share to DB.
+		if err := eh.nodeStorage.Shares().Save(txn, share); err != nil {
+			return nil, fmt.Errorf("could not save validator share: %w", err)
+		}
+
+		return share, nil
+	} else {
+		share, shareSecret, err := eh.validatorAddedEventToShare(
+			txn,
+			validatorEvent,
+			sharePublicKeys,
+			encryptedKeys,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("could not extract validator share from event: %w", err)
+		}
+
+		if share.BelongsToOperator(selfOperatorID) {
+			if shareSecret == nil {
+				return nil, errors.New("could not decode shareSecret")
+			}
+
 			// Save secret key into BeaconSigner.
 			if err := eh.keyManager.AddShare(shareSecret); err != nil {
 				return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
 			}
+
+			// Set the minimum participation epoch to match slashing protection.
+			// Note: The current epoch can differ from the epoch set in slashing protection
+			// due to the passage of time between saving slashing protection data and setting
+			// the minimum participation epoch
+			share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 		}
 
-		// Set the minimum participation epoch to match slashing protection.
-		// Note: The current epoch can differ from the epoch set in slashing protection
-		// due to the passage of time between saving slashing protection data and setting
-		// the minimum participation epoch
-		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
-	}
+		// Save share to DB.
+		if err := eh.nodeStorage.Shares().Save(txn, share); err != nil {
+			return nil, fmt.Errorf("could not save validator share: %w", err)
+		}
 
-	// Save share to DB.
-	if err := eh.nodeStorage.Shares().Save(txn, share); err != nil {
-		return nil, fmt.Errorf("could not save validator share: %w", err)
+		return share, nil
 	}
-
-	return share, nil
 }
 
 func (eh *EventHandler) validatorAddedEventToShare(
@@ -359,6 +377,68 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.Committee = shareMembers
 
 	return &validatorShare, shareSecret, nil
+}
+
+func (eh *EventHandler) validatorAddedEventToShareNoSK(
+	txn basedb.Txn,
+	event *contract.ContractValidatorAdded,
+	sharePublicKeys [][]byte,
+) (*ssvtypes.SSVShare, error) {
+	validatorShare := ssvtypes.SSVShare{}
+
+	publicKey, err := ssvtypes.DeserializeBLSPublicKey(event.PublicKey)
+	if err != nil {
+		return nil, &MalformedEventError{
+			Err: fmt.Errorf("failed to deserialize validator public key: %w", err),
+		}
+	}
+
+	var validatorPK spectypes.ValidatorPK
+	copy(validatorPK[:], publicKey.Serialize())
+
+	validatorShare.ValidatorPubKey = validatorPK
+	validatorShare.OwnerAddress = event.Owner
+
+	selfOperatorID := eh.operatorDataStore.GetOperatorID()
+
+	shareMembers := make([]*spectypes.ShareMember, 0)
+
+	for i := range event.OperatorIds {
+		operatorID := event.OperatorIds[i]
+		_, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
+		if err != nil {
+			return nil, fmt.Errorf("could not get operator data: %w", err)
+		}
+		if !found {
+			return nil, &MalformedEventError{
+				Err: fmt.Errorf("operator data not found: %w", err),
+			}
+		}
+
+		shareMembers = append(shareMembers, &spectypes.ShareMember{
+			Signer:      operatorID,
+			SharePubKey: sharePublicKeys[i],
+		})
+
+		if operatorID != selfOperatorID {
+			continue
+		}
+
+		//validatorShare.OperatorID = operatorID
+		validatorShare.SharePubKey = sharePublicKeys[i]
+
+		// TODO: need similar check?
+		//if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
+		//	return nil, nil, &MalformedEventError{
+		//		Err: errors.New("share private key does not match public key"),
+		//	}
+		//}
+	}
+
+	validatorShare.DomainType = eh.networkConfig.DomainType
+	validatorShare.Committee = shareMembers
+
+	return &validatorShare, nil
 }
 
 var emptyPK = [48]byte{}
