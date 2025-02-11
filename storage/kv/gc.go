@@ -34,12 +34,15 @@ func (b *BadgerDB) QuickGC(ctx context.Context) error {
 	b.gcMutex.Lock()
 	defer b.gcMutex.Unlock()
 
-	err := b.db.RunValueLogGC(0.5)
-	if errors.Is(err, badger.ErrNoRewrite) {
-		// No garbage to collect.
-		return nil
+	for ctx.Err() == nil {
+		err := b.db.RunValueLogGC(0.7)
+		if err == nil || errors.Is(err, badger.ErrNoRewrite) {
+			// No garbage to collect.
+			return nil
+		}
 	}
-	return err
+
+	return nil
 }
 
 // FullGC runs a long garbage collection cycle to reclaim (ideally) all unused disk space.
