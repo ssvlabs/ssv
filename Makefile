@@ -149,14 +149,12 @@ start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node ${BOOTNODE_COMMAND}
 
-MONITOR_NODES=prometheus grafana
-.PHONY: docker-monitor
-docker-monitor:
-	@echo $(MONITOR_NODES)
-	@docker-compose up --build $(MONITOR_NODES)
-
 .PHONY: mock
 mock:
+	make generate
+
+.PHONY: generate
+generate:
 	go generate ./...
 
 .PHONY: mockgen-install

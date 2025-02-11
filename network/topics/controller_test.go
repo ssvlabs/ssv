@@ -19,14 +19,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -35,6 +30,9 @@ import (
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 // TODO: fix this test to run post-fork
@@ -390,7 +388,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			return nil
 		},
 		Scoring: &ScoringConfig{
-			IPWhilelist:        nil,
+			IPWhitelist:        nil,
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
 		},
@@ -402,12 +400,12 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	_, validatorStore, err := registrystorage.NewSharesStorage(db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop(), validatorStore, nil)
+	ps, tm, err := NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)
 
 	p = &P{

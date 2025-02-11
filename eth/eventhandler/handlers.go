@@ -10,8 +10,6 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -19,6 +17,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"go.uber.org/zap"
 )
 
 // b64 encrypted key length is 256
@@ -93,7 +92,6 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		logger = logger.With(zap.Bool("own_operator", true))
 	}
 
-	eh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
 	logger.Debug("processed event")
 
 	return nil
@@ -193,7 +191,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 				return nil, err
 			}
 
-			eh.metrics.ValidatorError(event.PublicKey)
 			return nil, err
 		}
 
@@ -212,7 +209,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		eh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", true))
 	}
@@ -255,7 +251,7 @@ func (eh *EventHandler) handleShareCreation(
 		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
-	// Save share.
+	// Save share to DB.
 	if err := eh.nodeStorage.Shares().Save(txn, share); err != nil {
 		return nil, fmt.Errorf("could not save validator share: %w", err)
 	}
@@ -384,7 +380,6 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
-		eh.metrics.ValidatorRemoved(event.PublicKey)
 		logger.Debug("processed event")
 		return share.ValidatorPubKey, nil
 	}
@@ -505,7 +500,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if share.BeaconMetadata == nil {
+	if !share.HasBeaconMetadata() {
 		return nil, nil
 	}
 
@@ -515,7 +510,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	ed := &duties.ExitDescriptor{
 		OwnValidator:   false,
 		PubKey:         pk,
-		ValidatorIndex: share.BeaconMetadata.Index,
+		ValidatorIndex: share.ValidatorIndex,
 		BlockNumber:    event.Raw.BlockNumber,
 	}
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
@@ -547,17 +542,17 @@ func (eh *EventHandler) processClusterEvent(
 ) ([]*ssvtypes.SSVShare, []string, error) {
 	clusterID := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
 	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterIDHash(clusterID))
-	toUpdate := make([]*ssvtypes.SSVShare, 0)
-	updatedPubKeys := make([]string, 0)
+	toUpdate := make([]*ssvtypes.SSVShare, 0, len(shares))
+	var operatorShares []*ssvtypes.SSVShare
+	var operatorValidatorPubKeys []string
 
 	for _, share := range shares {
-		isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
-		if isOperatorShare || eh.fullNode {
-			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
-		}
-		if isOperatorShare {
-			share.Liquidated = toLiquidate
-			toUpdate = append(toUpdate, share)
+		share.Liquidated = toLiquidate
+		toUpdate = append(toUpdate, share)
+
+		if isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorData().ID); isOperatorShare {
+			operatorShares = append(operatorShares, share)
+			operatorValidatorPubKeys = append(operatorValidatorPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
 		}
 	}
 
@@ -567,7 +562,7 @@ func (eh *EventHandler) processClusterEvent(
 		}
 	}
 
-	return toUpdate, updatedPubKeys, nil
+	return operatorShares, operatorValidatorPubKeys, nil
 }
 
 // MalformedEventError is returned when event is malformed

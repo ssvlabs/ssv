@@ -8,18 +8,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	ma "github.com/multiformats/go-multiaddr"
-
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
+	ma "github.com/multiformats/go-multiaddr"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -36,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/utils/async"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
@@ -52,7 +49,7 @@ const (
 	connManagerBalancingTimeout        = time.Minute
 	peersReportingInterval             = 60 * time.Second
 	peerIdentitiesReportingInterval    = 5 * time.Minute
-	topicsReportingInterval            = 180 * time.Second
+	topicsReportingInterval            = 90 * time.Second
 	maximumIrrelevantPeersToDisconnect = 3
 )
 
@@ -86,7 +83,6 @@ type p2pNetwork struct {
 	connHandler  connections.ConnHandler
 	connGater    connmgr.ConnectionGater
 	trustedPeers []*peer.AddrInfo
-	metrics      Metrics
 
 	state int32
 
@@ -106,7 +102,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
+func New(logger *zap.Logger, cfg *Config) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
@@ -125,7 +121,6 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) (*p2pNetwork, error) {
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
-		metrics:                 mr,
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err
@@ -257,14 +252,12 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger, connector)
 
 	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
-	// don't report metrics in tests
-	if n.cfg.Metrics != nil {
-		async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
 
-		async.Interval(n.ctx, peerIdentitiesReportingInterval, n.reportPeerIdentities(logger))
+	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, logger, n.host))
 
-		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
-	}
+	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
+
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
 
 	if err := n.subscribeToSubnets(logger); err != nil {
 		return err
@@ -289,7 +282,6 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
 		if currentCount < n.cfg.MaxPeers {
-			_ = n.idx.GetSubnetsStats() // trigger metrics update
 			return
 		}
 

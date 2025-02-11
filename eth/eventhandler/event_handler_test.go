@@ -21,10 +21,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ekmcore "github.com/ssvlabs/eth2-key-manager/core"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -46,6 +42,9 @@ import (
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 var (
@@ -176,7 +175,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, 0, len(operators))
 
 		// Handle the event
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -281,7 +280,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			// Handle the event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -327,7 +326,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			// Handle OperatorAdded event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -357,7 +356,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops)+1, len(operators))
 
 			// Handle OperatorRemoved event
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -405,7 +404,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.NoError(t, err)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		blockNum++
@@ -456,7 +455,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -506,7 +505,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -561,7 +560,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -610,7 +609,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -660,7 +659,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -704,7 +703,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -731,7 +730,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -745,12 +744,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
 			require.NotNil(t, valShare)
-			valShare.BeaconMetadata = &beacon.ValidatorMetadata{
-				Index:           1,
-				ActivationEpoch: 0,
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
-				Balance:         phase0.Gwei(10000000000000000),
-			}
+			valShare.ValidatorIndex = 1
+			valShare.ActivationEpoch = 0
+			valShare.Status = eth2apiv1.ValidatorStateActiveOngoing
 			err := eh.nodeStorage.Shares().Save(nil, valShare)
 			require.NoError(t, err)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
@@ -773,7 +769,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -818,7 +814,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -856,7 +852,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -902,7 +898,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -952,7 +948,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NotNil(t, share)
 		require.False(t, share.Liquidated)
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -1007,7 +1003,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		currentSlot.SetSlot(1000)
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -1055,7 +1051,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -1098,7 +1094,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, share.Liquidated)
 		currentSlot.SetSlot(100)
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -1143,7 +1139,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -1194,7 +1190,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			// Handle the event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1271,7 +1267,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1335,7 +1331,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1393,7 +1389,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			bc,
 			WithFullNode(),
 			WithLogger(logger),
-			WithMetrics(nopMetrics{}),
 		)
 		if err != nil {
 			return nil, nil, err

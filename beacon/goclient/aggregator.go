@@ -3,12 +3,14 @@ package goclient
 import (
 	"encoding/binary"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"go.uber.org/zap"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -31,9 +33,6 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if attData == nil {
-		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
-	}
 
 	// Get aggregate attestation data.
 	root, err := attData.HashTreeRoot()
@@ -42,21 +41,30 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	}
 
 	aggDataReqStart := time.Now()
-	aggDataResp, err := gc.client.AggregateAttestation(gc.ctx, &api.AggregateAttestationOpts{
+	aggDataResp, err := gc.multiClient.AggregateAttestation(gc.ctx, &api.AggregateAttestationOpts{
 		Slot:                slot,
 		AttestationDataRoot: root,
 	})
+	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.multiClient.Address(), http.MethodGet, time.Since(aggDataReqStart), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "AggregateAttestation"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to get aggregate attestation: %w", err)
 	}
 	if aggDataResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "AggregateAttestation"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation response is nil")
 	}
 	if aggDataResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "AggregateAttestation"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
-
-	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
@@ -70,7 +78,21 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
-	return gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitAggregateAttestations"),
+		zap.String("client_addr", clientAddress))
+
+	start := time.Now()
+	err := gc.multiClient.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
+	recordRequestDuration(gc.ctx, "SubmitAggregateAttestations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	if err != nil {
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
+	}
+
+	logger.Debug("consensus client submitted signed aggregate attestations")
+	return nil
 }
 
 // IsAggregator returns true if the signature is from the input validator. The committee

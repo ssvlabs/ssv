@@ -19,7 +19,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -35,7 +34,6 @@ type MessageValidator interface {
 
 type messageValidator struct {
 	logger            *zap.Logger
-	metrics           metricsreporter.MetricsReporter
 	netCfg            networkconfig.NetworkConfig
 	state             *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 	validatorStore    storage.ValidatorStore
@@ -63,9 +61,8 @@ func New(
 	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec() // #nosec G115 -- amount of slots cannot exceed int64
 
 	mv := &messageValidator{
-		logger:  zap.NewNop(),
-		metrics: metricsreporter.NewNop(),
-		netCfg:  netCfg,
+		logger: zap.NewNop(),
+		netCfg: netCfg,
 		state: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
 		),
@@ -92,22 +89,26 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
 		return mv.validateSelf(pmsg)
 	}
 
-	reportDone := mv.reportPubSubMetrics(pmsg)
-	defer reportDone()
+	validationStart := time.Now()
+	defer func() {
+		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
+	}()
+
+	recordMessage(ctx)
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
-		return mv.handleValidationError(peerID, decodedMessage, err)
+		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage
 
-	return mv.handleValidationSuccess(decodedMessage)
+	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
@@ -228,7 +229,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
 	}
 
-	validator, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
+	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
 	if !exists {
 		e := ErrUnknownValidator
 		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
@@ -236,28 +237,28 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is liquidated
-	if validator.Liquidated {
+	if share.Liquidated {
 		return CommitteeInfo{}, ErrValidatorLiquidated
 	}
 
-	if validator.BeaconMetadata == nil {
+	if !share.HasBeaconMetadata() {
 		return CommitteeInfo{}, ErrNoShareMetadata
 	}
 
 	// Rule: If validator is not active
-	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
-		e.got = validator.BeaconMetadata.Status.String()
+		e.got = share.Status.String()
 		return CommitteeInfo{}, e
 	}
 
 	var operators []spectypes.OperatorID
-	for _, c := range validator.Committee {
+	for _, c := range share.Committee {
 		operators = append(operators, c.Signer)
 	}
 
-	indices := []phase0.ValidatorIndex{validator.BeaconMetadata.Index}
-	return newCommitteeInfo(validator.CommitteeID(), operators, indices), nil
+	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
+	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
 }
 
 func (mv *messageValidator) validatorState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *ValidatorState {
@@ -273,24 +274,8 @@ func (mv *messageValidator) validatorState(messageID spectypes.MessageID, commit
 	return cs
 }
 
-func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {
-	mv.metrics.ActiveMsgValidation(pmsg.GetTopic())
-	mv.metrics.MessagesReceivedFromPeer(pmsg.ReceivedFrom)
-	mv.metrics.MessagesReceivedTotal()
-	mv.metrics.MessageSize(len(pmsg.GetData()))
-
-	start := time.Now()
-
-	return func() {
-		sinceStart := time.Since(start)
-
-		mv.metrics.MessageValidationDuration(sinceStart)
-		mv.metrics.ActiveMsgValidationDone(pmsg.GetTopic())
-	}
-}
-
 // MaxStoredSlots stores max amount of slots message validation stores.
 // It's exported to allow usage outside of message validation
 func MaxStoredSlots(netCfg networkconfig.NetworkConfig) phase0.Slot {
-	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
+	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + LateSlotAllowance
 }

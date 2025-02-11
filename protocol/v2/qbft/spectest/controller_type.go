@@ -19,7 +19,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -60,7 +59,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), convert.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
 	return qbfttesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
 		identifier[:],
@@ -149,7 +148,7 @@ func testBroadcastedDecided(
 }
 
 func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(logger, height, runData.InputValue)
+	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err

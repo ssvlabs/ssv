@@ -22,7 +22,7 @@ type Options struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	Network           specqbft.Network
 	Beacon            beacon.BeaconNode
-	Storage           *storage.QBFTStores
+	Storage           *storage.ParticipantStores
 	SSVShare          *ssvtypes.SSVShare
 	Operator          *spectypes.CommitteeMember
 	Signer            spectypes.BeaconSigner
@@ -34,7 +34,6 @@ type Options struct {
 	QueueSize         int
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator
-	Metrics           Metrics
 	Graffiti          []byte
 }
 

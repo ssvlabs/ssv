@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -10,18 +11,28 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
+	"go.uber.org/zap"
 )
 
 // AttesterDuties returns attester duties for a given epoch.
 func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
-	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
+	start := time.Now()
+	resp, err := gc.multiClient.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
+	recordRequestDuration(gc.ctx, "AttesterDuties", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "AttesterDuties"),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to obtain attester duties: %w", err)
 	}
 	if resp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "AttesterDuties"),
+		)
 		return nil, fmt.Errorf("attester duties response is nil")
 	}
 
@@ -37,28 +48,43 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	spec.DataVersion,
 	error,
 ) {
-	// Check cache.
-	cachedResult := gc.attestationDataCache.Get(slot)
-	if cachedResult != nil {
-		data, err := withCommitteeIndex(cachedResult.Value(), committeeIndex)
-		if err != nil {
-			return nil, DataVersionNil, fmt.Errorf("failed to set committee index: %w", err)
-		}
-		return data, spec.DataVersionPhase0, nil
-	}
-
 	// Have to make beacon node request and cache the result.
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
+		// Check cache.
+		cachedResult := gc.attestationDataCache.Get(slot)
+		if cachedResult != nil {
+			data, err := withCommitteeIndex(cachedResult.Value(), committeeIndex)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set committee index: %w", err)
+			}
+			return data, nil
+		}
+
 		attDataReqStart := time.Now()
-		resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
+		resp, err := gc.multiClient.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
 		})
-		metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
+
+		recordRequestDuration(gc.ctx, "AttestationData", gc.multiClient.Address(), http.MethodGet, time.Since(attDataReqStart), err)
+
 		if err != nil {
+			gc.log.Error(clResponseErrMsg,
+				zap.String("api", "AttestationData"),
+				zap.Error(err),
+			)
 			return nil, fmt.Errorf("failed to get attestation data: %w", err)
 		}
 		if resp == nil {
+			gc.log.Error(clNilResponseErrMsg,
+				zap.String("api", "AttestationData"),
+			)
 			return nil, fmt.Errorf("attestation data response is nil")
+		}
+		if resp.Data == nil {
+			gc.log.Error(clNilResponseDataErrMsg,
+				zap.String("api", "AttestationData"),
+			)
+			return nil, fmt.Errorf("attestation data is nil")
 		}
 
 		// Caching resulting value here (as part of inflight request) guarantees only 1 request
@@ -96,5 +122,19 @@ func withCommitteeIndex(data *phase0.AttestationData, committeeIndex phase0.Comm
 
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*phase0.Attestation) error {
-	return gc.client.SubmitAttestations(gc.ctx, attestations)
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitAttestations"),
+		zap.String("client_addr", clientAddress))
+
+	start := time.Now()
+	err := gc.multiClient.SubmitAttestations(gc.ctx, attestations)
+	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
+	if err != nil {
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
+	}
+
+	logger.Debug("consensus client submitted attestations")
+	return nil
 }

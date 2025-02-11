@@ -3,12 +3,15 @@
 package eventhandler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/observability"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -68,7 +71,6 @@ type EventHandler struct {
 
 	fullNode bool
 	logger   *zap.Logger
-	metrics  metrics
 }
 
 func New(
@@ -92,7 +94,6 @@ func New(
 		keyManager:        keyManager,
 		beacon:            beacon,
 		logger:            zap.NewNop(),
-		metrics:           nopMetrics{},
 	}
 
 	for _, opt := range opts {
@@ -102,12 +103,12 @@ func New(
 	return eh, nil
 }
 
-func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
+func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
 	for blockLogs := range logs {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
-		tasks, err := eh.processBlockEvents(blockLogs)
+		tasks, err := eh.processBlockEvents(ctx, blockLogs)
 		logger.Debug("processed events from block",
 			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
@@ -116,8 +117,10 @@ func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.Bloc
 		if err != nil {
 			return 0, fmt.Errorf("failed to process block events: %w", err)
 		}
-
 		lastProcessedBlock = blockLogs.BlockNumber
+
+		observability.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
+
 		if !executeTasks || len(tasks) == 0 {
 			continue
 		}
@@ -139,7 +142,7 @@ func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.Bloc
 	return
 }
 
-func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs) ([]Task, error) {
+func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
@@ -164,7 +167,7 @@ func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs) ([]T
 
 	var tasks []Task
 	for _, log := range block.Logs {
-		task, err := eh.processEvent(txn, log)
+		task, err := eh.processEvent(ctx, txn, log)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +187,7 @@ func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs) ([]T
 	return tasks, nil
 }
 
-func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, error) {
+func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event ethtypes.Log) (Task, error) {
 	abiEvent, err := eh.eventParser.EventByID(event.Topics[0])
 	if err != nil {
 		eh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
@@ -198,12 +201,12 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		if err := eh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -212,7 +215,8 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 
-		eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
 		return nil, nil
 
 	case OperatorRemoved:
@@ -221,12 +225,13 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		if err := eh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -235,7 +240,8 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 
-		eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
+
 		return nil, nil
 
 	case ValidatorAdded:
@@ -244,13 +250,14 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		share, err := eh.handleValidatorAdded(txn, validatorAddedEvent)
 		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -259,7 +266,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 
-		defer eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
 
 		if share == nil {
 			return nil, nil
@@ -273,13 +280,14 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		validatorPubKey, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
 		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -288,7 +296,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 
-		defer eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
 
 		if validatorPubKey != emptyPK {
 			return NewStopValidatorTask(eh.taskExecutor, validatorPubKey), nil
@@ -302,13 +310,14 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		sharesToLiquidate, err := eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
 		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -317,7 +326,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
-		defer eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
 
 		if len(sharesToLiquidate) == 0 {
 			return nil, nil
@@ -333,13 +342,14 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		sharesToReactivate, err := eh.handleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -348,7 +358,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
-		defer eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
 
 		if len(sharesToReactivate) == 0 {
 			return nil, nil
@@ -364,13 +374,14 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		updated, err := eh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
 		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -379,7 +390,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 
-		defer eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
 
 		if !updated {
 			return nil, nil
@@ -394,13 +405,14 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			recordEventProcessFailure(ctx, abiEvent.Name)
 			return nil, nil
 		}
 
 		exitDescriptor, err := eh.handleValidatorExited(txn, validatorExitedEvent)
 		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			recordEventProcessFailure(ctx, abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -409,7 +421,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, fmt.Errorf("handle ValidatorExited: %w", err)
 		}
 
-		defer eh.metrics.EventProcessed(abiEvent.Name)
+		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
 
 		if exitDescriptor == nil {
 			return nil, nil
