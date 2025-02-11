@@ -635,37 +635,6 @@ func setupOperatorStorage(
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	storedPrivKeyHash, found, err := nodeStorage.GetPrivateKeyHash()
-	if err != nil {
-		logger.Fatal("could not get hashed private key", zap.Error(err))
-	}
-
-	configStoragePrivKeyHash, err := configPrivKey.StorageHash()
-	if err != nil {
-		logger.Fatal("could not hash private key", zap.Error(err))
-	}
-
-	// Backwards compatibility for the old hashing method,
-	// which was hashing the text from the configuration directly,
-	// whereas StorageHash re-encodes with PEM format.
-	cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(configPrivKeyText)
-	if err != nil {
-		logger.Fatal("could not decode private key", zap.Error(err))
-	}
-	configStoragePrivKeyLegacyHash, err := rsaencryption.HashRsaKey(cliPrivKeyDecoded)
-	if err != nil {
-		logger.Fatal("could not hash private key", zap.Error(err))
-	}
-
-	if !found {
-		if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {
-			logger.Fatal("could not save hashed private key", zap.Error(err))
-		}
-	} else if configStoragePrivKeyHash != storedPrivKeyHash &&
-		configStoragePrivKeyLegacyHash != storedPrivKeyHash {
-		logger.Fatal("operator private key is not matching the one encrypted the storage")
-	}
-
 	// nil if ssv-signer is disabled
 	if ssvSignerPublicKey != nil {
 		ssvSignerPubkeyB64, err := ssvSignerPublicKey.Base64()
@@ -682,9 +651,40 @@ func setupOperatorStorage(
 			if err := nodeStorage.SavePublicKey(string(ssvSignerPubkeyB64)); err != nil {
 				logger.Fatal("could not save public key", zap.Error(err))
 			}
-		} else if storedPubKey != string(ssvSignerPubkeyB64) &&
-			configStoragePrivKeyLegacyHash != storedPrivKeyHash {
+		} else if storedPubKey != string(ssvSignerPubkeyB64) {
 			logger.Fatal("operator public key is not matching the one in the storage")
+		}
+	} else {
+
+		storedPrivKeyHash, found, err := nodeStorage.GetPrivateKeyHash()
+		if err != nil {
+			logger.Fatal("could not get hashed private key", zap.Error(err))
+		}
+
+		configStoragePrivKeyHash, err := configPrivKey.StorageHash()
+		if err != nil {
+			logger.Fatal("could not hash private key", zap.Error(err))
+		}
+
+		// Backwards compatibility for the old hashing method,
+		// which was hashing the text from the configuration directly,
+		// whereas StorageHash re-encodes with PEM format.
+		cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(configPrivKeyText)
+		if err != nil {
+			logger.Fatal("could not decode private key", zap.Error(err))
+		}
+		configStoragePrivKeyLegacyHash, err := rsaencryption.HashRsaKey(cliPrivKeyDecoded)
+		if err != nil {
+			logger.Fatal("could not hash private key", zap.Error(err))
+		}
+
+		if !found {
+			if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {
+				logger.Fatal("could not save hashed private key", zap.Error(err))
+			}
+		} else if configStoragePrivKeyHash != storedPrivKeyHash &&
+			configStoragePrivKeyLegacyHash != storedPrivKeyHash {
+			logger.Fatal("operator private key is not matching the one encrypted the storage")
 		}
 	}
 
