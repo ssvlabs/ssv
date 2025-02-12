@@ -32,7 +32,6 @@ type participantStorage struct {
 	oldPrefix      string // kept back for cleanup
 	db             basedb.Database
 	participantsMu sync.Mutex
-	metrics        *metrics
 }
 
 // New create new participant store
@@ -42,7 +41,6 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 		prefix:    []byte{role},
 		oldPrefix: prefix.String(),
 		db:        db,
-		metrics:   newMetrics("participants_" + prefix.String()),
 	}
 }
 
@@ -165,8 +163,8 @@ func (i *participantStorage) CleanAllInstances() error {
 }
 
 func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
-	i.metrics.Start()
-	defer i.metrics.End()
+	start := time.Now()
+	defer recordRequestDuration(i.ID(), time.Since(start), updated)
 
 	i.participantsMu.Lock()
 	defer i.participantsMu.Unlock()

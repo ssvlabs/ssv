@@ -21,8 +21,8 @@ var (
 
 	saveParticipantsDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("save.duration"),
-			metric.WithUnit("ms"),
+			metricName("operation.duration"),
+			metric.WithUnit("s"),
 			metric.WithDescription("participants save duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
@@ -31,26 +31,13 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-type metrics struct {
-	stageStart time.Time
-	name       string
-}
-
-func newMetrics(role string) *metrics {
-	return &metrics{
-		name: role,
-	}
-}
-
-func (m *metrics) Start() {
-	m.stageStart = time.Now()
-}
-
-func (m *metrics) End() {
+func recordRequestDuration(name string, duration time.Duration, updated bool) {
 	saveParticipantsDurationHistogram.Record(
 		context.Background(),
-		float64(time.Since(m.stageStart).Milliseconds()),
-		metric.WithAttributes(attribute.String("store", m.name)),
+		duration.Seconds(),
+		metric.WithAttributes(
+			attribute.String("store", name),
+			attribute.Bool("updated", updated),
+		),
 	)
-	m.stageStart = time.Now()
 }
