@@ -109,9 +109,9 @@ func transformToParticipantResponse(role spectypes.BeaconRole, entry qbftstorage
 
 func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From       uint64   `json:"from"`
-		To         uint64   `json:"to"`
-		OperatorID []uint64 `json:"operatorID"`
+		From       uint64          `json:"from"`
+		To         uint64          `json:"to"`
+		OperatorID api.Uint64Slice `json:"operatorID"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
