@@ -138,7 +138,9 @@ type GoClient struct {
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
-	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+	attestationDataCache               *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+	weightedAttestationDataSoftTimeout time.Duration
+	weightedAttestationDataHardTimeout time.Duration
 
 	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
 	// from running in parallel.
@@ -195,9 +197,11 @@ func New(
 		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
 			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
 		),
-		commonTimeout:               commonTimeout,
-		longTimeout:                 longTimeout,
-		withWeightedAttestationData: opt.WithWeightedAttestationData,
+		commonTimeout:                      commonTimeout,
+		longTimeout:                        longTimeout,
+		withWeightedAttestationData:        opt.WithWeightedAttestationData,
+		weightedAttestationDataSoftTimeout: commonTimeout / 2,
+		weightedAttestationDataHardTimeout: commonTimeout,
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
