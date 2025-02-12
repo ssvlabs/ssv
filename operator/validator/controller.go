@@ -178,7 +178,7 @@ type controller struct {
 
 	// committeeObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *hashmap.Map[spectypes.MessageID, *committeeObserver] // todo: need to evict?
-	committeesObserversMutex sync.RWMutex
+	committeesObserversMutex sync.Mutex
 	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
@@ -366,19 +366,14 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 }
 
 func (c *controller) getCommitteeObserver(msgID spectypes.MessageID) *committeeObserver {
-	c.committeesObserversMutex.RLock()
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
 
 	// Check if the observer already exists
 	existingObserver, ok := c.committeesObservers.Get(msgID)
 	if ok {
-		c.committeesObserversMutex.RUnlock()
 		return existingObserver
 	}
-
-	c.committeesObserversMutex.RUnlock()
-
-	c.committeesObserversMutex.Lock()
-	defer c.committeesObserversMutex.Unlock()
 
 	// Create a new committee observer if it doesn't exist
 	committeeObserverOptions := validator.CommitteeObserverOptions{
