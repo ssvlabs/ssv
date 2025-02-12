@@ -9,6 +9,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 const (
@@ -37,8 +39,8 @@ func recordRequestDuration(name string, from time.Time, updated bool) {
 		context.Background(),
 		duration.Seconds(),
 		metric.WithAttributes(
-			attribute.String("store", name),
-			attribute.Bool("updated", updated),
+			semconv.DBOperationName(name),
+			attribute.Bool("db.operation.is_update", updated),
 		),
 	)
 }
