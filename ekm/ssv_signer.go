@@ -7,6 +7,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/ssvlabs/eth2-key-manager/core"
 	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
 	"github.com/ssvlabs/ssv-signer/web3signer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -22,6 +23,25 @@ type SSVSignerKeyManagerAdapter struct {
 	logger          *zap.Logger
 	client          *ssvsignerclient.SSVSignerClient
 	consensusClient *goclient.GoClient
+}
+
+func (s *SSVSignerKeyManagerAdapter) ListAccounts() ([]core.ValidatorAccount, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *SSVSignerKeyManagerAdapter) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *SSVSignerKeyManagerAdapter) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *SSVSignerKeyManagerAdapter) BumpSlashingProtection(pubKey []byte) error {
+	return nil
 }
 
 func NewSSVSignerKeyManagerAdapter(
