@@ -13,6 +13,8 @@ const (
 	gsDlo = 6
 	// gsDhi topic stable mesh high watermark
 	gsDhi = 12
+	// gsDout number of outbound peers per topic
+	gsDout = 4
 
 	// gsMaxIHaveLength is max number for ihave messages to send
 	// decreased the default (5000) to avoid ihave floods
@@ -36,6 +38,7 @@ func GossipSubParams() pubsub.GossipSubParams {
 	params.Dlo = gsDlo
 	params.Dhi = gsDhi
 	params.D = gsD
+	params.Dout = gsDout
 	params.HeartbeatInterval = HeartbeatInterval
 	params.HistoryLength = gsMcacheLen
 	params.HistoryGossip = gsMcacheGossip
