@@ -495,7 +495,9 @@ func createClient(
 type beaconServerResponseOptions struct {
 	WithAttestationDataEndpointError,
 	WithHeaderEndpointError bool
+	// BeaconHeadersResponseDuration helps configure scenarios where the '/eth/v1/beacon/headers' Beacon endpoint responds with a delay specified by this variable.
 	BeaconHeadersResponseDuration,
+	// AttestationDataResponseDuration helps configure scenarios where the '/eth/v1/validator/attestation_data' Beacon endpoint responds with a delay specified by this variable.
 	AttestationDataResponseDuration time.Duration
 	SlotReturnedFromHeaderEndpoint phase0.Slot
 	AttestationDataResponse        []byte
@@ -522,6 +524,7 @@ func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*htt
 
 		//this endpoint is not called for simple attestation data
 		if strings.HasPrefix(r.URL.Path, "/eth/v1/beacon/headers") {
+			//setup scenario when the endpoint responds with the pre-configured delay (tests related to timeouts)
 			time.Sleep(options.BeaconHeadersResponseDuration)
 			if options.WithHeaderEndpointError {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -575,6 +578,7 @@ func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*htt
 		require.NoError(t, err)
 		require.Zero(t, committeeIndex)
 
+		//setup scenario when the endpoint responds with the pre-configured delay (tests related to timeouts)
 		time.Sleep(options.AttestationDataResponseDuration)
 
 		if options.WithAttestationDataEndpointError {
