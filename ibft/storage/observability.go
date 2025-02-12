@@ -33,14 +33,15 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordRequestDuration(name string, from time.Time, updated bool) {
+func recordSaveDuration(name string, from time.Time, issUpdate bool) {
 	duration := time.Since(from)
 	saveParticipantsDurationHistogram.Record(
 		context.Background(),
 		duration.Seconds(),
 		metric.WithAttributes(
-			semconv.DBOperationName(name),
-			attribute.Bool("db.operation.is_update", updated),
+			semconv.DBCollectionName(name),
+			semconv.DBOperationName("save"),
+			attribute.Bool("db.operation.is_update", issUpdate),
 		),
 	)
 }
