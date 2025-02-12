@@ -336,6 +336,11 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				trace := n.getCommitteeTrace(slot, executorID) // committe id
 				round := trace.getRound(uint64(subMsg.Round))
 
+				if round == nil {
+					n.logger.Info("nil round at consensus committee", zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
+					return
+				}
+
 				func() { // populate proposer
 					operatorIDs := getOperators(executorID)
 					if len(operatorIDs) > 0 {
@@ -384,7 +389,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 				round := trace.getRound(uint64(subMsg.Round))
 				if round == nil {
-					n.logger.Info("nil round at", zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
+					n.logger.Info("nil round at consensus validator", zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
 					return
 				}
 
