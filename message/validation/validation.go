@@ -198,11 +198,12 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 }
 
 func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sync.Mutex {
-	cachedLock := mv.validationLockCache.Get(messageID)
-	if cachedLock != nil {
-		return cachedLock.Value()
-	}
 	lock, _, _ := mv.validationLocksInflight.Do(messageID, func() (*sync.Mutex, error) {
+		cachedLock := mv.validationLockCache.Get(messageID)
+		if cachedLock != nil {
+			return cachedLock.Value(), nil
+		}
+
 		lock := &sync.Mutex{}
 
 		epochDuration := casts.DurationFromUint64(mv.netCfg.Beacon.SlotsPerEpoch()) * mv.netCfg.Beacon.SlotDurationSec()
