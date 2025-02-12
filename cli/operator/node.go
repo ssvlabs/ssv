@@ -201,8 +201,6 @@ var StartNodeCmd = &cobra.Command{
 			} else {
 				logger.Fatal("Neither operator private key, nor keystore, nor remote signer address have been found in config")
 			}
-
-			cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 		}
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText, operatorPubKey)
@@ -277,7 +275,8 @@ var StartNodeCmd = &cobra.Command{
 		var keyManager ekm.KeyManager
 		if cfg.SSVSignerEndpoint != "" { // TODO: try to remove repetitive check
 			keyManager = ekm.NewSSVSignerKeyManagerAdapter(logger, ssvSignerClient, consensusClient)
-			cfg.P2pNetworkConfig.OperatorSigner = ekm.NewSSVSignerOperatorSignerAdapter(logger, ssvSignerClient)
+			cfg.P2pNetworkConfig.OperatorSigner = ekm.NewSSVSignerKeysOperatorSignerAdapter(logger, ssvSignerClient)
+			cfg.SSVOptions.ValidatorOptions.OperatorSigner = ekm.NewSSVSignerTypesOperatorSignerAdapter(logger, ssvSignerClient, operatorDataStore.GetOperatorID)
 		} else {
 			ekmHashedKey, err := operatorPrivKey.EKMHash()
 			if err != nil {
@@ -289,6 +288,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
 
+			cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		}
 

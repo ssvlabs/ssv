@@ -150,27 +150,27 @@ func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey string) error {
 	return s.client.RemoveValidator(decoded)
 }
 
-type SSVSignerOperatorSignerAdapter struct {
+type SSVSignerKeysOperatorSignerAdapter struct {
 	logger *zap.Logger
 	client *ssvsignerclient.SSVSignerClient
 }
 
-func NewSSVSignerOperatorSignerAdapter(
+func NewSSVSignerKeysOperatorSignerAdapter(
 	logger *zap.Logger,
 	client *ssvsignerclient.SSVSignerClient,
-) *SSVSignerOperatorSignerAdapter {
-	return &SSVSignerOperatorSignerAdapter{
-		logger: logger.Named("SSVSignerOperatorSignerAdapter"),
+) *SSVSignerKeysOperatorSignerAdapter {
+	return &SSVSignerKeysOperatorSignerAdapter{
+		logger: logger.Named("SSVSignerKeysOperatorSignerAdapter"),
 		client: client,
 	}
 }
 
-func (s *SSVSignerOperatorSignerAdapter) Sign(payload []byte) ([]byte, error) {
+func (s *SSVSignerKeysOperatorSignerAdapter) Sign(payload []byte) ([]byte, error) {
 	s.logger.Debug("Signing payload")
 	return s.client.OperatorSign(payload)
 }
 
-func (s *SSVSignerOperatorSignerAdapter) Public() keys.OperatorPublicKey {
+func (s *SSVSignerKeysOperatorSignerAdapter) Public() keys.OperatorPublicKey {
 	s.logger.Debug("Getting public key")
 	pubkeyString, err := s.client.GetOperatorIdentity()
 	if err != nil {
@@ -183,4 +183,35 @@ func (s *SSVSignerOperatorSignerAdapter) Public() keys.OperatorPublicKey {
 	}
 
 	return pubkey
+}
+
+type SSVSignerTypesOperatorSignerAdapter struct {
+	logger        *zap.Logger
+	client        *ssvsignerclient.SSVSignerClient
+	getOperatorId func() spectypes.OperatorID
+}
+
+func NewSSVSignerTypesOperatorSignerAdapter(
+	logger *zap.Logger,
+	client *ssvsignerclient.SSVSignerClient,
+	getOperatorId func() spectypes.OperatorID,
+) *SSVSignerTypesOperatorSignerAdapter {
+	return &SSVSignerTypesOperatorSignerAdapter{
+		logger:        logger.Named("SSVSignerTypesOperatorSignerAdapter"),
+		client:        client,
+		getOperatorId: getOperatorId,
+	}
+}
+
+func (s *SSVSignerTypesOperatorSignerAdapter) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte, error) {
+	encodedMsg, err := ssvMsg.Encode()
+	if err != nil {
+		return nil, err
+	}
+
+	return s.client.OperatorSign(encodedMsg)
+}
+
+func (s *SSVSignerTypesOperatorSignerAdapter) GetOperatorID() spectypes.OperatorID {
+	return s.getOperatorId()
 }
