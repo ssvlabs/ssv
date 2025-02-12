@@ -97,8 +97,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		if err != nil {
 			return spectypes.Signature{}, [32]byte{}, err
 		}
-
-		return []byte(sig), root, nil // TODO: need sig hex decoding?
+		return sig, root, nil
 
 	default:
 		// TODO: support other domains
