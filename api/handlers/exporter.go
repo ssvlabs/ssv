@@ -136,10 +136,10 @@ func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error 
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From        uint64   `json:"from"`
-		To          uint64   `json:"to"`
-		CommitteeID api.Hex  `json:"committeeID"`
-		Operators   []uint64 `json:"operators"`
+		From        uint64          `json:"from"`
+		To          uint64          `json:"to"`
+		CommitteeID api.Hex         `json:"committeeID"`
+		Operators   api.Uint64Slice `json:"operators"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
