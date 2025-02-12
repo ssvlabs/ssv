@@ -69,8 +69,8 @@ type p2pNetwork struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	interfaceLogger *zap.Logger // struct logger to log in interface methods that do not accept a logger
-	cfg             *Config
+	logger *zap.Logger
+	cfg    *Config
 
 	host         host.Host
 	streamCtrl   streams.StreamController
@@ -105,13 +105,11 @@ type p2pNetwork struct {
 func New(logger *zap.Logger, cfg *Config) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
-	logger = logger.Named(logging.NameP2PNetwork)
-
 	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		interfaceLogger:         logger,
+		logger:                  logger.Named(logging.NameP2PNetwork),
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
@@ -166,13 +164,13 @@ func (n *p2pNetwork) PeersByTopic() ([]peer.ID, map[string][]peer.ID) {
 	for _, tpc := range tpcs {
 		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
 		if err != nil {
-			n.interfaceLogger.Error("Cant get peers from topics")
+			n.logger.Error("Cant get peers from topics")
 			return nil, nil
 		}
 	}
 	allpeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
-		n.interfaceLogger.Error("Cant all peers")
+		n.logger.Error("Cant all peers")
 		return nil, nil
 	}
 	return allpeers, peerz
@@ -184,16 +182,16 @@ func (n *p2pNetwork) Close() error {
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.libConnManager.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.disc.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.idx.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close index", zap.Error(err))
+		n.logger.Warn("could not close index", zap.Error(err))
 	}
 	if err := n.topicsCtrl.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close topics controller", zap.Error(err))
+		n.logger.Warn("could not close topics controller", zap.Error(err))
 	}
 	return n.host.Close()
 }
@@ -220,9 +218,7 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start(logger *zap.Logger) error {
-	logger = logger.Named(logging.NameP2PNetwork)
-
+func (n *p2pNetwork) Start() error {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
 		return nil
@@ -238,28 +234,28 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		Addrs: n.host.Addrs(),
 	})
 	if err != nil {
-		logger.Fatal("could not get my address", zap.Error(err))
+		n.logger.Fatal("could not get my address", zap.Error(err))
 	}
 	maStrs := make([]string, len(pAddrs))
 	for i, ima := range pAddrs {
 		maStrs[i] = ima.String()
 	}
-	logger.Info("starting p2p",
+	n.logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
-	go n.startDiscovery(logger, connector)
+	go n.startDiscovery(connector)
 
-	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing(logger))
+	async.Interval(n.ctx, connManagerBalancingInterval, n.peersBalancing())
 
-	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, logger, n.host))
+	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, n.logger, n.host))
 
 	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
 
-	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.logger, n.topicsCtrl, 2))
 
-	if err := n.subscribeToSubnets(logger); err != nil {
+	if err := n.subscribeToSubnets(); err != nil {
 		return err
 	}
 
@@ -271,13 +267,13 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 // - Dropping peers with bad Gossip score.
 // - Dropping irrelevant peers that don't have any subnet in common.
 // - Tagging the best MaxPeers-1 peers (according to subnets intersection) as Protected and, then, removing the worst peer.
-func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
+func (n *p2pNetwork) peersBalancing() func() {
 	return func() {
 		allPeers := n.host.Network().Peers()
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
+		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
 
 		// Disconnect from bad peers
-		connMgr.DisconnectFromBadPeers(logger, n.host.Network(), allPeers)
+		connMgr.DisconnectFromBadPeers(n.host.Network(), allPeers)
 
 		// Check if it has the maximum number of connections
 		currentCount := len(allPeers)
@@ -291,21 +287,21 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		mySubnets := records.Subnets(n.activeSubnets).Clone()
 
 		// Disconnect from irrelevant peers
-		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(logger, maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
+		disconnectedPeers := connMgr.DisconnectFromIrrelevantPeers(maximumIrrelevantPeersToDisconnect, n.host.Network(), allPeers, mySubnets)
 		if disconnectedPeers > 0 {
 			return
 		}
 
 		// Trim peers according to subnet participation (considering the subnet size)
-		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
-		connMgr.TrimPeers(ctx, logger, n.host.Network())
+		connMgr.TagBestPeers(n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+		connMgr.TrimPeers(ctx, n.host.Network())
 	}
 }
 
 // startDiscovery starts the required services
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
+func (n *p2pNetwork) startDiscovery(connector chan peer.AddrInfo) {
 	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
 		ctx, cancel := context.WithCancel(n.ctx)
@@ -313,19 +309,19 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.Addr
 		n.backoffConnector.Connect(ctx, discoveredPeers)
 	}()
 	err := tasks.Retry(func() error {
-		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
+		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
 				return
 			}
 			select {
 			case connector <- e.AddrInfo:
 			default:
-				logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
+				n.logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
 			}
 		})
 	}, 3)
 	if err != nil {
-		logger.Panic("could not setup discovery", zap.Error(err))
+		n.logger.Panic("could not setup discovery", zap.Error(err))
 	}
 }
 
@@ -335,10 +331,9 @@ func (n *p2pNetwork) isReady() bool {
 
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
-func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
+func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
-	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(time.Second)
 	registeredSubnets := make([]byte, commons.Subnets())
 	defer ticker.Stop()
@@ -391,37 +386,37 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		var hasAdded, hasRemoved bool
 		if len(addedSubnets) > 0 {
 			var err error
-			hasAdded, err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+			hasAdded, err = n.disc.RegisterSubnets(addedSubnets...)
 			if err != nil {
-				logger.Debug("could not register subnets", zap.Error(err))
+				n.logger.Debug("could not register subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
 		}
 		if len(removedSubnets) > 0 {
 			var err error
-			hasRemoved, err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
+			hasRemoved, err = n.disc.DeregisterSubnets(removedSubnets...)
 			if err != nil {
-				logger.Debug("could not unregister subnets", zap.Error(err))
+				n.logger.Debug("could not unregister subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
 
 			// Unsubscribe from the removed subnets.
 			for _, removedSubnet := range removedSubnets {
-				if err := n.unsubscribeSubnet(logger, removedSubnet); err != nil {
-					logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
+				if err := n.unsubscribeSubnet(removedSubnet); err != nil {
+					n.logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
 					errs = errors.Join(errs, err)
 				} else {
-					logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
+					n.logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
 				}
 			}
 		}
 		if hasAdded || hasRemoved {
-			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
+			go n.disc.PublishENR()
 		}
 
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.activeSubnets, 0)
-		logger.Debug("updated subnets",
+		n.logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),
 			zap.Any("subnets", subnetsList),
@@ -434,12 +429,10 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 }
 
 // UpdateScoreParams updates the scoring parameters once per epoch through the call of n.topicsCtrl.UpdateScoreParams
-func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
+func (n *p2pNetwork) UpdateScoreParams() {
 	// TODO: this is a temporary solution to update the score parameters periodically.
 	// But, we should use an appropriate trigger for the UpdateScoreParams function that should be
 	// called once a validator is added or removed from the network
-
-	logger = logger.Named(logging.NameP2PNetwork)
 
 	// function to get the starting time of the next epoch
 	nextEpochStartingTime := func() time.Time {
@@ -456,11 +449,11 @@ func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
 	for ; true; <-timer.C {
 
 		// Update score parameters
-		err := n.topicsCtrl.UpdateScoreParams(logger)
+		err := n.topicsCtrl.UpdateScoreParams()
 		if err != nil {
-			logger.Debug("score parameters update failed", zap.Error(err))
+			n.logger.Debug("score parameters update failed", zap.Error(err))
 		} else {
-			logger.Debug("updated score parameters successfully")
+			n.logger.Debug("updated score parameters successfully")
 		}
 
 		// Reset to trigger on the beginning of the next epoch

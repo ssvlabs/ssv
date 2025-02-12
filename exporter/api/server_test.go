@@ -22,7 +22,7 @@ func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, func(logger *zap.Logger, nm *NetworkMessage) {
+	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: []byte(fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From))},
 		}
@@ -36,7 +36,7 @@ func TestHandleQuery(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			wg.Done()
 		}()
-		require.NoError(t, ws.Start(logger, addr))
+		require.NoError(t, ws.Start(addr))
 	}()
 	wg.Wait()
 
@@ -76,10 +76,10 @@ func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx := context.Background()
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, nil, mux, false).(*wsServer)
+	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	go func() {
-		require.NoError(t, ws.Start(logger, addr))
+		require.NoError(t, ws.Start(addr))
 	}()
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
