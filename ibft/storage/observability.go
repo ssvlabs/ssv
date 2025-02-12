@@ -21,11 +21,11 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	saveParticipantsDurationHistogram = observability.NewMetric(
+	operationDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
 			metricName("operation.duration"),
 			metric.WithUnit("s"),
-			metric.WithDescription("participants save duration"),
+			metric.WithDescription("participants db ops duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
 
@@ -35,7 +35,7 @@ func metricName(name string) string {
 
 func recordSaveDuration(name string, from time.Time, issUpdate bool) {
 	duration := time.Since(from)
-	saveParticipantsDurationHistogram.Record(
+	operationDurationHistogram.Record(
 		context.Background(),
 		duration.Seconds(),
 		metric.WithAttributes(
