@@ -164,7 +164,9 @@ func (i *participantStorage) CleanAllInstances() error {
 
 func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
 	start := time.Now()
-	defer recordSaveDuration(i.ID(), start, updated)
+	defer func() {
+		recordSaveDuration(i.ID(), start)
+	}()
 
 	i.participantsMu.Lock()
 	defer i.participantsMu.Unlock()

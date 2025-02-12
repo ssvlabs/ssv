@@ -7,7 +7,6 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -33,7 +32,7 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordSaveDuration(name string, from time.Time, issUpdate bool) {
+func recordSaveDuration(name string, from time.Time) {
 	duration := time.Since(from)
 	operationDurationHistogram.Record(
 		context.Background(),
@@ -41,7 +40,6 @@ func recordSaveDuration(name string, from time.Time, issUpdate bool) {
 		metric.WithAttributes(
 			semconv.DBCollectionName(name),
 			semconv.DBOperationName("save"),
-			attribute.Bool("db.operation.is_update", issUpdate),
 		),
 	)
 }
