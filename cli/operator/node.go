@@ -210,6 +210,8 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText, operatorPubKey)
 		operatorDataStore := operatordatastore.New(operatorData)
 
+		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
+
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 		usingSSVSigner := cfg.SSVSignerEndpoint != ""
 
@@ -370,7 +372,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
-		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 
 		fixedSubnets, err := records.Subnets{}.FromString(cfg.P2pNetworkConfig.Subnets)
 		if err != nil {
