@@ -64,6 +64,8 @@ require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/emicklei/dot v1.6.4 // indirect
 	github.com/fasthttp/router v1.5.4 // indirect
+	github.com/kilic/bls12-381 v0.1.0 // indirect
+	github.com/protolambda/bls12-381-util v0.1.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.58.0 // indirect
@@ -270,4 +272,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250203214635-0137e67b3b10
 
 // TODO: remove after github.com/ssvlabs/ssv-signer is created
-replace github.com/ssvlabs/ssv-signer => github.com/nkryuchkov/ssv-signer v0.0.0-20250211030455-b41c16620c29
+replace github.com/ssvlabs/ssv-signer => github.com/nkryuchkov/ssv-signer v0.0.0-20250212175951-be0d1e8cbd11
