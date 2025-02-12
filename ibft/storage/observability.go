@@ -31,7 +31,8 @@ func metricName(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }
 
-func recordRequestDuration(name string, duration time.Duration, updated bool) {
+func recordRequestDuration(name string, from time.Time, updated bool) {
+	duration := time.Since(from)
 	saveParticipantsDurationHistogram.Record(
 		context.Background(),
 		duration.Seconds(),
