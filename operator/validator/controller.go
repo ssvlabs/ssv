@@ -347,12 +347,13 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
-var committeeObserverValidatorTTLs = map[spectypes.RunnerRole]int{
-	spectypes.RoleCommittee:                 64,
-	spectypes.RoleProposer:                  4,
-	spectypes.RoleAggregator:                4,
-	spectypes.RoleSyncCommitteeContribution: 4,
-}
+// TODO: ecivt committeeObserver of dead committees by time or event
+//var committeeObserverValidatorTTLs = map[spectypes.RunnerRole]int{
+//	spectypes.RoleCommittee:                 64,
+//	spectypes.RoleProposer:                  4,
+//	spectypes.RoleAggregator:                4,
+//	spectypes.RoleSyncCommitteeContribution: 4,
+//}
 
 func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	ssvMsg := msg.(*queue.SSVMessage)
