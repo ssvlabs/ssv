@@ -112,10 +112,10 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 	// At the soft timeout, we return if we have any responses so far.
 	// At the hard timeout, we return unconditionally.
 	// The soft timeout is half the duration of the hard timeout.
-	ctx, cancel := context.WithTimeout(gc.ctx, gc.commonTimeout)
+	ctx, cancel := context.WithTimeout(gc.ctx, gc.weightedAttestationDataHardTimeout)
 	defer cancel()
 
-	softCtx, softCancel := context.WithTimeout(ctx, gc.commonTimeout/2)
+	softCtx, softCancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout)
 	defer softCancel()
 
 	started := time.Now()
@@ -371,7 +371,11 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root) (phas
 		}
 
 		logger.Debug("slot was not found in cache. Fetching from Consensus Client")
-		blockResponse, err := gc.multiClient.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{
+
+		timeoutCtx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
+		defer cancel()
+
+		blockResponse, err := gc.multiClient.BeaconBlockHeader(timeoutCtx, &api.BeaconBlockHeaderOpts{
 			Block: root.String(),
 		})
 		if err != nil {
