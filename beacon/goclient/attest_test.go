@@ -401,6 +401,26 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.LessOrEqual(t, timeElapsed, defaultHardTimeout+(defaultHardTimeout/10)) //time elapsed should not be greater than hard timeout + 10%
 	})
 
+	t.Run("multiple beacon clients: succeeds within soft timeout when BeaconBlockHeader(scoring) has timeout higher than hard timeout", func(t *testing.T) {
+		const numberOfServers = 3
+		var beaconServersURLs []string
+		for i := 0; i < numberOfServers; i++ {
+			server, _ := createBeaconServer(t, beaconServerResponseOptions{BeaconHeadersResponseDuration: defaultHardTimeout * 2})
+			beaconServersURLs = append(beaconServersURLs, server.URL)
+		}
+		client, err := createClient(ctx, strings.Join(beaconServersURLs, ";"), withWeightedAttestationData)
+		require.NoError(t, err)
+
+		startTime := time.Now()
+		response, version, err := client.GetAttestationData(phase0.Slot(100), phase0.CommitteeIndex(100))
+
+		require.NoError(t, err)
+		require.NotNil(t, response)
+		require.Equal(t, spec.DataVersionPhase0, version)
+		timeElapsed := time.Since(startTime)
+		require.LessOrEqual(t, timeElapsed, client.weightedAttestationDataSoftTimeout)
+	})
+
 	t.Run("multiple beacon clients: responses are correctly weighted", func(t *testing.T) {
 		const testSlot, testCommitteeIndex, testEpoch = phase0.Slot(100), phase0.CommitteeIndex(100), phase0.Epoch(10)
 		const numberOfBeaconServers = 3
@@ -475,9 +495,10 @@ func createClient(
 type beaconServerResponseOptions struct {
 	WithAttestationDataEndpointError,
 	WithHeaderEndpointError bool
+	BeaconHeadersResponseDuration,
 	AttestationDataResponseDuration time.Duration
-	SlotReturnedFromHeaderEndpoint  phase0.Slot
-	AttestationDataResponse         []byte
+	SlotReturnedFromHeaderEndpoint phase0.Slot
+	AttestationDataResponse        []byte
 }
 
 func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*httptest.Server, *hashmap.Map[phase0.Slot, int]) {
@@ -501,6 +522,7 @@ func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*htt
 
 		//this endpoint is not called for simple attestation data
 		if strings.HasPrefix(r.URL.Path, "/eth/v1/beacon/headers") {
+			time.Sleep(options.BeaconHeadersResponseDuration)
 			if options.WithHeaderEndpointError {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
