@@ -19,6 +19,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -36,14 +37,15 @@ type CommitteeDutyGuard interface {
 }
 
 type CommitteeRunner struct {
-	BaseRunner     *BaseRunner
-	network        specqbft.Network
-	beacon         beacon.BeaconNode
-	signer         spectypes.BeaconSigner
-	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
-	DutyGuard      CommitteeDutyGuard
-	measurements   measurementsStore
+	BaseRunner           *BaseRunner
+	network              specqbft.Network
+	beacon               beacon.BeaconNode
+	signer               spectypes.BeaconSigner
+	operatorSigner       ssvtypes.OperatorSigner
+	valCheck             specqbft.ProposedValueCheckF
+	DutyGuard            CommitteeDutyGuard
+	doppelgangerProvider DoppelgangerProvider
+	measurements         measurementsStore
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 }
@@ -58,6 +60,7 @@ func NewCommitteeRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
+	doppelgangerProvider DoppelgangerProvider,
 ) (Runner, error) {
 	if len(share) == 0 {
 		return nil, errors.New("no shares")
@@ -70,14 +73,15 @@ func NewCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		beacon:          beacon,
-		network:         network,
-		signer:          signer,
-		operatorSigner:  operatorSigner,
-		valCheck:        valCheck,
-		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
-		DutyGuard:       dutyGuard,
-		measurements:    NewMeasurementsStore(),
+		beacon:               beacon,
+		network:              network,
+		signer:               signer,
+		operatorSigner:       operatorSigner,
+		valCheck:             valCheck,
+		submittedDuties:      make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
+		DutyGuard:            dutyGuard,
+		doppelgangerProvider: doppelgangerProvider,
+		measurements:         NewMeasurementsStore(),
 	}, nil
 }
 
@@ -232,6 +236,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		switch duty.Type {
 		case spectypes.BNRoleAttester:
 			validDuties++
+
+			if cr.doppelgangerProvider.ValidatorStatus(duty.ValidatorIndex) != doppelganger.SigningEnabled {
+				logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(duty.ValidatorIndex))
+				continue
+			}
+
 			attestationData := constructAttestationData(beaconVote, duty)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
 				spectypes.DomainAttester)
@@ -405,6 +415,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 			vlogger.Debug("🧩 reconstructed partial signatures committee",
 				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
+
+			if cr.doppelgangerProvider.ValidatorStatus(validator) == doppelganger.SigningDisabled {
+				cr.doppelgangerProvider.MarkAsSafe(validator)
+			}
+
 			// Get the beacon object related to root
 			validatorObjs, exists := beaconObjects[validator]
 			if !exists {
@@ -729,6 +744,10 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 func (cr *CommitteeRunner) GetSigner() spectypes.BeaconSigner {
 	return cr.signer
+}
+
+func (cr *CommitteeRunner) GetDoppelgangerProvider() DoppelgangerProvider {
+	return cr.doppelgangerProvider
 }
 
 func (cr *CommitteeRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

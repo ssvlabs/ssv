@@ -12,6 +12,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -48,6 +50,11 @@ type Runner interface {
 	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
+}
+
+type DoppelgangerProvider interface {
+	ValidatorStatus(validatorIndex phase0.ValidatorIndex) doppelganger.DoppelgangerStatus
+	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
 }
 
 var _ Runner = new(CommitteeRunner)
