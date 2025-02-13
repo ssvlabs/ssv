@@ -15,9 +15,9 @@ type validatorTraceResponse struct {
 }
 
 type validatorTrace struct {
-	Slot      phase0.Slot `json:"slot"`
-	Rounds    []round
-	Decideds  []decided
+	Slot      phase0.Slot           `json:"slot"`
+	Rounds    []round               `json:"consensus"`
+	Decideds  []decided             `json:"decideds"`
 	Pre       []message             `json:"pre"`
 	Post      []message             `json:"post"`
 	Role      string                `json:"role"`
@@ -32,11 +32,11 @@ type decided struct {
 }
 
 type round struct {
-	ProposalTrace *proposalTrace       `json:"proposal"`
-	Proposer      spectypes.OperatorID `json:"proposer"`
-	Prepares      []message            `json:"prepares"`
-	Commits       []message            `json:"commits"`
-	RoundChanges  []roundChange        `json:"roundChanges"`
+	ProposalTrace *proposalTrace `json:"proposal"`
+	// Proposer      spectypes.OperatorID `json:"proposer"` not needed
+	Prepares     []message     `json:"prepares"`
+	Commits      []message     `json:"commits"`
+	RoundChanges []roundChange `json:"roundChanges"`
 }
 
 type proposalTrace struct {
@@ -93,7 +93,7 @@ func toMessageTrace(m []*model.PartialSigTrace) (out []message) {
 func toRounds(r []*model.RoundTrace) (out []round) {
 	for _, rt := range r {
 		out = append(out, round{
-			Proposer:      rt.Proposer,
+			// Proposer:      rt.Proposer,
 			ProposalTrace: toProposalTrace(rt.ProposalTrace),
 			Prepares:      toUIMessageTrace(rt.Prepares),
 			Commits:       toUIMessageTrace(rt.Commits),
@@ -156,12 +156,12 @@ type committeeTraceResponse struct {
 
 type committeeTrace struct {
 	Slot     phase0.Slot        `json:"slot"`
-	Rounds   []round            `json:"rounds"`
+	Rounds   []round            `json:"consensus"`
 	Decideds []decided          `json:"decideds"`
 	Post     []committeeMessage `json:"post"`
 
-	CommitteeID string                 `json:"committeeID"`
-	OperatorIDs []spectypes.OperatorID `json:"operatorIDs"`
+	CommitteeID string `json:"committeeID"`
+	// OperatorIDs []spectypes.OperatorID `json:"operatorIDs"` not needed?
 }
 
 type committeeMessage struct {
@@ -179,7 +179,7 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 		Slot:        t.Slot,
 		Post:        toCommitteePost(t.Post),
 		CommitteeID: hex.EncodeToString(t.CommitteeID[:]),
-		OperatorIDs: t.OperatorIDs,
+		// OperatorIDs: t.OperatorIDs,
 	}
 }
 
