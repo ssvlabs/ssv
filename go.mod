@@ -4,7 +4,7 @@ go 1.22.6
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.23.2-0.20250205171128-0c99cbcafc0b // TODO point to release
+	github.com/attestantio/go-eth2-client v0.24.0
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
