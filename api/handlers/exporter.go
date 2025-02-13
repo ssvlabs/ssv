@@ -136,10 +136,10 @@ func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error 
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From        uint64          `json:"from"`
-		To          uint64          `json:"to"`
-		CommitteeID api.Hex         `json:"committeeID"`
-		Operators   api.Uint64Slice `json:"operators"`
+		From         uint64          `json:"from"`
+		To           uint64          `json:"to"`
+		CommitteeIDs api.HexSlice    `json:"committeeIDs"`
+		Committees   api.Uint64Slice `json:"committees"` // TBD
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -150,25 +150,31 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 
-	var committeeID spectypes.CommitteeID
+	var committeeIDs []spectypes.CommitteeID
 
-	if len(request.Operators) > 0 { // operators take precedence
-		committeeID = spectypes.GetCommitteeID(request.Operators)
-	} else {
-		if len(request.CommitteeID) != len(committeeID) {
-			return api.BadRequestError(fmt.Errorf("invalid committee ID length"))
+	for _, cmt := range request.CommitteeIDs {
+		var id spectypes.CommitteeID
+		if len(cmt) != len(id) {
+			return api.BadRequestError(fmt.Errorf("invalid committee ID length: %s", hex.EncodeToString(cmt)))
 		}
-		copy(committeeID[:], request.CommitteeID)
+		copy(id[:], cmt)
+		committeeIDs = append(committeeIDs, id)
+	}
+
+	if len(committeeIDs) == 0 {
+		// map request.Committees
 	}
 
 	var duties []*model.CommitteeDutyTrace
-	for s := request.From; s <= request.To; s++ {
-		slot := phase0.Slot(s)
-		duty, err := e.TraceStore.GetCommitteeDuty(slot, committeeID)
-		if err != nil {
-			return api.Error(fmt.Errorf("error getting duties: %w", err))
+	for _, cmtID := range committeeIDs {
+		for s := request.From; s <= request.To; s++ {
+			slot := phase0.Slot(s)
+			duty, err := e.TraceStore.GetCommitteeDuty(slot, cmtID)
+			if err != nil {
+				return api.Error(fmt.Errorf("error getting duties: %w", err))
+			}
+			duties = append(duties, duty)
 		}
-		duties = append(duties, duty)
 	}
 
 	return api.Render(w, r, toCommitteeTraceResponse(duties))
@@ -184,10 +190,11 @@ func toCommitteeTraceResponse(duties []*model.CommitteeDutyTrace) *committeeTrac
 
 func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From   uint64        `json:"from"`
-		To     uint64        `json:"to"`
-		Roles  api.RoleSlice `json:"roles"`
-		PubKey api.Hex       `json:"pubkey"` // optional
+		From    uint64          `json:"from"`
+		To      uint64          `json:"to"`
+		Roles   api.RoleSlice   `json:"roles"`
+		PubKeys api.HexSlice    `json:"pubkeys"`
+		Indices api.Uint64Slice `json:"indices"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -202,41 +209,37 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
+	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
+		return api.BadRequestError(fmt.Errorf("either pubkeys or indices is required"))
+	}
+
 	var results []*model.ValidatorDutyTrace
 
-	if len(request.PubKey) == 0 {
+	for _, req := range request.PubKeys {
+		// convert to pubkey
+		var pubkey spectypes.ValidatorPK
+		if len(req) != len(pubkey) {
+			return api.BadRequestError(fmt.Errorf("invalid pubkey length"))
+		}
+		copy(pubkey[:], req)
+
+		// get for each slot
 		for s := request.From; s <= request.To; s++ {
 			slot := phase0.Slot(s)
 			for _, r := range request.Roles {
 				role := spectypes.BeaconRole(r)
-				duties, err := e.TraceStore.GetAllValidatorDuties(role, slot)
+				duty, err := e.TraceStore.GetValidatorDuty(role, slot, pubkey)
 				if err != nil {
 					return api.Error(fmt.Errorf("error getting duties: %w", err))
 				}
-				results = append(results, duties...)
+				results = append(results, duty)
 			}
 		}
-		return api.Render(w, r, toValidatorTraceResponse(results))
 	}
 
-	var pubkey spectypes.ValidatorPK
-
-	if len(request.PubKey) != len(pubkey) {
-		return api.BadRequestError(fmt.Errorf("invalid pubkey length"))
-	}
-
-	copy(pubkey[:], request.PubKey)
-
-	for s := request.From; s <= request.To; s++ {
-		slot := phase0.Slot(s)
-		for _, r := range request.Roles {
-			role := spectypes.BeaconRole(r)
-			duty, err := e.TraceStore.GetValidatorDuty(role, slot, pubkey)
-			if err != nil {
-				return api.Error(fmt.Errorf("error getting duties: %w", err))
-			}
-			results = append(results, duty)
-		}
+	for _, index := range request.Indices {
+		_ = index // convert to validator pubkey
+		// repeat above
 	}
 
 	return api.Render(w, r, toValidatorTraceResponse(results))
