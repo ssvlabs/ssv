@@ -334,10 +334,15 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			switch msgID.GetRoleType() {
 			case spectypes.RoleCommittee:
 				trace := n.getCommitteeTrace(slot, executorID) // committe id
+
+				oldC := len(trace.Rounds)
 				round := trace.getRound(uint64(subMsg.Round))
 
 				if round == nil {
-					n.logger.Info("nil round at consensus committee", zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
+					n.logger.Info("nil round at consensus committee",
+						zap.Int("new rounds", len(trace.Rounds)),
+						zap.Int("old rounds", oldC),
+						zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
 					return
 				}
 
@@ -387,9 +392,14 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					}
 				}
 
+				oldC := len(trace.Rounds)
 				round := trace.getRound(uint64(subMsg.Round))
+
 				if round == nil {
-					n.logger.Info("nil round at consensus validator", zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
+					n.logger.Info("nil round at consensus committee",
+						zap.Int("new rounds", len(trace.Rounds)),
+						zap.Int("old rounds", oldC),
+						zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
 					return
 				}
 
