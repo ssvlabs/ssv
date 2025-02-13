@@ -1,20 +1,20 @@
 package doppelganger
 
-// DoppelgangerState tracks the validator's state in Doppelganger Protection.
-type DoppelgangerState struct {
-	RemainingEpochs uint64 // The number of epochs that must be checked before it's considered safe.
-	IsLive          bool   // The validator's liveness status.
+// doppelgangerState tracks the validator's state in Doppelganger Protection.
+type doppelgangerState struct {
+	remainingEpochs uint64 // The number of epochs that must be checked before it's considered safe.
+	isLive          bool   // The validator's liveness status.
 }
 
 // requiresFurtherChecks returns true if the validator is *not* safe to sign yet.
-func (ds *DoppelgangerState) requiresFurtherChecks() bool {
-	return ds.RemainingEpochs > 0
+func (ds *doppelgangerState) requiresFurtherChecks() bool {
+	return ds.remainingEpochs > 0
 }
 
 // decreaseRemainingEpochs decreases remaining epochs.
-func (ds *DoppelgangerState) decreaseRemainingEpochs() {
-	if ds.RemainingEpochs > 0 {
-		ds.RemainingEpochs--
+func (ds *doppelgangerState) decreaseRemainingEpochs() {
+	if ds.remainingEpochs > 0 {
+		ds.remainingEpochs--
 	}
 }
 

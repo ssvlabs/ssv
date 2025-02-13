@@ -19,23 +19,23 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	NetworkConfig        networkconfig.NetworkConfig
-	Network              specqbft.Network
-	Beacon               beacon.BeaconNode
-	Storage              *storage.ParticipantStores
-	SSVShare             *ssvtypes.SSVShare
-	Operator             *spectypes.CommitteeMember
-	Signer               spectypes.BeaconSigner
-	OperatorSigner       ssvtypes.OperatorSigner
-	DoppelgangerProvider runner.DoppelgangerProvider
-	DutyRunners          runner.ValidatorDutyRunners
-	NewDecidedHandler    qbftctrl.NewDecidedHandler
-	FullNode             bool
-	Exporter             bool
-	QueueSize            int
-	GasLimit             uint64
-	MessageValidator     validation.MessageValidator
-	Graffiti             []byte
+	NetworkConfig       networkconfig.NetworkConfig
+	Network             specqbft.Network
+	Beacon              beacon.BeaconNode
+	Storage             *storage.ParticipantStores
+	SSVShare            *ssvtypes.SSVShare
+	Operator            *spectypes.CommitteeMember
+	Signer              spectypes.BeaconSigner
+	OperatorSigner      ssvtypes.OperatorSigner
+	DoppelgangerHandler runner.DoppelgangerProvider
+	DutyRunners         runner.ValidatorDutyRunners
+	NewDecidedHandler   qbftctrl.NewDecidedHandler
+	FullNode            bool
+	Exporter            bool
+	QueueSize           int
+	GasLimit            uint64
+	MessageValidator    validation.MessageValidator
+	Graffiti            []byte
 }
 
 func (o *Options) defaults() {

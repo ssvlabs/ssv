@@ -30,14 +30,14 @@ import (
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon               beacon.BeaconNode
-	network              specqbft.Network
-	signer               spectypes.BeaconSigner
-	operatorSigner       ssvtypes.OperatorSigner
-	doppelgangerProvider DoppelgangerProvider
-	valCheck             specqbft.ProposedValueCheckF
-	measurements         measurementsStore
-	graffiti             []byte
+	beacon              beacon.BeaconNode
+	network             specqbft.Network
+	signer              spectypes.BeaconSigner
+	operatorSigner      ssvtypes.OperatorSigner
+	doppelgangerHandler DoppelgangerProvider
+	valCheck            specqbft.ProposedValueCheckF
+	measurements        measurementsStore
+	graffiti            []byte
 }
 
 func NewProposerRunner(
@@ -49,7 +49,7 @@ func NewProposerRunner(
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	doppelgangerProvider DoppelgangerProvider,
+	doppelgangerHandler DoppelgangerProvider,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
@@ -68,14 +68,14 @@ func NewProposerRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:               beacon,
-		network:              network,
-		signer:               signer,
-		operatorSigner:       operatorSigner,
-		doppelgangerProvider: doppelgangerProvider,
-		valCheck:             valCheck,
-		graffiti:             graffiti,
-		measurements:         NewMeasurementsStore(),
+		beacon:              beacon,
+		network:             network,
+		signer:              signer,
+		operatorSigner:      operatorSigner,
+		doppelgangerHandler: doppelgangerHandler,
+		valCheck:            valCheck,
+		graffiti:            graffiti,
+		measurements:        NewMeasurementsStore(),
 	}, nil
 }
 
@@ -192,7 +192,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
-	if r.doppelgangerProvider.ValidatorStatus(duty.ValidatorIndex) == doppelganger.SigningDisabled {
+	if r.doppelgangerHandler.ValidatorStatus(duty.ValidatorIndex) == doppelganger.SigningDisabled {
 		logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
 	}
@@ -272,8 +272,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.Round(r.GetState().RunningInstance.State.Round))
 
-		if r.doppelgangerProvider.ValidatorStatus(r.GetShare().ValidatorIndex) == doppelganger.SigningDisabled {
-			r.doppelgangerProvider.MarkAsSafe(r.GetShare().ValidatorIndex)
+		if r.doppelgangerHandler.ValidatorStatus(r.GetShare().ValidatorIndex) == doppelganger.SigningDisabled {
+			r.doppelgangerHandler.MarkAsSafe(r.GetShare().ValidatorIndex)
 		}
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
@@ -409,7 +409,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	r.measurements.StartPreConsensus()
 
 	proposerDuty := duty.(*spectypes.ValidatorDuty)
-	if r.doppelgangerProvider.ValidatorStatus(proposerDuty.ValidatorIndex) != doppelganger.SigningEnabled {
+	if r.doppelgangerHandler.ValidatorStatus(proposerDuty.ValidatorIndex) != doppelganger.SigningEnabled {
 		logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
 		return nil
 	}

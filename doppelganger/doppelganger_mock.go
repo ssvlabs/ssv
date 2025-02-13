@@ -54,6 +54,18 @@ func (mr *MockDoppelgangerProviderMockRecorder) MarkAsSafe(validatorIndex any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsSafe", reflect.TypeOf((*MockDoppelgangerProvider)(nil).MarkAsSafe), validatorIndex)
 }
 
+// RemoveValidatorState mocks base method.
+func (m *MockDoppelgangerProvider) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RemoveValidatorState", validatorIndex)
+}
+
+// RemoveValidatorState indicates an expected call of RemoveValidatorState.
+func (mr *MockDoppelgangerProviderMockRecorder) RemoveValidatorState(validatorIndex any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveValidatorState", reflect.TypeOf((*MockDoppelgangerProvider)(nil).RemoveValidatorState), validatorIndex)
+}
+
 // StartMonitoring mocks base method.
 func (m *MockDoppelgangerProvider) StartMonitoring(ctx context.Context) {
 	m.ctrl.T.Helper()

@@ -355,9 +355,9 @@ var StartNodeCmd = &cobra.Command{
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
-		var doppelgangerService doppelganger.DoppelgangerProvider
+		var doppelgangerHandler doppelganger.DoppelgangerProvider
 		if cfg.EnableDoppelgangerProtection || true {
-			doppelgangerService = doppelganger.NewDoppelgangerService(&doppelganger.DoppelgangerOptions{
+			doppelgangerHandler = doppelganger.NewDoppelgangerHandler(&doppelganger.DoppelgangerOptions{
 				Network:            networkConfig,
 				BeaconNode:         consensusClient,
 				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
@@ -366,10 +366,10 @@ var StartNodeCmd = &cobra.Command{
 			})
 			logger.Info("Doppelganger protection enabled.")
 		} else {
-			doppelgangerService = doppelganger.NoOpDoppelgangerProvider{}
+			doppelgangerHandler = doppelganger.NoOpDoppelgangerHandler{}
 			logger.Warn("Doppelganger protection disabled.")
 		}
-		cfg.SSVOptions.ValidatorOptions.DoppelgangerProvider = doppelgangerService
+		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
@@ -410,6 +410,7 @@ var StartNodeCmd = &cobra.Command{
 			operatorDataStore,
 			operatorPrivKey,
 			keyManager,
+			doppelgangerHandler,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
 			nodeProber.AddNode("event syncer", eventSyncer)
@@ -746,6 +747,7 @@ func syncContractEvents(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
+	doppelgangerHandler eventhandler.DoppelgangerProvider,
 ) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
@@ -763,6 +765,7 @@ func syncContractEvents(
 		operatorDecrypter,
 		keyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
+		doppelgangerHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)

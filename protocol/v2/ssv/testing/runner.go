@@ -78,7 +78,7 @@ var ConstructBaseRunner = func(
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
-	dgProvider := doppelganger.NoOpDoppelgangerProvider{}
+	dgHandler := doppelganger.NoOpDoppelgangerHandler{}
 
 	var valCheck specqbft.ProposedValueCheckF
 	switch role {
@@ -133,7 +133,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
-			dgProvider,
+			dgHandler,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -158,7 +158,7 @@ var ConstructBaseRunner = func(
 			net,
 			km,
 			opSigner,
-			dgProvider,
+			dgHandler,
 			valCheck,
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
@@ -208,7 +208,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
-			dgProvider,
+			dgHandler,
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
@@ -305,7 +305,7 @@ var ConstructBaseRunnerWithShareMap = func(
 
 	km := spectestingutils.NewTestingKeyManager()
 	dutyGuard := validator.NewCommitteeDutyGuard()
-	dgProvider := doppelganger.NoOpDoppelgangerProvider{}
+	dgHandler := doppelganger.NoOpDoppelgangerHandler{}
 
 	if len(shareMap) > 0 {
 		var keySetInstance *spectestingutils.TestKeySet
@@ -388,7 +388,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
-			dgProvider,
+			dgHandler,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -413,7 +413,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			net,
 			km,
 			opSigner,
-			dgProvider,
+			dgHandler,
 			valCheck,
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
@@ -463,7 +463,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
-			dgProvider,
+			dgHandler,
 		)
 		if r != nil {
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType

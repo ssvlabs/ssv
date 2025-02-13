@@ -83,7 +83,7 @@ type ControllerOptions struct {
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
-	DoppelgangerProvider       doppelganger.DoppelgangerProvider
+	DoppelgangerHandler        doppelganger.DoppelgangerProvider
 	NetworkConfig              networkconfig.NetworkConfig
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
@@ -209,16 +209,16 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Beacon:        options.Beacon,
 		Storage:       options.StorageMap,
 		//Share:   nil,  // set per validator
-		Signer:               options.BeaconSigner,
-		OperatorSigner:       options.OperatorSigner,
-		DoppelgangerProvider: options.DoppelgangerProvider,
-		DutyRunners:          nil, // set per validator
-		NewDecidedHandler:    options.NewDecidedHandler,
-		FullNode:             options.FullNode,
-		Exporter:             options.Exporter,
-		GasLimit:             options.GasLimit,
-		MessageValidator:     options.MessageValidator,
-		Graffiti:             options.Graffiti,
+		Signer:              options.BeaconSigner,
+		OperatorSigner:      options.OperatorSigner,
+		DoppelgangerHandler: options.DoppelgangerHandler,
+		DutyRunners:         nil, // set per validator
+		NewDecidedHandler:   options.NewDecidedHandler,
+		FullNode:            options.FullNode,
+		Exporter:            options.Exporter,
+		GasLimit:            options.GasLimit,
+		MessageValidator:    options.MessageValidator,
+		Graffiti:            options.Graffiti,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -1066,7 +1066,7 @@ func SetupCommitteeRunners(
 			options.OperatorSigner,
 			valCheck,
 			dutyGuard,
-			options.DoppelgangerProvider,
+			options.DoppelgangerHandler,
 		)
 		if err != nil {
 			return nil, err
@@ -1128,7 +1128,7 @@ func SetupRunners(
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
-			runners[role], err = runner.NewProposerRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerProvider, proposedValueCheck, 0, options.Graffiti)
+			runners[role], err = runner.NewProposerRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
