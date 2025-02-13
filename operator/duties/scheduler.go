@@ -28,7 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
 
 const (
 	// blockPropagationDelay time to propagate around the nodes

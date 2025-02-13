@@ -46,7 +46,7 @@ import (
 	"go.uber.org/zap"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
 	networkRouterConcurrency = 2048

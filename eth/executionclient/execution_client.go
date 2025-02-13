@@ -23,7 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
-//go:generate mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
 
 type Provider interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
