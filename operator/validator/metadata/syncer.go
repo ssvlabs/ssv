@@ -19,7 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=metadata -destination=./mocks.go -source=./syncer.go
+//go:generate go tool -modfile=../../../tool.mod mockgen -package=metadata -destination=./mocks.go -source=./syncer.go
 
 const (
 	defaultSyncInterval      = 12 * time.Minute
