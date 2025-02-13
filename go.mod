@@ -257,4 +257,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 // Using a fix from https://github.com/ssvlabs/go-eth2-client/commits/syncing-el-offline-v0.21.7/ (https://github.com/attestantio/go-eth2-client/pull/192)
 // NOTE: Prysm doesn't set el_offline correctly (https://github.com/prysmaticlabs/prysm/issues/14226),
 // so the fix uses workaround with checking sync distance to check if EL is offline
-replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250206124345-c0674c73acc5
+replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250213185727-234628c0309f
