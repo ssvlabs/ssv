@@ -23,8 +23,7 @@ func newTestDoppelgangerService(t *testing.T) *DoppelgangerService {
 		Network:           networkconfig.NetworkConfig{},
 		BeaconNode:        mockBeaconNode,
 		ValidatorProvider: mockValidatorProvider,
-		//SlotTickerProvider: func() slotticker.SlotTicker { return },
-		Logger: logger,
+		Logger:            logger,
 	})
 
 	return service.(*DoppelgangerService)
