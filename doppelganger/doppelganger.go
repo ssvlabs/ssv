@@ -16,7 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/service.go -source=./service.go
+//go:generate mockgen -package=doppelganger -destination=./doppelganger_mock.go -source=./doppelganger.go
 
 const DefaultRemainingDetectionEpochs uint64 = 2
 
@@ -31,13 +31,13 @@ type ValidatorProvider interface {
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 }
 
-type ValidatorLiveness interface {
+type BeaconNode interface {
 	ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ValidatorLiveness, error)
 }
 
 type DoppelgangerOptions struct {
 	Network            networkconfig.NetworkConfig
-	BeaconNode         ValidatorLiveness
+	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
 	Logger             *zap.Logger
@@ -46,7 +46,7 @@ type DoppelgangerOptions struct {
 type DoppelgangerService struct {
 	mu                 sync.RWMutex
 	network            networkconfig.NetworkConfig
-	beaconNode         ValidatorLiveness
+	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
 	logger             *zap.Logger
@@ -99,9 +99,7 @@ func (ds *DoppelgangerService) MarkAsSafe(validatorIndex phase0.ValidatorIndex) 
 	state.RemainingEpochs = 0
 }
 
-func (ds *DoppelgangerService) updateDoppelgangerState(epoch phase0.Epoch) {
-	validatorIndices := indicesFromShares(ds.validatorProvider.SelfParticipatingValidators(epoch))
-
+func (ds *DoppelgangerService) updateDoppelgangerState(validatorIndices []phase0.ValidatorIndex) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -149,7 +147,8 @@ func (ds *DoppelgangerService) StartMonitoring(ctx context.Context) {
 			ds.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			// Update DG state with self participating validators from validator provider at the current epoch
-			ds.updateDoppelgangerState(currentEpoch)
+			validatorIndices := indicesFromShares(ds.validatorProvider.SelfParticipatingValidators(currentEpoch))
+			ds.updateDoppelgangerState(validatorIndices)
 
 			// Perform liveness check only on last slot of the epoch or first run .
 			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || ds.startEpoch == currentEpoch {
@@ -161,14 +160,12 @@ func (ds *DoppelgangerService) StartMonitoring(ctx context.Context) {
 				firstRun = false
 			}
 
-			ds.checkLiveness(ctx, currentEpoch)
+			ds.checkLiveness(ctx, currentEpoch-1)
 		}
 	}
 }
 
-func (ds *DoppelgangerService) checkLiveness(ctx context.Context, currentEpoch phase0.Epoch) {
-	ds.logger.Info("Checking liveness for validators...")
-
+func (ds *DoppelgangerService) checkLiveness(ctx context.Context, epoch phase0.Epoch) {
 	ds.mu.Lock()
 	validatorsToCheck := make([]phase0.ValidatorIndex, 0, len(ds.doppelgangerState))
 	for validatorIndex, state := range ds.doppelgangerState {
@@ -183,8 +180,7 @@ func (ds *DoppelgangerService) checkLiveness(ctx context.Context, currentEpoch p
 		return
 	}
 
-	livenessEpoch := currentEpoch - 1
-	livenessData, err := ds.beaconNode.ValidatorLiveness(ctx, livenessEpoch, validatorsToCheck)
+	livenessData, err := ds.beaconNode.ValidatorLiveness(ctx, epoch, validatorsToCheck)
 	if err != nil {
 		ds.logger.Error("Failed to obtain validator liveness data", zap.Error(err))
 		// TODO(doppelganger): should we return an err here? edge case? do something based on error type?
@@ -192,16 +188,16 @@ func (ds *DoppelgangerService) checkLiveness(ctx context.Context, currentEpoch p
 	}
 
 	// Process liveness data
-	ds.processLivenessData(livenessEpoch, livenessData)
+	ds.processLivenessData(epoch, livenessData)
 }
 
-func (ds *DoppelgangerService) processLivenessData(livenessEpoch phase0.Epoch, livenessData []*eth2apiv1.ValidatorLiveness) {
+func (ds *DoppelgangerService) processLivenessData(epoch phase0.Epoch, livenessData []*eth2apiv1.ValidatorLiveness) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
 	for _, response := range livenessData {
 		ds.logger.Debug("Processing liveness data",
-			fields.Epoch(livenessEpoch),
+			fields.Epoch(epoch),
 			fields.ValidatorIndex(response.Index),
 			zap.Bool("is_live", response.IsLive))
 		state, exists := ds.doppelgangerState[response.Index]
@@ -214,10 +210,10 @@ func (ds *DoppelgangerService) processLivenessData(livenessEpoch phase0.Epoch, l
 		if response.IsLive {
 			ds.logger.Warn("Doppelganger detected for validator",
 				fields.ValidatorIndex(response.Index),
-				fields.Epoch(livenessEpoch),
+				fields.Epoch(epoch),
 			)
 			state.RemainingEpochs = ^uint64(0) // Mark as permanently unsafe
-			return
+			continue
 		}
 
 		if state.RemainingEpochs == ^uint64(0) {
@@ -225,7 +221,7 @@ func (ds *DoppelgangerService) processLivenessData(livenessEpoch phase0.Epoch, l
 				fields.ValidatorIndex(response.Index),
 			)
 			state.RemainingEpochs = DefaultRemainingDetectionEpochs
-			return
+			continue
 		}
 
 		state.decreaseRemainingEpochs()
