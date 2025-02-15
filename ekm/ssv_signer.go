@@ -1,9 +1,17 @@
 package ekm
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	"github.com/attestantio/go-eth2-client/spec/altair"
+	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -62,46 +70,187 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 	sharePubkey []byte,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, [32]byte, error) {
+
+	root, err := spectypes.ComputeETHSigningRoot(obj, domain)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+
+	req := web3signer.SignRequest{
+		SigningRoot: hex.EncodeToString(root[:]),
+		ForkInfo:    s.getForkInfo(),
+	}
+
 	switch signatureDomain {
 	case spectypes.DomainAttester:
-		s.logger.Debug("Signing Attester")
-
 		data, ok := obj.(*phase0.AttestationData)
 		if !ok {
 			return nil, [32]byte{}, errors.New("could not cast obj to AttestationData")
 		}
 
-		root, err := spectypes.ComputeETHSigningRoot(data, domain)
-		if err != nil {
-			return nil, [32]byte{}, err
+		req.Type = web3signer.Attestation
+		req.Attestation = data
+
+	case spectypes.DomainProposer:
+		switch v := obj.(type) {
+		case *capella.BeaconBlock, *deneb.BeaconBlock:
+			return nil, [32]byte{}, fmt.Errorf("web3signer supports only blinded blocks since bellatrix") // https://github.com/Consensys/web3signer/blob/85ed009955d4a5bbccba5d5248226093987e7f6f/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/BlockRequest.java#L29
+
+		case *apiv1capella.BlindedBeaconBlock:
+			req.Type = web3signer.BlockV2
+			bodyRoot, err := v.Body.HashTreeRoot()
+			if err != nil {
+				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
+			}
+
+			req.BeaconBlock = &struct {
+				Version     string                    `json:"version"`
+				BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
+			}{
+				Version: "CAPELLA",
+				BlockHeader: &phase0.BeaconBlockHeader{
+					Slot:          v.Slot,
+					ProposerIndex: v.ProposerIndex,
+					ParentRoot:    v.ParentRoot,
+					StateRoot:     v.StateRoot,
+					BodyRoot:      bodyRoot,
+				},
+			}
+
+		case *apiv1deneb.BlindedBeaconBlock:
+			req.Type = web3signer.BlockV2
+			bodyRoot, err := v.Body.HashTreeRoot()
+			if err != nil {
+				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
+			}
+
+			req.BeaconBlock = &struct {
+				Version     string                    `json:"version"`
+				BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
+			}{
+				Version: "DENEB",
+				BlockHeader: &phase0.BeaconBlockHeader{
+					Slot:          v.Slot,
+					ProposerIndex: v.ProposerIndex,
+					ParentRoot:    v.ParentRoot,
+					StateRoot:     v.StateRoot,
+					BodyRoot:      bodyRoot,
+				},
+			}
+
+		default:
+			return nil, [32]byte{}, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 
-		denebForkHolesky := web3signer.ForkType{
-			PreviousVersion: "0x04017000",
-			CurrentVersion:  "0x05017000",
-			Epoch:           29696,
+	case spectypes.DomainVoluntaryExit:
+		data, ok := obj.(*phase0.VoluntaryExit)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to VoluntaryExit")
 		}
 
-		req := web3signer.SignRequest{
-			Type: web3signer.Attestation,
-			ForkInfo: web3signer.ForkInfo{
-				Fork:                  denebForkHolesky,
-				GenesisValidatorsRoot: hex.EncodeToString(s.consensusClient.Genesis().GenesisValidatorsRoot[:]),
-			},
-			SigningRoot: hex.EncodeToString(root[:]),
-			Attestation: data,
+		req.Type = web3signer.VoluntaryExit
+		req.VoluntaryExit = data
+
+	case spectypes.DomainAggregateAndProof:
+		data, ok := obj.(*phase0.AggregateAndProof)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to AggregateAndProof")
 		}
 
-		sig, err := s.client.Sign(sharePubkey, req)
-		s.logger.Debug("Signing Attester result", zap.Any("signature", sig), zap.Error(err))
-		if err != nil {
-			return spectypes.Signature{}, [32]byte{}, err
-		}
-		return sig, root, nil
+		req.Type = web3signer.AggregateAndProof
+		req.AggregateAndProof = data
 
+	case spectypes.DomainSelectionProof:
+		data, ok := obj.(spectypes.SSZUint64)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to SSZUint64")
+		}
+
+		req.Type = web3signer.AggregationSlot
+		req.AggregationSlot = &struct {
+			Slot phase0.Slot `json:"slot"`
+		}{Slot: phase0.Slot(data)}
+
+	case spectypes.DomainRandao:
+		data, ok := obj.(spectypes.SSZUint64)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to SSZUint64")
+		}
+
+		req.Type = web3signer.RandaoReveal
+		req.RandaoReveal = &struct {
+			Epoch phase0.Epoch `json:"epoch"`
+		}{Epoch: phase0.Epoch(data)}
+
+	case spectypes.DomainSyncCommittee:
+		data, ok := obj.(spectypes.SSZBytes)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to SSZBytes")
+		}
+
+		slot := binary.BigEndian.Uint64(data[0:8])
+		data = data[8:]
+
+		if len(data) != 32 {
+			return nil, [32]byte{}, fmt.Errorf("unexpected root length: %d", len(data))
+		}
+
+		req.Type = web3signer.SyncCommitteeMessage
+		req.SyncCommitteeMessage = &struct {
+			BeaconBlockRoot phase0.Root `json:"beacon_block_root"`
+			Slot            phase0.Slot `json:"slot"`
+		}{
+			BeaconBlockRoot: phase0.Root(data),
+			Slot:            phase0.Slot(slot),
+		}
+
+	case spectypes.DomainSyncCommitteeSelectionProof:
+		data, ok := obj.(*altair.SyncAggregatorSelectionData)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to SyncAggregatorSelectionData")
+		}
+
+		req.Type = web3signer.SyncCommitteeSelectionProof
+		req.SyncAggregatorSelectionData = data
+
+	case spectypes.DomainContributionAndProof:
+		data, ok := obj.(*altair.ContributionAndProof)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to ContributionAndProof")
+		}
+
+		req.Type = web3signer.SyncCommitteeContributionAndProof
+		req.ContributionAndProof = data
+
+	case spectypes.DomainApplicationBuilder:
+		data, ok := obj.(*eth2apiv1.ValidatorRegistration)
+		if !ok {
+			return nil, [32]byte{}, errors.New("could not cast obj to ValidatorRegistration")
+		}
+
+		req.Type = web3signer.AggregateAndProof
+		req.ValidatorRegistration = data
 	default:
-		// TODO: support other domains
-		return nil, [32]byte{}, errors.New("domain not supported at the moment")
+		return nil, [32]byte{}, errors.New("domain unknown")
+	}
+
+	sig, err := s.client.Sign(sharePubkey, req)
+	if err != nil {
+		return spectypes.Signature{}, [32]byte{}, err
+	}
+	return sig, root, nil
+}
+
+func (s *SSVSignerKeyManagerAdapter) getForkInfo() web3signer.ForkInfo {
+	denebForkHolesky := web3signer.ForkType{
+		PreviousVersion: "0x04017000",
+		CurrentVersion:  "0x05017000",
+		Epoch:           29696,
+	}
+
+	return web3signer.ForkInfo{
+		Fork:                  denebForkHolesky,
+		GenesisValidatorsRoot: hex.EncodeToString(s.consensusClient.Genesis().GenesisValidatorsRoot[:]),
 	}
 }
 
