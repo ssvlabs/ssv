@@ -228,7 +228,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to ValidatorRegistration")
 		}
 
-		req.Type = web3signer.AggregateAndProof
+		req.Type = web3signer.ValidatorRegistration
 		req.ValidatorRegistration = data
 	default:
 		return nil, [32]byte{}, errors.New("domain unknown")
