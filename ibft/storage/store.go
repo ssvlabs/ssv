@@ -31,6 +31,10 @@ type participantStorage struct {
 	prefix    []byte
 	oldPrefix string // kept back for cleanup
 	db        basedb.Database
+
+	cachedParticipants map[spectypes.ValidatorPK][]spectypes.OperatorID
+	cachedSlot         phase0.Slot
+	cacheMu            sync.RWMutex
 }
 
 // New create new participant store
@@ -230,6 +234,18 @@ func (i *participantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phas
 }
 
 func (i *participantStorage) getParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	// Check cache first.
+	i.cacheMu.RLock()
+	if i.cachedSlot == slot {
+		participants, ok := i.cachedParticipants[pk]
+		if ok {
+			i.cacheMu.RUnlock()
+			return participants, nil
+		}
+	}
+	i.cacheMu.RUnlock()
+
+	// Check DB.
 	val, found, err := i.get(pk[:], slotToByteSlice(slot))
 	if err != nil {
 		return nil, err
@@ -239,6 +255,14 @@ func (i *participantStorage) getParticipants(pk spectypes.ValidatorPK, slot phas
 	}
 
 	operators := decodeOperators(val)
+
+	// Update cache.
+	i.cacheMu.Lock()
+	if i.cachedSlot == slot {
+		i.cachedParticipants[pk] = operators
+	}
+	i.cacheMu.Unlock()
+
 	return operators, nil
 }
 
