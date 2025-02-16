@@ -53,6 +53,8 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 		return cachedResult.Value(), spec.DataVersionPhase0, nil
 	}
 
+	// Have to make beacon node request and cache the result.
+	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
 		attDataReqStart := time.Now()
 		resp, err := gc.multiClient.AttestationData(gc.ctx, &api.AttestationDataOpts{
 			Slot: slot,
