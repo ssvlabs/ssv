@@ -356,7 +356,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
 		var doppelgangerHandler doppelganger.DoppelgangerProvider
-		if cfg.EnableDoppelgangerProtection || true {
+		if cfg.EnableDoppelgangerProtection {
 			doppelgangerHandler = doppelganger.NewDoppelgangerHandler(&doppelganger.DoppelgangerOptions{
 				Network:            networkConfig,
 				BeaconNode:         consensusClient,
@@ -367,7 +367,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Info("Doppelganger protection enabled.")
 		} else {
 			doppelgangerHandler = doppelganger.NoOpDoppelgangerHandler{}
-			logger.Warn("Doppelganger protection disabled.")
+			logger.Info("Doppelganger protection disabled.")
 		}
 		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
 

@@ -169,7 +169,7 @@ func (ds *doppelgangerHandler) StartMonitoring(ctx context.Context) {
 			validatorIndices := indicesFromShares(ds.validatorProvider.SelfParticipatingValidators(currentEpoch))
 			ds.updateDoppelgangerState(validatorIndices)
 
-			// Perform liveness check only on last slot of the epoch or first run .
+			// Perform liveness checks during the first run or at the last slot of the epoch
 			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || ds.startEpoch == currentEpoch {
 				continue
 			}
