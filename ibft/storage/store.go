@@ -33,7 +33,7 @@ type participantStorage struct {
 	oldPrefix string // kept back for cleanup
 	db        basedb.Database
 
-	// Participants cache for the current slot. Persisted in bulk once every slot.
+	// Participants cache for the current slot. Flushed to DB once every slot.
 	cachedParticipants map[spectypes.ValidatorPK][]spectypes.OperatorID
 	cachedSlot         phase0.Slot
 	cacheMu            sync.RWMutex
@@ -60,15 +60,15 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, ne
 				slot := slotTicker.Slot()
 				next = slotTicker.Next()
 
-				// Persist previous slot participants.
+				// Flush previous slot participants.
 				st.cacheMu.Lock()
 				start := time.Now()
 				for pk, participants := range st.cachedParticipants {
-					if err := st.saveParticipants(pk, slot, participants); err != nil {
+					if err := st.saveParticipants(pk, st.cachedSlot, participants); err != nil {
 						logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
 					}
 				}
-				logger.Debug("saved slot participants", fields.Slot(slot), fields.Took(time.Since(start)))
+				logger.Debug("saved slot participants", fields.Slot(st.cachedSlot), fields.Took(time.Since(start)))
 
 				// Reset cache for new slot.
 				st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
@@ -210,7 +210,7 @@ func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot pha
 		return false, nil
 	}
 
-	// Update cache.
+	// Write to cache or DB.
 	i.cacheMu.Lock()
 	if i.cachedSlot != slot {
 		i.cacheMu.Unlock()
