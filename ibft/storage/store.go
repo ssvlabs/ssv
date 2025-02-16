@@ -14,6 +14,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -32,19 +33,52 @@ type participantStorage struct {
 	oldPrefix string // kept back for cleanup
 	db        basedb.Database
 
+	// Participants cache for the current slot. Persisted in bulk once every slot.
 	cachedParticipants map[spectypes.ValidatorPK][]spectypes.OperatorID
 	cachedSlot         phase0.Slot
 	cacheMu            sync.RWMutex
 }
 
 // New create new participant store
-func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.ParticipantStore {
+func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, netCfg networkconfig.NetworkConfig, slotTickerProvider slotticker.Provider) qbftstorage.ParticipantStore {
 	role := byte(prefix & 0xff)
-	return &participantStorage{
-		prefix:    []byte{role},
-		oldPrefix: prefix.String(),
-		db:        db,
+	st := &participantStorage{
+		prefix:             []byte{role},
+		oldPrefix:          prefix.String(),
+		db:                 db,
+		cachedSlot:         netCfg.Beacon.EstimatedCurrentSlot(),
+		cachedParticipants: make(map[spectypes.ValidatorPK][]spectypes.OperatorID),
 	}
+
+	// Persist in-memory participants to DB once every slot.
+	slotTicker := slotTickerProvider()
+	go func() {
+		next := slotTicker.Next()
+		for {
+			select {
+			case <-next:
+				slot := slotTicker.Slot()
+				next = slotTicker.Next()
+
+				// Persist previous slot participants.
+				st.cacheMu.Lock()
+				start := time.Now()
+				for pk, participants := range st.cachedParticipants {
+					if err := st.saveParticipants(pk, slot, participants); err != nil {
+						logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
+					}
+				}
+				logger.Debug("saved slot participants", fields.Slot(slot), fields.Took(time.Since(start)))
+
+				// Reset cache for new slot.
+				st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
+				st.cachedSlot = slot
+				st.cacheMu.Unlock()
+			}
+		}
+	}()
+
+	return st
 }
 
 // Prune waits for the initial tick and then removes all slots below the tickSlot - retain
@@ -176,9 +210,17 @@ func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot pha
 		return false, nil
 	}
 
-	if err := i.saveParticipants(pk, slot, mergedParticipants); err != nil {
-		return false, fmt.Errorf("save participants: %w", err)
+	// Update cache.
+	i.cacheMu.Lock()
+	if i.cachedSlot != slot {
+		i.cacheMu.Unlock()
+		if err := i.saveParticipants(pk, slot, mergedParticipants); err != nil {
+			return false, fmt.Errorf("save participants: %w", err)
+		}
+		return true, nil
 	}
+	i.cachedParticipants[pk] = mergedParticipants
+	i.cacheMu.Unlock()
 
 	return true, nil
 }
