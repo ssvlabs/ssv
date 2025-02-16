@@ -37,6 +37,7 @@ type CommitteeObserver struct {
 	networkConfig     networkconfig.NetworkConfig
 	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
+	rootsMtx          *sync.RWMutex
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache       *DomainCache
@@ -76,6 +77,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		syncCommRoots:     opts.SyncCommRoots,
 		domainCache:       opts.DomainCache,
 		pccMtx:            &sync.Mutex{},
+		rootsMtx:          &sync.RWMutex{},
 	}
 
 	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
@@ -185,8 +187,10 @@ func (o *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 func (o *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []spectypes.BeaconRole {
 	switch msg.MsgID.GetRoleType() {
 	case spectypes.RoleCommittee:
+		o.rootsMtx.RLock()
 		attester := o.attesterRoots.Get(root)
 		syncCommittee := o.syncCommRoots.Get(root)
+		o.rootsMtx.RUnlock()
 
 		switch {
 		case attester != nil && syncCommittee != nil:
@@ -337,6 +341,9 @@ func (o *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	}
 
 	epoch := o.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+
+	o.rootsMtx.Lock()
+	defer o.rootsMtx.Unlock()
 
 	if err := o.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
 		return err
