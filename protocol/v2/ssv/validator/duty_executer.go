@@ -45,3 +45,20 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	return nil
 }
+
+func (pc *PreconfCommitment) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
+	executeDutyData, err := msg.GetExecutePreconfCommitmentDutyData()
+	if err != nil {
+		return fmt.Errorf("failed to get execute committee duty data: %w", err)
+	}
+
+	if err := pc.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {
+		return fmt.Errorf("could not start committee duty: %w", err)
+	}
+
+	if err := pc.StartConsumeQueue(logger, executeDutyData.Duty); err != nil {
+		return fmt.Errorf("could not start committee consume queue: %w", err)
+	}
+
+	return nil
+}

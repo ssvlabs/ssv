@@ -465,6 +465,10 @@ func baseRunnerForRole(logger *zap.Logger, role spectypes.RunnerRole, base *runn
 		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
 		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
+	case spectypes.RolePreconfCommitment:
+		ret := ssvtesting.PreconfCommitmentRunner(logger, ks)
+		ret.(*runner.PreconfCommitmentRunner).BaseRunner = base
+		return ret
 	case testingutils.UnknownDutyType:
 		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)
 		ret.(*runner.CommitteeRunner).BaseRunner = base

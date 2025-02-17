@@ -136,7 +136,8 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 		spectypes.RoleProposer,
 		spectypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit:
+		spectypes.RoleVoluntaryExit,
+		spectypes.RolePreconfCommitment:
 		return true
 	default:
 		return false
