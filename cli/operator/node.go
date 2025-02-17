@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cockroachdb/pebble"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -533,8 +534,8 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
-	db, err := kv.New(logger, cfg.DBOptions)
+func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.PebbleDB, error) {
+	db, err := kv.NewPebbleDB(cfg.DBOptions.Ctx, logger, cfg.DBOptions.Path, &pebble.Options{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
