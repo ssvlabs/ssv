@@ -1,19 +1,22 @@
 package validator
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	// "github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	gc "github.com/ssvlabs/ssv/beacon/goclient"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"go.uber.org/zap"
 )
 
 type InMemTracer struct {
@@ -22,9 +25,16 @@ type InMemTracer struct {
 	// consider having the validator pubkey before of the slot
 	validatorTraces *ttlcache.Cache[uint64, map[string]*validatorDutyTrace]
 	committeeTraces *ttlcache.Cache[uint64, map[string]*committeeDutyTrace]
+	domains         []phase0.Domain
+
+	scRootsMu sync.Mutex
+	// sync committee roots derived from the beacon vote that
+	// belongs to the QBFT proposal message
+	// TODO ever growing structure, manage space
+	scRoots map[string]struct{}
 }
 
-func NewTracer(logger *zap.Logger) *InMemTracer {
+func NewTracer(logger *zap.Logger, client *gc.GoClient) *InMemTracer {
 	tracer := &InMemTracer{
 		logger: logger,
 		validatorTraces: ttlcache.New(
@@ -35,29 +45,29 @@ func NewTracer(logger *zap.Logger) *InMemTracer {
 		),
 	}
 
-	// tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
-	// 	logger.Info("committee eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
-	// })
+	tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
+		logger.Info("committee eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+	})
 
-	// tracer.committeeTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
-	// 	tracer.Lock()
-	// 	defer tracer.Unlock()
-	// 	for id := range i.Value() {
-	// 		logger.Info("committee insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
-	// 	}
-	// })
+	tracer.committeeTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
+		tracer.Lock()
+		defer tracer.Unlock()
+		for id := range i.Value() {
+			logger.Info("committee insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
+		}
+	})
 
-	// tracer.validatorTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
-	// 	logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
-	// })
+	tracer.validatorTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
+		logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+	})
 
-	// tracer.validatorTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
-	// 	tracer.Lock()
-	// 	defer tracer.Unlock()
-	// 	for id := range i.Value() {
-	// 		logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
-	// 	}
-	// })
+	tracer.validatorTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
+		tracer.Lock()
+		defer tracer.Unlock()
+		for id := range i.Value() {
+			logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
+		}
+	})
 
 	go func() {
 		for {
@@ -66,6 +76,22 @@ func NewTracer(logger *zap.Logger) *InMemTracer {
 			tracer.validatorTraces.DeleteExpired()
 		}
 	}()
+
+	var epochs = []phase0.Epoch{} // TODO fill these up
+	var domains = []phase0.DomainType{}
+
+	// domains is formed from phase0.DomainType (which will be spectypes.DomainSyncCommittee) and an epoch
+	// TODO get epoch to deneb and electra
+	for _, epoch := range epochs {
+		for _, domain := range domains {
+			data, err := client.DomainData(epoch, domain)
+			if err != nil {
+				logger.Error("get domain data", zap.Error(err))
+				continue
+			}
+			tracer.domains = append(tracer.domains, data)
+		}
+	}
 
 	return tracer
 }
@@ -307,20 +333,40 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	trace.OperatorIDs = getOperators(committeeID)
 	trace.Slot = msg.Slot
 
-	var cTrace = new(model.CommitteePartialSigMessageTrace)
-	cTrace.Type = msg.Type
-	cTrace.Signer = msg.Messages[0].Signer
-	cTrace.ReceivedTime = time.Now()
+	n.scRootsMu.Lock()
+	defer n.scRootsMu.Unlock()
 
 	for _, partialSigMsg := range msg.Messages {
-		tr := new(model.PartialSigMessage)
-		tr.BeaconRoot = partialSigMsg.SigningRoot
-		tr.Signer = partialSigMsg.Signer
-		tr.ValidatorIndex = partialSigMsg.ValidatorIndex
-		cTrace.Messages = append(cTrace.Messages, tr)
+		tr := new(model.SignerData)
+		tr.Signers = append(tr.Signers, partialSigMsg.Signer) // aggregate messages so that it ends up a collection
+		tr.ReceivedTime = time.Now()
+
+		if _, found := n.scRoots[string(partialSigMsg.SigningRoot[:])]; found {
+			trace.SyncCommittee = append(trace.SyncCommittee, tr)
+			continue
+		}
+
+		trace.Attester = append(trace.Attester, tr)
+	}
+}
+
+func (n *InMemTracer) fillInSyncCommitteeRoots(in []byte) error {
+	n.scRootsMu.Lock()
+	defer n.scRootsMu.Unlock()
+
+	var bnVote = new(spectypes.BeaconVote)
+	_ = bnVote.Decode(in)
+	object := bnVote.BlockRoot
+
+	for _, domain := range n.domains {
+		root, err := spectypes.ComputeETHSigningRoot(spectypes.SSZBytes(object[:]), domain)
+		if err != nil {
+			return fmt.Errorf("compute eth signing root for domain: %w", err)
+		}
+		n.scRoots[string(root[:])] = struct{}{}
 	}
 
-	trace.Post = append(trace.Post, cTrace)
+	return nil
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
@@ -346,13 +392,19 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					return
 				}
 
-				func() { // populate proposer
-					operatorIDs := getOperators(executorID)
-					if len(operatorIDs) > 0 {
-						mockState := n.toMockState(subMsg, operatorIDs)
-						round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
-					}
-				}()
+				// in this step will fill in sync committee roots
+				// to be later read in
+				err := n.fillInSyncCommitteeRoots(msg.SignedSSVMessage.FullData)
+				if err != nil {
+					n.logger.Error("fill sync committee roots", zap.Error(err))
+				}
+
+				// TODO is this needed?
+				operatorIDs := getOperators(executorID)
+				if len(operatorIDs) > 0 {
+					mockState := n.toMockState(subMsg, operatorIDs)
+					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
+				}
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
@@ -423,6 +475,22 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			n.logger.Error("failed to decode partial signature messages", zap.Error(err))
 			return
 		}
+
+		// for _, msg := range pSigMessages.Messages {
+		// 	sig, err := decodeSig(msg.PartialSignature)
+		// 	if err != nil {
+		// 		n.logger.Error("decode partial signature", zap.Error(err))
+		// 		return
+		// 	}
+
+		// 	// TODO read from event syncer state (or something) talk to Moshe/Matus
+		// 	var operatorKeySharePubkey []byte
+		// 	err = types.VerifyReconstructedSignature(sig, operatorKeySharePubkey, msg.SigningRoot)
+		// 	if err != nil {
+		// 		n.logger.Error("bls verification failed", zap.Error(err))
+		// 		 return
+		// 	}
+		// }
 
 		executorID := msg.MsgID.GetDutyExecutorID()
 
@@ -517,3 +585,9 @@ func (n *InMemTracer) getCommitteeDuty(slot phase0.Slot, committeeID spectypes.C
 
 	return &trace.CommitteeDutyTrace, nil
 }
+
+// func decodeSig(in []byte) (*bls.Sign, error) {
+// 	sign := new(bls.Sign)
+// 	err := sign.Deserialize(in)
+// 	return sign, err
+// }

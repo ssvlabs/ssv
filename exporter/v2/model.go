@@ -71,25 +71,19 @@ type CommitteeDutyTrace struct {
 	ConsensusTrace
 
 	Slot phase0.Slot
-	Post []*CommitteePartialSigMessageTrace `ssz-max:"13"`
 
 	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
 	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`
+
+	SyncCommittee []*SignerData `ssz-max:"1512"`
+	Attester      []*SignerData `ssz-max:"1512"`
 
 	// maybe not needed
 	AttestationDataRoot      phase0.Root `ssz-size:"32"`
 	SyncCommitteeMessageRoot phase0.Root `ssz-size:"32"`
 }
 
-type CommitteePartialSigMessageTrace struct {
-	Type         spectypes.PartialSigMsgType
-	Signer       spectypes.OperatorID
-	Messages     []*PartialSigMessage `ssz-max:"1512"`
+type SignerData struct {
+	Signers      []spectypes.OperatorID `ssz-max:"13"`
 	ReceivedTime time.Time
-}
-
-type PartialSigMessage struct {
-	BeaconRoot     phase0.Root `ssz-size:"32"`
-	Signer         spectypes.OperatorID
-	ValidatorIndex phase0.ValidatorIndex
 }

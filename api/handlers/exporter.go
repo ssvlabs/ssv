@@ -150,6 +150,10 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 
+	if len(request.Committees) == 0 && len(request.CommitteeIDs) == 0 {
+		return api.BadRequestError(fmt.Errorf("committees are required"))
+	}
+
 	var committeeIDs []spectypes.CommitteeID
 
 	for _, cmt := range request.CommitteeIDs {
@@ -161,8 +165,9 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		committeeIDs = append(committeeIDs, id)
 	}
 
-	if len(committeeIDs) == 0 {
-		// map request.Committees
+	if len(committeeIDs) == 0 { // double check
+		id := spectypes.GetCommitteeID(request.Committees)
+		committeeIDs = append(committeeIDs, id)
 	}
 
 	var duties []*model.CommitteeDutyTrace
