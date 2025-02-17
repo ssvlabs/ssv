@@ -233,11 +233,15 @@ func (ds *doppelgangerHandler) processLivenessData(epoch phase0.Epoch, livenessD
 			continue
 		}
 
+		// If the validator was previously marked as permanently unsafe (detected as live elsewhere),
+		// but is now considered inactive, we reset the detection period to be safer.
+		// Since we just checked for liveness now, we reduce the default detection period by 1
+		// to ensure it gets checked once again in the next epoch before being marked safe.
 		if state.remainingEpochs == PermanentlyUnsafe {
-			ds.logger.Debug("Validator is no longer live, resetting to default detection epochs",
+			state.remainingEpochs = DefaultRemainingDetectionEpochs - 1
+			ds.logger.Debug("Validator is no longer live but requires further checks",
 				fields.ValidatorIndex(response.Index),
-			)
-			state.remainingEpochs = DefaultRemainingDetectionEpochs
+				zap.Uint64("remaining_epochs", state.remainingEpochs))
 			continue
 		}
 
