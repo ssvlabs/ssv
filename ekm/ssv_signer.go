@@ -70,15 +70,8 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 	sharePubkey []byte,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, [32]byte, error) {
-
-	root, err := spectypes.ComputeETHSigningRoot(obj, domain)
-	if err != nil {
-		return nil, [32]byte{}, err
-	}
-
 	req := web3signer.SignRequest{
-		SigningRoot: hex.EncodeToString(root[:]),
-		ForkInfo:    s.getForkInfo(),
+		ForkInfo: s.getForkInfo(),
 	}
 
 	switch signatureDomain {
@@ -190,7 +183,8 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 
 		// TODO: fix this workaround
 		slot := binary.LittleEndian.Uint64(data[0:8])
-		beaconBlockRoot := (spectypes.SSZBytes)(data[8:])
+		beaconBlockRoot := data[8:]
+		obj = beaconBlockRoot
 
 		if len(beaconBlockRoot) != 32 {
 			return nil, [32]byte{}, fmt.Errorf("unexpected beacon block root length: %d", len(beaconBlockRoot))
@@ -247,6 +241,13 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 	default:
 		return nil, [32]byte{}, errors.New("domain unknown")
 	}
+
+	root, err := spectypes.ComputeETHSigningRoot(obj, domain)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+
+	req.SigningRoot = hex.EncodeToString(root[:])
 
 	sig, err := s.client.Sign(sharePubkey, req)
 	if err != nil {
