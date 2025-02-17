@@ -51,11 +51,12 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 		opt.ValueDir = ""
 	} else {
 
-		opt = opt.WithMemTableSize(32 << 20). // 32 MB instead of the default 64 MB
-							WithNumMemtables(1).
-							WithNumLevelZeroTables(1).
-							WithNumLevelZeroTablesStall(2).WithValueLogFileSize(1024 * 1024 * 500) // 500 MB per value log file.
-
+		opt = opt.WithMemTableSize(64 << 20). // 64 MB per memtable.
+							WithNumMemtables(3).                     // Allow 3 memtables concurrently.
+							WithNumLevelZeroTables(3).               // Allow up to 3 L0 tables.
+							WithNumLevelZeroTablesStall(5).          // Stall if more than 5 L0 tables accumulate.
+							WithValueLogFileSize(1024 * 1024 * 500). // 500 MB per value log file; adjust if needed.
+							WithNumCompactors(2)                     // Allow 2 concurrent compactors.
 	}
 
 	// TODO: we should set the default logger here to log Error and higher levels
