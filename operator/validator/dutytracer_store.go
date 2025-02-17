@@ -46,8 +46,9 @@ func (a *adapter) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Commi
 			Rounds:   trace.Rounds,
 			Decideds: trace.Decideds,
 		},
-		Post:        trace.Post,
-		OperatorIDs: trace.OperatorIDs,
+		SyncCommittee: trace.SyncCommittee,
+		Attester:      trace.Attester,
+		OperatorIDs:   trace.OperatorIDs,
 	}, nil
 }
 

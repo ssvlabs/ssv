@@ -7,7 +7,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
-	qbftmsg "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 type validatorTraceResponse struct {
@@ -26,7 +25,7 @@ type validatorTrace struct {
 
 type decided struct {
 	Round        uint64                 `json:"round"`
-	BeaconRoot   phase0.Root            `json:"beaconRoot"`
+	BeaconRoot   phase0.Root            `json:"ssvRoot"`
 	Signers      []spectypes.OperatorID `json:"signers"`
 	ReceivedTime time.Time              `json:"time"`
 }
@@ -41,7 +40,7 @@ type round struct {
 
 type proposalTrace struct {
 	Round           uint64               `json:"round"`
-	BeaconRoot      phase0.Root          `json:"beaconRoot"`
+	BeaconRoot      phase0.Root          `json:"ssvRoot"`
 	Signer          spectypes.OperatorID `json:"signer"`
 	RoundChanges    []roundChange        `json:"roundChanges"`
 	PrepareMessages []message            `json:"prepareMessages"`
@@ -56,15 +55,9 @@ type roundChange struct {
 
 type message struct {
 	Round        uint64               `json:"round"`
-	BeaconRoot   phase0.Root          `json:"beaconRoot"`
+	BeaconRoot   phase0.Root          `json:"ssvRoot"`
 	Signer       spectypes.OperatorID `json:"signer"`
 	ReceivedTime time.Time            `json:"time"`
-}
-
-type partialSigMessage struct {
-	BeaconRoot phase0.Root           `json:"beaconRoot"`
-	Signer     spectypes.OperatorID  `json:"signer"`
-	Validator  phase0.ValidatorIndex `json:"validator"`
 }
 
 func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
@@ -155,30 +148,31 @@ type committeeTraceResponse struct {
 }
 
 type committeeTrace struct {
-	Slot     phase0.Slot        `json:"slot"`
-	Rounds   []round            `json:"consensus"`
-	Decideds []decided          `json:"decideds"`
-	Post     []committeeMessage `json:"post"`
+	Slot     phase0.Slot `json:"slot"`
+	Rounds   []round     `json:"consensus"`
+	Decideds []decided   `json:"decideds"`
+
+	SyncCommittee []committeeMessage `json:"sync_committee"`
+	Attester      []committeeMessage `json:"attester"`
 
 	CommitteeID string `json:"committeeID"`
 	// OperatorIDs []spectypes.OperatorID `json:"operatorIDs"` not needed?
 }
 
 type committeeMessage struct {
-	Type         string               `json:"type"`
-	Signer       spectypes.OperatorID `json:"signer"`
-	Messages     []partialSigMessage  `json:"messages"`
-	ReceivedTime time.Time            `json:"time"`
+	Signers      []spectypes.OperatorID `json:"signers"`
+	ReceivedTime time.Time              `json:"time"`
 }
 
 func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 	return committeeTrace{
 		// consensus trace
-		Rounds:      toRounds(t.Rounds),
-		Decideds:    toDecidedTrace(t.Decideds),
-		Slot:        t.Slot,
-		Post:        toCommitteePost(t.Post),
-		CommitteeID: hex.EncodeToString(t.CommitteeID[:]),
+		Slot:          t.Slot,
+		Rounds:        toRounds(t.Rounds),
+		Decideds:      toDecidedTrace(t.Decideds),
+		SyncCommittee: toCommitteePost(t.SyncCommittee),
+		Attester:      toCommitteePost(t.Attester),
+		CommitteeID:   hex.EncodeToString(t.CommitteeID[:]),
 		// OperatorIDs: t.OperatorIDs,
 	}
 }
@@ -196,25 +190,11 @@ func toDecidedTrace(d []*model.DecidedTrace) (out []decided) {
 	return
 }
 
-func toCommitteePost(m []*model.CommitteePartialSigMessageTrace) (out []committeeMessage) {
+func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
-			Type:         qbftmsg.PartialMsgTypeToString(mt.Type),
-			Signer:       mt.Signer,
-			Messages:     toCommitteePartSigMessage(mt.Messages),
+			Signers:      mt.Signers,
 			ReceivedTime: mt.ReceivedTime,
-		})
-	}
-
-	return
-}
-
-func toCommitteePartSigMessage(m []*model.PartialSigMessage) (out []partialSigMessage) {
-	for _, mt := range m {
-		out = append(out, partialSigMessage{
-			BeaconRoot: mt.BeaconRoot,
-			Signer:     mt.Signer,
-			Validator:  mt.ValidatorIndex,
 		})
 	}
 
