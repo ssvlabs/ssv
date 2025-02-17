@@ -188,12 +188,12 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to SSZBytes")
 		}
 
-		// TODO: fix signing root
+		// TODO: fix this workaround
 		slot := binary.LittleEndian.Uint64(data[0:8])
-		data = data[8:]
+		beaconBlockRoot := (spectypes.SSZBytes)(data[8:])
 
-		if len(data) != 32 {
-			return nil, [32]byte{}, fmt.Errorf("unexpected root length: %d", len(data))
+		if len(beaconBlockRoot) != 32 {
+			return nil, [32]byte{}, fmt.Errorf("unexpected beacon block root length: %d", len(beaconBlockRoot))
 		}
 
 		req.Type = web3signer.SyncCommitteeMessage
@@ -201,9 +201,16 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 			BeaconBlockRoot phase0.Root `json:"beacon_block_root"`
 			Slot            phase0.Slot `json:"slot"`
 		}{
-			BeaconBlockRoot: phase0.Root(data),
+			BeaconBlockRoot: phase0.Root(beaconBlockRoot),
 			Slot:            phase0.Slot(slot),
 		}
+
+		// workaround TODO: remove
+		beaconBlockRootHash, err := spectypes.ComputeETHSigningRoot(beaconBlockRoot, domain)
+		if err != nil {
+			return nil, [32]byte{}, err
+		}
+		req.SigningRoot = hex.EncodeToString(beaconBlockRootHash[:])
 
 	case spectypes.DomainSyncCommitteeSelectionProof:
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
