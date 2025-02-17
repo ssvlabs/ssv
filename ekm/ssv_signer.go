@@ -188,7 +188,8 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to SSZBytes")
 		}
 
-		slot := binary.BigEndian.Uint64(data[0:8])
+		// TODO: fix signing root
+		slot := binary.LittleEndian.Uint64(data[0:8])
 		data = data[8:]
 
 		if len(data) != 32 {
