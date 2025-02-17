@@ -49,6 +49,13 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 		opt.InMemory = true
 		opt.Dir = ""
 		opt.ValueDir = ""
+	} else {
+
+		opt = opt.WithMemTableSize(32 << 20). // 32 MB instead of the default 64 MB
+							WithNumMemtables(1).
+							WithNumLevelZeroTables(1).
+							WithNumLevelZeroTablesStall(2).WithValueLogFileSize(1024 * 1024 * 500) // 500 MB per value log file.
+
 	}
 
 	// TODO: we should set the default logger here to log Error and higher levels
@@ -59,7 +66,7 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 		opt.Logger = newLogger(zap.NewNop()) // TODO: we should allow only errors to be logged
 	}
 
-	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
+	//opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
 	db, err := badger.Open(opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open badger")

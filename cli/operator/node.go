@@ -68,6 +68,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
+
+	_ "expvar"
 )
 
 type KeyStore struct {
