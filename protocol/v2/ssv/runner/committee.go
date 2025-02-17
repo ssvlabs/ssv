@@ -233,35 +233,58 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		case spectypes.BNRoleAttester:
 			validDuties++
 			attestationData := constructAttestationData(beaconVote, duty)
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
-				spectypes.DomainAttester)
-			if err != nil {
-				return errors.Wrap(err, "failed signing attestation data")
-			}
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
-			// TODO: revert log
-			attDataRoot, err := attestationData.HashTreeRoot()
-			if err != nil {
-				return errors.Wrap(err, "failed to hash attestation data")
-			}
-			logger.Debug("signed attestation data",
+			logger := logger.With(
 				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
 				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
-				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
+			)
+
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
+				spectypes.DomainAttester)
+			if err != nil {
+				logger.Error("failed signing attestation data", zap.Error(err))
+				continue
+			}
+
+			logger = logger.With(
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
+
+			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+
+			attDataRoot, err := attestationData.HashTreeRoot()
+			if err != nil {
+				logger.Error("failed to hash attestation data", zap.Error(err))
+				continue
+			}
+
+			logger.Debug("signed attestation data", zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])))
+
 		case spectypes.BNRoleSyncCommittee:
 			validDuties++
 			blockRoot := beaconVote.BlockRoot
+
+			logger := logger.With(
+				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
+				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
+				zap.String("block_root", hex.EncodeToString(blockRoot[:])),
+			)
+
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
-				return errors.Wrap(err, "failed signing sync committee message")
+				logger.Error("failed signing sync committee", zap.Error(err))
+				continue
 			}
+
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+			logger.Debug("signed sync committee data",
+				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+			)
+
 		default:
 			return fmt.Errorf("invalid duty type: %s", duty.Type)
 		}
