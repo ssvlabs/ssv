@@ -294,7 +294,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// give discovery some time to find the best peers right after node start, the exact
 		// best time to wait is arrived at experimentally
-		if time.Since(p2pStartTime) < 1*time.Minute {
+		if time.Since(p2pStartTime) < 5*time.Minute {
 			return
 		}
 
