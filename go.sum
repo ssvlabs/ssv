@@ -538,8 +538,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8m
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86/go.mod h1:kHJEU3ofeGjhHklVoIGuVj85JJwZ6kWPaJwCIxgnFmo=
 github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a/Q4r9LP1IltGz7tA7iOK1WonHEYhu1HRBA7ZiM=
-github.com/nkryuchkov/ssv-signer v0.0.0-20250215020052-8253281b59f4 h1:R6qDpsiZhNWO6kGaEr/n3/MqCObHci412Nw4pQduaeY=
-github.com/nkryuchkov/ssv-signer v0.0.0-20250215020052-8253281b59f4/go.mod h1:ZQ2IxkqLqLXsXj2HFKoSc+oN0DcPozybZTaOe/Bk3T4=
+github.com/nkryuchkov/ssv-signer v0.0.0-20250217181522-e4c66aee05d6 h1:oTXcFzVPGoP+4trP5KlAz6/ZzEd/COjlDI3dgkSAeb8=
+github.com/nkryuchkov/ssv-signer v0.0.0-20250217181522-e4c66aee05d6/go.mod h1:ZQ2IxkqLqLXsXj2HFKoSc+oN0DcPozybZTaOe/Bk3T4=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
 github.com/nxadm/tail v1.4.11 h1:8feyoE3OzPrcshW5/MJ4sGESc5cqmGkGCWlco4l0bqY=

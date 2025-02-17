@@ -211,7 +211,13 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		}
 
 		req.Type = web3signer.SyncCommitteeSelectionProof
-		req.SyncAggregatorSelectionData = data
+		req.SyncAggregatorSelectionData = &struct {
+			Slot              phase0.Slot           `json:"slot"`
+			SubcommitteeIndex phase0.CommitteeIndex `json:"subcommittee_index"`
+		}{
+			Slot:              data.Slot,
+			SubcommitteeIndex: phase0.CommitteeIndex(data.SubcommitteeIndex),
+		}
 
 	case spectypes.DomainContributionAndProof:
 		data, ok := obj.(*altair.ContributionAndProof)

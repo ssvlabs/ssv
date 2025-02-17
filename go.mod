@@ -272,6 +272,6 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250203214635-0137e67b3b10
 
 // TODO: remove after github.com/ssvlabs/ssv-signer is created
-replace github.com/ssvlabs/ssv-signer => github.com/nkryuchkov/ssv-signer v0.0.0-20250215020052-8253281b59f4
+replace github.com/ssvlabs/ssv-signer => github.com/nkryuchkov/ssv-signer v0.0.0-20250217181522-e4c66aee05d6
 
 //replace github.com/ssvlabs/ssv-signer => ../ssv-signer // for local development, TODO: remove
