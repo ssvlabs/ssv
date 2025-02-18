@@ -20,14 +20,34 @@ func TestSaveCommitteeDutyTrace(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	trace1 := makeCTrace(1)
-	trace2 := makeCTrace(2)
+	trace1 := makeCTrace(1, 'a')
+	trace2 := makeCTrace(2, 'b')
 
 	store := store.New(db)
 	require.NoError(t, store.SaveCommiteeDuty(trace1))
 	require.NoError(t, store.SaveCommiteeDuty(trace2))
 
 	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
+	require.NoError(t, err)
+	assert.Equal(t, phase0.Slot(1), duty.Slot)
+}
+
+func TestSaveCommitteeDuties(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	traces := []*model.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
+
+	store := store.New(db)
+	require.NoError(t, store.SaveCommiteeDuties(phase0.Slot(1), traces))
+
+	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
+	require.NoError(t, err)
+	assert.Equal(t, phase0.Slot(1), duty.Slot)
+
+	duty, err = store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'b'})
 	require.NoError(t, err)
 	assert.Equal(t, phase0.Slot(1), duty.Slot)
 }
@@ -75,10 +95,10 @@ func makeVTrace(slot phase0.Slot) *model.ValidatorDutyTrace {
 	}
 }
 
-func makeCTrace(slot phase0.Slot) *model.CommitteeDutyTrace {
+func makeCTrace(slot phase0.Slot, committee byte) *model.CommitteeDutyTrace {
 	return &model.CommitteeDutyTrace{
 		Slot:                     slot,
-		CommitteeID:              [32]byte{'a'},
+		CommitteeID:              [32]byte{committee},
 		OperatorIDs:              nil,
 		AttestationDataRoot:      [32]byte{},
 		SyncCommitteeMessageRoot: [32]byte{},

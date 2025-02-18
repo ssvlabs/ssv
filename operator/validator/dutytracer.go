@@ -9,23 +9,30 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	// "github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jellydator/ttlcache/v3"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	gc "github.com/ssvlabs/ssv/beacon/goclient"
 	model "github.com/ssvlabs/ssv/exporter/v2"
+	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type InMemTracer struct {
 	sync.Mutex
 	logger *zap.Logger
+	store  *store.DutyTraceStore
 	// consider having the validator pubkey before of the slot
 	validatorTraces *ttlcache.Cache[uint64, map[string]*validatorDutyTrace]
 	committeeTraces *ttlcache.Cache[uint64, map[string]*committeeDutyTrace]
 	domains         []phase0.Domain
+
+	shares registrystorage.Shares
 
 	scRootsMu sync.Mutex
 	// sync committee roots derived from the beacon vote that
@@ -34,26 +41,39 @@ type InMemTracer struct {
 	scRoots map[string]struct{}
 }
 
-func NewTracer(logger *zap.Logger, client *gc.GoClient) *InMemTracer {
+const flushToDisk = 180 * time.Second
+
+func NewTracer(logger *zap.Logger, client *gc.GoClient, store *store.DutyTraceStore, shares registrystorage.Shares) *InMemTracer {
 	tracer := &InMemTracer{
 		logger: logger,
 		validatorTraces: ttlcache.New(
-			ttlcache.WithTTL[uint64, map[string]*validatorDutyTrace](3 * time.Minute),
+			ttlcache.WithTTL[uint64, map[string]*validatorDutyTrace](flushToDisk),
 		),
 		committeeTraces: ttlcache.New(
-			ttlcache.WithTTL[uint64, map[string]*committeeDutyTrace](3 * time.Minute),
+			ttlcache.WithTTL[uint64, map[string]*committeeDutyTrace](flushToDisk),
 		),
+		shares: shares,
+		store:  store,
 	}
 
 	tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
-		logger.Info("committee eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+		var duties []*model.CommitteeDutyTrace
+		for _, d := range item.Value() {
+			duties = append(duties, &d.CommitteeDutyTrace)
+		}
+		err := store.SaveCommiteeDuties(phase0.Slot(item.Key()), duties)
+		if err != nil {
+			logger.Error("save committees duties to disk", zap.Uint64("slot", item.Key()), zap.Int("items", len(item.Value())))
+			return
+		}
+		logger.Info("move to disk committee duties", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
 	})
 
 	tracer.committeeTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
 		tracer.Lock()
 		defer tracer.Unlock()
 		for id := range i.Value() {
-			logger.Info("committee insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
+			logger.Info("committee insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id))))
 		}
 	})
 
@@ -65,7 +85,7 @@ func NewTracer(logger *zap.Logger, client *gc.GoClient) *InMemTracer {
 		tracer.Lock()
 		defer tracer.Unlock()
 		for id := range i.Value() {
-			logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id[16:]))))
+			logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id))))
 		}
 	})
 
@@ -103,7 +123,7 @@ func (n *InMemTracer) Store() DutyTraceStore {
 	}
 }
 
-func (n *InMemTracer) getValidatorTrace(slot uint64, vPubKey string) *validatorDutyTrace {
+func (n *InMemTracer) getOrCreateValidatorTrace(slot uint64, vPubKey string, role spectypes.RunnerRole) *validatorDutyTrace {
 	n.Lock()
 	defer n.Unlock()
 
@@ -112,13 +132,32 @@ func (n *InMemTracer) getValidatorTrace(slot uint64, vPubKey string) *validatorD
 	trace, ok := mp.Value()[vPubKey]
 	if !ok {
 		trace = new(validatorDutyTrace)
+
+		var bnRole spectypes.BeaconRole
+
+		switch role {
+		case spectypes.RoleCommittee:
+			panic("unexpected committee role")
+		case spectypes.RoleProposer:
+			bnRole = spectypes.BNRoleProposer
+		case spectypes.RoleAggregator:
+			bnRole = spectypes.BNRoleAggregator
+		case spectypes.RoleSyncCommitteeContribution:
+			bnRole = spectypes.BNRoleSyncCommitteeContribution
+		case spectypes.RoleValidatorRegistration:
+			bnRole = spectypes.BNRoleValidatorRegistration
+		case spectypes.RoleVoluntaryExit:
+			bnRole = spectypes.BNRoleVoluntaryExit
+		}
+
+		trace.ValidatorDutyTrace.Role = bnRole
 		mp.Value()[vPubKey] = trace
 	}
 
 	return trace
 }
 
-func (n *InMemTracer) getCommitteeTrace(slot uint64, committeeID []byte) *committeeDutyTrace {
+func (n *InMemTracer) getOrCreateCommitteeTrace(slot uint64, committeeID []byte) *committeeDutyTrace {
 	n.Lock()
 	defer n.Unlock()
 
@@ -127,13 +166,14 @@ func (n *InMemTracer) getCommitteeTrace(slot uint64, committeeID []byte) *commit
 	trace, ok := mp.Value()[string(committeeID)]
 	if !ok {
 		trace = new(committeeDutyTrace)
+		trace.CommitteeID = spectypes.CommitteeID(committeeID)
 		mp.Value()[string(committeeID)] = trace
 	}
 
 	return trace
 }
 
-// HOW TO? id -> validator or committee id
+// TODO: HOW TO? id -> validator or committee id
 func getOperators([]byte) []spectypes.OperatorID {
 	return []spectypes.OperatorID{}
 }
@@ -293,7 +333,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	}
 
 	slot := uint64(msg.Slot)
-	trace := n.getValidatorTrace(slot, string(validatorPubKey))
+	trace := n.getOrCreateValidatorTrace(slot, string(validatorPubKey), ssvMsg.MsgID.GetRoleType())
 	trace.Lock()
 	defer trace.Unlock()
 
@@ -325,28 +365,28 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignatureMessages, committeeID []byte) {
 	slot := uint64(msg.Slot)
 
-	trace := n.getCommitteeTrace(slot, committeeID)
+	trace := n.getOrCreateCommitteeTrace(slot, committeeID)
 	trace.Lock()
 	defer trace.Unlock()
 
 	trace.CommitteeID = [32]byte(committeeID[:])
-	trace.OperatorIDs = getOperators(committeeID)
+	trace.OperatorIDs = getOperators(committeeID) // TODO confirm is needed
 	trace.Slot = msg.Slot
 
 	n.scRootsMu.Lock()
 	defer n.scRootsMu.Unlock()
 
 	for _, partialSigMsg := range msg.Messages {
-		tr := new(model.SignerData)
-		tr.Signers = append(tr.Signers, partialSigMsg.Signer) // aggregate messages so that it ends up a collection
+		var tr model.SignerData
+		tr.Signers = append(tr.Signers, partialSigMsg.Signer)
 		tr.ReceivedTime = time.Now()
 
 		if _, found := n.scRoots[string(partialSigMsg.SigningRoot[:])]; found {
-			trace.SyncCommittee = append(trace.SyncCommittee, tr)
+			trace.SyncCommittee = append(trace.SyncCommittee, &tr)
 			continue
 		}
 
-		trace.Attester = append(trace.Attester, tr)
+		trace.Attester = append(trace.Attester, &tr)
 	}
 }
 
@@ -377,27 +417,22 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			msgID := spectypes.MessageID(subMsg.Identifier[:]) // validator + pubkey + role + network
 			executorID := msgID.GetDutyExecutorID()            // validator pubkey or committee id
 
-			switch msgID.GetRoleType() {
+			switch role := msgID.GetRoleType(); role {
 			case spectypes.RoleCommittee:
-				trace := n.getCommitteeTrace(slot, executorID) // committe id
-
-				oldC := len(trace.Rounds)
-				round := trace.getRound(uint64(subMsg.Round))
-
-				if round == nil {
-					n.logger.Info("nil round at consensus committee",
-						zap.Int("new rounds", len(trace.Rounds)),
-						zap.Int("old rounds", oldC),
-						zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
-					return
-				}
-
-				// in this step will fill in sync committee roots
-				// to be later read in
+				// first step fill in sync committee roots
+				// to be later read in 'processPartialSigCommittee'
 				err := n.fillInSyncCommitteeRoots(msg.SignedSSVMessage.FullData)
 				if err != nil {
 					n.logger.Error("fill sync committee roots", zap.Error(err))
 				}
+
+				committeeID := executorID[16:]
+				trace := n.getOrCreateCommitteeTrace(slot, committeeID) // committe id
+
+				trace.Lock()
+				defer trace.Unlock()
+
+				round := trace.getOrCreateRound(uint64(subMsg.Round))
 
 				// TODO is this needed?
 				operatorIDs := getOperators(executorID)
@@ -412,7 +447,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				}
 			default:
 				validatorPubKey := string(executorID)
-				trace := n.getValidatorTrace(slot, validatorPubKey)
+				trace := n.getOrCreateValidatorTrace(slot, validatorPubKey, role)
 
 				if msg.MsgType == spectypes.SSVConsensusMsgType {
 					var qbftMsg specqbft.Message
@@ -444,16 +479,10 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					}
 				}
 
-				oldC := len(trace.Rounds)
-				round := trace.getRound(uint64(subMsg.Round))
+				trace.Lock()
+				defer trace.Unlock()
 
-				if round == nil {
-					n.logger.Info("nil round at consensus committee",
-						zap.Int("new rounds", len(trace.Rounds)),
-						zap.Int("old rounds", oldC),
-						zap.Uint64("subMsg.Round", uint64(subMsg.Round)))
-					return
-				}
+				round := trace.getOrCreateRound(uint64(subMsg.Round))
 
 				// populate proposer
 				operatorIDs := getOperators(executorID) // validator pubkey
@@ -476,26 +505,48 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			return
 		}
 
-		// for _, msg := range pSigMessages.Messages {
-		// 	sig, err := decodeSig(msg.PartialSignature)
-		// 	if err != nil {
-		// 		n.logger.Error("decode partial signature", zap.Error(err))
-		// 		return
-		// 	}
+		for _, msg := range pSigMessages.Messages {
+			sig, err := decodeSig(msg.PartialSignature)
+			if err != nil {
+				n.logger.Error("decode partial signature", zap.Error(err))
+				return
+			}
 
-		// 	// TODO read from event syncer state (or something) talk to Moshe/Matus
-		// 	var operatorKeySharePubkey []byte
-		// 	err = types.VerifyReconstructedSignature(sig, operatorKeySharePubkey, msg.SigningRoot)
-		// 	if err != nil {
-		// 		n.logger.Error("bls verification failed", zap.Error(err))
-		// 		 return
-		// 	}
-		// }
+			// TODO confirm read share with Moshe/Matus
+			// TODO confirm is SigningRoot with Matheus
+
+			operatorID := msg.Signer
+			validator := msg.ValidatorIndex
+
+			shares := n.shares.List(nil, registrystorage.ByOperatorID(operatorID))
+
+			var operatorKeyShare *types.SSVShare
+			for _, share := range shares {
+				if share.ValidatorIndex == validator {
+					operatorKeyShare = share
+					break
+				}
+			}
+
+			if operatorKeyShare == nil {
+				// n.logger.Warn("operator key share not found", fields.OperatorID(operatorID))
+				break // TODO replace with return
+			}
+
+			sharePubkey := operatorKeyShare.SharePubKey
+
+			err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
+			if err != nil {
+				n.logger.Error("bls verification failed", zap.Error(err))
+				return
+			}
+		}
 
 		executorID := msg.MsgID.GetDutyExecutorID()
 
 		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
-			n.processPartialSigCommittee(pSigMessages, executorID)
+			committeeID := executorID[16:]
+			n.processPartialSigCommittee(pSigMessages, committeeID)
 			return
 		}
 
@@ -508,10 +559,7 @@ type validatorDutyTrace struct {
 	model.ValidatorDutyTrace
 }
 
-func (trace *validatorDutyTrace) getRound(rnd uint64) *model.RoundTrace {
-	trace.Lock()
-	defer trace.Unlock()
-
+func (trace *validatorDutyTrace) getOrCreateRound(rnd uint64) *model.RoundTrace {
 	var count = len(trace.Rounds)
 	for rnd > uint64(count) { //nolint:gosec
 		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})
@@ -528,10 +576,7 @@ type committeeDutyTrace struct {
 	model.CommitteeDutyTrace
 }
 
-func (trace *committeeDutyTrace) getRound(rnd uint64) *model.RoundTrace {
-	trace.Lock()
-	defer trace.Unlock()
-
+func (trace *committeeDutyTrace) getOrCreateRound(rnd uint64) *model.RoundTrace {
 	var count = len(trace.Rounds)
 	for rnd > uint64(count) { //nolint:gosec
 		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})
@@ -566,18 +611,24 @@ func (n *InMemTracer) getCommitteeDuty(slot phase0.Slot, committeeID spectypes.C
 	n.Lock()
 	defer n.Unlock()
 
-	if !n.committeeTraces.Has(uint64(slot)) {
+	m := n.committeeTraces.Get(uint64(slot))
+
+	if m == nil {
+		trace, err := n.store.GetCommitteeDuty(slot, committeeID)
+		if err != nil {
+			return nil, fmt.Errorf("get committee duty from disk: %w", err)
+		}
+
+		if trace != nil {
+			return trace, nil
+		}
+
 		return nil, errors.New("slot not found")
 	}
 
-	m := n.committeeTraces.Get(uint64(slot))
-
-	var mapID [48]byte
-	copy(mapID[16:], committeeID[:])
-
-	trace, ok := m.Value()[string(mapID[:])]
+	trace, ok := m.Value()[string(committeeID[:])]
 	if !ok {
-		return nil, errors.New("committe ID not found: " + hex.EncodeToString(mapID[:]))
+		return nil, errors.New("committe ID not found: " + hex.EncodeToString(committeeID[:]))
 	}
 
 	trace.Lock()
@@ -586,8 +637,8 @@ func (n *InMemTracer) getCommitteeDuty(slot phase0.Slot, committeeID spectypes.C
 	return &trace.CommitteeDutyTrace, nil
 }
 
-// func decodeSig(in []byte) (*bls.Sign, error) {
-// 	sign := new(bls.Sign)
-// 	err := sign.Deserialize(in)
-// 	return sign, err
-// }
+func decodeSig(in []byte) (*bls.Sign, error) {
+	sign := new(bls.Sign)
+	err := sign.Deserialize(in)
+	return sign, err
+}

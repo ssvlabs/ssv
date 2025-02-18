@@ -84,6 +84,21 @@ func (s *DutyTraceStore) GetAllValidatorDuties(role spectypes.BeaconRole, slot p
 	return
 }
 
+func (s *DutyTraceStore) SaveCommiteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
+	prefix := s.makeSlotPrefix(slot)
+
+	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
+		value, err := duties[i].MarshalSSZ()
+		if err != nil {
+			return basedb.Obj{}, fmt.Errorf("marshall committee duty: %w", err)
+		}
+		return basedb.Obj{
+			Value: value,
+			Key:   duties[i].CommitteeID[:],
+		}, nil
+	})
+}
+
 func (s *DutyTraceStore) SaveCommiteeDuty(duty *model.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteePrefix(duty.Slot, duty.CommitteeID)
 
@@ -177,7 +192,15 @@ func (s *DutyTraceStore) makeValidatorPrefix(role spectypes.BeaconRole, slot pha
 	return prefix
 }
 
-// role + slot
+// slot only
+func (s *DutyTraceStore) makeSlotPrefix(slot phase0.Slot) []byte {
+	prefix := make([]byte, 0, len(commiteeDutyTraceKey)+4)
+	prefix = append(prefix, []byte(commiteeDutyTraceKey)...)
+	prefix = append(prefix, slotToByteSlice(slot)...)
+	return prefix
+}
+
+// slot + role
 func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.CommitteeID) []byte {
 	prefix := make([]byte, 0, len(commiteeDutyTraceKey)+4+32)
 	prefix = append(prefix, []byte(commiteeDutyTraceKey)...)
