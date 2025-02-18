@@ -2,7 +2,7 @@
 
 This document provides an overview of the Doppelganger Protection mechanism in `ssv.network`.
 
-🔗 **Full Documentation**: [Doppelganger Protection Design on HackMD](https://hackmd.io/qwoDR80_Q6yBQVA6kt_hpg?view)
+🔗 **Full Documentation**: [Doppelganger Protection Design on HackMD](https://hackmd.io/@TjjCyxe9Qxm0hOn3HZ_YIA/HygAf4M5yg)
 
 ## Summary
 Doppelganger Protection ensures that validators do not accidentally sign while active elsewhere, preventing slashing risks.
