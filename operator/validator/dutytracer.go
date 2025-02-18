@@ -18,9 +18,15 @@ import (
 	gc "github.com/ssvlabs/ssv/beacon/goclient"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
+
+type shareKey struct {
+	operatorID, validatorIndex uint64
+}
 
 type InMemTracer struct {
 	sync.Mutex
@@ -29,7 +35,9 @@ type InMemTracer struct {
 	// consider having the validator pubkey before of the slot
 	validatorTraces *ttlcache.Cache[uint64, map[string]*validatorDutyTrace]
 	committeeTraces *ttlcache.Cache[uint64, map[string]*committeeDutyTrace]
-	domains         []phase0.Domain
+	shareCache      *ttlcache.Cache[shareKey, spectypes.ShareValidatorPK]
+
+	domains []phase0.Domain
 
 	shares registrystorage.Shares
 
@@ -50,6 +58,9 @@ func NewTracer(logger *zap.Logger, client *gc.GoClient, store *store.DutyTraceSt
 		),
 		committeeTraces: ttlcache.New(
 			ttlcache.WithTTL[uint64, map[string]*committeeDutyTrace](flushToDisk),
+		),
+		shareCache: ttlcache.New(
+			ttlcache.WithTTL[shareKey, spectypes.ShareValidatorPK](flushToDisk),
 		),
 		shares: shares,
 		store:  store,
@@ -93,6 +104,7 @@ func NewTracer(logger *zap.Logger, client *gc.GoClient, store *store.DutyTraceSt
 			<-time.After(time.Minute)
 			tracer.committeeTraces.DeleteExpired()
 			tracer.validatorTraces.DeleteExpired()
+			tracer.shareCache.DeleteExpired()
 		}
 	}()
 
@@ -504,47 +516,51 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			return
 		}
 
-		// for _, msg := range pSigMessages.Messages {
-		// 	sig, err := decodeSig(msg.PartialSignature)
-		// 	if err != nil {
-		// 		n.logger.Error("decode partial signature", zap.Error(err))
-		// 		return
-		// 	}
+		for _, msg := range pSigMessages.Messages {
+			sig, err := decodeSig(msg.PartialSignature)
+			if err != nil {
+				n.logger.Error("decode partial signature", zap.Error(err))
+				continue
+			}
 
-		// 	// TODO confirm read share with Moshe/Matus
-		// 	// TODO confirm is SigningRoot with Matheus
+			// TODO confirm read share with Moshe/Matus
+			// TODO confirm is SigningRoot with Matheus
 
-		// 	operatorID := msg.Signer
-		// 	validator := msg.ValidatorIndex
+			operatorID := msg.Signer
+			validator := msg.ValidatorIndex
 
-		// 	shares := n.shares.List(nil, registrystorage.ByOperatorID(operatorID))
+			// try getting share from cache
+			key := shareKey{operatorID: operatorID, validatorIndex: uint64(validator)}
+			targetShare := n.shareCache.Get(key)
 
-		// 	var operatorKeyShare *types.SSVShare
-		// 	for _, share := range shares {
-		// 		if share.ValidatorIndex == validator {
-		// 			operatorKeyShare = share
-		// 			break
-		// 		}
-		// 	}
+			var sharePubkey []byte
 
-		// 	if operatorKeyShare == nil {
-		// 		n.logger.Warn("operator key share not found", fields.OperatorID(operatorID))
-		// 		continue // TODO consider replace with return
-		// 	}
+			// lookup missing share
+			if targetShare == nil {
+				shares := n.shares.List(nil, registrystorage.ByOperatorID(operatorID))
 
-		// 	sharePubkey := operatorKeyShare.SharePubKey
+				for _, share := range shares {
+					if share.ValidatorIndex == validator {
+						sharePubkey = share.SharePubKey
+						n.shareCache.Set(key, sharePubkey, 0)
+						break
+					}
+				}
+			} else {
+				sharePubkey = targetShare.Value()
+			}
 
-		// 	if len(sharePubkey) == 0 {
-		// 		n.logger.Warn("share pub key is empty", fields.OperatorID(operatorID))
-		// 		continue // TODO consider replace with return
-		// 	}
+			if len(sharePubkey) == 0 {
+				n.logger.Warn("operator key share not found", fields.OperatorID(operatorID))
+				continue // TODO consider replace with return
+			}
 
-		// 	err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
-		// 	if err != nil {
-		// 		n.logger.Error("bls verification failed", zap.Error(err))
-		// 		return
-		// 	}
-		// }
+			err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
+			if err != nil {
+				n.logger.Error("bls verification failed", zap.Error(err))
+				return
+			}
+		}
 
 		executorID := msg.MsgID.GetDutyExecutorID()
 
