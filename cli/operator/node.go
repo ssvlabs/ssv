@@ -34,6 +34,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	dutytracestore "github.com/ssvlabs/ssv/exporter/v2/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -356,7 +357,7 @@ var StartNodeCmd = &cobra.Command{
 		var tracer validator.DutyTracer = validator.NoOp()
 		if cfg.SSVOptions.ValidatorOptions.ExporterEnableDutyTracing {
 			logger.Info("exporter duty tracing enabled")
-			tracer = validator.NewTracer(logger, consensusClient)
+			tracer = validator.NewTracer(logger, consensusClient, dutytracestore.New(db), nodeStorage.Shares())
 		}
 		cfg.SSVOptions.ValidatorOptions.DutyTracer = tracer
 
