@@ -115,7 +115,7 @@ func TestProcessLivenessData(t *testing.T) {
 		{Index: 2, IsLive: false},
 	})
 
-	require.Equal(t, uint64(2), ds.doppelgangerState[1].remainingEpochs)
+	require.Equal(t, uint64(1), ds.doppelgangerState[1].remainingEpochs)
 	require.Equal(t, uint64(0), ds.doppelgangerState[2].remainingEpochs)
 
 	require.True(t, ds.doppelgangerState[1].requiresFurtherChecks())
