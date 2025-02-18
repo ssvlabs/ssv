@@ -19,7 +19,6 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -505,42 +504,47 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			return
 		}
 
-		for _, msg := range pSigMessages.Messages {
-			sig, err := decodeSig(msg.PartialSignature)
-			if err != nil {
-				n.logger.Error("decode partial signature", zap.Error(err))
-				return
-			}
+		// for _, msg := range pSigMessages.Messages {
+		// 	sig, err := decodeSig(msg.PartialSignature)
+		// 	if err != nil {
+		// 		n.logger.Error("decode partial signature", zap.Error(err))
+		// 		return
+		// 	}
 
-			// TODO confirm read share with Moshe/Matus
-			// TODO confirm is SigningRoot with Matheus
+		// 	// TODO confirm read share with Moshe/Matus
+		// 	// TODO confirm is SigningRoot with Matheus
 
-			operatorID := msg.Signer
-			validator := msg.ValidatorIndex
+		// 	operatorID := msg.Signer
+		// 	validator := msg.ValidatorIndex
 
-			shares := n.shares.List(nil, registrystorage.ByOperatorID(operatorID))
+		// 	shares := n.shares.List(nil, registrystorage.ByOperatorID(operatorID))
 
-			var operatorKeyShare *types.SSVShare
-			for _, share := range shares {
-				if share.ValidatorIndex == validator {
-					operatorKeyShare = share
-					break
-				}
-			}
+		// 	var operatorKeyShare *types.SSVShare
+		// 	for _, share := range shares {
+		// 		if share.ValidatorIndex == validator {
+		// 			operatorKeyShare = share
+		// 			break
+		// 		}
+		// 	}
 
-			if operatorKeyShare == nil {
-				// n.logger.Warn("operator key share not found", fields.OperatorID(operatorID))
-				break // TODO replace with return
-			}
+		// 	if operatorKeyShare == nil {
+		// 		n.logger.Warn("operator key share not found", fields.OperatorID(operatorID))
+		// 		continue // TODO consider replace with return
+		// 	}
 
-			sharePubkey := operatorKeyShare.SharePubKey
+		// 	sharePubkey := operatorKeyShare.SharePubKey
 
-			err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
-			if err != nil {
-				n.logger.Error("bls verification failed", zap.Error(err))
-				return
-			}
-		}
+		// 	if len(sharePubkey) == 0 {
+		// 		n.logger.Warn("share pub key is empty", fields.OperatorID(operatorID))
+		// 		continue // TODO consider replace with return
+		// 	}
+
+		// 	err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
+		// 	if err != nil {
+		// 		n.logger.Error("bls verification failed", zap.Error(err))
+		// 		return
+		// 	}
+		// }
 
 		executorID := msg.MsgID.GetDutyExecutorID()
 
