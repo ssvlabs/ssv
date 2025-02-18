@@ -607,7 +607,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+		if pushed := v.Queues[duty.RunnerRole()].TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))

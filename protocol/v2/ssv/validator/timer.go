@@ -17,13 +17,13 @@ import (
 
 func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
-		v.mtx.RLock() // read-lock for v.Queues, v.state
-		defer v.mtx.RUnlock()
-
 		// only run if the validator is started
-		if v.state != uint32(Started) {
+		if v.started.Load() {
 			return
 		}
+
+		v.mtx.RLock() // read-lock for v.Queues
+		defer v.mtx.RUnlock()
 
 		dr := v.DutyRunners[identifier.GetRoleType()]
 		if dr == nil {

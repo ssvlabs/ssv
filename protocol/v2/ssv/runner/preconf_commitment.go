@@ -7,12 +7,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 type PreconfCommitmentRunner struct {
@@ -67,7 +66,9 @@ func (r *PreconfCommitmentRunner) HasRunningDuty() bool {
 }
 
 func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	// TODO - provide appropriate implementation
+	// TODO - implement this for preconfs, this is where we process messages from other
+	// operators and once we got quorum we should reconstruct full-validator-signature and
+	// send it to whoever was asking for it
 
 	//quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	//if err != nil {
@@ -135,12 +136,14 @@ func (r *PreconfCommitmentRunner) ProcessPostConsensus(ctx context.Context, logg
 }
 
 func (r *PreconfCommitmentRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	// TODO - implement
+	// TODO - implement this for preconfs
 	// compare hash-root that comes with pre-consensus message against what this runner expects
 	// based on the data it has pulled on its own
 	// note, currently with Bolt there is no way for us to fetch data about preconf(s) independently:
 	// https://github.com/chainbound/bolt/issues/772
+
 	return TODO, TODO, TODO
+
 	//if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
 	//	return nil, spectypes.DomainError, errors.New("no running duty to compute preconsensus roots and domain")
 	//}
@@ -157,7 +160,7 @@ func (r *PreconfCommitmentRunner) expectedPostConsensusRootsAndDomain() ([]ssz.H
 }
 
 func (r *PreconfCommitmentRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	// TODO - adjust this for preconfs
+	// TODO - implement this for preconfs, this is the entry-point for OUR operator
 
 	//vr, err := r.calculatePreconfCommitment(duty.DutySlot())
 	//if err != nil {

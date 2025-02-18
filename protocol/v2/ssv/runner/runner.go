@@ -20,6 +20,8 @@ import (
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
+	GetLastHeight() specqbft.Height
+	GetLastRound() specqbft.Round
 	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
@@ -205,7 +207,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.Wrap(err, "decided ValidatorConsensusData invalid")
 	}
 
-	runner.GetBaseRunner().State.DecidedValue, err = decidedValue.Encode()
+	b.State.DecidedValue, err = decidedValue.Encode()
 	if err != nil {
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
@@ -301,7 +303,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		return errors.Wrap(err, "input data invalid")
 	}
 
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
+	if err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
 		specqbft.Height(slot),
@@ -309,14 +311,14 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 	); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
-	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
+	newInstance := b.QBFTController.StoredInstances.FindInstance(b.QBFTController.Height)
 	if newInstance == nil {
 		return errors.New("could not find newly created QBFT instance")
 	}
 
-	runner.GetBaseRunner().State.RunningInstance = newInstance
+	b.State.RunningInstance = newInstance
 
-	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
+	b.registerTimeoutHandler(logger, newInstance, b.QBFTController.Height)
 
 	return nil
 }

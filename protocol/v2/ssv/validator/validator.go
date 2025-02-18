@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -24,12 +25,10 @@ import (
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
-	mtx    *sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	NetworkConfig networkconfig.NetworkConfig
-	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 
 	Operator       *spectypes.CommitteeMember
@@ -37,12 +36,16 @@ type Validator struct {
 	Signer         spectypes.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Queues map[spectypes.RunnerRole]queueContainer
+	// mtx protects access to Queues
+	mtx    *sync.RWMutex
+	Queues map[spectypes.RunnerRole]queue.Queue
+
+	DutyRunners runner.ValidatorDutyRunners
 
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
 
-	state uint32
+	started atomic.Bool
 
 	messageValidator validation.MessageValidator
 }
@@ -62,8 +65,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
 		OperatorSigner:   options.OperatorSigner,
-		Queues:           make(map[spectypes.RunnerRole]queueContainer),
-		state:            uint32(NotStarted),
+		Queues:           make(map[spectypes.RunnerRole]queue.Queue),
 		dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator: options.MessageValidator,
 	}
@@ -75,15 +77,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		//Setup the queue.
 		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
-		v.Queues[role] = queueContainer{
-			Q: queue.New(options.QueueSize),
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             0,
-				Slot:               0,
-				//Quorum:             options.SSVShare.Share,// TODO
-			},
-		}
+		v.Queues[role] = queue.New(options.QueueSize)
 	}
 
 	return v

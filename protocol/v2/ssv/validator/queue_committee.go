@@ -17,6 +17,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// queueContainer wraps a queue with its corresponding state
+type queueContainer struct {
+	Q          queue.Queue
+	queueState *queue.State
+}
+
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
