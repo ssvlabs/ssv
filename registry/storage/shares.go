@@ -87,6 +87,7 @@ type Share struct {
 
 	Status          uint64
 	ActivationEpoch uint64
+	ExitEpoch       uint64
 	OwnerAddress    [addressLength]byte
 	Liquidated      bool
 }
@@ -285,6 +286,7 @@ func FromSSVShare(share *types.SSVShare) *Share {
 		Liquidated:          share.Liquidated,
 		Status:              uint64(share.Status), // nolint: gosec
 		ActivationEpoch:     uint64(share.ActivationEpoch),
+		ExitEpoch:           uint64(share.ExitEpoch),
 	}
 }
 
@@ -316,6 +318,7 @@ func ToSSVShare(stShare *Share) (*types.SSVShare, error) {
 		},
 		Status:          eth2apiv1.ValidatorState(stShare.Status), // nolint: gosec
 		ActivationEpoch: phase0.Epoch(stShare.ActivationEpoch),
+		ExitEpoch:       phase0.Epoch(stShare.ExitEpoch),
 		OwnerAddress:    stShare.OwnerAddress,
 		Liquidated:      stShare.Liquidated,
 	}
@@ -380,6 +383,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			share.ValidatorIndex = metadata.Index
 			share.Status = metadata.Status
 			share.ActivationEpoch = metadata.ActivationEpoch
+			share.ExitEpoch = metadata.ExitEpoch
 			shares = append(shares, share)
 		}
 
