@@ -14,8 +14,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -39,11 +42,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -70,6 +71,7 @@ type ControllerOptions struct {
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"The number of slots to be keep back"`
+	ExporterEnableDutyTracing  bool   `yaml:"ExporterEnableDutyTracing" env:"EXPORTER_ENABLE_DUTY_TRACING" env-default:"true" env-description:"Expose all validator duties to the exporter"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -77,6 +79,7 @@ type ControllerOptions struct {
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
+	DutyTracer                 DutyTracer
 	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
@@ -185,6 +188,20 @@ type controller struct {
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
+
+	tracer DutyTracer
+}
+
+type DutyTracer interface {
+	Trace(*queue.SSVMessage)
+	Store() DutyTraceStore
+}
+
+type DutyTraceStore interface {
+	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error)
+	GetCommitteeDutiesByOperator(indexes []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 }
 
 // NewController creates a new validator controller instance
@@ -243,6 +260,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
+		tracer:            options.DutyTracer,
 
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
@@ -361,6 +379,8 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
+
+	c.tracer.Trace(ssvMsg)
 
 	item := c.getNonCommitteeValidators(ssvMsg.GetID())
 	if item == nil {
@@ -774,7 +794,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.SSVShare = share
 		opts.Operator = operator
 
-		committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
+		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
 
 		logger := c.logger.With([]zap.Field{
 			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
