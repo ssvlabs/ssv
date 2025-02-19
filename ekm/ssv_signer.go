@@ -273,16 +273,8 @@ func (s *SSVSignerKeyManagerAdapter) AddShare(shareKey *bls.SecretKey) error {
 	panic("should not be called")
 }
 
-func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(
-	encryptedShare []byte,
-	validatorPubKey spectypes.ValidatorPK,
-) error {
-	// TODO: consider using spectypes.ValidatorPK
-	if err := s.client.AddValidator(encryptedShare, validatorPubKey[:]); err != nil {
-		return err
-	}
-
-	return nil
+func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(encryptedShare []byte) error {
+	return s.client.AddValidator(encryptedShare)
 }
 
 func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey string) error {

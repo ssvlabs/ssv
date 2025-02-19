@@ -259,7 +259,7 @@ func (eh *EventHandler) handleShareCreation(
 				n := 3
 				var multiErr error
 				for i := 1; i <= n; i++ {
-					if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK); err != nil {
+					if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare); err != nil {
 						var shareDecryptionError ssvsignerclient.ShareDecryptionError
 						if errors.As(err, &shareDecryptionError) {
 							return nil, &MalformedEventError{Err: err}
