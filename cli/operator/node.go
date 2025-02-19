@@ -357,7 +357,7 @@ var StartNodeCmd = &cobra.Command{
 		var tracer validator.DutyTracer = validator.NoOp()
 		if cfg.SSVOptions.ValidatorOptions.ExporterEnableDutyTracing {
 			logger.Info("exporter duty tracing enabled")
-			tracer = validator.NewTracer(logger, consensusClient, dutytracestore.New(db), nodeStorage.Shares())
+			tracer = validator.NewTracer(logger, nodeStorage.ValidatorStore(), consensusClient, dutytracestore.New(db), nodeStorage.Shares())
 		}
 		cfg.SSVOptions.ValidatorOptions.DutyTracer = tracer
 

@@ -97,10 +97,15 @@ func makeVTrace(slot phase0.Slot) *model.ValidatorDutyTrace {
 
 func makeCTrace(slot phase0.Slot, committee byte) *model.CommitteeDutyTrace {
 	return &model.CommitteeDutyTrace{
-		Slot:                     slot,
-		CommitteeID:              [32]byte{committee},
-		OperatorIDs:              nil,
-		AttestationDataRoot:      [32]byte{},
-		SyncCommitteeMessageRoot: [32]byte{},
+		Slot:        slot,
+		CommitteeID: [32]byte{committee},
+		OperatorIDs: nil,
+		ConsensusTrace: model.ConsensusTrace{
+			Rounds: []*model.RoundTrace{{
+				Commits: []*model.QBFTTrace{
+					nil,
+				},
+			}},
+		},
 	}
 }
