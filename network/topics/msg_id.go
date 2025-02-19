@@ -3,6 +3,8 @@ package topics
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"github.com/cespare/xxhash/v2"
 	"sync"
 	"time"
 
@@ -11,7 +13,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -131,7 +132,12 @@ func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	// whereas before it included a BLS signature which made it unique
 	// so we hash full message (including signer) to make it unique
 
-	return commons.MsgID()(msg)
+	if len(msg) == 0 {
+		return ""
+	}
+	b := make([]byte, 12)
+	binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
+	return string(b)
 }
 
 // GetPeers returns the peers that are related to the given msg
