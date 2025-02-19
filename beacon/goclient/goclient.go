@@ -141,6 +141,7 @@ type GoClient struct {
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
+	ForkLock           sync.RWMutex
 	ForkEpochElectra   phase0.Epoch
 	ForkEpochDeneb     phase0.Epoch
 	ForkEpochCapella   phase0.Epoch
@@ -180,6 +181,13 @@ func New(
 		),
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
+
+		// Initialize forks with FAR_FUTURE_EPOCH.
+		ForkEpochAltair:    math.MaxUint64,
+		ForkEpochBellatrix: math.MaxUint64,
+		ForkEpochCapella:   math.MaxUint64,
+		ForkEpochDeneb:     math.MaxUint64,
+		ForkEpochElectra:   math.MaxUint64,
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
@@ -204,11 +212,6 @@ func New(
 	}
 
 	client.nodeSyncingFn = client.nodeSyncing
-
-	// Get the fork epochs.
-	if err := fetchStaticValues(client); err != nil {
-		return nil, fmt.Errorf("fetch static values: %w", err)
-	}
 
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
@@ -248,7 +251,6 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithReducedMemoryUsage(true),
 		eth2clienthttp.WithAllowDelayedStart(true),
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
-		eth2clienthttp.WithELConnectionCheck(true),
 	)
 	if err != nil {
 		gc.log.Error("Consensus http client initialization failed",
@@ -303,6 +305,24 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
+			}
+
+			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "Spec"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			if err := gc.checkForkValues(spec); err != nil {
+				gc.log.Error("failed to check fork values",
+					zap.String("address", s.Address()),
+					zap.Error(err),
+				)
+				return
 			}
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
@@ -388,10 +408,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
-	}
-	if syncState.ELOffline {
-		gc.log.Error("Consensus client's EL node is offline")
-		return fmt.Errorf("EL is offline")
 	}
 
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())

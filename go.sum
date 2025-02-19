@@ -38,6 +38,8 @@ github.com/aristanetworks/glog v0.0.0-20191112221043-67e8567f59f3/go.mod h1:KASm
 github.com/aristanetworks/goarista v0.0.0-20200805130819-fd197cf57d96 h1:XJH0YfVFKbq782tlNThzN/Ud5qm/cx6LXOA/P6RkTxc=
 github.com/aristanetworks/goarista v0.0.0-20200805130819-fd197cf57d96/go.mod h1:QZe5Yh80Hp1b6JxQdpfSEEe8X7hTyTEZSosSrFf/oJE=
 github.com/aristanetworks/splunk-hec-go v0.3.3/go.mod h1:1VHO9r17b0K7WmOlLb9nTk/2YanvOEnLMUgsFrxBROc=
+github.com/attestantio/go-eth2-client v0.24.0 h1:lGVbcnhlBwRglt1Zs56JOCgXVyLWKFZOmZN8jKhE7Ws=
+github.com/attestantio/go-eth2-client v0.24.0/go.mod h1:/KTLN3WuH1xrJL7ZZrpBoWM1xCCihnFbzequD5L+83o=
 github.com/bazelbuild/rules_go v0.23.2 h1:Wxu7JjqnF78cKZbsBsARLSXx/jlGaSLCnUV3mTlyHvM=
 github.com/bazelbuild/rules_go v0.23.2/go.mod h1:MC23Dc/wkXEyk3Wpq6lCqz0ZAYOZDw2DR5y3N1q2i7M=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
@@ -741,10 +743,8 @@ github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.0.0/go.mod h1:A8kyI5cUJhb8N+3pkfONlcEcZbueH6nhAm0Fq7SrnBM=
 github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250210084923-506ed4b28259 h1:Ax1XNOPH2bJhp3LnMmzXaf9e4LDO7KHBFdJqQuPkYDQ=
 github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250210084923-506ed4b28259/go.mod h1:6KvRV5R4WpeGQ5n0oOCORZ4T9M7bTUCza1YL3+RBCC4=
-github.com/ssvlabs/go-eth2-client v0.6.31-0.20250206124345-c0674c73acc5 h1:JH/TUFRdH/YlzGC73/HOZvyT1lhXrIbbik93KNFuiQ8=
-github.com/ssvlabs/go-eth2-client v0.6.31-0.20250206124345-c0674c73acc5/go.mod h1:/KTLN3WuH1xrJL7ZZrpBoWM1xCCihnFbzequD5L+83o=
-github.com/ssvlabs/ssv-spec v0.0.0-20250210123900-b69ddcfcf300 h1:5GlREuKqG7U2klsTd+wsZY2nYT2Xp9aLkT5zL7I5lPY=
-github.com/ssvlabs/ssv-spec v0.0.0-20250210123900-b69ddcfcf300/go.mod h1:pVHh7rpdGkyhMRpm2N+AOraNJiE9nFM+RX2+i16sybU=
+github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c h1:3ijOHIppBuQfi8S43R3IZv9xcfy8KhFjel9gOAIOlT8=
+github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
