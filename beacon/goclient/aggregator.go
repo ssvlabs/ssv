@@ -48,7 +48,6 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	aggDataResp, err := gc.multiClient.AggregateAttestation(gc.ctx, &api.AggregateAttestationOpts{
 		Slot:                slot,
 		AttestationDataRoot: root,
-		CommitteeIndex:      committeeIndex,
 	})
 	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.multiClient.Address(), http.MethodGet, time.Since(aggDataReqStart), err)
 	if err != nil {
