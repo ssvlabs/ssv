@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -255,8 +256,22 @@ func (eh *EventHandler) handleShareCreation(
 			}
 			if encryptedShare != nil { // TODO: should never be nil because of share.BelongsToOperator(selfOperatorID)
 				// TODO: hex encode validator PK?
-				if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK); err != nil {
-					return nil, fmt.Errorf("could not add validator share: %w", err)
+				n := 3
+				var multiErr error
+				for i := 1; i <= n; i++ {
+					if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare, validatorPK); err != nil {
+						var shareDecryptionError ssvsignerclient.ShareDecryptionError
+						if errors.As(err, &shareDecryptionError) {
+							return nil, &MalformedEventError{Err: err}
+						}
+						if i == n {
+							return nil, fmt.Errorf("could not add validator share after %d attempts: %w", n, multiErr)
+						}
+						eh.logger.Error("could not add validator share, retrying", zap.Error(err))
+						multiErr = errors.Join(multiErr, err)
+					} else {
+						break
+					}
 				}
 			}
 		}

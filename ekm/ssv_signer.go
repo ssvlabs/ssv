@@ -96,10 +96,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
 			}
 
-			req.BeaconBlock = &struct {
-				Version     string                    `json:"version"`
-				BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
-			}{
+			req.BeaconBlock = &web3signer.BeaconBlockData{
 				Version: "CAPELLA",
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
@@ -117,10 +114,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
 			}
 
-			req.BeaconBlock = &struct {
-				Version     string                    `json:"version"`
-				BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
-			}{
+			req.BeaconBlock = &web3signer.BeaconBlockData{
 				Version: "DENEB",
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
@@ -160,9 +154,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		}
 
 		req.Type = web3signer.AggregationSlot
-		req.AggregationSlot = &struct {
-			Slot phase0.Slot `json:"slot"`
-		}{Slot: phase0.Slot(data)}
+		req.AggregationSlot = &web3signer.AggregationSlotData{Slot: phase0.Slot(data)}
 
 	case spectypes.DomainRandao:
 		data, ok := obj.(spectypes.SSZUint64)
@@ -171,9 +163,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		}
 
 		req.Type = web3signer.RandaoReveal
-		req.RandaoReveal = &struct {
-			Epoch phase0.Epoch `json:"epoch"`
-		}{Epoch: phase0.Epoch(data)}
+		req.RandaoReveal = &web3signer.RandaoRevealData{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
 		data, ok := obj.(spectypes.SSZBytes)
@@ -191,10 +181,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		}
 
 		req.Type = web3signer.SyncCommitteeMessage
-		req.SyncCommitteeMessage = &struct {
-			BeaconBlockRoot phase0.Root `json:"beacon_block_root"`
-			Slot            phase0.Slot `json:"slot"`
-		}{
+		req.SyncCommitteeMessage = &web3signer.SyncCommitteeMessageData{
 			BeaconBlockRoot: phase0.Root(beaconBlockRoot),
 			Slot:            phase0.Slot(slot),
 		}
@@ -213,10 +200,7 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		}
 
 		req.Type = web3signer.SyncCommitteeSelectionProof
-		req.SyncAggregatorSelectionData = &struct {
-			Slot              phase0.Slot           `json:"slot"`
-			SubcommitteeIndex phase0.CommitteeIndex `json:"subcommittee_index"`
-		}{
+		req.SyncAggregatorSelectionData = &web3signer.SyncCommitteeAggregatorSelectionData{
 			Slot:              data.Slot,
 			SubcommitteeIndex: phase0.CommitteeIndex(data.SubcommitteeIndex),
 		}
@@ -293,22 +277,15 @@ func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(
 	encryptedShare []byte,
 	validatorPubKey spectypes.ValidatorPK,
 ) error {
-	s.logger.Debug("Adding Share")
-
 	// TODO: consider using spectypes.ValidatorPK
 	if err := s.client.AddValidator(encryptedShare, validatorPubKey[:]); err != nil {
-		s.logger.Debug("Adding Share err", zap.Error(err))
-		// TODO: if it fails on share decryption, which only the ssv-signer can know: return malformedError
-		// TODO: if it fails for any other reason: retry X times or crash
 		return err
 	}
-	s.logger.Debug("Adding Share ok")
 
 	return nil
 }
 
 func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey string) error {
-	s.logger.Debug("Removing Share")
 	decoded, _ := hex.DecodeString(pubKey) // TODO: caller passes hex encoded string, need to fix this workaround
 	return s.client.RemoveValidator(decoded)
 }
