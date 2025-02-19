@@ -107,3 +107,24 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 		return len(shared) >= n
 	}
 }
+
+// subnetFilter checks if the node has already been discovered recently and filters it out
+// if so
+func (dvs *DiscV5Service) alreadyDiscoveredFilter(logger *zap.Logger) func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pID, err := PeerID(node)
+		if err != nil {
+			logger.Warn("could not get peer ID from node record", zap.Error(err))
+			return false
+		}
+		if peers.DiscoveredPeersPool.Has(pID) {
+			// this log line is commented out as it is too spammy
+			//n.interfaceLogger.Debug(
+			//	"discovery proposed peer, this proposal is already in proposal-pool",
+			//	zap.String("peer_id", string(proposal.ID)),
+			//)
+			return false // this peer is already being considered
+		}
+		return true
+	}
+}

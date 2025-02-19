@@ -264,16 +264,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
 	go n.startDiscovery(logger, connectorProposals)
 	go func() {
-		// keep discovered peers in the pool so we can choose the best ones
+		// keep discovered peers in a pool so we can choose the best ones
 		for proposal := range connectorProposals {
-			if peers.DiscoveredPeersPool.Has(proposal.ID) {
-				// this log line is commented out as it is too spammy
-				//n.interfaceLogger.Debug(
-				//	"discovery proposed peer, this proposal is already in proposal-pool",
-				//	zap.String("peer_id", string(proposal.ID)),
-				//)
-				continue // this proposal is already "on the table"
-			}
 			discoveredPeer := peers.DiscoveredPeer{
 				AddrInfo:       proposal,
 				ConnectRetries: 0,
