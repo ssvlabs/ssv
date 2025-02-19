@@ -21,6 +21,7 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -47,13 +48,9 @@ type InMemTracer struct {
 	validators registrystorage.ValidatorStore
 }
 
-const (
-	flushToDisk           = 2 * 12 * time.Second // two slots
-	saveTTL               = 12 * time.Second
-	mainnetDenebForkEpoch = 269568 // March 13, 2024, 13:55:35 UTC
-)
+const flushToDisk = 2 * 12 * time.Second // two slots
 
-func NewTracer(logger *zap.Logger, validators registrystorage.ValidatorStore, client *gc.GoClient, store *store.DutyTraceStore, shares registrystorage.Shares) *InMemTracer {
+func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTicker, validators registrystorage.ValidatorStore, client *gc.GoClient, store *store.DutyTraceStore, shares registrystorage.Shares) *InMemTracer {
 	tracer := &InMemTracer{
 		logger: logger,
 		validatorTraces: ttlcache.New(
@@ -66,6 +63,21 @@ func NewTracer(logger *zap.Logger, validators registrystorage.ValidatorStore, cl
 		validators: validators,
 		store:      store,
 	}
+
+	// every slot check which duties are older than 2 slots old
+	// and move them from cache to disk
+	go func() {
+		logger.Info("start duty tracer cache to disk evictor")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.Next():
+				tracer.committeeTraces.DeleteExpired()
+				tracer.validatorTraces.DeleteExpired()
+			}
+		}
+	}()
 
 	tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
 		var duties []*model.CommitteeDutyTrace
@@ -100,15 +112,6 @@ func NewTracer(logger *zap.Logger, validators registrystorage.ValidatorStore, cl
 		}
 	})
 
-	// TODO:me replace with slotticker
-	go func() {
-		for {
-			<-time.After(saveTTL)
-			tracer.committeeTraces.DeleteExpired()
-			tracer.validatorTraces.DeleteExpired()
-		}
-	}()
-
 	return tracer
 }
 
@@ -118,26 +121,6 @@ func (n *InMemTracer) Store() DutyTraceStore {
 		logger: n.logger,
 	}
 }
-
-// func (n *InMemTracer) domainData(epoch phase0.Epoch, typ phase0.DomainType) { //TODO:me ttl cache for domain data
-// 	// cache by epoch
-
-// 	var epochs = []phase0.Epoch{mainnetDenebForkEpoch} // TODO fill these up
-// 	var domains = []phase0.DomainType{}
-
-// 	// domains is formed from phase0.DomainType (which will be spectypes.DomainSyncCommittee) and an epoch
-// 	// TODO get epoch to deneb and electra
-// 	for _, domain := range domains {
-// 		for _, epoch := range epochs {
-// 			data, err := n.client.DomainData(epoch, domain)
-// 			if err != nil {
-// 				logger.Error("get domain data", zap.Error(err))
-// 				continue
-// 			}
-// 			tracer.domains = append(tracer.domains, data)
-// 		}
-// 	}
-// }
 
 func (n *InMemTracer) getOrCreateValidatorTrace(slot uint64, vPubKey string, role spectypes.RunnerRole) *validatorDutyTrace {
 	n.Lock()
@@ -214,14 +197,14 @@ func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) [
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
 		if err != nil {
-			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("decode round change justification", zap.Error(err))
 			continue
 		}
 
 		var qbftMsg = new(specqbft.Message)
 		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
 		if err != nil {
-			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("decode signed message data", zap.Error(err))
 			continue
 		}
 
@@ -241,14 +224,14 @@ func (n *InMemTracer) decodeJustificationWithRoundChanges(justifications [][]byt
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
 		if err != nil {
-			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("decode round change justification", zap.Error(err))
 			continue
 		}
 
 		var qbftMsg = new(specqbft.Message)
 		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
 		if err != nil {
-			n.logger.Error("failed to decode round change justification", zap.Error(err))
+			n.logger.Error("decode round change justification", zap.Error(err))
 			continue
 		}
 
@@ -419,14 +402,14 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 // 	// Root
 // 	domain, err := cr.GetBeaconNode().DomainData(epoch, spectypes.DomainSyncCommittee)
 // 	if err != nil {
-// 		logger.Debug("failed to get sync committee domain", zap.Error(err))
+// 		logger.Debug("get sync committee domain", zap.Error(err))
 // 		continue
 // 	}
 // 	// Eth root
 // 	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
 // 	root, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
 // 	if err != nil {
-// 		n.logger.Debug("failed to compute sync committee root", zap.Error(err))
+// 		n.logger.Debug("compute sync committee root", zap.Error(err))
 // 		return
 // 	}
 
@@ -484,7 +467,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					var qbftMsg specqbft.Message
 					err := qbftMsg.Decode(msg.Data)
 					if err != nil {
-						n.logger.Error("failed to decode validator consensus data", zap.Error(err))
+						n.logger.Error("decode validator consensus data", zap.Error(err))
 						return
 					}
 
@@ -496,7 +479,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 							var data = new(spectypes.ValidatorConsensusData)
 							err := data.Decode(msg.SignedSSVMessage.FullData)
 							if err != nil {
-								n.logger.Error("failed to decode validator proposal data", zap.Error(err))
+								n.logger.Error("decode validator proposal data", zap.Error(err))
 								return true
 							}
 
@@ -532,7 +515,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
 		if err != nil {
-			n.logger.Error("failed to decode partial signature messages", zap.Error(err))
+			n.logger.Error("decode partial signature messages", zap.Error(err))
 			return
 		}
 
@@ -545,7 +528,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 			share, found := n.validators.ValidatorByIndex(msg.ValidatorIndex)
 			if !found {
-				// log
+				n.logger.Error("could not find share by index", zap.Uint64("validator", uint64(msg.ValidatorIndex)))
 				continue
 			}
 
@@ -554,7 +537,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 			})
 
 			if signerIndex == -1 {
-				n.logger.Warn("operator key share not found", fields.OperatorID(msg.Signer))
+				n.logger.Error("operator key share not found", fields.OperatorID(msg.Signer))
 				continue
 			}
 
