@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 )
 
 func (gc *GoClient) DataVersion(epoch phase0.Epoch) spec.DataVersion {
@@ -103,6 +104,13 @@ func (gc *GoClient) checkForkValues(specResponse *api.Response[map[string]any]) 
 	gc.ForkEpochCapella = newCapella
 	gc.ForkEpochDeneb = newDeneb
 	gc.ForkEpochElectra = newElectra
+	gc.log.Debug("updated fork values",
+		zap.Uint64("altair", uint64(newAltair)),
+		zap.Uint64("bellatrix", uint64(newBellatrix)),
+		zap.Uint64("capella", uint64(newCapella)),
+		zap.Uint64("deneb", uint64(newDeneb)),
+		zap.Uint64("electra", uint64(newElectra)),
+	)
 
 	return nil
 }
