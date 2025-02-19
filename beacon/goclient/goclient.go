@@ -19,6 +19,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
@@ -39,9 +40,10 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
-	clResponseErrMsg        = "Consensus client returned an error"
-	clNilResponseErrMsg     = "Consensus client returned a nil response"
-	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
+	clResponseErrMsg            = "Consensus client returned an error"
+	clNilResponseErrMsg         = "Consensus client returned a nil response"
+	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
+	clNilResponseForkDataErrMsg = "Consensus client returned a nil response fork data"
 )
 
 // NodeClient is the type of the Beacon node.
@@ -114,6 +116,7 @@ type GoClient struct {
 	network     beaconprotocol.Network
 	clients     []Client
 	multiClient MultiClient
+	specssv.VersionCalls
 
 	genesisVersion atomic.Pointer[phase0.Version]
 
@@ -137,6 +140,13 @@ type GoClient struct {
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
+
+	ForkLock           sync.RWMutex
+	ForkEpochElectra   phase0.Epoch
+	ForkEpochDeneb     phase0.Epoch
+	ForkEpochCapella   phase0.Epoch
+	ForkEpochBellatrix phase0.Epoch
+	ForkEpochAltair    phase0.Epoch
 }
 
 // New init new client and go-client instance
@@ -171,6 +181,13 @@ func New(
 		),
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
+
+		// Initialize forks with FAR_FUTURE_EPOCH.
+		ForkEpochAltair:    math.MaxUint64,
+		ForkEpochBellatrix: math.MaxUint64,
+		ForkEpochCapella:   math.MaxUint64,
+		ForkEpochDeneb:     math.MaxUint64,
+		ForkEpochElectra:   math.MaxUint64,
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
@@ -234,7 +251,6 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithReducedMemoryUsage(true),
 		eth2clienthttp.WithAllowDelayedStart(true),
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
-		eth2clienthttp.WithELConnectionCheck(true),
 	)
 	if err != nil {
 		gc.log.Error("Consensus http client initialization failed",
@@ -290,6 +306,33 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				)
 				return // Tests may override Fatal's behavior
 			}
+
+			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "Spec"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			if err := gc.checkForkValues(spec); err != nil {
+				gc.log.Error("failed to check fork values",
+					zap.String("address", s.Address()),
+					zap.Error(err),
+				)
+				return
+			}
+			gc.log.Info("retrieved fork epochs",
+				zap.String("node_addr", s.Address()),
+				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
+				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
+				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
+				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
+				zap.Uint64("deneb", uint64(gc.ForkEpochDeneb)),
+				zap.Uint64("electra", uint64(gc.ForkEpochElectra)),
+			)
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",
@@ -374,10 +417,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
-	}
-	if syncState.ELOffline {
-		gc.log.Error("Consensus client's EL node is offline")
-		return fmt.Errorf("EL is offline")
 	}
 
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
