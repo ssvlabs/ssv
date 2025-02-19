@@ -234,6 +234,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	return nil
 }
 
+func (r *SyncCommitteeAggregatorRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
+}
+
 func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
@@ -442,8 +446,36 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 	return nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetBaseRunner() *BaseRunner {
-	return r.BaseRunner
+func (r *SyncCommitteeAggregatorRunner) HasRunningQBFTInstance() bool {
+	return r.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (r *SyncCommitteeAggregatorRunner) HasAcceptedProposalForCurrentRound() bool {
+	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return r.BaseRunner.GetShares()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetRole() spectypes.RunnerRole {
+	return r.BaseRunner.GetRole()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetLastHeight() specqbft.Height {
+	return r.BaseRunner.GetLastHeight()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetLastRound() specqbft.Round {
+	return r.BaseRunner.GetLastRound()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetStateRoot() ([32]byte, error) {
+	return r.BaseRunner.GetStateRoot()
+}
+
+func (r *SyncCommitteeAggregatorRunner) SetTimeoutFunc(fn TimeoutF) {
+	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetNetwork() specqbft.Network {

@@ -124,10 +124,9 @@ func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.Commit
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not create CommitteeRunner")
 	}
-
-	// Set timeout function.
-	r.GetBaseRunner().TimeoutF = c.onTimeout
+	r.SetTimeoutFunc(c.onTimeout)
 	c.Runners[duty.Slot] = r
+
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
 		c.Queues[duty.Slot] = queueContainer{
