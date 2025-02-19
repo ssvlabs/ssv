@@ -34,6 +34,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
+	attData.Index = committeeIndex
 
 	// Get aggregate attestation data.
 	root, err := attData.HashTreeRoot()

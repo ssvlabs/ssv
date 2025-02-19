@@ -57,7 +57,8 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 
 		attDataReqStart := time.Now()
 		resp, err := gc.multiClient.AttestationData(gc.ctx, &api.AttestationDataOpts{
-			Slot: slot,
+			Slot:           slot,
+			CommitteeIndex: 0,
 		})
 
 		recordRequestDuration(gc.ctx, "AttestationData", gc.multiClient.Address(), http.MethodGet, time.Since(attDataReqStart), err)
