@@ -37,6 +37,8 @@ func BeaconRoleToRunnerRole(runnerRole spectypes.BeaconRole) spectypes.RunnerRol
 		return spectypes.RoleValidatorRegistration
 	case spectypes.BNRoleVoluntaryExit:
 		return spectypes.RoleVoluntaryExit
+	case spectypes.BNRolePreconfCommitment:
+		return spectypes.RolePreconfCommitment
 	default:
 		return spectypes.RoleUnknown
 	}

@@ -43,6 +43,8 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + LateSlotAllowance
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
+	case spectypes.RolePreconfCommitment:
+		return 0
 	}
 
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).

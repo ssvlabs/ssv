@@ -46,7 +46,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	validateError(t, lastErr, test.Name, test.ExpectedError)
 
 	// post root
-	postRoot, err := r.GetBaseRunner().State.GetRoot()
+	postRoot, err := r.GetStateRoot()
 	require.NoError(t, err)
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 }
