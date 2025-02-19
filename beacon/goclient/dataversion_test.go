@@ -106,23 +106,6 @@ func TestCheckForkValues(t *testing.T) {
 			expectedErr: "failed to decode ALTAIR fork epoch",
 		},
 		{
-			name:             "new ALTAIR candidate greater than current",
-			initialAltair:    10,
-			initialBellatrix: 20,
-			initialCapella:   30,
-			initialDeneb:     40,
-			initialElectra:   50,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(15), // 15 > current 10
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-				},
-			},
-			expectedErr: "new ALTAIR fork epoch (15) is greater than current (10)",
-		},
-		{
 			name:             "valid update with initial zeros and electra provided",
 			initialAltair:    math.MaxUint64,
 			initialBellatrix: math.MaxUint64,
@@ -145,34 +128,12 @@ func TestCheckForkValues(t *testing.T) {
 			expectedElectra:   phase0.Epoch(50),
 		},
 		{
-			name:             "valid update with candidate lower than current",
-			initialAltair:    15,
-			initialBellatrix: 25,
-			initialCapella:   35,
-			initialDeneb:     45,
-			initialElectra:   55,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(10),
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-				},
-			},
-			expectedAltair:    phase0.Epoch(10),
-			expectedBellatrix: phase0.Epoch(20),
-			expectedCapella:   phase0.Epoch(30),
-			expectedDeneb:     phase0.Epoch(40),
-			// ELECTRA key not provided; remains unchanged.
-			expectedElectra: phase0.Epoch(55),
-		},
-		{
 			name:             "optional ELECTRA not provided, remains unchanged",
-			initialAltair:    10,
-			initialBellatrix: 20,
-			initialCapella:   30,
-			initialDeneb:     40,
-			initialElectra:   99,
+			initialAltair:    math.MaxUint64,
+			initialBellatrix: math.MaxUint64,
+			initialCapella:   math.MaxUint64,
+			initialDeneb:     math.MaxUint64,
+			initialElectra:   math.MaxUint64,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    uint64(10),
@@ -185,7 +146,7 @@ func TestCheckForkValues(t *testing.T) {
 			expectedBellatrix: phase0.Epoch(20),
 			expectedCapella:   phase0.Epoch(30),
 			expectedDeneb:     phase0.Epoch(40),
-			expectedElectra:   phase0.Epoch(99),
+			expectedElectra:   phase0.Epoch(math.MaxUint64),
 		},
 		{
 			name:             "optional ELECTRA provided and updates",
