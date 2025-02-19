@@ -238,6 +238,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			if err != nil {
 				return errors.Wrap(err, "failed signing attestation data")
 			}
+
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
 			// TODO: revert log
@@ -262,6 +263,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				return errors.Wrap(err, "failed signing sync committee message")
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+
 		default:
 			return fmt.Errorf("invalid duty type: %s", duty.Type)
 		}

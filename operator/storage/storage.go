@@ -9,18 +9,19 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
-
-var HashedPrivateKey = "hashed-private-key"
 
 var (
 	OperatorStoragePrefix = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 	configKey             = []byte("config")
+	hashedPrivkeyDBKey    = "hashed-private-key"
+	pubkeyDBKey           = "public-key"
 )
 
 // Storage represents the interface for ssv node storage
@@ -46,6 +47,9 @@ type Storage interface {
 
 	GetPrivateKeyHash() (string, bool, error)
 	SavePrivateKeyHash(privKeyHash string) error
+
+	GetPublicKey() (string, bool, error)
+	SavePublicKey(pubKey string) error
 }
 
 type storage struct {
@@ -207,7 +211,7 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 
 // GetPrivateKeyHash return sha256 hashed private key
 func (s *storage) GetPrivateKeyHash() (string, bool, error) {
-	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(HashedPrivateKey))
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey))
 	if !found {
 		return "", found, nil
 	}
@@ -219,7 +223,24 @@ func (s *storage) GetPrivateKeyHash() (string, bool, error) {
 
 // SavePrivateKeyHash saves operator private key hash
 func (s *storage) SavePrivateKeyHash(hashedKey string) error {
-	return s.db.Set(OperatorStoragePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
+	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKey))
+}
+
+// GetPublicKey returns public key.
+func (s *storage) GetPublicKey() (string, bool, error) {
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(pubkeyDBKey))
+	if !found {
+		return "", found, nil
+	}
+	if err != nil {
+		return "", found, err
+	}
+	return string(obj.Value), found, nil
+}
+
+// SavePublicKey saves operator public key.
+func (s *storage) SavePublicKey(publicKey string) error {
+	return s.db.Set(OperatorStoragePrefix, []byte(pubkeyDBKey), []byte(publicKey))
 }
 
 func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {
