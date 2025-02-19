@@ -77,10 +77,6 @@ type CommitteeDutyTrace struct {
 
 	SyncCommittee []*SignerData `ssz-max:"1512"`
 	Attester      []*SignerData `ssz-max:"1512"`
-
-	// maybe not needed
-	AttestationDataRoot      phase0.Root `ssz-size:"32"`
-	SyncCommitteeMessageRoot phase0.Root `ssz-size:"32"`
 }
 
 type SignerData struct {
