@@ -1,6 +1,7 @@
 package goclient
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -73,11 +74,11 @@ func TestCheckForkValues(t *testing.T) {
 		},
 		{
 			name:             "missing ALTAIR",
-			initialAltair:    0,
-			initialBellatrix: 0,
-			initialCapella:   0,
-			initialDeneb:     0,
-			initialElectra:   0,
+			initialAltair:    math.MaxUint64,
+			initialBellatrix: math.MaxUint64,
+			initialCapella:   math.MaxUint64,
+			initialDeneb:     math.MaxUint64,
+			initialElectra:   math.MaxUint64,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"BELLATRIX_FORK_EPOCH": uint64(20),
@@ -89,11 +90,11 @@ func TestCheckForkValues(t *testing.T) {
 		},
 		{
 			name:             "invalid type for ALTAIR",
-			initialAltair:    0,
-			initialBellatrix: 0,
-			initialCapella:   0,
-			initialDeneb:     0,
-			initialElectra:   0,
+			initialAltair:    math.MaxUint64,
+			initialBellatrix: math.MaxUint64,
+			initialCapella:   math.MaxUint64,
+			initialDeneb:     math.MaxUint64,
+			initialElectra:   math.MaxUint64,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    "not a uint",
@@ -123,11 +124,11 @@ func TestCheckForkValues(t *testing.T) {
 		},
 		{
 			name:             "valid update with initial zeros and electra provided",
-			initialAltair:    0,
-			initialBellatrix: 0,
-			initialCapella:   0,
-			initialDeneb:     0,
-			initialElectra:   0,
+			initialAltair:    math.MaxUint64,
+			initialBellatrix: math.MaxUint64,
+			initialCapella:   math.MaxUint64,
+			initialDeneb:     math.MaxUint64,
+			initialElectra:   math.MaxUint64,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    uint64(10),

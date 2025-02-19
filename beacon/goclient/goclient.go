@@ -181,6 +181,13 @@ func New(
 		),
 		commonTimeout: commonTimeout,
 		longTimeout:   longTimeout,
+
+		// Initialize forks with FAR_FUTURE_EPOCH.
+		ForkEpochAltair:    math.MaxUint64,
+		ForkEpochBellatrix: math.MaxUint64,
+		ForkEpochCapella:   math.MaxUint64,
+		ForkEpochDeneb:     math.MaxUint64,
+		ForkEpochElectra:   math.MaxUint64,
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".

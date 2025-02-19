@@ -55,17 +55,10 @@ func (gc *GoClient) checkForkValues(specResponse *api.Response[map[string]any]) 
 		if !ok {
 			return 0, fmt.Errorf("failed to decode %s fork epoch", forkName)
 		}
-		candidate := phase0.Epoch(forkVal)
-		// Error if the candidate is greater than the current (non-zero) value.
-		if current != 0 && candidate > current {
-			return 0, fmt.Errorf("new %s fork epoch (%d) is greater than current (%d)", forkName, candidate, current)
+		if current != FarFutureEpoch && forkVal == uint64(FarFutureEpoch) {
+			return 0, fmt.Errorf("failed to decode %s fork epoch", forkName)
 		}
-		// Otherwise, if current is zero or the candidate is lower, use the candidate.
-		if current == 0 || candidate < current {
-			return candidate, nil
-		}
-		// If they are equal, no update is necessary.
-		return current, nil
+		return phase0.Epoch(forkVal), nil
 	}
 
 	var err error
@@ -100,7 +93,7 @@ func (gc *GoClient) checkForkValues(specResponse *api.Response[map[string]any]) 
 			newElectra = gc.ForkEpochElectra
 		}
 	} else {
-		newElectra = gc.ForkEpochElectra
+		newElectra = FarFutureEpoch
 	}
 
 	// At this point, no error was encountered.
