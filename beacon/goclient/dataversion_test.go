@@ -145,7 +145,7 @@ func TestCheckForkValues(t *testing.T) {
 			expectedBellatrix: phase0.Epoch(20),
 			expectedCapella:   phase0.Epoch(30),
 			expectedDeneb:     phase0.Epoch(40),
-			expectedElectra:   phase0.Epoch(FarFutureEpoch),
+			expectedElectra:   FarFutureEpoch,
 		},
 		{
 			name:             "optional ELECTRA provided and can't change",
