@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var (
+const (
 	defaultDiscoveryInterval = time.Millisecond * 1
 	publishENRTimeout        = time.Minute
 )
@@ -147,21 +147,31 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	const logFrequency = 10
 	var skippedPeers uint64 = 0
 
-	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		logger := logger.With(
-			fields.ENR(e.Node),
-			fields.PeerID(e.AddrInfo.ID),
-		)
-		err := dvs.checkPeer(dvs.ctx, logger, e)
-		if err != nil {
-			if skippedPeers%logFrequency == 0 {
-				logger.Debug("skipped discovered peer", zap.Error(err))
+	dvs.discover(
+		dvs.ctx,
+		func(e PeerEvent) {
+			logger := logger.With(
+				fields.ENR(e.Node),
+				fields.PeerID(e.AddrInfo.ID),
+			)
+			err := dvs.checkPeer(dvs.ctx, logger, e)
+			if err != nil {
+				if skippedPeers%logFrequency == 0 {
+					logger.Debug("skipped discovered peer", zap.Error(err))
+				}
+				skippedPeers++
+				return
 			}
-			skippedPeers++
-			return
-		}
-		handler(e)
-	}, defaultDiscoveryInterval, dvs.ssvNodeFilter(logger), dvs.sharedSubnetsFilter(1), dvs.badNodeFilter(logger), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
+			handler(e)
+		},
+		defaultDiscoveryInterval,
+		dvs.ssvNodeFilter(logger),
+		dvs.sharedSubnetsFilter(1),
+		dvs.alreadyDiscoveredFilter(logger),
+		dvs.badNodeFilter(logger),
+		dvs.alreadyConnectedFilter(),
+		dvs.recentlyTrimmedFilter(),
+	)
 
 	return nil
 }
@@ -201,6 +211,10 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
 		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
 		return errors.New("no shared subnets")
+	}
+	if !dvs.alreadyDiscoveredFilter(logger)(e.Node) {
+		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
+		return errors.New("peer already discovered recently")
 	}
 
 	peerAcceptedCounter.Add(ctx, 1)
