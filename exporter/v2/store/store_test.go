@@ -100,12 +100,5 @@ func makeCTrace(slot phase0.Slot, committee byte) *model.CommitteeDutyTrace {
 		Slot:        slot,
 		CommitteeID: [32]byte{committee},
 		OperatorIDs: nil,
-		ConsensusTrace: model.ConsensusTrace{
-			Rounds: []*model.RoundTrace{{
-				Commits: []*model.QBFTTrace{
-					nil,
-				},
-			}},
-		},
 	}
 }
