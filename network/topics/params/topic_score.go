@@ -27,7 +27,7 @@ const (
 	maxFirstDeliveryScore    = 80 // max score a peer can obtain from first deliveries
 
 	// P3
-	// Mesh scording is disabled for now.
+	// Mesh scoring is disabled for now.
 	meshDeliveryDecayEpochs     = time.Duration(16)
 	meshDeliveryDampeningFactor = 1.0 / 50.0
 	meshDeliveryCapFactor       = 16

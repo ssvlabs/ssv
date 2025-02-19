@@ -28,8 +28,11 @@ func (bn *TestingBeaconNodeWrapped) GetBeaconNode() *spectestingutils.TestingBea
 	return bn.Bn
 }
 
-func (bn *TestingBeaconNodeWrapped) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
-	return bn.Bn.GetAttestationData(slot, committeeIndex)
+func (bn *TestingBeaconNodeWrapped) GetAttestationData(slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
+	return bn.Bn.GetAttestationData(slot)
+}
+func (bn *TestingBeaconNodeWrapped) DataVersion(epoch phase0.Epoch) spec.DataVersion {
+	return bn.Bn.DataVersion(epoch)
 }
 func (bn *TestingBeaconNodeWrapped) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return bn.Bn.DomainData(epoch, domain)
@@ -58,7 +61,7 @@ func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(registration *ap
 func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
 	return bn.Bn.SubmitVoluntaryExit(voluntaryExit)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*phase0.Attestation) error {
+func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
 	return bn.Bn.SubmitAttestations(attestations)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
@@ -70,7 +73,7 @@ func (bn *TestingBeaconNodeWrapped) SubmitBlindedBeaconBlock(block *api.Versione
 func (bn *TestingBeaconNodeWrapped) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
 	return bn.Bn.SubmitSignedContributionAndProof(contribution)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
+func (bn *TestingBeaconNodeWrapped) SubmitSignedAggregateSelectionProof(msg *spec.VersionedSignedAggregateAndProof) error {
 	return bn.Bn.SubmitSignedAggregateSelectionProof(msg)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
