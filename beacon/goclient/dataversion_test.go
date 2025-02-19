@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"math"
 	"strings"
 	"testing"
 
@@ -74,11 +73,11 @@ func TestCheckForkValues(t *testing.T) {
 		},
 		{
 			name:             "missing ALTAIR",
-			initialAltair:    math.MaxUint64,
-			initialBellatrix: math.MaxUint64,
-			initialCapella:   math.MaxUint64,
-			initialDeneb:     math.MaxUint64,
-			initialElectra:   math.MaxUint64,
+			initialAltair:    FarFutureEpoch,
+			initialBellatrix: FarFutureEpoch,
+			initialCapella:   FarFutureEpoch,
+			initialDeneb:     FarFutureEpoch,
+			initialElectra:   FarFutureEpoch,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"BELLATRIX_FORK_EPOCH": uint64(20),
@@ -90,11 +89,11 @@ func TestCheckForkValues(t *testing.T) {
 		},
 		{
 			name:             "invalid type for ALTAIR",
-			initialAltair:    math.MaxUint64,
-			initialBellatrix: math.MaxUint64,
-			initialCapella:   math.MaxUint64,
-			initialDeneb:     math.MaxUint64,
-			initialElectra:   math.MaxUint64,
+			initialAltair:    FarFutureEpoch,
+			initialBellatrix: FarFutureEpoch,
+			initialCapella:   FarFutureEpoch,
+			initialDeneb:     FarFutureEpoch,
+			initialElectra:   FarFutureEpoch,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    "not a uint",
@@ -107,11 +106,11 @@ func TestCheckForkValues(t *testing.T) {
 		},
 		{
 			name:             "valid update with initial zeros and electra provided",
-			initialAltair:    math.MaxUint64,
-			initialBellatrix: math.MaxUint64,
-			initialCapella:   math.MaxUint64,
-			initialDeneb:     math.MaxUint64,
-			initialElectra:   math.MaxUint64,
+			initialAltair:    FarFutureEpoch,
+			initialBellatrix: FarFutureEpoch,
+			initialCapella:   FarFutureEpoch,
+			initialDeneb:     FarFutureEpoch,
+			initialElectra:   FarFutureEpoch,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    uint64(10),
@@ -129,11 +128,11 @@ func TestCheckForkValues(t *testing.T) {
 		},
 		{
 			name:             "optional ELECTRA not provided, remains unchanged",
-			initialAltair:    math.MaxUint64,
-			initialBellatrix: math.MaxUint64,
-			initialCapella:   math.MaxUint64,
-			initialDeneb:     math.MaxUint64,
-			initialElectra:   math.MaxUint64,
+			initialAltair:    FarFutureEpoch,
+			initialBellatrix: FarFutureEpoch,
+			initialCapella:   FarFutureEpoch,
+			initialDeneb:     FarFutureEpoch,
+			initialElectra:   FarFutureEpoch,
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    uint64(10),
@@ -146,10 +145,10 @@ func TestCheckForkValues(t *testing.T) {
 			expectedBellatrix: phase0.Epoch(20),
 			expectedCapella:   phase0.Epoch(30),
 			expectedDeneb:     phase0.Epoch(40),
-			expectedElectra:   phase0.Epoch(math.MaxUint64),
+			expectedElectra:   phase0.Epoch(FarFutureEpoch),
 		},
 		{
-			name:             "optional ELECTRA provided and updates",
+			name:             "optional ELECTRA provided and can't change",
 			initialAltair:    10,
 			initialBellatrix: 20,
 			initialCapella:   30,
@@ -169,6 +168,7 @@ func TestCheckForkValues(t *testing.T) {
 			expectedCapella:   phase0.Epoch(30),
 			expectedDeneb:     phase0.Epoch(40),
 			expectedElectra:   phase0.Epoch(50),
+			expectedErr:       "new ELECTRA fork epoch (50) doesn't match current value (99)",
 		},
 		{
 			name:             "optional ELECTRA provided, candidate greater than current",
@@ -186,7 +186,7 @@ func TestCheckForkValues(t *testing.T) {
 					"ELECTRA_FORK_EPOCH":   uint64(60),
 				},
 			},
-			expectedErr: "new ELECTRA fork epoch (60) is greater than current (50)",
+			expectedErr: "new ELECTRA fork epoch (60) doesn't match current value (50)",
 		},
 	}
 
