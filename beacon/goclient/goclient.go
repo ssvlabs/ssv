@@ -244,7 +244,6 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithReducedMemoryUsage(true),
 		eth2clienthttp.WithAllowDelayedStart(true),
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
-		eth2clienthttp.WithELConnectionCheck(true),
 	)
 	if err != nil {
 		gc.log.Error("Consensus http client initialization failed",
@@ -402,10 +401,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
-	}
-	if syncState.ELOffline {
-		gc.log.Error("Consensus client's EL node is offline")
-		return fmt.Errorf("EL is offline")
 	}
 
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
