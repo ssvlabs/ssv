@@ -324,6 +324,15 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				)
 				return
 			}
+			gc.log.Info("retrieved fork epochs",
+				zap.String("node_addr", s.Address()),
+				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
+				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
+				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
+				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
+				zap.Uint64("deneb", uint64(gc.ForkEpochDeneb)),
+				zap.Uint64("electra", uint64(gc.ForkEpochElectra)),
+			)
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",

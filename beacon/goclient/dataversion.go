@@ -46,54 +46,42 @@ func (gc *GoClient) checkForkValues(specResponse *api.Response[map[string]any]) 
 	// and compares it with the current stored value.
 	// If the candidate is greater than the current value, that's an error.
 	// Otherwise, it returns the lower value (or the candidate if the current value is zero).
-	processFork := func(forkName, key string, current phase0.Epoch) (phase0.Epoch, error) {
+	processFork := func(forkName, key string, current phase0.Epoch, required bool) (phase0.Epoch, error) {
 		raw, ok := specResponse.Data[key]
 		if !ok {
-			return 0, fmt.Errorf("%s fork epoch not known by chain", forkName)
+			if required {
+				return 0, fmt.Errorf("%s fork epoch not known by chain", forkName)
+			}
+			return FarFutureEpoch, nil
 		}
 		forkVal, ok := raw.(uint64)
 		if !ok {
 			return 0, fmt.Errorf("failed to decode %s fork epoch", forkName)
 		}
-		if current != FarFutureEpoch && forkVal == uint64(FarFutureEpoch) {
-			return 0, fmt.Errorf("failed to decode %s fork epoch", forkName)
+		if current != FarFutureEpoch && current != phase0.Epoch(forkVal) {
+			// Reject if candidate is missing the fork epoch that we've already seen.
+			return 0, fmt.Errorf("new %s fork epoch (%d) doesn't match current value (%d)", forkName, phase0.Epoch(forkVal), current)
 		}
 		return phase0.Epoch(forkVal), nil
 	}
 
 	var err error
 	// Process required forks.
-	if newAltair, err = processFork("ALTAIR", "ALTAIR_FORK_EPOCH", gc.ForkEpochAltair); err != nil {
+	if newAltair, err = processFork("ALTAIR", "ALTAIR_FORK_EPOCH", gc.ForkEpochAltair, true); err != nil {
 		return err
 	}
-	if newBellatrix, err = processFork("BELLATRIX", "BELLATRIX_FORK_EPOCH", gc.ForkEpochBellatrix); err != nil {
+	if newBellatrix, err = processFork("BELLATRIX", "BELLATRIX_FORK_EPOCH", gc.ForkEpochBellatrix, true); err != nil {
 		return err
 	}
-	if newCapella, err = processFork("CAPELLA", "CAPELLA_FORK_EPOCH", gc.ForkEpochCapella); err != nil {
+	if newCapella, err = processFork("CAPELLA", "CAPELLA_FORK_EPOCH", gc.ForkEpochCapella, true); err != nil {
 		return err
 	}
-	if newDeneb, err = processFork("DENEB", "DENEB_FORK_EPOCH", gc.ForkEpochDeneb); err != nil {
+	if newDeneb, err = processFork("DENEB", "DENEB_FORK_EPOCH", gc.ForkEpochDeneb, true); err != nil {
 		return err
 	}
-
-	// Process the optional ELECTRA fork.
-	// If the key exists, perform the same validation; otherwise, keep the current value.
-	if raw, ok := specResponse.Data["ELECTRA_FORK_EPOCH"]; ok {
-		forkVal, ok := raw.(uint64)
-		if !ok {
-			return fmt.Errorf("failed to decode ELECTRA fork epoch")
-		}
-		candidate := phase0.Epoch(forkVal)
-		if gc.ForkEpochElectra != 0 && candidate > gc.ForkEpochElectra {
-			return fmt.Errorf("new ELECTRA fork epoch (%d) is greater than current (%d)", candidate, gc.ForkEpochElectra)
-		}
-		if gc.ForkEpochElectra == 0 || candidate < gc.ForkEpochElectra {
-			newElectra = candidate
-		} else {
-			newElectra = gc.ForkEpochElectra
-		}
-	} else {
-		newElectra = FarFutureEpoch
+	alreadySeenElectra := gc.ForkEpochElectra != FarFutureEpoch
+	if newElectra, err = processFork("ELECTRA", "ELECTRA_FORK_EPOCH", gc.ForkEpochElectra, alreadySeenElectra); err != nil {
+		return err
 	}
 
 	// At this point, no error was encountered.
