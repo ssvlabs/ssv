@@ -326,6 +326,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			}
 			gc.log.Info("retrieved fork epochs",
 				zap.String("node_addr", s.Address()),
+				zap.String("current_data_version", fmt.Sprintf("%d", gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
 				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
 				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
 				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
