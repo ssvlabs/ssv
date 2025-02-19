@@ -745,6 +745,8 @@ github.com/ssvlabs/eth2-key-manager v1.5.0 h1:0stZf5JOUPzMU5u5x7OgqYTiE3lyfJx31G
 github.com/ssvlabs/eth2-key-manager v1.5.0/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
 github.com/ssvlabs/ssv-spec v0.0.0-20250218195926-aa2f5b566f52 h1:/207rrvONorSQf/jZz8mD0Azj2nM8q0KSEnhidr3mZc=
 github.com/ssvlabs/ssv-spec v0.0.0-20250218195926-aa2f5b566f52/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
+github.com/ssvlabs/ssv-spec v1.1.1 h1:V7F4ML4e0994paES5CT+tLC9uwnzhO/jLjHO0kBkhR8=
+github.com/ssvlabs/ssv-spec v1.1.1/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
