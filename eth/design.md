@@ -74,7 +74,7 @@ for {
 
 ### EL sync
 
-if the EL node is not synced, we should stop event processing and signal the node to crash becasue we can't resume.
+if the EL node is not synced, we should stop event processing and signal the node to crash because we can't resume.
 a synecd EL node is a prerequisite to run SSV.
 
 After crash the SSV node will launch and will wait and retry until it synced, so it won't be in a crash loop.
