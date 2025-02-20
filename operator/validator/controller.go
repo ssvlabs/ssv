@@ -71,7 +71,7 @@ type ControllerOptions struct {
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"The number of slots to be keep back"`
-	ExporterEnableDutyTracing  bool   `yaml:"ExporterEnableDutyTracing" env:"EXPORTER_ENABLE_DUTY_TRACING" env-default:"true" env-description:"Expose all validator duties to the exporter"`
+	ExporterDutyTracing        bool   `yaml:"ExporterDutyTracing" env:"EXPORTER_DUTY_TRACING" env-default:"true" env-description:"Expose all validator duties to the exporter"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -223,15 +223,16 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Beacon:        options.Beacon,
 		Storage:       options.StorageMap,
 		//Share:   nil,  // set per validator
-		Signer:            options.BeaconSigner,
-		OperatorSigner:    options.OperatorSigner,
-		DutyRunners:       nil, // set per validator
-		NewDecidedHandler: options.NewDecidedHandler,
-		FullNode:          options.FullNode,
-		Exporter:          options.Exporter,
-		GasLimit:          options.GasLimit,
-		MessageValidator:  options.MessageValidator,
-		Graffiti:          options.Graffiti,
+		Signer:              options.BeaconSigner,
+		OperatorSigner:      options.OperatorSigner,
+		DutyRunners:         nil, // set per validator
+		NewDecidedHandler:   options.NewDecidedHandler,
+		FullNode:            options.FullNode,
+		Exporter:            options.Exporter,
+		GasLimit:            options.GasLimit,
+		MessageValidator:    options.MessageValidator,
+		Graffiti:            options.Graffiti,
+		ExporterDutyTracing: options.ExporterDutyTracing,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -351,7 +352,7 @@ func (c *controller) handleRouterMessages() {
 					v.HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(ctx, c.logger, m)
-				} else if c.validatorOptions.Exporter {
+				} else if c.validatorOptions.Exporter || c.validatorOptions.ExporterDutyTracing {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -410,9 +411,15 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	} else {
 		ncv = item
 	}
+
+	if !c.validatorOptions.Exporter {
+		return nil
+	}
+
 	if err := c.handleNonCommitteeMessages(ssvMsg, ncv); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -470,7 +477,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		}
 	}
 
-	if c.validatorOptions.Exporter {
+	if c.validatorOptions.Exporter || c.validatorOptions.ExporterDutyTracing {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
 	} else {

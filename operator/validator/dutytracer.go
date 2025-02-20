@@ -64,7 +64,7 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 		store:      store,
 	}
 
-	// every slot check which duties are older than 2 slots old
+	// every slot check which duties are older than 2 slots
 	// and move them from cache to disk
 	go func() {
 		logger.Info("start duty tracer cache to disk evictor")
@@ -105,11 +105,11 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 	})
 
 	tracer.validatorTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
-		tracer.Lock()
-		defer tracer.Unlock()
-		for id := range i.Value() {
-			logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id))))
-		}
+		// tracer.Lock()
+		// defer tracer.Unlock()
+		// for id := range i.Value() {
+		// 	logger.Info("insertion", zap.Uint64("slot", i.Key()), zap.String("id", hex.EncodeToString([]byte(id))))
+		// }
 	})
 
 	return tracer
