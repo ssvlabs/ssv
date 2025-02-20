@@ -356,7 +356,7 @@ var StartNodeCmd = &cobra.Command{
 
 		// Validator duty tracing
 		var tracer validator.DutyTracer = validator.NoOp()
-		if cfg.SSVOptions.ValidatorOptions.ExporterEnableDutyTracing {
+		if cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
 			logger.Info("exporter duty tracing enabled")
 			tracer = validator.NewTracer(cmd.Context(), logger, slotTickerProvider(),
 				nodeStorage.ValidatorStore(), consensusClient, dutytracestore.New(db),
@@ -474,7 +474,7 @@ var StartNodeCmd = &cobra.Command{
 					ParticipantStores: storageMap,
 					TraceStore:        tracer.Store(),
 				},
-				cfg.SSVOptions.ValidatorOptions.ExporterEnableDutyTracing,
+				cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing,
 			)
 			go func() {
 				err := apiServer.Run()

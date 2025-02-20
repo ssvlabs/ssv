@@ -125,7 +125,7 @@ func (n *Node) Start(logger *zap.Logger) error {
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	if n.validatorOptions.Exporter {
+	if n.validatorOptions.Exporter || n.validatorOptions.ExporterDutyTracing {
 		// Subscribe to all subnets.
 		err := n.net.SubscribeAll(logger)
 		if err != nil {
