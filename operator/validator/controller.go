@@ -355,14 +355,29 @@ func (c *controller) handleRouterMessages() {
 //	spectypes.RoleSyncCommitteeContribution: 4,
 //}
 
-func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
-	ssvMsg := msg.(*queue.SSVMessage)
-	observer := c.getCommitteeObserver(ssvMsg.GetID())
+func (c *controller) handleWorkerMessages(netmsg network.DecodedSSVMessage) error {
+	msg := netmsg.(*queue.SSVMessage)
+	// Validate message should be processed
+	switch msg.GetType() {
+	case spectypes.SSVConsensusMsgType:
+		// Process proposal messages for committee consensus only to get the roots
+		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+			return nil
+		}
 
-	if err := c.handleCommitteeObserverMessage(ssvMsg, observer); err != nil {
-		return fmt.Errorf("failed to handle committee observer message: %w", err)
+		subMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+			return nil
+		}
+		return c.getCommitteeObserver(msg.GetID()).OnProposalMsg(msg)
+	case spectypes.SSVPartialSignatureMsgType:
+		pSigMessages := &spectypes.PartialSignatureMessages{}
+		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+			return fmt.Errorf("failed to decode partial signature messages: %w", err)
+		}
+
+		return c.getCommitteeObserver(msg.GetID()).ProcessMessage(msg)
 	}
-
 	return nil
 }
 
