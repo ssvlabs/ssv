@@ -19,7 +19,7 @@ import (
 
 func TestQBFTMapping(t *testing.T) {
 	path, _ := os.Getwd()
-	jsonTests, err := protocoltesting.GetSpecTestJSON(path, "qbft")
+	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
 
 	untypedTests := map[string]interface{}{}
