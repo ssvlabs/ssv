@@ -27,6 +27,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -61,9 +62,9 @@ type StorageProvider interface {
 type KeyManager interface {
 	spectypes.BeaconSigner
 	// AddShare saves a share key
-	AddShare(shareKey *bls.SecretKey) error
+	AddShare(secret []byte) error
 	// RemoveShare removes a share key
-	RemoveShare(pubKey string) error
+	RemoveShare(pubKey []byte) error
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
@@ -197,11 +198,11 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 
 		return km.signer.SignEpoch(phase0.Epoch(data), domain, pk)
 	case spectypes.DomainSyncCommittee:
-		data, ok := obj.(spectypes.SSZBytes)
+		data, ok := obj.(ssvtypes.BlockRootWithSlot)
 		if !ok {
-			return nil, nil, errors.New("could not cast obj to SSZBytes")
+			return nil, nil, errors.New("could not cast obj to BlockRootWithSlot")
 		}
-		return km.signer.SignSyncCommittee(data, domain, pk)
+		return km.signer.SignSyncCommittee(data.SSZBytes, domain, pk)
 	case spectypes.DomainSyncCommitteeSelectionProof:
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
 		if !ok {
@@ -253,19 +254,24 @@ func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slo
 	return nil
 }
 
-func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
+func (km *ethKeyManagerSigner) AddShare(sharePrivKey []byte) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	acc, err := km.wallet.AccountByPublicKey(shareKey.GetPublicKey().SerializeToHexStr())
+	blsPrivKey := &bls.SecretKey{}
+	if err := blsPrivKey.Deserialize(sharePrivKey); err != nil {
+		return fmt.Errorf("malformed private key: %w", err)
+	}
+
+	acc, err := km.wallet.AccountByPublicKey(blsPrivKey.SerializeToHexStr())
 	if err != nil && err.Error() != "account not found" {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		if err := km.BumpSlashingProtection(shareKey.GetPublicKey().Serialize()); err != nil {
+		if err := km.BumpSlashingProtection(blsPrivKey.Serialize()); err != nil {
 			return errors.Wrap(err, "could not bump slashing protection")
 		}
-		if err := km.saveShare(shareKey); err != nil {
+		if err := km.saveShare(sharePrivKey); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
 	}
@@ -273,26 +279,24 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
+func (km *ethKeyManagerSigner) RemoveShare(pubKey []byte) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	acc, err := km.wallet.AccountByPublicKey(pubKey)
+	pubKeyHex := hex.EncodeToString(pubKey)
+
+	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)
 	if err != nil && err.Error() != "account not found" {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc != nil {
-		pkDecoded, err := hex.DecodeString(pubKey)
-		if err != nil {
-			return errors.Wrap(err, "could not hex decode share public key")
-		}
-		if err := km.storage.RemoveHighestAttestation(pkDecoded); err != nil {
+		if err := km.storage.RemoveHighestAttestation(pubKey); err != nil {
 			return errors.Wrap(err, "could not remove highest attestation")
 		}
-		if err := km.storage.RemoveHighestProposal(pkDecoded); err != nil {
+		if err := km.storage.RemoveHighestProposal(pubKey); err != nil {
 			return errors.Wrap(err, "could not remove highest proposal")
 		}
-		if err := km.wallet.DeleteAccountByPublicKey(pubKey); err != nil {
+		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
 			return errors.Wrap(err, "could not delete share")
 		}
 	}
@@ -395,8 +399,8 @@ func (km *ethKeyManagerSigner) computeMinimalProposerSP(slot phase0.Slot) phase0
 	return slot + minSPProposalSlotGap
 }
 
-func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {
-	key, err := core.NewHDKeyFromPrivateKey(shareKey.Serialize(), "")
+func (km *ethKeyManagerSigner) saveShare(privKey []byte) error {
+	key, err := core.NewHDKeyFromPrivateKey(privKey, "")
 	if err != nil {
 		return errors.Wrap(err, "could not generate HDKey")
 	}

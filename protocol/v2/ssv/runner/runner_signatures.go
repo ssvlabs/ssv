@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"encoding/binary"
 	"fmt"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -10,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -31,17 +29,6 @@ func (b *BaseRunner) signBeaconObject(
 		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
 	}
 
-	// TODO: temporary workaround to match to interface, it needs to be removed
-	if _, ok := runner.GetSigner().(*ekm.SSVSignerKeyManagerAdapter); ok && domainType == spectypes.DomainSyncCommittee {
-		data, ok := obj.(spectypes.SSZBytes)
-		if !ok {
-			return nil, fmt.Errorf("unexpected object type for %v, expected %T", spectypes.DomainSyncCommittee, obj)
-		}
-
-		encodedSlot := make([]byte, 8)
-		binary.LittleEndian.PutUint64(encodedSlot, uint64(slot))
-		obj = spectypes.SSZBytes(append(encodedSlot, data...))
-	}
 	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey, domainType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")

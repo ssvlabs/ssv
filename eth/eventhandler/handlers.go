@@ -259,7 +259,7 @@ func (eh *EventHandler) handleShareCreation(
 				n := 3
 				var multiErr error
 				for i := 1; i <= n; i++ {
-					if err := ssvSignerAdapter.AddEncryptedShare(encryptedShare); err != nil {
+					if err := ssvSignerAdapter.AddShare(encryptedShare); err != nil {
 						var shareDecryptionError ssvsignerclient.ShareDecryptionError
 						if errors.As(err, &shareDecryptionError) {
 							return nil, &MalformedEventError{Err: err}
@@ -299,7 +299,7 @@ func (eh *EventHandler) handleShareCreation(
 			}
 
 			// Save secret key into BeaconSigner.
-			if err := eh.keyManager.AddShare(shareSecret); err != nil {
+			if err := eh.keyManager.AddShare(shareSecret.Serialize()); err != nil {
 				return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
 			}
 
@@ -369,13 +369,13 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		//validatorShare.OperatorID = operatorID
 		validatorShare.SharePubKey = sharePublicKeys[i]
 
-		shareSecret = &bls.SecretKey{}
 		decryptedSharePrivateKey, err := eh.operatorDecrypter.Decrypt(encryptedKeys[i])
 		if err != nil {
 			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not decrypt share private key: %w", err),
 			}
 		}
+		shareSecret = &bls.SecretKey{}
 		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
 			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
@@ -497,7 +497,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(share.SharePubKey)
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}

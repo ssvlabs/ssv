@@ -1,7 +1,6 @@
 package ekm
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,54 +13,104 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/ssvlabs/eth2-key-manager/core"
+	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
 	"github.com/ssvlabs/ssv-signer/web3signer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // TODO: move to another package?
 
 type SSVSignerKeyManagerAdapter struct {
-	logger          *zap.Logger
-	client          *ssvsignerclient.SSVSignerClient
-	consensusClient *goclient.GoClient
-}
-
-func (s *SSVSignerKeyManagerAdapter) ListAccounts() ([]core.ValidatorAccount, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *SSVSignerKeyManagerAdapter) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *SSVSignerKeyManagerAdapter) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *SSVSignerKeyManagerAdapter) BumpSlashingProtection(pubKey []byte) error {
-	return nil
+	logger            *zap.Logger
+	client            *ssvsignerclient.SSVSignerClient
+	consensusClient   *goclient.GoClient
+	slashingProtector *slashingprotection.NormalProtection
+	signerStore       Storage
 }
 
 func NewSSVSignerKeyManagerAdapter(
 	logger *zap.Logger,
+	netCfg networkconfig.NetworkConfig,
+	db basedb.Database,
 	client *ssvsignerclient.SSVSignerClient,
 	consensusClient *goclient.GoClient,
-) *SSVSignerKeyManagerAdapter {
-	return &SSVSignerKeyManagerAdapter{
-		logger:          logger.Named("SSVSignerKeyManagerAdapter"),
-		client:          client,
-		consensusClient: consensusClient,
+	encryptionKey string,
+) (*SSVSignerKeyManagerAdapter, error) {
+	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
+	if encryptionKey != "" {
+		err := signerStore.SetEncryptionKey(encryptionKey)
+		if err != nil {
+			return nil, err
+		}
 	}
+	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
+	return &SSVSignerKeyManagerAdapter{
+		logger:            logger.Named("SSVSignerKeyManagerAdapter"),
+		client:            client,
+		consensusClient:   consensusClient,
+		slashingProtector: slashingProtector,
+		signerStore:       signerStore,
+	}, nil
+}
+
+func (s *SSVSignerKeyManagerAdapter) ListAccounts() ([]core.ValidatorAccount, error) {
+	return s.signerStore.ListAccounts()
+}
+
+func (s *SSVSignerKeyManagerAdapter) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+	return s.signerStore.RetrieveHighestAttestation(pubKey)
+}
+
+func (s *SSVSignerKeyManagerAdapter) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+	return s.signerStore.RetrieveHighestProposal(pubKey)
+}
+
+func (s *SSVSignerKeyManagerAdapter) BumpSlashingProtection(pubKey []byte) error {
+	// TODO: consider using ekm instead of slashingProtector
+	panic("implement") // TODO
+}
+
+func (s *SSVSignerKeyManagerAdapter) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
+	// TODO: consider using ekm instead of slashingProtector
+	if val, err := s.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("slashable attestation (%s), not signing", val.Status)
+	}
+	return nil
+}
+
+func (s *SSVSignerKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
+	// TODO: consider using ekm instead of slashingProtector
+	status, err := s.slashingProtector.IsSlashableProposal(pk, slot)
+	if err != nil {
+		return err
+	}
+	if status.Status != core.ValidProposal {
+		return fmt.Errorf("slashable proposal (%s), not signing", status.Status)
+	}
+
+	return nil
+}
+
+// AddShare is a dummy method to match KeyManager interface. This method panics and should never be called.
+// TODO: add a comment that it uses encryptedShare instead of pubkey
+func (s *SSVSignerKeyManagerAdapter) AddShare(encryptedShare []byte) error {
+	return s.client.AddValidator(encryptedShare)
+}
+
+func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey []byte) error {
+	return s.client.RemoveValidator(pubKey)
 }
 
 func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
@@ -166,32 +215,16 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		req.RandaoReveal = &web3signer.RandaoRevealData{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
-		data, ok := obj.(spectypes.SSZBytes)
+		data, ok := obj.(ssvtypes.BlockRootWithSlot)
 		if !ok {
 			return nil, [32]byte{}, errors.New("could not cast obj to SSZBytes")
 		}
 
-		// TODO: fix this workaround
-		slot := binary.LittleEndian.Uint64(data[0:8])
-		beaconBlockRoot := data[8:]
-		obj = beaconBlockRoot
-
-		if len(beaconBlockRoot) != 32 {
-			return nil, [32]byte{}, fmt.Errorf("unexpected beacon block root length: %d", len(beaconBlockRoot))
-		}
-
 		req.Type = web3signer.SyncCommitteeMessage
 		req.SyncCommitteeMessage = &web3signer.SyncCommitteeMessageData{
-			BeaconBlockRoot: phase0.Root(beaconBlockRoot),
-			Slot:            phase0.Slot(slot),
+			BeaconBlockRoot: phase0.Root(data.SSZBytes),
+			Slot:            data.Slot,
 		}
-
-		// workaround TODO: remove
-		beaconBlockRootHash, err := spectypes.ComputeETHSigningRoot(beaconBlockRoot, domain)
-		if err != nil {
-			return nil, [32]byte{}, err
-		}
-		req.SigningRoot = hex.EncodeToString(beaconBlockRootHash[:])
 
 	case spectypes.DomainSyncCommitteeSelectionProof:
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
@@ -253,35 +286,6 @@ func (s *SSVSignerKeyManagerAdapter) getForkInfo() web3signer.ForkInfo {
 	}
 }
 
-func (s *SSVSignerKeyManagerAdapter) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
-	// TODO: Consider if this needs to be implemented.
-	//  IsAttestationSlashable is called to avoid signing a slashable attestation, however,
-	//  ssv-signer's Sign must perform the slashability check.
-	return nil
-}
-
-func (s *SSVSignerKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
-	// TODO: Consider if this needs to be implemented.
-	//  IsBeaconBlockSlashable is called to avoid signing a slashable attestation, however,
-	//  ssv-signer's Sign must perform the slashability check.
-	return nil
-}
-
-// AddShare is a dummy method to match KeyManager interface. This method panics and should never be called.
-// TODO: get rid of this workaround
-func (s *SSVSignerKeyManagerAdapter) AddShare(shareKey *bls.SecretKey) error {
-	panic("should not be called")
-}
-
-func (s *SSVSignerKeyManagerAdapter) AddEncryptedShare(encryptedShare []byte) error {
-	return s.client.AddValidator(encryptedShare)
-}
-
-func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey string) error {
-	decoded, _ := hex.DecodeString(pubKey) // TODO: caller passes hex encoded string, need to fix this workaround
-	return s.client.RemoveValidator(decoded)
-}
-
 type SSVSignerKeysOperatorSignerAdapter struct {
 	logger *zap.Logger
 	client *ssvsignerclient.SSVSignerClient
@@ -298,12 +302,10 @@ func NewSSVSignerKeysOperatorSignerAdapter(
 }
 
 func (s *SSVSignerKeysOperatorSignerAdapter) Sign(payload []byte) ([]byte, error) {
-	s.logger.Debug("Signing payload")
 	return s.client.OperatorSign(payload)
 }
 
 func (s *SSVSignerKeysOperatorSignerAdapter) Public() keys.OperatorPublicKey {
-	s.logger.Debug("Getting public key")
 	pubkeyString, err := s.client.GetOperatorIdentity()
 	if err != nil {
 		return nil // TODO: handle, consider changing the interface to return error
