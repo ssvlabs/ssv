@@ -34,7 +34,7 @@ func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentif
 		logger.Info("Launching event listener")
 		if err := gc.startEventListener(ctx); err != nil {
 			const errMsg = "Failed to start event listener"
-			gc.log.Error(errMsg, zap.Error(err))
+			logger.Error(errMsg, zap.Error(err))
 			return nil, errors.Wrap(err, errMsg)
 		}
 	}
@@ -42,7 +42,7 @@ func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentif
 	headEventSubscriber := NewSubscriber[*apiv1.HeadEvent](subscriberIdentifier)
 	gc.headEventSubscribers = append(gc.headEventSubscribers, headEventSubscriber)
 
-	gc.log.
+	logger.
 		With(zap.Int("head_event_subscribers_len", len(gc.headEventSubscribers))).
 		Info("Subscribed to head events")
 

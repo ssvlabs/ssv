@@ -241,10 +241,17 @@ func New(
 		for {
 			select {
 			case headEvent := <-headChan:
-				client.log.Info("received head event",
-					zap.Uint64("slot", uint64(headEvent.Slot)),
-					zap.String("block_root", headEvent.Block.String()),
-				)
+				logger := client.log.
+					With(zap.Uint64("slot", uint64(headEvent.Slot))).
+					With(zap.String("block_root", headEvent.Block.String()))
+
+				logger.Info("received head event. Updating cache")
+
+				item := client.blockRootToSlotCache.Set(headEvent.Block, headEvent.Slot, ttlcache.NoTTL)
+
+				logger.
+					With(zap.Int64("cache_item_version", item.Version())).
+					Info("cache updated")
 			case <-opt.Context.Done():
 				return
 			}
