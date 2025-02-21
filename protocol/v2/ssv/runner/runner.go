@@ -192,26 +192,6 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	b.mtx.Unlock()
 }
 
-func NewBaseRunner(
-	state *State,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	controller *controller.Controller,
-	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
-	runnerRoleType spectypes.RunnerRole,
-	highestDecidedSlot phase0.Slot,
-) *BaseRunner {
-	return &BaseRunner{
-		State:              state,
-		Share:              share,
-		QBFTController:     controller,
-		BeaconNetwork:      beaconNetwork,
-		DomainType:         domainType,
-		RunnerRoleType:     runnerRoleType,
-		highestDecidedSlot: highestDecidedSlot,
-	}
-}
-
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
