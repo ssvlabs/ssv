@@ -321,6 +321,8 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
+		cfg.SSVOptions.ValidatorOptions.Exporter = false
+
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
